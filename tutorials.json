@@ -1,0 +1,173 @@
+{
+  "startup_tutorial": [
+    {
+      "id": "welcome",
+      "target": null,
+      "title": "Welcome to Arbor!",
+      "text": "This quick 2-minute tutorial will show you the basics.\n\nYou can skip this now and access it anytime from the Help menu.",
+      "placement": "center"
+    },
+    {
+      "id": "db_selection",
+      "target": "db_path_entry",
+      "title": "Excel Database",
+      "text": "Arbor uses an Excel file as its main database.\nSelect the file containing your botanical records here.",
+      "placement": "bottom"
+    },
+    {
+      "id": "image_source",
+      "target": "image_source_frame",
+      "title": "Image Source",
+      "text": "Choose where Arbor should load high-resolution images from.\nOnline is recommended if you have a stable connection.",
+      "placement": "top"
+    },
+    {
+      "id": "launch",
+      "target": "launch_button",
+      "title": "Launch System",
+      "text": "When you're ready, click here to load your project.\nThe tutorial will continue in the main workspace.",
+      "placement": "top"
+    }
+  ],
+  "main_tutorial": [
+    {
+      "id": "workspace_intro",
+      "target": null,
+      "title": "Main Workspace",
+      "text": "Welcome to the main Arbor interface.\nHere you will review and edit your object records.",
+      "placement": "center"
+    },
+    {
+      "id": "search_box",
+      "target": "search_entry",
+      "title": "Finding Objects",
+      "text": "Use the search bar to quickly find an object by its ID, genus, or other fields.",
+      "placement": "bottom"
+    },
+    {
+      "id": "object_editor",
+      "target": "object_editor_frame",
+      "title": "Object Editor",
+      "text": "This panel lets you view and modify all properties of the selected object.",
+      "placement": "left"
+    },
+    {
+      "id": "error_flags",
+      "target": "problem_flags_frame",
+      "title": "Identifying Errors",
+      "text": "If an object has taxonomic or data errors, they will be flagged here for your review.",
+      "placement": "right"
+    },
+    {
+      "id": "conflict_resolver_access",
+      "target": "history_indicator_label",
+      "title": "Historical Conflicts",
+      "text": "If there are discrepancies with older data (or if you just want to compare), click this area to open the Historical Database Conflict Resolver.",
+      "placement": "bottom"
+    },
+    {
+      "id": "reviewed_button",
+      "target": "reviewed_button",
+      "title": "Mark as Reviewed",
+      "text": "Once you have corrected any errors, click this to mark the object as fully reviewed.",
+      "placement": "top"
+    },
+    {
+      "id": "finish",
+      "target": null,
+      "title": "Tutorial Complete",
+      "text": "You're all set!\n\nRemember, you can restart this tutorial anytime from Help -> Tutorial.",
+      "placement": "center"
+    }
+  ],
+  "historical_resolver": [
+    {
+      "id": "hr_intro",
+      "target": null,
+      "title": "Historical Conflict Resolver",
+      "text": "Welcome to the Conflict Resolver.\nHere you can see differences between the current record and previous years' data.",
+      "placement": "center"
+    },
+    {
+      "id": "hr_dir",
+      "target": "hr_sidebar",
+      "title": "Field Directory",
+      "text": "This sidebar lists all fields that have a conflict or suggestion. Click a field to jump directly to it.",
+      "placement": "right"
+    },
+    {
+      "id": "hr_show_all",
+      "target": "hr_show_all",
+      "title": "Show All Fields",
+      "text": "By default, only fields with conflicts are shown. Check this to see the history for ALL fields in this record.",
+      "placement": "right"
+    },
+    {
+      "id": "hr_cards",
+      "target": "hr_cards",
+      "title": "Issue Cards",
+      "text": "These cards show the current value versus the historical values. Click a historical value to resolve the conflict by accepting it.",
+      "placement": "left"
+    },
+    {
+      "id": "hr_apply",
+      "target": "hr_apply_all",
+      "title": "Apply Changes",
+      "text": "When you are done resolving issues, click here to apply all of your selected resolutions to the record.",
+      "placement": "top"
+    }
+  ],
+  "focus_settings": [
+    {
+      "id": "focus_intro",
+      "target": null,
+      "title": "Focus Mode",
+      "text": "Focus Mode helps you declutter the interface by hiding sections or fields that you don't need right now.",
+      "placement": "center"
+    },
+    {
+      "id": "focus_presets",
+      "target": "focus_presets",
+      "title": "Presets",
+      "text": "You can save different sets of visibility rules as 'Presets' and quickly load them here.",
+      "placement": "bottom"
+    },
+    {
+      "id": "focus_options",
+      "target": "focus_options",
+      "title": "Dynamic Fallback",
+      "text": "If a field has an error (problem flag), it will automatically reappear even if you hid it, ensuring you never miss a critical issue.",
+      "placement": "right"
+    },
+    {
+      "id": "focus_fields",
+      "target": "focus_fields",
+      "title": "Visibility Toggles",
+      "text": "Toggle individual fields or entire sections on and off. Uncheck a field to hide it from the main editor.",
+      "placement": "left"
+    }
+  ],
+  "layout_settings": [
+    {
+      "id": "layout_intro",
+      "target": null,
+      "title": "Layout Settings",
+      "text": "Customize how Arbor's panels are arranged to best fit your workflow.",
+      "placement": "center"
+    },
+    {
+      "id": "layout_presets",
+      "target": "layout_presets",
+      "title": "Saving Layouts",
+      "text": "Once you configure your ideal layout, save it as a preset. You can load it instantly or even set it as your default startup layout.",
+      "placement": "bottom"
+    },
+    {
+      "id": "layout_toggles",
+      "target": "layout_toggles",
+      "title": "Panel Toggles",
+      "text": "Turn entire panels (like the Image Viewer, Search Bar, or Registration Fields) on or off using these toggles.",
+      "placement": "left"
+    }
+  ]
+}

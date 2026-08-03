@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+build/
+dist/
+*.spec
+error.log
+error_test.log
+user_prefs.json
+*.xlsx
+*.xls
+.idea/
+.vscode/
