@@ -1,0 +1,346 @@
+import os
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import threading
+import pandas as pd
+import config
+from collections import OrderedDict
+from utils import debug_error
+
+class HistoricalSuggestionsMixin:
+    def collect_historical_suggestions(self, oid, show_all_override=None):
+
+
+        if show_all_override is None:
+            show_all = self.show_all_history_var.get()
+        else:
+            show_all = show_all_override
+
+
+        cache_key = (oid, show_all)
+
+        if hasattr(self, "_history_cache"):
+            cached = self._history_cache.get(cache_key)
+            if cached is not None:
+                self._history_cache.move_to_end(cache_key)
+                return cached
+        else:
+            self._history_cache = OrderedDict()
+
+        suggestions = {}
+
+        if not self.app.historical_dbs:
+            self._history_cache[cache_key] = suggestions
+            return suggestions
+
+        field_to_prob = {
+            v: k for k, v in self.problem_to_field.items()
+        }
+
+
+        fields = set()
+
+
+        fields.update(self.problem_to_field.values())
+
+
+        if show_all:
+            fields.update(self.reg_by_id.columns)
+
+
+
+        # Get registration row
+        reg = self.reg_by_id.loc[oid] if oid in self.reg_by_id.index else pd.Series()
+        if isinstance(reg, pd.DataFrame):
+            reg = reg.iloc[0]
+
+        for field in fields:
+            prob_col = field_to_prob.get(field)
+
+            is_unknown = self.is_unknown(str(reg.get(field, "")).strip()) if not reg.empty else False
+            is_active_prob = prob_col and self.is_problem_active(oid, prob_col)
+
+            if not show_all:
+                if not (is_active_prob or is_unknown):
+                    continue
+
+            value_map = {}
+
+            for db in self.app.historical_dbs:
+                reg_by_id = db.get("value_cache")
+                if reg_by_id is None:
+                    reg_by_id = self._get_reg_by_id(db)
+                if reg_by_id is None:
+                    continue
+                if oid not in reg_by_id.index:
+                    continue
+
+                val = str(reg_by_id.loc[oid].get(field, "")).strip()
+
+                if not val or self.is_word_ignored(val):
+                    continue
+
+                value_map.setdefault(val, []).append(db["name"])
+
+            if value_map:
+                suggestions[field] = value_map
+            elif show_all or is_active_prob or is_unknown:
+                suggestions[field] = {
+                    "(No data found)": []
+                }
+
+        self._history_cache[cache_key] = suggestions
+        if len(self._history_cache) > 50:
+            self._history_cache.popitem(last=False)
+        return suggestions
+
+
+    def _toggle_history_local(self, win, oid):
+        current = getattr(win, "local_show_all", False)
+        new_state = not current
+        self.open_historical_suggestions(show_all_override=new_state, refresh=True)
+
+
+    def _make_row_widgets(self, row_frame, bg, widgets):
+        """Lagre widgets i rad for enkel highlight senere"""
+        row_frame._widgets = widgets
+        row_frame._base_bg = bg
+
+
+    def _set_row_bg(self, row_frame, color):
+        """Oppdater hele raden"""
+        try:
+            for w in row_frame._widgets:
+                w.configure(bg=color)
+        except Exception:
+            pass
+
+
+    def _highlight_row(self, row_frame):
+        self._set_row_bg(row_frame, "#d0ebff")  # valgt
+
+
+    def _hover_row_enter(self, row_frame):
+        if not getattr(row_frame, "_selected", False):
+            self._set_row_bg(row_frame, "#e8f2ff")
+
+
+    def _hover_row_leave(self, row_frame):
+        if not getattr(row_frame, "_selected", False):
+            self._set_row_bg(row_frame, row_frame._base_bg)
+
+
+    def _on_combo_select(self, selected_frame, all_rows):
+        """temp"""
+        for rf in all_rows:
+            rf._selected = False
+            self._set_row_bg(rf, rf._base_bg)
+
+        selected_frame._selected = True
+        self._highlight_row(selected_frame)
+
+
+    def open_historical_suggestions(self, show_all_override=None, refresh=False):
+        show_all = show_all_override if show_all_override is not None else self.show_all_history_var.get()
+        if not self.app.historical_dbs:
+            if not refresh:
+                from tkinter import messagebox
+                messagebox.showinfo("No data loaded", "No historical data is loaded.\n\nPlease load books or earlier databases first.")
+                self.open_advanced_menu()
+            return
+        oid = self.app.current_object_id
+        if not oid: return
+        suggestions = self.collect_historical_suggestions(oid, show_all_override=show_all)
+        if not suggestions and not show_all:
+            self.history_indicator_label.config(text="")
+        active_count = sum(1 for prob_col in self.problem_to_field if self.problem_vars.get(prob_col) and self.problem_vars[prob_col].get())
+        if active_count:
+            self.history_indicator_label.config(text=f"Suggestions available ({active_count} active problem(s))", foreground="blue")
+        else:
+            self.history_indicator_label.config(text=" Suggestions available", foreground="gray")
+        from ui.historical_resolver import HistoricalConflictResolverWindow
+        HistoricalConflictResolverWindow(self, oid, suggestions)
+
+
+    def load_books_file(self):
+
+        path = filedialog.askopenfilename(
+            title="Select Books Excel file",
+            filetypes=[("Excel files", "*.xlsx")],
+            initialdir=__import__("config").get_last_dir("last_book_dir")
+        )
+        if not path:
+            return
+        __import__("config").set_last_dir("last_book_dir", path)
+
+        self._show_progress("Loading Books...", 100)
+
+        threading.Thread(
+            target=self._load_books_file_worker,
+            args=(path,),
+            daemon=True
+        ).start()
+
+
+    def _load_books_file_worker(self, path):
+        try:
+            xls = pd.ExcelFile(path, engine="openpyxl")
+            loaded = []
+            total = len(xls.sheet_names)
+
+            allowed_cols = set(self.app.config.get("books_columns", []))
+            if "ObjectID" not in allowed_cols:
+                allowed_cols.add("ObjectID")
+
+            for i, sheet_name in enumerate(xls.sheet_names):
+
+
+                self.root.after(0, lambda: self.image_scan_progress.configure(value=i, maximum=total))
+
+
+                try:
+                    df = pd.read_excel(
+                        xls,
+                        sheet_name=sheet_name,
+                        usecols=lambda x: x in allowed_cols
+                    )
+
+                    if "ObjectID" not in df.columns:
+                        continue
+
+                    df["ObjectID"] = df["ObjectID"].astype(str).str.strip()
+
+                    loaded.append({
+                        "name": f"Books: {sheet_name}",
+                        "path": path,
+                        "df_reg": df,
+                        "reg_by_id": None,
+                    })
+
+                except Exception:
+                    continue
+
+
+            self.root.after(
+                0,
+                lambda: self._finish_load_books(loaded)
+            )
+
+        except Exception as e:
+            err_msg = str(e)
+
+            self.root.after(
+                0,
+                lambda: (
+                    self._hide_progress("Books load failed"),
+                    messagebox.showerror("Error", f"Could not load Books file:\n{err_msg}")
+                )
+            )
+
+
+    def _finish_load_books(self, loaded):
+        self._history_cache = OrderedDict()
+
+        if hasattr(self, "image_scan_progress"):
+            try:
+                self._hide_progress("Books loaded")
+                self.image_scan_progress.configure(mode="determinate")
+            except Exception:
+                pass
+
+
+        if not loaded:
+            messagebox.showwarning(
+                "No valid sheets",
+                "No usable sheets were found in the Books file."
+            )
+            if hasattr(self, "status"):
+                self.system_status.config(text="Books load failed")
+
+            return
+
+        for db in loaded:
+            if db["reg_by_id"] is None:
+                db["reg_by_id"] = db["df_reg"].set_index("ObjectID")
+
+        self.app.historical_dbs = loaded
+
+
+        self._problem_cache.clear()
+
+
+        if hasattr(self, "_history_cache"):
+            self._history_cache.clear()
+
+        self.refresh_list()
+
+        self._list_dirty = True
+
+        oid = self.app.current_object_id
+        if oid:
+            self.load_object(oid)
+
+
+        self.system_status.config(
+            text=f"Loaded Books file ({len(loaded)} sheets)"
+        )
+
+        self._hide_progress("Books loaded")
+
+        self.update_history_button_state()
+
+
+    def update_history_indicator(self, oid):
+
+        if not self.app.historical_dbs:
+            self.history_indicator_label.config(text="")
+            return
+
+
+        suggestions = self.collect_historical_suggestions(oid)
+
+        if suggestions:
+            self.history_indicator_label.config(
+                text=" Suggestions available (click for details)",
+                foreground="blue"
+            )
+            return
+
+
+        has_any_history = any(
+            (self._get_reg_by_id(db) is not None and oid in self._get_reg_by_id(db).index)
+            for db in self.app.historical_dbs
+        )
+
+        if has_any_history:
+            self.history_indicator_label.config(
+                text=" Historical data loaded. No suggestions for current problems",
+                foreground="gray"
+            )
+        else:
+            self.history_indicator_label.config(text="")
+
+
+    def update_history_button_state(self):
+
+        if not hasattr(self, "next_history_btn"):
+            return
+
+        has_data = bool(self.app.historical_dbs)
+
+        if has_data:
+            self.next_history_btn.config(
+                state="normal",
+                text="Next Problem with Historical Data"
+            )
+        else:
+            self.next_history_btn.config(
+                state="disabled",
+                text="No Historical Data Loaded"
+            )
+
+
+            if hasattr(self, "status"):
+                self.system_status.config(
+                    text="Load Books or previous databases to enable historical navigation"
+                )
