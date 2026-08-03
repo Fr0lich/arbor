@@ -8,6 +8,32 @@ from collections import OrderedDict
 from utils import debug_error
 
 class HistoricalSuggestionsMixin:
+    def _get_db_dict_cache(self, db):
+        if "dict_cache" not in db:
+            dict_cache = {}
+            df = db.get("df_reg")
+            if df is not None and not df.empty:
+                columns = list(df.columns)
+                if "ObjectID" in columns:
+                    obj_id_idx = columns.index("ObjectID") + 1
+                    for row in df.itertuples():
+                        oid = str(row[obj_id_idx]).strip()
+                        if not oid or oid == "nan":
+                            continue
+                        oid_cache = dict_cache.setdefault(oid, {})
+                        for col_idx, col_name in enumerate(columns):
+                            if col_name == "ObjectID":
+                                continue
+                            val = row[col_idx + 1]
+                            if pd.notna(val):
+                                val_str = str(val).strip()
+                                if val_str and val_str != "nan":
+                                    vals_list = oid_cache.setdefault(col_name, [])
+                                    if val_str not in vals_list:
+                                        vals_list.append(val_str)
+            db["dict_cache"] = dict_cache
+        return db["dict_cache"]
+
     def collect_historical_suggestions(self, oid, show_all_override=None):
 
 
@@ -67,20 +93,15 @@ class HistoricalSuggestionsMixin:
             value_map = {}
 
             for db in self.app.historical_dbs:
-                reg_by_id = db.get("value_cache")
-                if reg_by_id is None:
-                    reg_by_id = self._get_reg_by_id(db)
-                if reg_by_id is None:
-                    continue
-                if oid not in reg_by_id.index:
+                dict_cache = self._get_db_dict_cache(db)
+                if oid not in dict_cache:
                     continue
 
-                val = str(reg_by_id.loc[oid].get(field, "")).strip()
-
-                if not val or self.is_word_ignored(val):
-                    continue
-
-                value_map.setdefault(val, []).append(db["name"])
+                field_vals = dict_cache[oid].get(field, [])
+                for val in field_vals:
+                    if self.is_word_ignored(val):
+                        continue
+                    value_map.setdefault(val, []).append(db["name"])
 
             if value_map:
                 suggestions[field] = value_map

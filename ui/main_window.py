@@ -4757,20 +4757,11 @@ class ObjectProgramUI(
             for field in self.reg_columns:
                 vals = []
                 for db in self.app.historical_dbs:
-                    reg_by_id = self._get_reg_by_id(db)
-                    if reg_by_id is not None and oid in reg_by_id.index:
-                        row = reg_by_id.loc[oid]
-                        if isinstance(row, pd.DataFrame):
-                            for v in row[field].dropna():
-                                v_str = str(v).strip()
-                                if v_str and v_str not in vals:
-                                    vals.append(v_str)
-                        else:
-                            v = row.get(field)
-                            if v is not None and not pd.isna(v):
-                                v_str = str(v).strip()
-                                if v_str and v_str not in vals:
-                                    vals.append(v_str)
+                    dict_cache = self._get_db_dict_cache(db)
+                    field_vals = dict_cache.get(oid, {}).get(field, [])
+                    for v in field_vals:
+                        if v not in vals:
+                            vals.append(v)
                 if vals:
                     self.current_object_suggestions[field] = vals
 
