@@ -1,0 +1,281 @@
+import os
+import tkinter as tk
+from tkinter import ttk, messagebox
+from datetime import datetime
+import config
+from config import AUTOSAVE_INTERVAL_MS, AUTOSAVE_SUFFIX, sc
+from utils import debug_error
+
+class AutosaveMixin:
+    def open_autosave_settings(self):
+        """Let the user configure the autosave interval (takes effect immediately)."""
+        import config as _cfg
+        win = tk.Toplevel(self.root)
+        win.title("Autosave Settings")
+        import utils
+        utils.center_and_fit_toplevel(win, 300, 150)
+        win.resizable(False, False)
+        win.grab_set()
+
+        frame = ttk.Frame(win, padding=15)
+        frame.pack(fill="both", expand=True)
+
+        current_minutes = _cfg.AUTOSAVE_INTERVAL_MS // 60000
+        ttk.Label(frame, text="Autosave every (minutes):").pack(anchor="w")
+        var = tk.IntVar(value=current_minutes)
+        spin = ttk.Spinbox(frame, from_=1, to=60, textvariable=var, width=8)
+        spin.pack(anchor="w", pady=6)
+        ttk.Label(frame, text="(1-60 minutes)", foreground="gray").pack(anchor="w")
+
+        def _apply():
+            mins = max(1, min(60, var.get()))
+            _cfg.AUTOSAVE_INTERVAL_MS = mins * 60 * 1000
+            # Cancel current scheduled job and reschedule with new interval
+            if self._autosave_job:
+                self.root.after_cancel(self._autosave_job)
+                self._autosave_job = None
+            self._schedule_autosave()
+            win.destroy()
+
+        ttk.Button(frame, text="Apply", command=_apply).pack(pady=(8, 0))
+
+
+    def start_autosave_loop(self):
+        if self._autosave_job is not None:
+            return
+
+        self._schedule_autosave()
+
+
+    def _schedule_autosave(self):
+        self._autosave_job = self.root.after(
+            AUTOSAVE_INTERVAL_MS,
+            self._autosave_tick
+        )
+
+
+    def _autosave_tick(self):
+        try:
+            if getattr(self, '_save_in_progress', False):
+                # Background save still running — skip this tick
+                return
+            if self.app.dirty and self.app.excel_path:
+                current_dirty = self.app.dirty
+                self.commit_current_object()
+                autosave_path = self._autosave_path()
+
+                def on_autosave_complete(success, err=None):
+                    if success:
+                        ts = datetime.now().strftime("%H:%M:%S")
+                        self.set_status_badge("autosaved", f"Autosaved ({ts})")
+                    else:
+                        self.set_status_badge("autosaved", "Autosave failed")
+                        self.set_status_badge("error", f"Autosave Error")
+
+                self._write_excel_async(autosave_path, on_autosave_complete)
+
+                self.app.dirty = current_dirty
+        except Exception as e:
+            debug_error("_autosave_tick", str(e))
+            self.set_status_badge("error", "Autosave failed")
+        finally:
+            self._schedule_autosave()
+
+
+    def _autosave_path(self):
+        base, _ = os.path.splitext(self.app.excel_path)
+        base = base.replace(".autosave", "")
+        return base + AUTOSAVE_SUFFIX
+
+
+    def _autosave_archive_dir(self):
+        """Returns the .autosave_archives directory path next to the Excel file."""
+        excel_dir = os.path.dirname(self.app.excel_path)
+        return os.path.join(excel_dir, ".autosave_archives")
+
+
+    def _archive_autosave(self, autosave_path):
+        """Move active autosave to archive dir with timestamp suffix."""
+        try:
+            archive_dir = self._autosave_archive_dir()
+            os.makedirs(archive_dir, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            base = os.path.splitext(os.path.basename(autosave_path))[0]
+            dest = os.path.join(archive_dir, f"{base}_{ts}.xlsx")
+            import shutil
+            shutil.move(autosave_path, dest)
+        except Exception as e:
+            from utils import debug_error
+            debug_error("_archive_autosave", str(e))
+
+
+    def _check_and_prompt_autosave(self, original_path):
+        """After DB loads, check for a newer autosave and prompt to restore."""
+        if not self.app.excel_path:
+            return
+        autosave_path = self._autosave_path()
+        if not os.path.exists(autosave_path):
+            self._check_archive_clutter()
+            return
+        try:
+            orig_mtime = os.path.getmtime(original_path)
+            auto_mtime = os.path.getmtime(autosave_path)
+        except Exception:
+            return
+        if auto_mtime <= orig_mtime:
+            # Autosave is not newer — clean it up silently
+            try:
+                os.remove(autosave_path)
+            except Exception:
+                pass
+            self._check_archive_clutter()
+            return
+
+        auto_ts = datetime.fromtimestamp(auto_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        restore = messagebox.askyesno(
+            "Autosave found",
+            f"An autosave from {auto_ts} was found for this database.\n\n"
+            "It may contain unsaved work from your last session.\n\n"
+            "Restore it now?",
+            parent=self.root
+        )
+        if restore:
+            self._restore_autosave(autosave_path, original_path)
+        else:
+            self._archive_autosave(autosave_path)
+        self._check_archive_clutter()
+
+
+    def _restore_autosave(self, autosave_path, original_path):
+        """Load data from the autosave file into the current session."""
+        try:
+            from repository import ExcelRepository
+            df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(autosave_path, self.app.config)
+            self.app.df_reg = df_reg
+            self.app.df_obs = df_obs
+            self.app.df_photo = df_photo
+            self.app.df_log = df_log
+            self.app.df_reg.set_index("ObjectID", inplace=True)
+            self.app.df_obs.set_index("ObjectID", inplace=True)
+            self.app.df_photo.set_index("ObjectID", inplace=True)
+            self.app.initial_df_obs = self.app.df_obs.copy()
+            self.reg_by_id = self.app.df_reg
+            self.obs_by_id = self.app.df_obs
+            self.app.active_object_ids = list(self.app.df_reg.index)
+            self.refresh_list()
+            self.app.dirty = True
+            self.update_dirty_ui()
+            # Remove the autosave after successful restore
+            try:
+                os.remove(autosave_path)
+            except Exception:
+                pass
+            self.show_banner("Autosave restored. Remember to save.", "warning")
+        except Exception as e:
+            from utils import debug_error
+            debug_error("_restore_autosave", str(e))
+            messagebox.showerror("Restore failed", f"Could not restore autosave:\n{e}", parent=self.root)
+
+
+    def _check_archive_clutter(self):
+        """If more than 10 archived autosaves exist, prompt the user."""
+        if not self.app.excel_path:
+            return
+        archive_dir = self._autosave_archive_dir()
+        if not os.path.isdir(archive_dir):
+            return
+        archives = sorted(
+            [f for f in os.listdir(archive_dir) if f.endswith(".xlsx")],
+            reverse=True
+        )
+        if len(archives) > 10:
+            self.root.after(500, lambda: self._prompt_archive_clutter(archive_dir, archives))
+
+
+    def _prompt_archive_clutter(self, archive_dir, archives):
+        msg = (
+            f"You have {len(archives)} archived autosaves stored.\n\n"
+            "Would you like to review and clean them up?\n"
+            "(You can also access them via File → Restore earlier autosave...)"
+        )
+        if messagebox.askyesno("Autosave archive full", msg, parent=self.root):
+            self.open_autosave_manager()
+
+
+    def open_autosave_manager(self):
+        """Open a window to browse, restore, or delete archived autosaves."""
+        if not self.app.excel_path:
+            messagebox.showinfo("No database", "Open a database first.", parent=self.root)
+            return
+        archive_dir = self._autosave_archive_dir()
+        if not os.path.isdir(archive_dir):
+            messagebox.showinfo("No archives", "No archived autosaves found.", parent=self.root)
+            return
+        archives = sorted(
+            [f for f in os.listdir(archive_dir) if f.endswith(".xlsx")],
+            reverse=True
+        )
+        if not archives:
+            messagebox.showinfo("No archives", "No archived autosaves found.", parent=self.root)
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("Autosave Archive Manager")
+        win.geometry("520x380")
+        win.grab_set()
+
+        ttk.Label(win, text="Archived Autosaves", font=("Segoe UI", sc(11), "bold")).pack(anchor="w", padx=15, pady=(12, 4))
+        ttk.Label(win, text="Select a file to restore or delete it.", font=("Segoe UI", sc(9))).pack(anchor="w", padx=15, pady=(0, 8))
+
+        list_frame = ttk.Frame(win)
+        list_frame.pack(fill="both", expand=True, padx=15, pady=4)
+
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+        lb = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, selectmode="single", font=("Segoe UI", sc(9)))
+        lb.pack(fill="both", expand=True)
+        scrollbar.config(command=lb.yview)
+
+        for fname in archives:
+            lb.insert(tk.END, fname)
+
+        btn_frame = ttk.Frame(win)
+        btn_frame.pack(fill="x", padx=15, pady=10)
+
+        def restore_selected():
+            sel = lb.curselection()
+            if not sel:
+                return
+            fname = archives[sel[0]]
+            path = os.path.join(archive_dir, fname)
+            if messagebox.askyesno("Restore", f"Restore '{fname}'?\nThis will replace the current in-memory data.", parent=win):
+                win.destroy()
+                self._restore_autosave(path, self.app.excel_path)
+
+        def delete_selected():
+            sel = lb.curselection()
+            if not sel:
+                return
+            fname = archives[sel[0]]
+            path = os.path.join(archive_dir, fname)
+            if messagebox.askyesno("Delete", f"Permanently delete '{fname}'?", parent=win):
+                try:
+                    os.remove(path)
+                    archives.pop(sel[0])
+                    lb.delete(sel[0])
+                except Exception as e:
+                    messagebox.showerror("Error", str(e), parent=win)
+
+        def delete_all():
+            if messagebox.askyesno("Delete all", f"Delete all {len(archives)} archived autosaves?", parent=win):
+                for fname in list(archives):
+                    try:
+                        os.remove(os.path.join(archive_dir, fname))
+                    except Exception:
+                        pass
+                win.destroy()
+
+        ttk.Button(btn_frame, text="Restore selected", command=restore_selected).pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Delete selected", command=delete_selected).pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Delete all", command=delete_all).pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Close", command=win.destroy).pack(side="right", padx=4)
