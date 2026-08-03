@@ -1,3 +1,11 @@
+"""
+ui/main_window.py
+
+This module implements the main workspace layout (primary layout) of the arbor application.
+It integrates various mixins (Autosave, ImageHandler, Suggestions, etc.) and constructs the
+dynamic database visualizer window using Tkinter.
+"""
+
 from ui.widgets import ToggleSwitch, TreeviewListboxWrapper
 from ui.autosave_handler import AutosaveMixin
 from ui.image_handler import ImageHandlerMixin
@@ -3091,6 +3099,18 @@ class ObjectProgramUI(
         nav_links_frame.pack(side="left", fill="y")
 
         def _nav_btn(parent, label, cmd, is_active=False):
+            """
+            Creates a navigation button with consistent styling and packs it inside the parent container.
+
+            Args:
+                parent (tk.Widget): The container frame to pack the button into.
+                label (str): The text label displayed on the button.
+                cmd (function): The callback function triggered on button click.
+                is_active (bool, optional): Unused flag kept for API consistency.
+
+            Returns:
+                ttk.Button: The created styled button widget.
+            """
             btn = ttk.Button(parent, text=label, style="Nav.TButton", command=cmd)
             btn.pack(side="left", fill="y")
             self.toolbar_buttons[label] = btn
@@ -3098,19 +3118,24 @@ class ObjectProgramUI(
             return btn
 
         # FILE — opens the file/open dialog
-        _nav_btn(nav_links_frame, "FILE",     self.open_excel)
+        btn_file = _nav_btn(nav_links_frame, "FILE",     self.open_excel)
+        self.add_tooltip(btn_file, "Open an Excel database file")
 
         # NAVIGATE — active state indicator (current view, no command)
-        _nav_btn(nav_links_frame, "FREE BUTTON", lambda: None)
+        btn_nav = _nav_btn(nav_links_frame, "NAVIGATE", lambda: None)
+        self.add_tooltip(btn_nav, "Active workspace navigation view")
 
         # IMAGES — jump to next problem
-        _nav_btn(nav_links_frame, "IMAGES", self.open_image_menu)
+        btn_img = _nav_btn(nav_links_frame, "IMAGES", self.open_image_menu)
+        self.add_tooltip(btn_img, "Manage image folder or scan settings")
 
         # CREATE — add new object or database
-        _nav_btn(nav_links_frame, "CREATE",   self.show_create_dropdown)
-        # HISTORY — recent objects popup
+        btn_create = _nav_btn(nav_links_frame, "CREATE",   self.show_create_dropdown)
+        self.add_tooltip(btn_create, "Create a new museum object or database")
 
-        _nav_btn(nav_links_frame, "HISTORY",  self.open_recent_popup)
+        # HISTORY — recent objects popup
+        btn_hist = _nav_btn(nav_links_frame, "HISTORY",  self.open_recent_popup)
+        self.add_tooltip(btn_hist, "View recently visited museum objects")
 
         # 1px separator before secondary controls
         tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)
