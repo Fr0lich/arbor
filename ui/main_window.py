@@ -50,6 +50,14 @@ class ObjectProgramUI(
     DatabaseOpsMixin
 ):
 # ---------- UI helpers ----------
+    @property
+    def autoAdvanceOnReview(self):
+        return self.auto_advance_var.get()
+
+    @autoAdvanceOnReview.setter
+    def autoAdvanceOnReview(self, val):
+        self.auto_advance_var.set(bool(val))
+
     def labeled_entry(self, parent, text, textvar):
         """
         Lager en flyttbar rad med Label + Entry
@@ -117,6 +125,7 @@ class ObjectProgramUI(
         self.focus_dynamic_update_var = tk.BooleanVar(value=True)
         self.layout_dynamic_update_var = tk.BooleanVar(value=True)
         self.large_reviewed_button_var = tk.BooleanVar(value=True)
+        self.auto_advance_var = tk.BooleanVar(value=True)
 
 
 
@@ -198,9 +207,9 @@ class ObjectProgramUI(
         self.root.bind("<Control-y>", self.redo)
         self.root.bind("<Control-n>", self._shortcut_new_object)
         self.root.bind("<F1>", lambda e: self.show_shortcuts())
-        self.root.bind("<Control-r>", lambda e: self._toggle_reviewed_for_id(self.app.current_object_id))
-        self.root.bind("<Control-Return>", lambda e: self._toggle_reviewed_for_id(self.app.current_object_id))
-        self.root.bind("<Control-KP_Enter>", lambda e: self._toggle_reviewed_for_id(self.app.current_object_id))
+        self.root.bind("<Control-r>", lambda e: self.mark_current_as_reviewed())
+        self.root.bind("<Control-Return>", lambda e: self.mark_current_as_reviewed())
+        self.root.bind("<Control-KP_Enter>", lambda e: self.mark_current_as_reviewed())
 
         self.root.bind("<space>", self._toggle_problem_checkbox)
 
@@ -701,109 +710,143 @@ class ObjectProgramUI(
         self.prob_border_bars.clear()
         self.prob_label_widgets.clear()
 
-        # Fetch or determine reg_groups
-        import config
-        prefs = config.load_prefs() or {}
-        custom_groups = prefs.get("custom_reg_tabs")
-        
-        if custom_groups:
-            reg_groups_def = custom_groups
-        else:
-            reg_groups_def = self.app.config.get("reg_groups", [])
-
-        assigned_fields = set()
-        for g in reg_groups_def:
-            assigned_fields.update(g.get("fields", []))
-        
+        # Build single Specimen Audit tab with cards
         all_fields = [f["name"] for f in self.app.config["ui_sections"]["registration"]]
-        misc_fields = [f for f in all_fields if f not in assigned_fields]
-        
-        groups_to_build = []
-        for g in reg_groups_def:
-            groups_to_build.append(g)
-        if misc_fields:
-            groups_to_build.append({"name": "Miscellaneous", "fields": misc_fields})
-
         self._reg_tabs = {}
         
-        for group in groups_to_build:
-            g_name = group["name"]
-            g_fields = [f for f in group.get("fields", []) if f in all_fields]
-            if not g_fields:
-                continue
-                
-            # Create a tab frame container in the notebook
-            tab_container = ttk.Frame(self.reg_notebook)
+        # Define cards with themes, header icons and ordered fields
+        card_defs = [
+            {
+                "id": "taxonomy",
+                "title": "Taxonomy & Scientific Name",
+                "icon": "🧬",
+                "fields": ["Genus", "Species", "Author", "Family", "Higher Classification"]
+            },
+            {
+                "id": "collection",
+                "title": "Collection & Specimen Metadata",
+                "icon": "📦",
+                "fields": ["Collector", "Innsammling Nr.", "Collection Date", "Collection Place", "Variant", "(N) Plant Part", "Plant Part", "Box Label", "Conservation Status", "UID"]
+            },
+            {
+                "id": "notes",
+                "title": "Audit Notes & Descriptions",
+                "icon": "📝",
+                "fields": ["Observation", "Comment", "ProblemDescription"]
+            }
+        ]
+
+        # Safeguard: Append any other registration fields in config not explicitly assigned to any card
+        assigned_fields = set()
+        for c in card_defs:
+            assigned_fields.update(c["fields"])
+        unassigned_fields = [f for f in all_fields if f not in assigned_fields]
+        if unassigned_fields:
+            card_defs[1]["fields"].extend(unassigned_fields)
+
+        self.card_defs_ordered = [c["id"] for c in card_defs]
+        self.card_frames = {}
+        
+        is_dark = getattr(self, "dark_mode_active", False)
+        card_bg = "#1e1e2d" if is_dark else "#ffffff"
+        header_bg = "#252538" if is_dark else "#f5f5f5"
+        border_color = "#313244" if is_dark else "#e2e2e2"
+        fg_color = "#cdd6f4" if is_dark else "#1a1c1c"
+        
+        # Create a single tab container for Specimen Audit
+        tab_container = ttk.Frame(self.reg_notebook)
+        
+        # Scrollable canvas inside the tab container
+        tab_canvas = tk.Canvas(tab_container, highlightthickness=0, bg="#1e1e2d" if is_dark else "#f9f9f9")
+        tab_scroll = ttk.Scrollbar(tab_container, orient="vertical", command=tab_canvas.yview)
+        tab_frame = ttk.Frame(tab_canvas, style="RightPane.TFrame")
+
+        tab_frame.bind(
+            "<Configure>",
+            lambda e, tc=tab_canvas: tc.configure(scrollregion=tc.bbox("all"))
+        )
+        tab_win_id = tab_canvas.create_window((0, 0), window=tab_frame, anchor="nw")
+        tab_canvas.configure(yscrollcommand=tab_scroll.set)
+        tab_canvas.bind(
+            "<Configure>",
+            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width)
+        )
+
+        # Mousewheel scrolling specific to this tab
+        def _make_mousewheel_scroller(canvas):
+            return lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units")
+
+        mw_scroller = _make_mousewheel_scroller(tab_canvas)
+        tab_container.bind("<Enter>", lambda e, mws=mw_scroller: tab_container.bind_all("<MouseWheel>", mws))
+        tab_container.bind("<Leave>", lambda e: tab_container.unbind_all("<MouseWheel>"))
+
+        tab_canvas.pack(side="left", fill="both", expand=True)
+        tab_scroll.pack(side="right", fill="y")
+
+        self._reg_tabs["Specimen Audit"] = {
+            "container": tab_container,
+            "canvas": tab_canvas,
+            "frame": tab_frame,
+            "fields": all_fields
+        }
+
+        self.reg_notebook.add(tab_container, text="Specimen Audit")
+
+        # Generate card layout inside the tab frame
+        for c in card_defs:
+            card_id = c["id"]
+            card_title = c["title"]
+            icon = c["icon"]
+            fields_to_render = c["fields"]
             
-            # Scrollable canvas inside the tab container
-            tab_canvas = tk.Canvas(tab_container, highlightthickness=0)
-            tab_scroll = ttk.Scrollbar(tab_container, orient="vertical", command=tab_canvas.yview)
-            tab_frame = ttk.Frame(tab_canvas)
+            # Card frame (outer container with 1px border)
+            card_frame = tk.Frame(tab_frame, bg=card_bg, highlightthickness=1, highlightbackground=border_color, bd=0)
+            card_frame.pack(fill="x", padx=10, pady=8)
             
-            tab_frame.bind(
-                "<Configure>",
-                lambda e, tc=tab_canvas: tc.configure(scrollregion=tc.bbox("all"))
-            )
-            tab_win_id = tab_canvas.create_window((0, 0), window=tab_frame, anchor="nw")
-            tab_canvas.configure(yscrollcommand=tab_scroll.set)
-            tab_canvas.bind(
-                "<Configure>",
-                lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width)
-            )
-            
-            # Mousewheel scrolling specific to this tab
-            def _make_mousewheel_scroller(canvas):
-                return lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units")
-            
-            mw_scroller = _make_mousewheel_scroller(tab_canvas)
-            tab_container.bind("<Enter>", lambda e, mws=mw_scroller: tab_container.bind_all("<MouseWheel>", mws))
-            tab_container.bind("<Leave>", lambda e: tab_container.unbind_all("<MouseWheel>"))
-            
-            tab_canvas.pack(side="left", fill="both", expand=True)
-            tab_scroll.pack(side="right", fill="y")
-            
-            self._reg_tabs[g_name] = {
-                "container": tab_container,
-                "canvas": tab_canvas,
-                "frame": tab_frame,
-                "fields": g_fields
+            self.card_frames[card_id] = {
+                "frame": card_frame,
+                "fields": fields_to_render
             }
             
-            self.reg_notebook.add(tab_container, text=g_name)
+            # Header panel inside card
+            header_frame = tk.Frame(card_frame, bg=header_bg, padx=8, pady=6)
+            header_frame.pack(fill="x")
             
-            # Split fields into single-line and multiline
-            single_fields = []
-            multi_fields = []
-            for fname in g_fields:
+            icon_lbl = tk.Label(header_frame, text=icon, font=("Segoe UI", sc(11)), bg=header_bg, fg=fg_color)
+            icon_lbl.pack(side="left", padx=(0, 6))
+            
+            title_lbl = tk.Label(header_frame, text=card_title, font=("Hanken Grotesk", sc(11), "bold"), bg=header_bg, fg=fg_color)
+            title_lbl.pack(side="left")
+            
+            # Card content area
+            body_frame = tk.Frame(card_frame, bg=card_bg, padx=12, pady=12)
+            body_frame.pack(fill="x")
+            
+            body_frame.columnconfigure(0, weight=1)
+            
+            current_row = 0
+            for fname in fields_to_render:
                 field = next((f for f in self.app.config["ui_sections"]["registration"] if f["name"] == fname), None)
                 if not field:
                     continue
-                ftype = field.get("type", "text")
-                if ftype == "multiline" or fname == "Conservation Status":
-                    multi_fields.append((fname, field))
-                else:
-                    single_fields.append((fname, field))
 
-            # Render single-line fields in a grid
-            current_row = 0
-            for fname, field in single_fields:
                 name = field["name"]
                 ftype = field.get("type", "text")
                 var = tk.StringVar()
                 self.reg_vars[name] = var
 
-                frame = ttk.Frame(tab_frame)
+                # Single individual field row
+                frame = tk.Frame(body_frame, bg=card_bg)
                 self.reg_row_frames[name] = frame
 
-                # Col 0: always a container holding the colored border bar + optional checkbox
-                col0_frame = ttk.Frame(frame)
+                # Col 0: border bar + optional problem checkbox
+                col0_frame = tk.Frame(frame, bg=card_bg)
                 col0_frame.grid(row=0, column=0, sticky="nsw", padx=(2, 2))
 
                 prob_col = field_to_problem.get(name)
                 if prob_col:
                     prob_var = self.problem_vars[prob_col]
 
-                    # 3px left-edge border bar — color driven by _update_problem_row_style
                     border_bar = tk.Frame(col0_frame, width=3, bd=0, highlightthickness=0)
                     border_bar.pack(side="left", fill="y", padx=(0, 2))
                     self.prob_border_bars[name] = border_bar
@@ -818,7 +861,6 @@ class ObjectProgramUI(
                     cb.pack(side="left")
                     self.add_tooltip(cb, f"Flag as having a problem ({prob_col.replace('_', ' ')}). Tab + Space to toggle.")
 
-                    # Trace for external updates (load_object, undo)
                     prob_var.trace_add(
                         "write",
                         lambda *_, n=name, pc=prob_col: self.root.after_idle(
@@ -826,16 +868,17 @@ class ObjectProgramUI(
                         )
                     )
                 else:
-                    # No problem mapped — spacer to keep column widths consistent
-                    tk.Frame(col0_frame, width=3, bd=0, highlightthickness=0).pack(side="left", fill="y", padx=(0, 2))
-                    ttk.Frame(col0_frame, width=16).pack(side="left")  # matches checkbox width
+                    tk.Frame(col0_frame, width=3, bd=0, highlightthickness=0, bg=card_bg).pack(side="left", fill="y", padx=(0, 2))
+                    spacer_lbl = tk.Frame(col0_frame, width=16, bg=card_bg)
+                    spacer_lbl.pack(side="left")
 
-                # Col 1: field label — ref stored for foreground updates
-                lbl = ttk.Label(frame, text=name, width=22, anchor="w", font=("Hanken Grotesk", sc(10), "bold"))
+                # Col 1: Label with bold clean typography
+                lbl = tk.Label(frame, text=name, width=22, anchor="w", font=("Hanken Grotesk", sc(10), "bold"), bg=card_bg, fg=fg_color)
                 lbl.grid(row=0, column=1, sticky="w", padx=(0, 6))
                 if prob_col:
                     self.prob_label_widgets[name] = lbl
-        
+
+                # Col 2: input widget based on type
                 if ftype == "choice":
                     choices = field.get("choices", [])
                     if "" not in choices:
@@ -843,20 +886,36 @@ class ObjectProgramUI(
                     widget = ttk.Combobox(frame, textvariable=var, values=choices)
                 elif ftype == "checkbox":
                     widget = ttk.Checkbutton(
-                        frame, 
-                        text="", 
+                        frame,
+                        text="",
                         variable=var,
-                        onvalue="True", 
+                        onvalue="True",
                         offvalue="False",
                         command=lambda n=name, v=var: self._on_checkbox_change(n, v)
                     )
+                elif ftype == "multiline" or name == "Conservation Status":
+                    widget = tk.Text(
+                        frame, height=3,
+                        relief="flat", bd=0,
+                        highlightthickness=1, highlightbackground=border_color,
+                        highlightcolor="#000000" if not is_dark else "#cdd6f4",
+                        insertbackground="#000000" if not is_dark else "#cdd6f4",
+                        bg="#ffffff" if not is_dark else "#181825",
+                        fg="#1a1c1c" if not is_dark else "#cdd6f4",
+                        font=("Hanken Grotesk", sc(10))
+                    )
+                    def bind_text_events(w):
+                        w.bind("<KeyRelease>", self._on_text_change)
+                    bind_text_events(widget)
                 else:
                     widget = tk.Entry(
                         frame, textvariable=var,
                         relief="flat", bd=0,
-                        highlightthickness=1, highlightbackground="#d1d1d1",
-                        highlightcolor="#000000", insertbackground="#000000",
-                        bg="#ffffff", fg="#1a1c1c",
+                        highlightthickness=1, highlightbackground=border_color,
+                        highlightcolor="#000000" if not is_dark else "#cdd6f4",
+                        insertbackground="#000000" if not is_dark else "#cdd6f4",
+                        bg="#ffffff" if not is_dark else "#181825",
+                        fg="#1a1c1c" if not is_dark else "#cdd6f4",
                         font=("Hanken Grotesk", sc(10))
                     )
                     widget.bind("<KeyRelease>", lambda e, n=name, w=widget: self._on_autocomplete_key(e, n, w), add="+")
@@ -868,62 +927,23 @@ class ObjectProgramUI(
 
                 self.reg_entries[name] = widget
                 self.reg_entry_list.append(widget)
-            
+
                 widget.grid(row=0, column=2, sticky="ew")
 
+                # Bind general keys
                 widget.bind("<Shift-Up>", self._reg_nav_up)
                 widget.bind("<Shift-Down>", self._reg_nav_down)
                 widget.bind("<Control-Up>", self._reg_nav_up)
                 widget.bind("<Control-Down>", self._reg_nav_down)
-                widget.bind("<Return>", self._reg_nav_down)
+                if ftype != "multiline":
+                    widget.bind("<Return>", self._reg_nav_down)
 
                 frame.columnconfigure(0, minsize=sc(28), weight=0)
                 frame.columnconfigure(1, minsize=sc(180), weight=0)
                 frame.columnconfigure(2, weight=1)
-                frame.grid(row=current_row, column=0, sticky="ew", pady=2)
+
+                frame.grid(row=current_row, column=0, sticky="ew", pady=4)
                 current_row += 1
-
-            # Render multiline fields below a dashed separator
-            if multi_fields:
-                sep_frame = ttk.Frame(tab_frame)
-                sep_frame.grid(row=current_row, column=0, columnspan=3, sticky="ew", pady=8)
-                dashed_lbl = ttk.Label(sep_frame, text="--------------------------------------------------------------------------------", foreground="#d1d1d1")
-                dashed_lbl.pack(fill="x")
-                current_row += 1
-
-                for fname, field in multi_fields:
-                    name = field["name"]
-                    
-                    frame = ttk.Frame(tab_frame)
-                    self.reg_row_frames[name] = frame
-
-                    lbl = ttk.Label(frame, text=name, font=("Hanken Grotesk", sc(10), "bold"))
-                    lbl.pack(anchor="w", pady=(4, 2))
-
-                    widget = tk.Text(
-                        frame, height=4,
-                        relief="flat", bd=0,
-                        highlightthickness=1, highlightbackground="#d1d1d1",
-                        highlightcolor="#000000", insertbackground="#000000",
-                        bg="#ffffff", fg="#1a1c1c",
-                        font=("Hanken Grotesk", sc(10))
-                    )
-                    self.reg_entries[name] = widget
-
-                    def bind_text_events(w):
-                        w.bind("<KeyRelease>", self._on_text_change)
-                    bind_text_events(widget)
-
-                    self.reg_entry_list.append(widget)
-                    widget.pack(fill="x", expand=True)
-
-                    widget.bind("<Shift-Up>", self._reg_nav_up)
-                    widget.bind("<Shift-Down>", self._reg_nav_down)
-                    widget.bind("<Control-Up>", self._reg_nav_up)
-                    widget.bind("<Control-Down>", self._reg_nav_down)
-
-                    frame.grid(row=current_row, column=0, columnspan=3, sticky="ew", pady=4)
-                    current_row += 1
 
         # -------- PROBLEMS TAB --------
         tab_container = ttk.Frame(self.reg_notebook)
@@ -3724,6 +3744,23 @@ class ObjectProgramUI(
         self.add_tooltip(
             self.clear_problems_cb,
             "Uncheck all problem flags and mark this object as reviewed (stays on current object)"
+        )
+
+        self.auto_next_cb = tk.Checkbutton(
+            action_row1b,
+            text="Auto-next after review",
+            variable=self.auto_advance_var,
+            font=("Segoe UI", sc(9.5)),
+            bg=bg_pane, fg=fg_col,
+            activebackground=bg_pane, activeforeground=fg_col,
+            selectcolor=bg_col,
+            relief="flat", bd=0, highlightthickness=0,
+            cursor="hand2"
+        )
+        self.auto_next_cb.pack(side="left", padx=4)
+        self.add_tooltip(
+            self.auto_next_cb,
+            "Automatically advance to the next item when marked as reviewed"
         )
 
         self.reviewed_time_label = ttk.Label(
@@ -7197,6 +7234,22 @@ class ObjectProgramUI(
         else:
             self.no_problems_msg_label.grid_remove()
 
+        # Dynamically hide card frames if all of their fields are hidden in Focus Mode
+        if hasattr(self, "card_frames") and hasattr(self, "card_defs_ordered"):
+            for card_id in self.card_defs_ordered:
+                info = self.card_frames[card_id]
+                card_frame = info["frame"]
+                fields = info["fields"]
+                any_visible = False
+                for f in fields:
+                    row_frame = self.reg_row_frames.get(f)
+                    if row_frame and row_frame.winfo_manager() == "grid":
+                        any_visible = True
+                        break
+                card_frame.pack_forget()
+                if any_visible:
+                    card_frame.pack(fill="x", padx=10, pady=8)
+
         if not skip_snap and self.snap_lock_var.get():
             self.snap_to_place(shrink=focus_active)
             
@@ -7408,8 +7461,8 @@ class ObjectProgramUI(
 
 
     def _on_reviewed_clicked(self):
-        """Toggle reviewed status in-place. No navigation."""
-        self._toggle_reviewed_for_id(self.app.current_object_id)
+        """Mark as reviewed and automatically advance if autoAdvanceOnReview is enabled."""
+        self.mark_current_as_reviewed()
 
     def update_reviewed_button_state(self):
         oid = self.app.current_object_id
@@ -7491,17 +7544,8 @@ class ObjectProgramUI(
             self.reviewed_button.config(bg="#3b6934")
 
     def mark_reviewed_and_next(self, event=None):
-        """Toggle reviewed status for the current object in-place. No navigation.
-        
-        Formerly navigated to the next object after marking. Behaviour changed:
-        Ctrl+R / Ctrl+Enter and the Mark as Reviewed button all toggle in-place
-        so the user stays on the current object and can verify the state before
-        manually navigating with the Next button or keyboard.
-        """
-        oid = self.app.current_object_id
-        if not oid:
-            return "break"
-        self._toggle_reviewed_for_id(oid)
+        """Mark as reviewed and automatically advance if autoAdvanceOnReview is enabled."""
+        self.mark_current_as_reviewed()
         return "break"
 
     def _clear_problems_and_mark_reviewed(self, event=None):
@@ -7670,6 +7714,37 @@ class ObjectProgramUI(
         if current_vals:
             current_vals[0] = "☑" if reviewed else "☐"
             self.object_list.item(oid, values=current_vals)
+
+    def mark_current_as_reviewed(self):
+        oid = self.app.current_object_id
+        if not oid:
+            return
+
+        # Ensure the current item is marked as reviewed (set to True)
+        self.push_undo_state()
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.app.df_obs.loc[oid, REVIEWED_COLUMN] = True
+        self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = now
+
+        # If this is the currently active object, also update the checkbox variable and display
+        self.reviewed_var.set(True)
+        self.reviewed_time_label.config(text=now)
+
+        self.app.dirty = True
+        self.update_dirty_ui()
+        self.update_dashboard()
+        self.update_list_item_color(oid)
+        self.update_review_progress()
+        self._list_dirty = True
+        self.update_reviewed_button_state()
+
+        # If autoAdvanceOnReview is True and a next item exists, advance
+        if self.autoAdvanceOnReview:
+            if oid in self.app.active_object_ids:
+                idx = self.app.active_object_ids.index(oid)
+                if idx + 1 < len(self.app.active_object_ids):
+                    self.navigate_object(1)
 
     def _toggle_reviewed_for_id(self, oid):
         if not oid:
