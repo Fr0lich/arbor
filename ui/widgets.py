@@ -163,7 +163,9 @@ class TreeviewListboxWrapper(ttk.Treeview):
             super().delete(*children)
         self.items_list.clear()
 
-    def insert(self, index, title, genus=None, species=None):
+    def insert(self, index, title, genus=None, species=None, reviewed=None):
+        # PERFORMANCE OPTIMIZATION (Bolt): Added reviewed parameter to bypass expensive DataFrame/pandas index
+        # queries (O(1) with high pandas overhead) in large collection rendering loops.
         from repository import REVIEWED_COLUMN
         oid = title.split(" ")[0].strip()
         if genus is None or species is None:
@@ -178,12 +180,13 @@ class TreeviewListboxWrapper(ttk.Treeview):
                 if genus == "nan" or pd.isna(row.get("Genus")): genus = ""
                 if species == "nan" or pd.isna(row.get("Species")): species = ""
 
-        reviewed = False
-        if self.main_window.app.df_obs is not None and oid in self.main_window.app.df_obs.index:
-            try:
-                reviewed = bool(self.main_window.app.df_obs.loc[oid, REVIEWED_COLUMN])
-            except Exception:
-                pass
+        if reviewed is None:
+            reviewed = False
+            if self.main_window.app.df_obs is not None and oid in self.main_window.app.df_obs.index:
+                try:
+                    reviewed = bool(self.main_window.app.df_obs.loc[oid, REVIEWED_COLUMN])
+                except Exception:
+                    pass
         rev_char = "☑" if reviewed else "☐"
 
         row_tag = "even" if len(self.items_list) % 2 == 0 else "odd"

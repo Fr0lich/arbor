@@ -2239,12 +2239,21 @@ class ObjectProgramUI(
 # ------ sÃ¸ke_index 1
 
     def build_search_index(self):
+        # PERFORMANCE OPTIMIZATION (Bolt): Use itertuples() to build the index faster, avoiding pandas iterrows series creation overhead.
         self.search_index = []
+        if self.reg_by_id is None or self.reg_by_id.empty:
+            return
 
-        for oid, row in self.reg_by_id.iterrows():
+        df = self.reg_by_id
+        genus_col = "Genus" if "Genus" in df.columns else None
+        species_col = "Species" if "Species" in df.columns else None
 
-            genus = str(row.get("Genus", "")).strip()
-            species = str(row.get("Species", "")).strip()
+        for row in df.itertuples():
+            oid = str(row.Index)
+            genus = str(getattr(row, "Genus", "")).strip() if genus_col else ""
+            species = str(getattr(row, "Species", "")).strip() if species_col else ""
+            if genus == "nan" or pd.isna(genus) or genus == "None": genus = ""
+            if species == "nan" or pd.isna(species) or species == "None": species = ""
 
             name = f"{genus} {species}".strip()
 
@@ -6666,10 +6675,11 @@ class ObjectProgramUI(
             if species: parts.append(species)
             title = " ".join(parts)
 
-            self.object_list.insert(tk.END, title, genus=genus, species=species)
+            reviewed = bool(reviewed_dict.get(oid, False))
+            # PERFORMANCE OPTIMIZATION (Bolt): Pass the pre-calculated reviewed status to bypass costly individual loc queries on insert.
+            self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed)
 
             color = None
-            reviewed = bool(reviewed_dict.get(oid, False))
             has_problem = self._get_cached_problem(oid)
             has_history = self._has_history(oid)
 
