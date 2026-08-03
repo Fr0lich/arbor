@@ -188,9 +188,9 @@ class DatabaseOpsMixin:
         self.photo_by_id = self.app.df_photo
 
         self.app.active_object_ids = list(self.app.df_reg.index)
-        self.object_list.delete(0, tk.END)
-        for oid in self.app.active_object_ids:
-            self.object_list.insert(tk.END, self.object_title(oid))
+        # PERFORMANCE OPTIMIZATION (Bolt): Call self.refresh_list() instead of manual loop to populate
+        # the list with pre-calculated fields and apply correct color/state styles in a single fast pass.
+        self.refresh_list()
 
 
         self.build_search_index()
