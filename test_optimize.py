@@ -93,5 +93,26 @@ class TestOptimize(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def test_update_dashboard_vectorized_logic(self):
+        # Test the core logic used in our optimized update_dashboard method.
+        # We check that .any(axis=1) works properly on a DataFrame.
+        df_obs = pd.DataFrame({
+            "ObjectID": ["1", "2", "3"],
+            "Genus_Problem": [True, False, False],
+            "Species_Problem": [False, True, False]
+        }).set_index("ObjectID")
+
+        problem_columns = ["Genus_Problem", "Species_Problem"]
+        cols = [p for p in problem_columns if p in df_obs.columns]
+
+        has_prob_series = df_obs[cols].any(axis=1)
+        self.assertTrue(has_prob_series.loc["1"])
+        self.assertTrue(has_prob_series.loc["2"])
+        self.assertFalse(has_prob_series.loc["3"])
+
+        # Test dropping current_oid
+        other_sum = has_prob_series.drop("1", errors="ignore").sum()
+        self.assertEqual(other_sum, 1)
+
 if __name__ == "__main__":
     unittest.main()
