@@ -245,10 +245,9 @@ class TutorialPopup:
         self.win.update_idletasks()
         self.position_popup()
         
-        # Ensure it stays with parent
-        self.win.bind("<Configure>", lambda e: self.position_popup())
+        # Ensure it stays with parent, but guard to only process parent window's config events
         if parent:
-            parent.bind("<Configure>", lambda e: self.position_popup(), add="+")
+            parent.bind("<Configure>", lambda e, p=parent: self.position_popup(e, p), add="+")
 
     def save_skip_pref(self):
         import config
@@ -280,10 +279,34 @@ class TutorialPopup:
             import tkinter.messagebox as mb
             mb.showerror("Tutorial Error", f"Error in next step: {e}")
 
-    def position_popup(self):
+    # ── CRASH EXPLANATION & FIX MECHANICS ──────────────────────────────────
+    # [PREVIOUS BUG]:
+    # Previously, the popup window (self.win) had a `<Configure>` event bound
+    # to self.position_popup(). Inside `position_popup()`, calling
+    # `self.win.geometry()` altered the popup's own geometry, which immediately
+    # triggered a new `<Configure>` event. This created an infinite, rapid,
+    # recursive cascade of configure events that starved the CPU and froze the
+    # Tkinter event loop, causing the program to get stuck on startup.
+    #
+    # [THE RESOLUTION]:
+    # 1. We removed the `<Configure>` binding from `self.win` entirely because
+    #    overrideredirect windows have no window manager controls and are not
+    #    resizable/movable by the user, hence they don't need to reposition
+    #    themselves in response to their own geometry configurations.
+    # 2. We guarded parent window configurations (event.widget == parent_widget)
+    #    to ensure the popup only repositions when the top-level parent window
+    #    actually moves or resizes, rather than on every child widget layout
+    #    update (preventing propagation overhead and infinite loops).
+    # ───────────────────────────────────────────────────────────────────────
+    def position_popup(self, event=None, parent_widget=None):
         if not self.win.winfo_exists():
             return
             
+        # Avoid processing configure events propagated from child widgets.
+        # Only process configurations of the parent window itself.
+        if event and parent_widget and event.widget != parent_widget:
+            return
+
         w = self.win.winfo_reqwidth()
         h = self.win.winfo_reqheight()
 
