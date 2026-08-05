@@ -6575,6 +6575,23 @@ class ObjectProgramUI(
 
         matched = []
 
+        # PERFORMANCE OPTIMIZATION (Bolt): Retrieve all Tkinter variable values once before the loop,
+        # avoiding thousands of expensive Tcl interpreter roundtrips inside the loop.
+        group_modes = {group_name: self.filter_modes[group_name].get() for group_name in groups}
+
+        building_filter = self.filter_location_vars["Building"].get()
+        floor_filter = self.filter_location_vars["Floor"].get()
+        cabinet_filter = self.filter_location_vars["Cabinet"].get().strip().lower()
+
+        # PERFORMANCE OPTIMIZATION (Bolt): Define the helper function outside of the main loop
+        # to avoid function object creation overhead on every iteration.
+        def get_location_str(val):
+            if pd.isna(val) or val == "":
+                return ""
+            if isinstance(val, float) and val.is_integer():
+                return str(int(val))
+            return str(val)
+
         for oid in self.app.df_reg.index:
 
          
@@ -6590,7 +6607,7 @@ class ObjectProgramUI(
 
             for group_name, items in groups.items():
 
-                mode = self.filter_modes[group_name].get()
+                mode = group_modes[group_name]
                 result = check_group(oid, items, mode)
 
                 if result is not None:
@@ -6606,18 +6623,7 @@ class ObjectProgramUI(
             # ---------- LOCATION MATCH ----------
             location_match = True
 
-            building_filter = self.filter_location_vars["Building"].get()
-            floor_filter = self.filter_location_vars["Floor"].get()
-            cabinet_filter = self.filter_location_vars["Cabinet"].get().strip().lower()
-
             obs_row = obs_dict.get(oid, {})
-
-            def get_location_str(val):
-                if pd.isna(val) or val == "":
-                    return ""
-                if isinstance(val, float) and val.is_integer():
-                    return str(int(val))
-                return str(val)
 
             # Building
             if building_filter:
