@@ -43,6 +43,23 @@ class TestOptimize(unittest.TestCase):
         result = ObjectProgramUI._get_reg_by_id(None, db)
         self.assertIsNone(result)
 
+    def test_lambda_deferred_exception_binding(self):
+        # Test that lambda behaves correctly when capturing exception details eagerly via default arguments
+        callbacks = []
+        try:
+            raise ValueError("Test Exception")
+        except ValueError as e:
+            err_msg = str(e)
+            tb = "mock_traceback"
+            # Define lambda with default arguments to capture eagerly
+            callbacks.append(lambda msg=err_msg, t=tb: (msg, t))
+            # e will be deleted after the except block, but lambda should still succeed
+
+        # Verify lambda successfully retrieves exception message and traceback without NameError
+        msg, t = callbacks[0]()
+        self.assertEqual(msg, "Test Exception")
+        self.assertEqual(t, "mock_traceback")
+
     def test_pickle_serialization_and_deserialization(self):
         # Test that df dataframes can be pickled and unpickled correctly
         df_reg = pd.DataFrame({"ObjectID": ["1", "2"], "Genus": ["Genus1", "Genus2"]})
