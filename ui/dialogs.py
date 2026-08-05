@@ -1317,16 +1317,40 @@ class StartupDialog:
         self.win.destroy()
 
     def show_help(self):
+        import config
+        prefs = config.load_prefs()
+        disable_tutorials = prefs.get("disable_tutorials", False)
+
         menu = tk.Menu(self.win, tearoff=0)
         menu.add_command(label="Setup Help", command=self._show_setup_help_msg)
+
         from ui.tutorial import TutorialManager
-        menu.add_command(label="Start Tutorial", command=lambda: TutorialManager().start_tutorial("startup_tutorial", self.win))
+        if not disable_tutorials:
+            menu.add_command(label="Start Tutorial", command=lambda: TutorialManager().start_tutorial("startup_tutorial", self.win))
+            menu.add_command(label="Disable All Tutorials", command=self._toggle_disable_tutorials)
+        else:
+            menu.add_command(label="Enable Tutorials", command=self._toggle_disable_tutorials)
+
         x = self.help_btn.winfo_rootx()
         y = self.help_btn.winfo_rooty() + self.help_btn.winfo_height()
         try:
             menu.tk_popup(x, y)
         finally:
             menu.grab_release()
+
+    def _toggle_disable_tutorials(self):
+        import config
+        prefs = config.load_prefs()
+        curr = prefs.get("disable_tutorials", False)
+        prefs["disable_tutorials"] = not curr
+        config.save_prefs(prefs)
+
+        if not curr: # meaning we just set it to True (disabled)
+            from ui.tutorial import TutorialManager
+            TutorialManager().close_tutorial()
+            messagebox.showinfo("Tutorials Disabled", "All interactive tutorials have been disabled globally.")
+        else:
+            messagebox.showinfo("Tutorials Enabled", "Interactive tutorials are now enabled.")
 
     def _show_setup_help_msg(self):
         messagebox.showinfo(
