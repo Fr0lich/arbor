@@ -7098,13 +7098,10 @@ class ObjectProgramUI(
             title = " ".join(parts)
 
             reviewed = bool(reviewed_dict.get(oid, False))
-            # PERFORMANCE OPTIMIZATION (Bolt): Pass the pre-calculated reviewed status to bypass costly individual loc queries on insert.
-            self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed, bulk=True)
-
-            color = None
             has_problem = self._problem_cache.get(oid, False)
             has_history = oid in history_set
 
+            color = None
             if reviewed and has_problem:
                 color = "#f0ad4e"
             elif reviewed:
@@ -7114,11 +7111,12 @@ class ObjectProgramUI(
             elif has_problem:
                 color = "#d9534f"
 
-            if color:
-                try:
-                    self.object_list.itemconfig(i, foreground=color)
-                except Exception as e:
-                    debug_error("Foreground color failed", str(e))
+            # PERFORMANCE OPTIMIZATION (Bolt): Pass pre-calculated color directly to bypass itemconfig Tcl queries entirely.
+            self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed, color=color, bulk=True)
+
+        # Trigger lazy deferred card building if in detailed view mode
+        if getattr(self.object_list, "active_view", None) == "detailed":
+            self.object_list._lazy_build_cards(0)
 
 
     def update_filter_button_text(self):

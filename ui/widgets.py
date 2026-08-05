@@ -214,10 +214,8 @@ class TreeviewListboxWrapper(ttk.Frame):
             self.canvas.pack(fill="both", expand=True)
             self.active_view = "detailed"
 
-            # PERFORMANCE OPTIMIZATION (Bolt): Lazily build card widgets for all loaded items that do not have one yet
-            for oid in self.items_list:
-                if oid in self.item_data and "card_frame" not in self.item_data[oid]:
-                    self._create_card_widget(oid)
+            # PERFORMANCE OPTIMIZATION (Bolt): Asynchronously build card widgets in the background
+            self._lazy_build_cards(0)
 
         self._sync_view_selections()
 
@@ -345,6 +343,31 @@ class TreeviewListboxWrapper(ttk.Frame):
         badge.is_badge = True
         return badge
 
+    def _lazy_build_cards(self, index=0):
+        if index == 0:
+            if hasattr(self, "_card_build_job") and self._card_build_job:
+                try:
+                    self.canvas.after_cancel(self._card_build_job)
+                except Exception:
+                    pass
+                self._card_build_job = None
+
+        if not self.winfo_exists() or self.active_view != "detailed":
+            return
+
+        batch_size = 30
+        end_idx = min(index + batch_size, len(self.items_list))
+
+        for i in range(index, end_idx):
+            oid = self.items_list[i]
+            if oid in self.item_data and "card_frame" not in self.item_data[oid]:
+                self._create_card_widget(oid)
+
+        if end_idx < len(self.items_list):
+            self._card_build_job = self.canvas.after(10, lambda: self._lazy_build_cards(end_idx))
+        else:
+            self._card_build_job = None
+
     def _create_card_widget(self, oid):
         # PERFORMANCE OPTIMIZATION (Bolt): Prevent duplicated widget creation
         if oid in self.item_data and "card_frame" in self.item_data[oid]:
@@ -372,6 +395,11 @@ class TreeviewListboxWrapper(ttk.Frame):
         card.pack(fill="x", padx=sc(4), pady=sc(3))
         self.item_data[oid]["card_frame"] = card
 
+        obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else {}
+        reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else {}
+        obs_row = obs_dict.get(oid, {})
+        reg_row = reg_dict.get(oid, {})
+
         # --- Top Line Frame ---
         top_line = tk.Frame(card, bg=bg_color)
         top_line.pack(fill="x", anchor="w")
@@ -392,8 +420,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         cb_lbl.bind("<Button-1>", lambda e, o=oid: self._on_checkbox_click(o, e))
         self.item_data[oid]["cb_label"] = cb_lbl
 
-        genus = self.item_data[oid].get("genus", "")
-        species = self.item_data[oid].get("species", "")
+        genus = reg_row.get("Genus", "")
+        species = reg_row.get("Species", "")
         tax_text = f"{genus} {species}".strip()
         if not tax_text:
             tax_text = "Unknown Specimen"
@@ -420,19 +448,11 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         # Loaned out status badge (Blue)
         loaned = False
-        obs_df = self.main_window.app.df_obs
-        if obs_df is not None and oid in obs_df.index:
-            try:
-                row = obs_df.loc[oid]
-                if isinstance(row, pd.DataFrame):
-                    row = row.iloc[0]
-                loaned_raw = row.get("Loaned out", False)
-                if isinstance(loaned_raw, str):
-                    loaned = loaned_raw.strip().lower() == "true"
-                else:
-                    loaned = bool(loaned_raw)
-            except Exception:
-                pass
+        loaned_raw = obs_row.get("Loaned out", False)
+        if isinstance(loaned_raw, str):
+            loaned = loaned_raw.strip().lower() == "true"
+        else:
+            loaned = bool(loaned_raw)
 
         if loaned:
             badge_bg = "#e3f2fd" if not is_dark else "#203040"
@@ -458,15 +478,14 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         # Photo count
         photo_count = 0
-        if self.main_window.app.df_photo is not None and oid in self.main_window.app.df_photo.index:
-            try:
-                photo_data = self.main_window.app.df_photo.loc[oid]
-                if isinstance(photo_data, pd.DataFrame):
-                    photo_count = len(photo_data)
-                elif isinstance(photo_data, pd.Series):
-                    photo_count = 1
-            except Exception:
-                pass
+        if self.main_window.app.df_photo is not None:
+            if not hasattr(self.main_window, "_cached_photo_counts") or getattr(self.main_window, "_row_cache_dirty", True):
+                photo_df = self.main_window.app.df_photo
+                if photo_df is not None and not photo_df.empty:
+                    self.main_window._cached_photo_counts = photo_df.index.value_counts().to_dict()
+                else:
+                    self.main_window._cached_photo_counts = {}
+            photo_count = self.main_window._cached_photo_counts.get(oid, 0)
 
         local_count = 0
         if hasattr(self.main_window, "image_index"):
@@ -487,41 +506,31 @@ class TreeviewListboxWrapper(ttk.Frame):
         bot_line = tk.Frame(card, bg=bg_color)
         bot_line.pack(fill="x", anchor="w", pady=(sc(2), 0))
 
-        building = ""
-        floor_room = ""
-        stored_as_val = ""
-        if obs_df is not None and oid in obs_df.index:
-            try:
-                row = obs_df.loc[oid]
-                if isinstance(row, pd.DataFrame):
-                    row = row.iloc[0]
-                building = str(row.get("Building", "")).strip()
-                floor = str(row.get("Floor", "")).strip()
-                extra = str(row.get("Extra", "")).strip()
-                stored_as = str(row.get("Stored as", "")).strip()
-                cabinet = str(row.get("Cabinet", "")).strip()
+        building = str(obs_row.get("Building", "")).strip()
+        floor = str(obs_row.get("Floor", "")).strip()
+        extra = str(obs_row.get("Extra", "")).strip()
+        stored_as = str(obs_row.get("Stored as", "")).strip()
+        cabinet = str(obs_row.get("Cabinet", "")).strip()
 
-                if building in ("nan", "None"): building = ""
-                if floor in ("nan", "None"): floor = ""
-                if extra in ("nan", "None"): extra = ""
-                if stored_as in ("nan", "None"): stored_as = ""
-                if cabinet in ("nan", "None"): cabinet = ""
+        if building in ("nan", "None"): building = ""
+        if floor in ("nan", "None"): floor = ""
+        if extra in ("nan", "None"): extra = ""
+        if stored_as in ("nan", "None"): stored_as = ""
+        if cabinet in ("nan", "None"): cabinet = ""
 
-                parts = []
-                if floor:
-                    parts.append(f"Floor {floor}")
-                if extra:
-                    parts.append(extra)
-                floor_room = ", ".join(parts) if parts else ""
+        parts = []
+        if floor:
+            parts.append(f"Floor {floor}")
+        if extra:
+            parts.append(extra)
+        floor_room = ", ".join(parts) if parts else ""
 
-                parts_stored = []
-                if stored_as:
-                    parts_stored.append(stored_as)
-                if cabinet:
-                    parts_stored.append(f"Cab {cabinet}")
-                stored_as_val = " / ".join(parts_stored) if parts_stored else ""
-            except Exception:
-                pass
+        parts_stored = []
+        if stored_as:
+            parts_stored.append(stored_as)
+        if cabinet:
+            parts_stored.append(f"Cab {cabinet}")
+        stored_as_val = " / ".join(parts_stored) if parts_stored else ""
 
         loc_parts = []
         if building:
@@ -703,7 +712,7 @@ class TreeviewListboxWrapper(ttk.Frame):
                 card.destroy()
         self.item_data.clear()
 
-    def insert(self, index, title, genus=None, species=None, reviewed=None, bulk=False):
+    def insert(self, index, title, genus=None, species=None, reviewed=None, color=None, bulk=False):
         oid = title.split(" ")[0].strip()
         if not bulk:
             if oid in self.items_set:
@@ -725,22 +734,27 @@ class TreeviewListboxWrapper(ttk.Frame):
                 pass
 
         rev_char = "☑" if reviewed else "☐"
-        row_tag = "even" if len(self.items_list) % 2 == 0 else "odd"
-        self.tree.insert("", "end", iid=oid, values=(rev_char, oid, genus or "", species or ""), tags=(row_tag,))
+        row_tags = ["even" if len(self.items_list) % 2 == 0 else "odd"]
+        
+        if color:
+            tag_name = f"color_{color.replace('#', '')}"
+            if not hasattr(self, "_configured_tags"):
+                self._configured_tags = set()
+            if tag_name not in self._configured_tags:
+                self.tag_configure(tag_name, foreground=color)
+                self._configured_tags.add(tag_name)
+            row_tags.append(tag_name)
+
+        self.tree.insert("", "end", iid=oid, values=(rev_char, oid, genus or "", species or ""), tags=tuple(row_tags))
 
         self.item_data[oid] = {
             "title": title,
             "genus": genus or "",
             "species": species or "",
             "reviewed": bool(reviewed),
-            "tags": [row_tag],
+            "tags": row_tags,
             "values": [rev_char, oid, genus or "", species or ""]
         }
-
-        # PERFORMANCE OPTIMIZATION (Bolt): Only create card widget if we are actually in detailed view,
-        # otherwise defer widget creation to avoid high CPU and memory overhead on database load.
-        if self.active_view == "detailed":
-            self._create_card_widget(oid)
 
     def itemconfig(self, index, **kwargs):
         foreground = kwargs.get("foreground")
@@ -895,6 +909,11 @@ class TreeviewListboxWrapper(ttk.Frame):
         if hasattr(self, "_resize_job") and self._resize_job:
             try:
                 self.canvas.after_cancel(self._resize_job)
+            except Exception:
+                pass
+        if hasattr(self, "_card_build_job") and self._card_build_job:
+            try:
+                self.canvas.after_cancel(self._card_build_job)
             except Exception:
                 pass
         if self._trace_id and self.focus_mode_var:
