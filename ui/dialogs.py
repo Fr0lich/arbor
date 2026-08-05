@@ -1411,7 +1411,102 @@ class StartupDialog:
         )
 
 
+
 # =====================
-# MAIN UI
+# SPLASH LOADING SCREEN
 # =====================
+
+class LoadingWindow:
+    def __init__(self, parent_root, excel_path, ui):
+        self.parent = parent_root
+        self.ui = ui
+        self.excel_path = excel_path
+        
+        self.win = tk.Toplevel(self.parent)
+        self.win.title("Loading Database")
+        self.win.configure(bg="#1e1e2e")
+        self.win.resizable(False, False)
+        
+        # Center the splash window
+        from config import sc
+        import utils
+        utils.center_and_fit_toplevel(self.win, sc(450), sc(180))
+        
+        # Prevent user closing it manually
+        self.win.protocol("WM_DELETE_WINDOW", lambda: None)
+        self.win.grab_set()
+        
+        # Title Label
+        tk.Label(
+            self.win,
+            text="Initializing Application",
+            font=("Segoe UI", sc(12), "bold"),
+            bg="#1e1e2e",
+            fg="#cba6f7"  # Pastel accent color
+        ).pack(pady=(sc(24), sc(10)))
+        
+        # Progress status label (saved as attribute to easily update)
+        self.status_lbl = tk.Label(
+            self.win,
+            text="Loading Excel database...",
+            font=("Segoe UI", sc(9)),
+            bg="#1e1e2e",
+            fg="#cdd6f4"  # Off-white
+        )
+        self.status_lbl.pack(pady=(0, sc(8)))
+        
+        # Progress Bar
+        style = ttk.Style(self.win)
+        style.theme_use("clam")
+        style.configure(
+            "Splash.Horizontal.TProgressbar",
+            troughcolor="#313244",
+            background="#cba6f7",
+            thickness=sc(8),
+            borderwidth=0
+        )
+        self.progress_bar = ttk.Progressbar(
+            self.win,
+            style="Splash.Horizontal.TProgressbar",
+            orient="horizontal",
+            mode="determinate"
+        )
+        self.progress_bar.pack(fill="x", padx=sc(35), pady=sc(10))
+        
+        # Register on UI instance
+        self.ui._loading_window = self
+        
+        # Start database load
+        self.ui._show_progress("Loading database...", 100)
+        self.ui.open_excel_from_path(excel_path)
+        
+    def update_progress_bar(self, value=None, maximum=None):
+        if not self.win.winfo_exists():
+            return
+        if value is not None:
+            self.progress_bar["value"] = value
+        if maximum is not None:
+            self.progress_bar["maximum"] = maximum
+            
+    def update_status_text(self, text):
+        if not self.win.winfo_exists():
+            return
+        self.status_lbl.config(text=text)
+                
+    def finish(self, text="Ready"):
+        # Unregister loading window
+        self.ui._loading_window = None
+        try:
+            self.win.destroy()
+        except Exception:
+            pass
+        
+        # Show main window
+        self.parent.deiconify()
+        self.parent.state("zoomed")
+        
+        # Run tutorial manager
+        from ui.tutorial import TutorialManager
+        TutorialManager().continue_pending_tutorial(self.parent)
+
 

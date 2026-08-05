@@ -40,6 +40,78 @@ from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN, ONL
 from models import AppState
 from utils import debug_error
 
+class LabelWrapper:
+    def __init__(self, real_label, ui):
+        self.real = real_label
+        self.ui = ui
+        
+    def config(self, cnf=None, **kw):
+        if cnf is not None:
+            kw.update(cnf)
+        text = kw.get("text")
+        if text is not None:
+            if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
+                self.ui._loading_window.update_status_text(text)
+        try:
+            return self.real.config(**kw)
+        except Exception:
+            pass
+            
+    def configure(self, cnf=None, **kw):
+        return self.config(cnf, **kw)
+        
+    def cget(self, option):
+        return self.real.cget(option)
+        
+    def __getitem__(self, key):
+        return self.real[key]
+        
+    def __setitem__(self, key, value):
+        self.real[key] = value
+        if key == "text":
+            if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
+                self.ui._loading_window.update_status_text(value)
+                
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+class ProgressbarWrapper:
+    def __init__(self, real_progressbar, ui):
+        self.real = real_progressbar
+        self.ui = ui
+        
+    def configure(self, cnf=None, **kw):
+        if cnf is not None:
+            kw.update(cnf)
+        value = kw.get("value")
+        maximum = kw.get("maximum")
+        
+        if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
+            self.ui._loading_window.update_progress_bar(value, maximum)
+        try:
+            return self.real.configure(**kw)
+        except Exception:
+            pass
+            
+    def config(self, cnf=None, **kw):
+        return self.configure(cnf, **kw)
+        
+    def cget(self, option):
+        return self.real.cget(option)
+        
+    def __getitem__(self, key):
+        return self.real[key]
+        
+    def __setitem__(self, key, value):
+        self.real[key] = value
+        if key == "value":
+            if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
+                self.ui._loading_window.update_progress_bar(value=value)
+                
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
 # BulkEditWindow, NewDatabaseWizard, AddObjectsWindow, ZoomableImagePopup, and
 # requests are imported lazily inside the methods that need them so that startup
 # time is not spent loading unused subsystems.
@@ -86,6 +158,7 @@ class ObjectProgramUI(
 
         self.root = root
         self.app = app
+        self._loading_window = None
 
         if self.app.undo_stacks is None:
             self.app.undo_stacks = {}
@@ -2317,6 +2390,11 @@ class ObjectProgramUI(
 #---- progress bar
 
     def _show_progress(self, text="Working", maximum=100):
+        if hasattr(self, "_loading_window") and self._loading_window and self._loading_window.win.winfo_exists():
+            self._loading_window.update_progress_bar(0, maximum)
+            self._loading_window.update_status_text(text)
+            return
+
         self.system_status.config(text=text)
         self.image_scan_progress.configure(
             value=0,
@@ -2326,6 +2404,10 @@ class ObjectProgramUI(
         self.image_scan_progress.pack(anchor="e", pady=(2, 0))
 
     def _hide_progress(self, text=""):
+        if hasattr(self, "_loading_window") and self._loading_window and self._loading_window.win.winfo_exists():
+            self._loading_window.finish(text)
+            return
+
         self.image_scan_progress.pack_forget()
         self.system_status.config(text=text)
         self.root.after(1500, lambda: self.system_status.config(text=""))
@@ -3257,12 +3339,13 @@ class ObjectProgramUI(
         self.data_status.pack(side="right", padx=(0, 8))
 
         # System status (loading messages etc.)
-        self.system_status = ttk.Label(
+        real_system_status = ttk.Label(
             status_container,
             anchor="e",
             foreground="#444748"
         )
-        self.system_status.pack(side="right", padx=(0, 4))
+        real_system_status.pack(side="right", padx=(0, 4))
+        self.system_status = LabelWrapper(real_system_status, self)
 
         # Object count label now lives in the sort_frame (left panel), near Filter button.
         # A placeholder is created here so update_object_count() doesn't fail before build_ui finishes.
@@ -3275,14 +3358,15 @@ class ObjectProgramUI(
         # Not packed here — will be re-parented in the sort_frame below.
 
         # Image scan progress (hidden by default)
-        self.image_scan_progress = ttk.Progressbar(
+        real_image_scan_progress = ttk.Progressbar(
             status_container,
             orient="horizontal",
             mode="determinate",
             length=140
         )
-        self.image_scan_progress.pack(side="right", padx=(0, 8))
-        self.image_scan_progress.pack_forget()
+        real_image_scan_progress.pack(side="right", padx=(0, 8))
+        real_image_scan_progress.pack_forget()
+        self.image_scan_progress = ProgressbarWrapper(real_image_scan_progress, self)
 
         # Sync toolbar_vars for all registered buttons
         for name in self.toolbar_buttons:

@@ -214,16 +214,17 @@ if __name__ == "__main__":
             root.destroy()
             sys.exit(0)
 
-        # Dialog completed successfully, show main window
-        root.deiconify()
-        root.state("zoomed")
-
-        from ui.tutorial import TutorialManager
-        TutorialManager().continue_pending_tutorial(root)
+        # Dialog completed successfully, hide main window during loading
+        root.withdraw()
 
         if hasattr(dialog, "selected_excel_path"):
-            ui._show_progress("Loading database and images...", 100)
-            ui.open_excel_from_path(dialog.selected_excel_path)
+            from ui.dialogs import LoadingWindow
+            loading_win = LoadingWindow(root, dialog.selected_excel_path, ui)
+        else:
+            root.deiconify()
+            root.state("zoomed")
+            from ui.tutorial import TutorialManager
+            TutorialManager().continue_pending_tutorial(root)
 
         # Check for crash logs from previous sessions (shows a banner after 2 s)
         _check_previous_crash_logs(root, ui_ref)
