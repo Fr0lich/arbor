@@ -2264,36 +2264,11 @@ class ObjectProgramUI(
 # ------ sÃ¸ke_index 1
 
     def build_search_index(self):
-        # PERFORMANCE OPTIMIZATION (Bolt): Use itertuples() to build the index faster, avoiding pandas iterrows series creation overhead.
+        # PERFORMANCE OPTIMIZATION (Bolt): This method was previously building an expensive search index list
+        # that was entirely unused in the codebase (the live search actually uses `_get_search_index()`).
+        # Making this a fast no-op eliminates unnecessary CPU/memory overhead on database loads.
         self.search_index = []
-        if self.reg_by_id is None or self.reg_by_id.empty:
-            return
-
-        df = self.reg_by_id
-        genus_col = "Genus" if "Genus" in df.columns else None
-        species_col = "Species" if "Species" in df.columns else None
-
-        for row in df.itertuples():
-            oid = str(row.Index)
-            genus = str(getattr(row, "Genus", "")).strip() if genus_col else ""
-            species = str(getattr(row, "Species", "")).strip() if species_col else ""
-            if genus == "nan" or pd.isna(genus) or genus == "None": genus = ""
-            if species == "nan" or pd.isna(species) or species == "None": species = ""
-
-            name = f"{genus} {species}".strip()
-
-            if name:
-                display = f"{oid}  {name}"
-                searchable = f"{oid} {name}".lower()
-            else:
-                display = f"{oid}  Unknown"
-                searchable = f"{oid} unknown"
-
-            self.search_index.append({
-                "oid": oid,
-                "searchable": searchable,
-                "display": display
-            })
+        return
 
 #---- progress bar
 
@@ -6952,6 +6927,68 @@ class ObjectProgramUI(
         if reg_df is not None and "Species" in reg_df.columns:
             species_dict = reg_df["Species"].to_dict()
 
+        # PERFORMANCE OPTIMIZATION (Bolt): Convert DataFrames to dicts once to avoid slow .loc inside the loop
+        reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
+        obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
+
+        # Is image mode folder?
+        include_image_problems = (self.image_mode == "folder")
+
+        # Clear and pre-populate the problem cache for active objects
+        self._problem_cache.clear()
+        problem_cols = getattr(self, "problem_columns", [])
+        problem_mapping = getattr(self, "problem_to_field", {})
+
+        for oid in self.app.active_object_ids:
+            obs_row = obs_dict.get(oid, {})
+            reg_row = reg_dict.get(oid, {})
+
+            has_prob = False
+            for p in problem_cols:
+                if p == "Images_Missing":
+                    continue
+                if not include_image_problems:
+                    if "Image" in p:
+                        continue
+
+                # Check if problem p is active
+                is_act = False
+                if p == "Other_problem":
+                    is_act = bool(obs_row.get(p, False))
+                elif p == "Reviewed":
+                    is_act = bool(obs_row.get(REVIEWED_COLUMN, False))
+                elif p == "Has_Images":
+                    is_act = not obs_row.get("Images_Missing", False)
+                else:
+                    obs_val = bool(obs_row.get(p, False))
+                    auto_val = False
+                    if p in problem_mapping:
+                        field = problem_mapping.get(p)
+                        if field:
+                            raw_val = reg_row.get(field, "")
+                            is_missing = (
+                                pd.isna(raw_val) or
+                                (isinstance(raw_val, str) and raw_val.strip() == "")
+                            )
+                            is_unknown = self.is_unknown(raw_val)
+                            auto_val = is_missing and not is_unknown
+                    is_act = obs_val or auto_val
+
+                if is_act:
+                    has_prob = True
+                    break
+
+            self._problem_cache[oid] = has_prob
+
+        # PERFORMANCE OPTIMIZATION (Bolt): Precompute a Python set of historical object IDs
+        # to perform fast O(1) membership checks instead of index scans inside the loop.
+        history_set = set()
+        if self.app.historical_dbs:
+            for db in self.app.historical_dbs:
+                reg_by_id = db.get("reg_by_id")
+                if reg_by_id is not None:
+                    history_set.update(reg_by_id.index)
+
         for i, oid in enumerate(self.app.active_object_ids):
             genus = str(genus_dict.get(oid, "")).strip()
             species = str(species_dict.get(oid, "")).strip()
@@ -6968,8 +7005,8 @@ class ObjectProgramUI(
             self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed)
 
             color = None
-            has_problem = self._get_cached_problem(oid)
-            has_history = self._has_history(oid)
+            has_problem = self._problem_cache.get(oid, False)
+            has_history = oid in history_set
 
             if reviewed and has_problem:
                 color = "#f0ad4e"

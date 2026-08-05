@@ -15,3 +15,7 @@
 ## 2025-02-15 - [Frequent Excel Autosaving I/O Overhead]
 **Learning:** Writing massive, multi-sheet Excel files periodically during autosave loops with `openpyxl` causes high CPU usage and I/O stutters. Replacing it with binary `pickle` serialization on DataFrame copies reduces state saves from seconds to ~10ms while preserving tabular structures perfectly. Checking file extensions at load-time maintains full backwards-compatibility.
 **Action:** For temporary application state storage or autosaves, prefer python's fast standard library `pickle` over heavy file formats like Excel.
+
+## 2025-02-16 - [Unused Search Index and Repeated Pandas .loc Queries on Start]
+**Learning:** During startup database loading, building an unused `self.search_index` (which is never read) and repeatedly calling Pandas `.loc` queries to determine problem states inside active lists introduces massive latency and near-crashes. Making `build_search_index()` a fast no-op and pre-populating `self._problem_cache` using fast dictionary-based O(1) lookups in `refresh_list()` entirely bypasses Pandas `.loc` and dramatically speeds up list population, bringing startup time down to milliseconds.
+**Action:** Always pre-calculate lookups using `.to_dict(orient="index")` before iterating lists, and immediately remove or disable any unused index-building routines that block startup.
