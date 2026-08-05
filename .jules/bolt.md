@@ -15,3 +15,7 @@
 ## 2025-02-15 - [Frequent Excel Autosaving I/O Overhead]
 **Learning:** Writing massive, multi-sheet Excel files periodically during autosave loops with `openpyxl` causes high CPU usage and I/O stutters. Replacing it with binary `pickle` serialization on DataFrame copies reduces state saves from seconds to ~10ms while preserving tabular structures perfectly. Checking file extensions at load-time maintains full backwards-compatibility.
 **Action:** For temporary application state storage or autosaves, prefer python's fast standard library `pickle` over heavy file formats like Excel.
+
+## 2025-02-16 - [Lambda Scope NameError on Exception Variables]
+**Learning:** Defining a lambda inside an `except Exception as e:` block that captures `e` and calling it deferredly (e.g., via `after`) results in a NameError because `e` is unbound when the except scope exits. Eagerly binding the value at definition-time as a default argument (e.g., `lambda em=err_msg: ...`) completely avoids this issue.
+**Action:** Always eagerly bind exception variables using default lambda arguments when referencing them in deferred callbacks.
