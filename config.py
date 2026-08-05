@@ -28,16 +28,26 @@ def get_theme():
     return "clam"
 
 
+# In-memory prefs cache — populated on first read, invalidated on write.
+_prefs_cache = None
+
 def load_prefs():
+    global _prefs_cache
+    if _prefs_cache is not None:
+        return _prefs_cache
     if os.path.exists(_PREFS_PATH):
         try:
             with open(_PREFS_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                _prefs_cache = json.load(f)
+                return _prefs_cache
         except Exception:
             pass
-    return {}
+    _prefs_cache = {}
+    return _prefs_cache
 
 def save_prefs(prefs):
+    global _prefs_cache
+    _prefs_cache = prefs  # keep cache in sync before writing
     try:
         with open(_PREFS_PATH, "w", encoding="utf-8") as f:
             json.dump(prefs, f, indent=2)

@@ -184,12 +184,17 @@ class HistoricalSuggestionsMixin:
 
 
     def load_books_file(self):
-
-        path = filedialog.askopenfilename(
+        last_dir = __import__("config").get_last_dir("last_book_dir")
+        dialog_kwargs = dict(
             title="Select Books Excel file",
             filetypes=[("Excel files", "*.xlsx")],
-            initialdir=__import__("config").get_last_dir("last_book_dir")
         )
+        # Guard: only pass initialdir if it resolves to an existing directory
+        import os as _os
+        if last_dir and _os.path.isdir(last_dir):
+            dialog_kwargs["initialdir"] = last_dir
+
+        path = filedialog.askopenfilename(**dialog_kwargs)
         if not path:
             return
         __import__("config").set_last_dir("last_book_dir", path)
@@ -303,12 +308,15 @@ class HistoricalSuggestionsMixin:
 
 
         self.system_status.config(
-            text=f"Loaded Books file ({len(loaded)} sheets)"
+            text=f"Loaded Books file ({len(loaded)} sheets) — pre-scanning historical data..."
         )
 
         self._hide_progress("Books loaded")
 
         self.update_history_button_state()
+
+        # Pre-build dict caches in a background thread so navigation is instant
+        self._prescan_historical_dbs(loaded)
 
 
     def update_history_indicator(self, oid):
@@ -365,3 +373,96 @@ class HistoricalSuggestionsMixin:
                 self.system_status.config(
                     text="Load Books or previous databases to enable historical navigation"
                 )
+
+    # ------------------------------------------------------------------
+    # Pre-scan: build dict caches for all historical DBs in background.
+    # This means the expensive itertuples() pass over each DB happens
+    # once (at load time) rather than on the first navigation to each OID.
+    # A progress bar is shown in the status bar while scanning.
+    # ------------------------------------------------------------------
+    def _prescan_historical_dbs(self, dbs):
+        """Background thread: build _get_db_dict_cache for every loaded DB."""
+        if not dbs:
+            return
+
+        total = sum(len(db.get("df_reg", [])) for db in dbs)
+
+        def _worker():
+            done = 0
+            try:
+                for db in dbs:
+                    df = db.get("df_reg")
+                    if df is None or df.empty:
+                        continue
+
+                    # Warm the cache one row at a time so we can report progress
+                    dict_cache = db.setdefault("dict_cache", {})
+                    columns = list(df.columns)
+                    obj_id_col = "ObjectID"
+                    if obj_id_col not in columns:
+                        continue
+                    obj_id_idx = columns.index(obj_id_col) + 1  # +1 for Index
+
+                    for row in df.itertuples():
+                        oid = str(row[obj_id_idx]).strip()
+                        if not oid or oid == "nan":
+                            done += 1
+                            continue
+                        if oid not in dict_cache:
+                            oid_cache = {}
+                            for col_idx, col_name in enumerate(columns):
+                                if col_name == obj_id_col:
+                                    continue
+                                val = row[col_idx + 1]
+                                if pd.notna(val):
+                                    val_str = str(val).strip()
+                                    if val_str and val_str != "nan":
+                                        oid_cache.setdefault(col_name, [])
+                                        if val_str not in oid_cache[col_name]:
+                                            oid_cache[col_name].append(val_str)
+                            dict_cache[oid] = oid_cache
+                        done += 1
+                        if total > 0 and done % 50 == 0:
+                            pct = int((done / total) * 100)
+                            self.root.after(
+                                0,
+                                lambda p=pct: self._update_prescan_progress(p)
+                            )
+
+                self.root.after(0, self._finish_prescan)
+            except Exception as e:
+                from utils import debug_error
+                debug_error("_prescan_historical_dbs", str(e))
+                self.root.after(0, self._finish_prescan)
+
+        # Show progress bar
+        try:
+            self.image_scan_progress.configure(mode="determinate", value=0, maximum=100)
+            self.image_scan_progress.pack(
+                side="right", padx=(0, 8)
+            )
+        except Exception:
+            pass
+        self.system_status.config(text="Pre-scanning historical data...")
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _update_prescan_progress(self, pct):
+        try:
+            self.image_scan_progress.configure(value=pct, maximum=100)
+        except Exception:
+            pass
+
+    def _finish_prescan(self):
+        try:
+            self.image_scan_progress.pack_forget()
+        except Exception:
+            pass
+        # Invalidate the LRU suggestion cache so it is rebuilt from warm data
+        if hasattr(self, "_history_cache"):
+            self._history_cache.clear()
+        self.system_status.config(text="Historical data ready")
+        # Refresh the history indicator for the current object
+        oid = self.app.current_object_id
+        if oid:
+            self.update_history_indicator(oid)

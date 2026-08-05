@@ -177,6 +177,14 @@ class ObjectProgramUI(
         self._banner_timer_id = None
         self._search_index_cache = None      # lazy search index {oid: token_string}
 
+        # Row-dict caches for refresh_list() — rebuilt only when data changes
+        self._cached_reg_dict: dict = None   # type: ignore[assignment]
+        self._cached_obs_dict: dict = None   # type: ignore[assignment]
+        self._cached_reviewed_dict: dict = {}
+        self._cached_genus_dict: dict = {}
+        self._cached_species_dict: dict = {}
+        self._row_cache_dirty: bool = True
+
         self.problem_to_field = {}
         self.problem_columns = []
         self.location_columns = []
@@ -1354,11 +1362,16 @@ class ObjectProgramUI(
 
 
     def load_historical_databases(self):
-        paths = filedialog.askopenfilenames(
+        last_dir = __import__("config").get_last_dir("last_db_dir")
+        dialog_kwargs = dict(
             title="Select previous Excel databases",
             filetypes=[("Excel files", "*.xlsx")],
-            initialdir=__import__("config").get_last_dir("last_db_dir")
         )
+        # Guard: only pass initialdir if it resolves to an existing directory
+        if last_dir and os.path.isdir(last_dir):
+            dialog_kwargs["initialdir"] = last_dir
+
+        paths = filedialog.askopenfilenames(**dialog_kwargs)
         if not paths:
             return
         __import__("config").set_last_dir("last_db_dir", paths[0])
@@ -1382,10 +1395,16 @@ class ObjectProgramUI(
             )
 
         self.system_status.config(
-            text=f"Loaded {len(self.app.historical_dbs)} earlier databases"
+            text=f"Loaded {len(self.app.historical_dbs)} earlier databases — pre-scanning..."
         )
 
         self.update_history_button_state()
+
+        # Pre-build dict caches in a background thread so navigation is instant
+        if self.app.historical_dbs:
+            self._prescan_historical_dbs(self.app.historical_dbs)
+
+
 
 
 
@@ -1693,7 +1712,9 @@ class ObjectProgramUI(
             
         self.app.dirty = True
         self.update_dirty_ui()
+        self._invalidate_row_cache()
         self.refresh_list()
+
         
         if not self.app.df_reg.empty:
             self.load_object(self.app.df_reg.index[0])
@@ -3827,28 +3848,37 @@ class ObjectProgramUI(
             self._status_bar_labels["object_count"].config(
                 text=f"OBJECT_COUNT: {total:,}"
             )
-            # Compute reviewed percent from df_obs if available
+            # Compute reviewed percent and problem count from df_obs if available.
+            # Cache the expensive problem-column scan; only recompute when data changes.
             if self.app.df_obs is not None and len(self.app.df_obs) > 0:
                 df_obs = self.app.df_obs
+
+                # Reviewed percent — cheap column sum
                 rev = int(df_obs[REVIEWED_COLUMN].sum()) if REVIEWED_COLUMN in df_obs.columns else 0
                 pct = int((rev / len(df_obs)) * 100)
                 self._status_bar_labels["reviewed"].config(
                     text=f"REVIEWED: {pct}%"
                 )
-                # Count objects with active problems: scan for bool columns excluding REVIEWED_COLUMN
-                try:
-                    prob_cols = [
-                        c for c in df_obs.columns
-                        if c not in (REVIEWED_COLUMN, "ReviewedAt")
-                        and str(df_obs[c].dtype) == "bool"
-                    ]
-                    problems_count = int((df_obs[prob_cols].any(axis=1)).sum()) if prob_cols else 0
-                except Exception:
-                    problems_count = 0
+
+                # Problems count — expensive; cache it
+                if getattr(self, "_row_cache_dirty", True) or not hasattr(self, "_cached_problems_count"):
+                    try:
+                        prob_cols = [
+                            c for c in df_obs.columns
+                            if c not in (REVIEWED_COLUMN, "ReviewedAt")
+                            and str(df_obs[c].dtype) == "bool"
+                        ]
+                        self._cached_problems_count = int((df_obs[prob_cols].any(axis=1)).sum()) if prob_cols else 0
+                    except Exception:
+                        self._cached_problems_count = 0
+
+                problems_count = self._cached_problems_count
                 self._status_bar_labels["problems"].config(text=f"PROBLEMS: {problems_count}")
                 self._status_bar_problems_lbl.config(
                     fg="#ff6b6b" if problems_count > 0 else "#e2e2e2"
                 )
+
+
 
 
 #------
@@ -4330,6 +4360,7 @@ class ObjectProgramUI(
             self.app.dirty = True
             self.update_dirty_ui()
             self._list_dirty = True
+            self._invalidate_row_cache()
             
             # Log the edit immediately so it's captured in the continuous session
             self.log_action("EDIT", 
@@ -4353,6 +4384,11 @@ class ObjectProgramUI(
 
 
 #------
+
+    def _invalidate_row_cache(self):
+        """Mark the refresh_list() row-dict caches as stale so they are rebuilt on next refresh."""
+        self._row_cache_dirty = True
+
 
     def update_location_summary(self, oid):
         if oid not in self.obs_by_id.index:
@@ -5159,49 +5195,54 @@ class ObjectProgramUI(
 
 
     def highlight_fields_with_suggestions(self, oid):
-
-        # reset
-        for field, widget in self.reg_entries.items():
-            try:
-                if isinstance(widget, tk.Text):
-                    widget.configure(bg="white")
-                else:
-                    widget.configure(background="white")
-            except Exception as e:
-                debug_error("Suppressed Error", str(e))
-                pass
+        # Track the last background color set per field to skip redundant Tcl calls.
+        if not hasattr(self, "_field_bg_state"):
+            self._field_bg_state = {}
 
         suggestions = self.collect_historical_suggestions(oid)
-        reg = self.reg_by_id.loc[oid]
+
+        # Use cached reg row if available
+        if (not getattr(self, "_row_cache_dirty", True)
+                and self._cached_reg_dict is not None
+                and oid in self._cached_reg_dict):
+            reg_row = self._cached_reg_dict[oid]
+            def _get(field): return reg_row.get(field, "")
+        else:
+            reg = self.reg_by_id.loc[oid]
+            if isinstance(reg, pd.DataFrame):
+                reg = reg.iloc[0]
+            def _get(field): return reg.get(field, "")
+
+        def _set_bg(widget, field, color):
+            if self._field_bg_state.get(field) == color:
+                return  # already this color — skip Tcl call
+            try:
+                if isinstance(widget, tk.Text):
+                    widget.configure(bg=color)
+                else:
+                    widget.configure(background=color)
+                self._field_bg_state[field] = color
+            except Exception as e:
+                debug_error("Suppressed Error", str(e))
 
         for field, widget in self.reg_entries.items():
-
             if not widget:
                 continue
-
             try:
-                raw_val = reg.get(field, "")
-
+                raw_val = _get(field)
                 if isinstance(raw_val, pd.Series):
                     raw_val = raw_val.iloc[0]
 
-                # UNKNOWN
                 if self.is_unknown(raw_val):
-                    if isinstance(widget, tk.Text):
-                        widget.configure(bg="#ffe4b3")
-                    else:
-                        widget.configure(background="#ffe4b3")
-
-                # SUGGESTIONS
+                    _set_bg(widget, field, "#ffe4b3")
                 elif field in suggestions:
-                    if isinstance(widget, tk.Text):
-                        widget.configure(bg="#fff3a3")
-                    else:
-                        widget.configure(background="#fff3a3")
-
+                    _set_bg(widget, field, "#fff3a3")
+                else:
+                    _set_bg(widget, field, "white")
             except Exception as e:
                 debug_error("Suppressed Error", str(e))
-                pass
+
+
 
 
 
@@ -5234,24 +5275,23 @@ class ObjectProgramUI(
         else:
             start_idx = ids.index(self.app.current_object_id)
 
-     
-        critical_fields = [
-            f for f in self.problem_to_field.values()
-            if f in self.app.df_reg.columns
-        ]
+        # Use cached problem state; fall back to has_any_problem for cache misses
+        obs_dict = (
+            self._cached_obs_dict
+            if not getattr(self, "_row_cache_dirty", True) and self._cached_obs_dict
+            else self.app.df_obs.to_dict(orient="index")
+        )
 
         for step in range(1, n + 1):
             i = (start_idx + step) % n
             oid = ids[i]
 
-        
-            if self.app.df_obs.loc[oid, REVIEWED_COLUMN]:
+            obs_row = obs_dict.get(oid, {})
+            if obs_row.get(REVIEWED_COLUMN):
                 continue
 
-            reg = self.app.df_reg.loc[oid]
-
-         
-            has_checkbox_problem = self.has_any_problem(oid)
+            # Use _problem_cache if populated; compute on demand otherwise
+            has_checkbox_problem = self._get_cached_problem(oid)
 
             if has_checkbox_problem:
                 self.object_list.selection_clear(0, tk.END)
@@ -5261,6 +5301,7 @@ class ObjectProgramUI(
                 return
 
         messagebox.showinfo("Done", "No more problems found")
+
 
 
 
@@ -5283,20 +5324,25 @@ class ObjectProgramUI(
 
         total = len(ids)
 
+        # Use cached obs dict for the reviewed check to avoid per-row .loc
+        obs_dict = (
+            self._cached_obs_dict
+            if not getattr(self, "_row_cache_dirty", True) and self._cached_obs_dict
+            else self.app.df_obs.to_dict(orient="index")
+        )
+
         for step in range(1, total + 1):
             i = (start_idx + step) % total
             oid = ids[i]
 
-         
-            if self.app.df_obs.loc[oid, REVIEWED_COLUMN]:
+            obs_row = obs_dict.get(oid, {})
+            if obs_row.get(REVIEWED_COLUMN):
                 continue
 
-            
             suggestions = self.collect_historical_suggestions(oid)
             if not suggestions:
                 continue
 
-            
             match = False
 
             for prob_col, field in self.problem_to_field.items():
@@ -5320,6 +5366,7 @@ class ObjectProgramUI(
             return
 
         messagebox.showinfo("Done", "No matching objects found")
+
 
 
 #---- go to last object
@@ -6908,6 +6955,7 @@ class ObjectProgramUI(
         self.app.dirty = True
         self.update_dirty_ui()
         self._problem_cache.clear()
+        self._invalidate_row_cache()
         self.update_review_progress()
         self.update_dashboard()
         
@@ -6924,17 +6972,93 @@ class ObjectProgramUI(
         obs_df = self.app.df_obs
         reg_df = self.app.df_reg
 
-        reviewed_dict = {}
-        if obs_df is not None and REVIEWED_COLUMN in obs_df.columns:
-            reviewed_dict = obs_df[REVIEWED_COLUMN].to_dict()
+        # Use cached dicts; rebuild only when data has changed (_row_cache_dirty).
+        # This avoids expensive full-DF to_dict() on every filter/search/review.
+        if getattr(self, "_row_cache_dirty", True) or self._cached_reg_dict is None:
+            self._cached_reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
+            self._cached_obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
+            self._cached_reviewed_dict = (
+                obs_df[REVIEWED_COLUMN].to_dict()
+                if obs_df is not None and REVIEWED_COLUMN in obs_df.columns
+                else {}
+            )
+            self._cached_genus_dict = (
+                reg_df["Genus"].to_dict()
+                if reg_df is not None and "Genus" in reg_df.columns
+                else {}
+            )
+            self._cached_species_dict = (
+                reg_df["Species"].to_dict()
+                if reg_df is not None and "Species" in reg_df.columns
+                else {}
+            )
+            self._row_cache_dirty = False
 
-        genus_dict = {}
-        if reg_df is not None and "Genus" in reg_df.columns:
-            genus_dict = reg_df["Genus"].to_dict()
+        reviewed_dict = self._cached_reviewed_dict
+        genus_dict    = self._cached_genus_dict
+        species_dict  = self._cached_species_dict
+        reg_dict      = self._cached_reg_dict
+        obs_dict      = self._cached_obs_dict
 
-        species_dict = {}
-        if reg_df is not None and "Species" in reg_df.columns:
-            species_dict = reg_df["Species"].to_dict()
+
+
+        # Is image mode folder?
+        include_image_problems = (self.image_mode == "folder")
+
+        # Clear and pre-populate the problem cache for active objects
+        self._problem_cache.clear()
+        problem_cols = getattr(self, "problem_columns", [])
+        problem_mapping = getattr(self, "problem_to_field", {})
+
+        for oid in self.app.active_object_ids:
+            obs_row = obs_dict.get(oid, {})
+            reg_row = reg_dict.get(oid, {})
+
+            has_prob = False
+            for p in problem_cols:
+                if p == "Images_Missing":
+                    continue
+                if not include_image_problems:
+                    if "Image" in p:
+                        continue
+
+                # Check if problem p is active
+                is_act = False
+                if p == "Other_problem":
+                    is_act = bool(obs_row.get(p, False))
+                elif p == "Reviewed":
+                    is_act = bool(obs_row.get(REVIEWED_COLUMN, False))
+                elif p == "Has_Images":
+                    is_act = not obs_row.get("Images_Missing", False)
+                else:
+                    obs_val = bool(obs_row.get(p, False))
+                    auto_val = False
+                    if p in problem_mapping:
+                        field = problem_mapping.get(p)
+                        if field:
+                            raw_val = reg_row.get(field, "")
+                            is_missing = (
+                                pd.isna(raw_val) or
+                                (isinstance(raw_val, str) and raw_val.strip() == "")
+                            )
+                            is_unknown = self.is_unknown(raw_val)
+                            auto_val = is_missing and not is_unknown
+                    is_act = obs_val or auto_val
+
+                if is_act:
+                    has_prob = True
+                    break
+
+            self._problem_cache[oid] = has_prob
+
+        # PERFORMANCE OPTIMIZATION (Bolt): Precompute a Python set of historical object IDs
+        # to perform fast O(1) membership checks instead of index scans inside the loop.
+        history_set = set()
+        if self.app.historical_dbs:
+            for db in self.app.historical_dbs:
+                reg_by_id = db.get("reg_by_id")
+                if reg_by_id is not None:
+                    history_set.update(reg_by_id.index)
 
         # PERFORMANCE OPTIMIZATION (Bolt): Convert DataFrames to dicts once to avoid slow .loc inside the loop
         reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
@@ -7093,6 +7217,7 @@ class ObjectProgramUI(
         self.app.dirty = True
         self.update_dirty_ui()
         self._problem_cache.clear()
+        self._invalidate_row_cache()
         self._list_dirty = True
         self.update_review_progress()
         self.system_status.config(text=f"Marked {count} objects as {action}")

@@ -96,6 +96,13 @@ class AutosaveMixin:
 
 
     def _schedule_autosave(self):
+        # Always cancel any existing job before scheduling to prevent stale timer leaks
+        if self._autosave_job is not None:
+            try:
+                self.root.after_cancel(self._autosave_job)
+            except Exception:
+                pass
+            self._autosave_job = None
         self._autosave_job = self.root.after(
             AUTOSAVE_INTERVAL_MS,
             self._autosave_tick
