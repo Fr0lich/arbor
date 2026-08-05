@@ -126,12 +126,24 @@ class DatabaseOpsMixin:
 
             self.root.after(0, lambda: self.image_scan_progress.configure(value=10))
 
-            df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(path, self.app.config)
+            # PERFORMANCE OPTIMIZATION (Bolt): Read via standard library pickle if it's a binary autosave file.
+            if path.endswith(".pkl"):
+                import pickle
+                with open(path, "rb") as f:
+                    data = pickle.load(f)
+                df_reg = data["df_reg"]
+                df_obs = data["df_obs"]
+                df_photo = data["df_photo"]
+                df_log = data["df_log"]
+            else:
+                df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(path, self.app.config)
 
             self.root.after(0, lambda: self.image_scan_progress.configure(value=60))
 
             base, _ = os.path.splitext(path)
-            output_path = f"{base}_updated_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+            # Ensure the output path uses .xlsx even if we loaded from a .pkl autosave
+            base_xlsx = base.replace(".autosave", "")
+            output_path = f"{base_xlsx}_updated_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
 
 
             def _safe_finish(p=path, op=output_path,
@@ -153,8 +165,17 @@ class DatabaseOpsMixin:
 
 
     def _finish_open_excel(self, path, output_path, df_reg, df_obs, df_photo, df_log):
+        # PERFORMANCE OPTIMIZATION (Bolt): Reconstruct the original Excel path as active path if loaded from an autosave
+        if ".autosave" in path:
+            orig_path = path.replace(".autosave.pkl", ".xlsx").replace(".autosave.xlsx", ".xlsx")
+            if os.path.exists(orig_path):
+                path = orig_path
 
-        dupes = df_reg[df_reg["ObjectID"].duplicated()]["ObjectID"].unique()
+        # If df_reg has index name already set to ObjectID, we don't have duplicated column
+        if "ObjectID" in df_reg.columns:
+            dupes = df_reg[df_reg["ObjectID"].duplicated()]["ObjectID"].unique()
+        else:
+            dupes = []
 
         if len(dupes) > 0:
             messagebox.showwarning(
@@ -177,9 +198,12 @@ class DatabaseOpsMixin:
         self.app.df_photo = df_photo
         self.app.df_log = df_log
 
-        self.app.df_reg.set_index("ObjectID", inplace=True)
-        self.app.df_obs.set_index("ObjectID", inplace=True)
-        self.app.df_photo.set_index("ObjectID", inplace=True)
+        if "ObjectID" in self.app.df_reg.columns:
+            self.app.df_reg.set_index("ObjectID", inplace=True)
+        if "ObjectID" in self.app.df_obs.columns:
+            self.app.df_obs.set_index("ObjectID", inplace=True)
+        if "ObjectID" in self.app.df_photo.columns:
+            self.app.df_photo.set_index("ObjectID", inplace=True)
 
         self.app.initial_df_obs = self.app.df_obs.copy()
 
