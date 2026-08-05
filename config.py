@@ -4,6 +4,7 @@
 # Set at startup in main.py based on screen DPI.
 # Use sc(n) everywhere instead of raw pixel/font sizes.
 UI_SCALE = 1.0
+ENABLE_TUTORIALS = True
 _detected_scale = 1.0  # Overwritten at startup with the actual detected DPI ratio
 _PREFS_PATH = "user_prefs.json"  # Overwritten at startup with the correct exe-relative path
 
