@@ -79,7 +79,8 @@ class AutosaveMixin:
             except Exception as e:
                 from utils import debug_error
                 debug_error("_write_pickle_async worker", str(e))
-                self.root.after(0, lambda: callback(False, str(e)) if callback else None)
+                err_msg = str(e)
+                self.root.after(0, lambda err=err_msg: callback(False, err) if callback else None)
             finally:
                 self.root.after(0, lambda: setattr(self, '_save_in_progress', False))
 
