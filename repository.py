@@ -4,8 +4,26 @@ import os
 import shutil
 import sqlite3
 import datetime
+import warnings
 from config import DATABASE_CONFIGS
 from utils import debug_error
+
+# Suppress the FutureWarning about downcasting object dtype arrays on fillna/ffill/bfill.
+# This warning is raised under Pandas 2.2+ when filling missing values on object dtype series with boolean/scalar values.
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message=".*Downcasting object dtype arrays.*"
+)
+
+# Safely enable the future non-silent downcasting behavior if available (Pandas 2.x),
+# while catching any deprecation/ignore warnings in newer Pandas (3.x) versions.
+try:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pd.set_option("future.no_silent_downcasting", True)
+except Exception:
+    pass
 
 # ---------------------------------------------------------------------------
 # Column name constants used across repository and UI layers.
