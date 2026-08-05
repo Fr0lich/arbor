@@ -43,12 +43,18 @@ def _normalise_dataframes(df_reg, df_obs, config):
     sections = config.get("ui_sections", {})
     problem_columns = [f["name"] for f in sections.get("problems", [])]
     location_columns = [f["name"] for f in sections.get("location", [])]
+    registration_columns = [f["name"] for f in sections.get("registration", [])]
 
     # --- ObjectID ---
     if not df_reg.empty and "ObjectID" in df_reg.columns:
         df_reg["ObjectID"] = df_reg["ObjectID"].astype(str).str.strip()
     if not df_obs.empty and "ObjectID" in df_obs.columns:
         df_obs["ObjectID"] = df_obs["ObjectID"].astype(str).str.strip()
+
+    # --- Registration: ensure all defined registration columns exist ---
+    for col in registration_columns:
+        if col not in df_reg.columns:
+            df_reg[col] = ""
 
     # --- Observation: problem columns ---
     for col in problem_columns:
