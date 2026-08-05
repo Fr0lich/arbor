@@ -85,6 +85,9 @@ class ObjectProgramUI(
 
 
         self.object_loaded = False
+        self._image_paths = []
+        self._rendered_paths = None
+        self._thumb_cards = []
 
         self.history_stack = []
 
