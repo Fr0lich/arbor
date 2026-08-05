@@ -71,7 +71,7 @@ class ImageHandlerMixin:
         self._image_resize_job = None
         if not self.root.winfo_exists():
             return
-        if self.object_loaded and self._image_paths:
+        if self.object_loaded and getattr(self, "_image_paths", None):
             self.image_render_cache.clear()
             if self.image_view_mode == "gallery":
                 self._render_image_gallery()
@@ -429,10 +429,63 @@ class ImageHandlerMixin:
     def _render_image_gallery(self):
         self._update_image_controls_visibility()
 
+        can_reuse = (
+            getattr(self, "_rendered_paths", None) == self._image_paths
+            and self._rendered_paths is not None
+            and hasattr(self, "main_image_label")
+            and self.main_image_label.winfo_exists()
+            and hasattr(self, "thumb_canvas")
+            and self.thumb_canvas.winfo_exists()
+            and len(getattr(self, "_thumb_cards", [])) == len(self._image_paths)
+            and all(c and c.winfo_exists() for c in self._thumb_cards)
+        )
+
+        active_border_color = "#3b6934" # secondary green
+        inactive_border_color = "#c4c7c7"
+
+        if can_reuse:
+            # 1. Update main image and bind
+            main_path = self._image_paths[self._current_image_index]
+            tk_img = self._get_image_for_display(main_path, large=True)
+            self.main_image_label.config(image=tk_img)
+            self.main_image_label.image = tk_img
+            self.main_image_label.bind("<Double-Button-1>", lambda e, p=main_path: self.open_image_web(p))
+
+            # 2. Update border highlight/thickness on the existing thumbnail cards
+            active_card = None
+            for i, card in enumerate(self._thumb_cards):
+                is_active = (i == self._current_image_index)
+                border_size = 2 if is_active else 1
+                current_border = active_border_color if is_active else inactive_border_color
+                card.config(highlightthickness=border_size, highlightbackground=current_border)
+                if is_active:
+                    active_card = card
+
+            # 3. Handle Auto-Scroll
+            if active_card:
+                self.thumb_canvas.update_idletasks()
+                card_x = active_card.winfo_x()
+                card_w = active_card.winfo_width()
+                canvas_w = self.thumb_canvas.winfo_width()
+
+                scroll_region = self.thumb_canvas.bbox("all")
+                if scroll_region:
+                    total_w = scroll_region[2] - scroll_region[0]
+                    if total_w > canvas_w:
+                        if card_x + card_w > self.thumb_canvas.canvasx(canvas_w):
+                            target_x = card_x + card_w - canvas_w + sc(8)
+                            self.thumb_canvas.xview_moveto(target_x / total_w)
+                        elif card_x < self.thumb_canvas.canvasx(0):
+                            target_x = card_x - sc(8)
+                            self.thumb_canvas.xview_moveto(target_x / total_w)
+            return
+
         for w in self.image_container.winfo_children():
             w.destroy()
 
         if not self._image_paths:
+            self._rendered_paths = None
+            self._thumb_cards = []
             return
 
         main_path = self._image_paths[self._current_image_index]
@@ -441,8 +494,6 @@ class ImageHandlerMixin:
         bg_color = "#ffffff"       # surface-container-lowest
         strip_bg = "#f3f3f3"       # surface-container-low
         border_color = "#d1d1d1"   # outline-variant
-        active_border_color = "#3b6934" # secondary green
-        inactive_border_color = "#c4c7c7"
 
         # Main Gallery Container Frame with 1px border and margins
         gallery_container = tk.Frame(
@@ -543,6 +594,7 @@ class ImageHandlerMixin:
         )
 
         active_card = None
+        self._thumb_cards = []
 
         for i, path in enumerate(self._image_paths):
             is_active = (i == self._current_image_index)
@@ -557,6 +609,7 @@ class ImageHandlerMixin:
                 highlightbackground=current_border
             )
             card.pack(side="left", padx=sc(6), pady=sc(6))
+            self._thumb_cards.append(card)
 
             if is_active:
                 active_card = card
@@ -614,6 +667,8 @@ class ImageHandlerMixin:
                     elif card_x < self.thumb_canvas.canvasx(0):
                         target_x = card_x - sc(8)
                         self.thumb_canvas.xview_moveto(target_x / total_w)
+
+        self._rendered_paths = self._image_paths
 
 
     def _update_image_controls_visibility(self):
