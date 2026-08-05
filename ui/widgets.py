@@ -212,6 +212,11 @@ class TreeviewListboxWrapper(ttk.Frame):
             self.canvas.pack(fill="both", expand=True)
             self.active_view = "detailed"
 
+            # PERFORMANCE OPTIMIZATION (Bolt): Lazily build card widgets for all loaded items that do not have one yet
+            for oid in self.items_list:
+                if oid in self.item_data and "card_frame" not in self.item_data[oid]:
+                    self._create_card_widget(oid)
+
         self._sync_view_selections()
 
     def _on_frame_configure(self, event):
@@ -323,6 +328,12 @@ class TreeviewListboxWrapper(ttk.Frame):
         return badge
 
     def _create_card_widget(self, oid):
+        # PERFORMANCE OPTIMIZATION (Bolt): Prevent duplicated widget creation
+        if oid in self.item_data and "card_frame" in self.item_data[oid]:
+            card_frame = self.item_data[oid]["card_frame"]
+            if card_frame and card_frame.winfo_exists():
+                return
+
         from config import sc
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
 
@@ -695,7 +706,10 @@ class TreeviewListboxWrapper(ttk.Frame):
             "values": [rev_char, oid, genus or "", species or ""]
         }
 
-        self._create_card_widget(oid)
+        # PERFORMANCE OPTIMIZATION (Bolt): Only create card widget if we are actually in detailed view,
+        # otherwise defer widget creation to avoid high CPU and memory overhead on database load.
+        if self.active_view == "detailed":
+            self._create_card_widget(oid)
 
     def itemconfig(self, index, **kwargs):
         foreground = kwargs.get("foreground")
