@@ -17,12 +17,19 @@ from ui.database_ops import DatabaseOpsMixin
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
+import re
 import time
 import threading
 from datetime import datetime
 import pandas as pd
 import getpass
 from PIL import Image, ImageTk
+
+# Pre-compiled regex patterns for speed optimization
+_NUMERIC_OID_PATTERN = re.compile(r"\b(\d+)\b")
+_NORMALIZE_NON_WORD_PATTERN = re.compile(r'[^\w\s]')
+_NORMALIZE_SPACE_PATTERN = re.compile(r'\s+')
+
 from io import BytesIO
 import json
 import uuid
@@ -2452,9 +2459,8 @@ class ObjectProgramUI(
     def _extract_numeric_object_id(self, filename):
         name = os.path.splitext(filename)[0]
 
-        # Finn fÃ¸rste rene tallsekvens
-        import re
-        m = re.search(r"\b(\d+)\b", name)
+        # Finn første rene tallsekvens
+        m = _NUMERIC_OID_PATTERN.search(name)
         if not m:
             return None
 
@@ -7060,68 +7066,6 @@ class ObjectProgramUI(
                 if reg_by_id is not None:
                     history_set.update(reg_by_id.index)
 
-        # PERFORMANCE OPTIMIZATION (Bolt): Convert DataFrames to dicts once to avoid slow .loc inside the loop
-        reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
-        obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
-
-        # Is image mode folder?
-        include_image_problems = (self.image_mode == "folder")
-
-        # Clear and pre-populate the problem cache for active objects
-        self._problem_cache.clear()
-        problem_cols = getattr(self, "problem_columns", [])
-        problem_mapping = getattr(self, "problem_to_field", {})
-
-        for oid in self.app.active_object_ids:
-            obs_row = obs_dict.get(oid, {})
-            reg_row = reg_dict.get(oid, {})
-
-            has_prob = False
-            for p in problem_cols:
-                if p == "Images_Missing":
-                    continue
-                if not include_image_problems:
-                    if "Image" in p:
-                        continue
-
-                # Check if problem p is active
-                is_act = False
-                if p == "Other_problem":
-                    is_act = bool(obs_row.get(p, False))
-                elif p == "Reviewed":
-                    is_act = bool(obs_row.get(REVIEWED_COLUMN, False))
-                elif p == "Has_Images":
-                    is_act = not obs_row.get("Images_Missing", False)
-                else:
-                    obs_val = bool(obs_row.get(p, False))
-                    auto_val = False
-                    if p in problem_mapping:
-                        field = problem_mapping.get(p)
-                        if field:
-                            raw_val = reg_row.get(field, "")
-                            is_missing = (
-                                pd.isna(raw_val) or
-                                (isinstance(raw_val, str) and raw_val.strip() == "")
-                            )
-                            is_unknown = self.is_unknown(raw_val)
-                            auto_val = is_missing and not is_unknown
-                    is_act = obs_val or auto_val
-
-                if is_act:
-                    has_prob = True
-                    break
-
-            self._problem_cache[oid] = has_prob
-
-        # PERFORMANCE OPTIMIZATION (Bolt): Precompute a Python set of historical object IDs
-        # to perform fast O(1) membership checks instead of index scans inside the loop.
-        history_set = set()
-        if self.app.historical_dbs:
-            for db in self.app.historical_dbs:
-                reg_by_id = db.get("reg_by_id")
-                if reg_by_id is not None:
-                    history_set.update(reg_by_id.index)
-
         for i, oid in enumerate(self.app.active_object_ids):
             genus = str(genus_dict.get(oid, "")).strip()
             species = str(species_dict.get(oid, "")).strip()
@@ -8208,10 +8152,9 @@ class ObjectProgramUI(
             return ""
         text = text.strip()
         if variations:
-            import re
             text = text.lower()
-            text = re.sub(r'[^\w\s]', '', text)
-            text = re.sub(r'\s+', ' ', text)
+            text = _NORMALIZE_NON_WORD_PATTERN.sub('', text)
+            text = _NORMALIZE_SPACE_PATTERN.sub(' ', text)
             text = text.strip()
         return text
 

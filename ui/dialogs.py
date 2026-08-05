@@ -16,9 +16,11 @@ class ZoomableImagePopup:
         self.top = tk.Toplevel(parent)
         self.top.title("Image")
 
+        self._scale = getattr(parent, "_scale", 1.0)
         self._compact = False
         self._last_scale = self._scale
-
+        self._zoom_job = None
+        self._resize_job = None
 
         self.canvas = tk.Canvas(self.top, bg="black")
         self.canvas.pack(fill="both", expand=True)
@@ -50,6 +52,16 @@ class ZoomableImagePopup:
             threading.Thread(target=self._load_full_res, daemon=True).start()
 
     def _on_close(self, event=None):
+        if hasattr(self, "_zoom_job") and self._zoom_job:
+            try:
+                self.top.after_cancel(self._zoom_job)
+            except Exception:
+                pass
+        if hasattr(self, "_resize_job") and self._resize_job:
+            try:
+                self.top.after_cancel(self._resize_job)
+            except Exception:
+                pass
         self.orig_img = None
         self.tk_img = None
 
@@ -74,7 +86,6 @@ class ZoomableImagePopup:
         self.top.title("Image (Full Resolution)")
         self._fit_to_window()
 
-
     def _fit_to_window(self, event=None):
         cw = self.canvas.winfo_width()
         ch = self.canvas.winfo_height()
@@ -86,25 +97,43 @@ class ZoomableImagePopup:
         self.offset_x = (cw - iw * self.scale) / 2
         self.offset_y = (ch - ih * self.scale) / 2
 
-        self._redraw()
+        # Debounce the high quality configure/resize events
+        if hasattr(self, "_resize_job") and self._resize_job:
+            try:
+                self.top.after_cancel(self._resize_job)
+            except Exception:
+                pass
+            self._resize_job = None
 
-    def _redraw(self):
-        w = int(self.orig_img.width * self.scale)
-        h = int(self.orig_img.height * self.scale)
+        self._redraw(scale_changed=True, fast_filter=True)
+        self._resize_job = self.top.after(200, self._high_quality_resize)
 
-        if w < 1 or h < 1:
-            return
+    def _high_quality_resize(self):
+        self._resize_job = None
+        self._redraw(scale_changed=True, fast_filter=False)
 
-        resized = self.orig_img.resize((w, h), Image.LANCZOS)
-        self.tk_img = ImageTk.PhotoImage(resized)
+    def _redraw(self, scale_changed=True, fast_filter=False):
+        if scale_changed or not self.tk_img or not self.img_id:
+            w = int(self.orig_img.width * self.scale)
+            h = int(self.orig_img.height * self.scale)
 
-        self.canvas.delete("all")
-        self.img_id = self.canvas.create_image(
-            self.offset_x,
-            self.offset_y,
-            anchor="nw",
-            image=self.tk_img
-        )
+            if w < 1 or h < 1:
+                return
+
+            filter_type = Image.NEAREST if fast_filter else Image.LANCZOS
+            resized = self.orig_img.resize((w, h), filter_type)
+            self.tk_img = ImageTk.PhotoImage(resized)
+
+            self.canvas.delete("all")
+            self.img_id = self.canvas.create_image(
+                self.offset_x,
+                self.offset_y,
+                anchor="nw",
+                image=self.tk_img
+            )
+        else:
+            if self.img_id:
+                self.canvas.coords(self.img_id, self.offset_x, self.offset_y)
 
     def _on_zoom(self, event):
         factor = 1.1 if event.delta > 0 else 0.9
@@ -116,7 +145,19 @@ class ZoomableImagePopup:
         self.offset_x = mx - (mx - self.offset_x) * (self.scale / old_scale)
         self.offset_y = my - (my - self.offset_y) * (self.scale / old_scale)
 
-        self._redraw()
+        if hasattr(self, "_zoom_job") and self._zoom_job:
+            try:
+                self.top.after_cancel(self._zoom_job)
+            except Exception:
+                pass
+            self._zoom_job = None
+
+        self._redraw(scale_changed=True, fast_filter=True)
+        self._zoom_job = self.top.after(200, self._high_quality_redraw)
+
+    def _high_quality_redraw(self):
+        self._zoom_job = None
+        self._redraw(scale_changed=True, fast_filter=False)
 
     def _start_pan(self, event):
         self._drag_start = (event.x, event.y)
@@ -132,7 +173,7 @@ class ZoomableImagePopup:
         self.offset_y += dy
         self._drag_start = (event.x, event.y)
 
-        self._redraw()
+        self._redraw(scale_changed=False)
 
 # =====================
 # SETUP UI

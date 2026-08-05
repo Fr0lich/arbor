@@ -397,6 +397,105 @@ class ImageHandlerMixin:
         return
 
 
+    def _load_image_async(self, path, large, target_widget, token=None):
+        if token is None:
+            token = getattr(self, "_image_load_token", 0)
+
+        # Cache key includes zoom and rotation details for large images
+        key = (path, large, self.image_zoom_factor if large else 1.0, self.image_rotation_angle if large else 0)
+
+        if key in self.image_render_cache:
+            self.image_render_cache.move_to_end(key)
+            tk_img = self.image_render_cache[key]
+            if target_widget.winfo_exists():
+                target_widget.config(image=tk_img, text="")
+                target_widget.image = tk_img
+            return
+
+        # Track the active path on the widget to prevent race conditions
+        target_widget.loading_path = path
+
+        # Compute sizing arguments on the main thread before starting the background thread
+        # because calling winfo methods in worker threads is not thread-safe.
+        try:
+            width = self.image_canvas.winfo_width()
+            height = self.image_canvas.winfo_height()
+        except Exception:
+            width, height = 800, 350
+        
+        if width < 300:
+            width = 800
+        canvas_h = height if height > 150 else 350
+
+        zoom = self.image_zoom_factor
+        rot = self.image_rotation_angle
+        dpi_scale = getattr(self, "_scale", 1.0)
+
+        def worker():
+            try:
+                # Check token before doing heavy work
+                if token != getattr(self, "_image_load_token", 0):
+                    return
+
+                # Load original PIL image
+                if path not in self.original_pil_cache:
+                    self.original_pil_cache[path] = Image.open(path)
+                    if len(self.original_pil_cache) > 40:
+                        self.original_pil_cache.popitem(last=False)
+
+                img = self.original_pil_cache[path].copy()
+
+                # Apply rotation
+                if large and rot != 0:
+                    img = img.rotate(rot, expand=True)
+
+                if large:
+                    max_width = int(width * 0.95 * zoom)
+                    max_height = int(canvas_h * 0.85 * zoom)
+
+                    if max_width > 0 and max_height > 0:
+                        img_w, img_h = img.size
+                        ratio = min(max_width / img_w, max_height / img_h)
+                        new_w = int(img_w * ratio)
+                        new_h = int(img_h * ratio)
+                        if new_w > 0 and new_h > 0:
+                            img = img.resize((new_w, new_h), Image.LANCZOS)
+                else:
+                    # Modern square thumbnails centered and scaled by DPI scale factor
+                    size = int(max(1, int(70 * dpi_scale)))
+                    img_w, img_h = img.size
+                    min_dim = min(img_w, img_h)
+                    left = (img_w - min_dim) / 2
+                    top = (img_h - min_dim) / 2
+                    right = (img_w + min_dim) / 2
+                    bottom = (img_h + min_dim) / 2
+                    img = img.crop((left, top, right, bottom))
+                    img = img.resize((size, size), Image.LANCZOS)
+
+                def callback(pil_img=img):
+                    if token != getattr(self, "_image_load_token", 0):
+                        return
+                    if not target_widget.winfo_exists():
+                        return
+                    if getattr(target_widget, "loading_path", None) != path:
+                        return
+
+                    tk_img = ImageTk.PhotoImage(pil_img)
+                    self.image_render_cache[key] = tk_img
+
+                    if len(self.image_render_cache) > MAX_IMAGE_CACHE:
+                        self.image_render_cache.popitem(last=False)
+
+                    target_widget.config(image=tk_img, text="")
+                    target_widget.image = tk_img
+
+                self.root.after(0, callback)
+            except Exception as e:
+                from utils import debug_error
+                debug_error("_load_image_async worker", str(e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _render_image_stack(self):
         self._update_image_controls_visibility()
 
@@ -407,14 +506,10 @@ class ImageHandlerMixin:
             return
 
         for path in self._image_paths:
-
             frame = ttk.Frame(self.image_container)
             frame.pack(pady=10)
 
-            tk_img = self._get_image_for_display(path, large=True)
-
-            lbl = ttk.Label(frame, image=tk_img)
-            lbl.image = tk_img
+            lbl = ttk.Label(frame, text="Loading image...")
             lbl.pack()
 
             lbl.bind("<ButtonPress-1>", self._on_pan_start)
@@ -425,6 +520,7 @@ class ImageHandlerMixin:
                 lambda e, p=path: self.open_image_web(p)
             )
 
+            self._load_image_async(path, large=True, target_widget=lbl)
 
     def _render_image_gallery(self):
         self._update_image_controls_visibility()
@@ -446,9 +542,8 @@ class ImageHandlerMixin:
         if can_reuse:
             # 1. Update main image and bind
             main_path = self._image_paths[self._current_image_index]
-            tk_img = self._get_image_for_display(main_path, large=True)
-            self.main_image_label.config(image=tk_img)
-            self.main_image_label.image = tk_img
+            self.main_image_label.config(image="", text="Loading image...")
+            self._load_image_async(main_path, large=True, target_widget=self.main_image_label)
             self.main_image_label.bind("<Double-Button-1>", lambda e, p=main_path: self.open_image_web(p))
 
             # 2. Update border highlight/thickness on the existing thumbnail cards
@@ -508,17 +603,16 @@ class ImageHandlerMixin:
         main_image_container = tk.Frame(gallery_container, bg=bg_color)
         main_image_container.pack(side="top", fill="both", expand=True)
 
-        tk_img = self._get_image_for_display(main_path, large=True)
-
-        # Centered label for the main large image
-        self.main_image_label = tk.Label(main_image_container, image=tk_img, bg=bg_color)
-        self.main_image_label.image = tk_img
+        # Centered label for the main large image (initially Loading)
+        self.main_image_label = tk.Label(main_image_container, text="Loading image...", bg=bg_color)
         self.main_image_label.pack(fill="both", expand=True)
 
         # Bind zoom/pan and double-click web actions
         self.main_image_label.bind("<ButtonPress-1>", self._on_pan_start)
         self.main_image_label.bind("<B1-Motion>", self._on_pan_drag)
         self.main_image_label.bind("<Double-Button-1>", lambda e, p=main_path: self.open_image_web(p))
+
+        self._load_image_async(main_path, large=True, target_widget=self.main_image_label)
 
         # Floating Viewer Controls Overlay HUD in the bottom-right corner
         controls_overlay = tk.Frame(
@@ -614,15 +708,12 @@ class ImageHandlerMixin:
             if is_active:
                 active_card = card
 
-            tk_thumb = self._get_image_for_display(path, large=False)
-
             thumb = tk.Label(
                 card,
-                image=tk_thumb,
+                text="...",
                 bg="#ffffff",
                 cursor="hand2"
             )
-            thumb.image = tk_thumb
             thumb.pack(padx=2, pady=2)
 
             thumb.bind("<Button-1>", lambda e, idx=i: self._set_main_image(idx))
@@ -640,6 +731,8 @@ class ImageHandlerMixin:
                 h_enter, h_leave = _make_hover_handlers()
                 thumb.bind("<Enter>", h_enter)
                 thumb.bind("<Leave>", h_leave)
+
+            self._load_image_async(path, large=False, target_widget=thumb)
 
         # Bind horizontal mousewheel scrolling on the thumbnail strip
         def _on_thumb_scroll(event):

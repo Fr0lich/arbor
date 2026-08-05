@@ -52,21 +52,26 @@ def _normalise_dataframes(df_reg, df_obs, config):
         df_obs["ObjectID"] = df_obs["ObjectID"].astype(str).str.strip()
 
     # --- Registration: ensure all defined registration columns exist ---
-    for col in registration_columns:
-        if col not in df_reg.columns:
+    new_reg_cols = [col for col in registration_columns if col not in df_reg.columns]
+    if new_reg_cols:
+        for col in new_reg_cols:
             df_reg[col] = ""
 
     # --- Observation: problem columns ---
-    for col in problem_columns:
-        if col not in df_obs.columns:
+    new_prob_cols = [col for col in problem_columns if col not in df_obs.columns]
+    if new_prob_cols:
+        for col in new_prob_cols:
             df_obs[col] = False
-        df_obs[col] = df_obs[col].fillna(False).astype(bool)
+    if problem_columns:
+        df_obs[problem_columns] = df_obs[problem_columns].fillna(False).astype(bool)
 
     # --- Observation: location columns ---
-    for col in location_columns:
-        if col not in df_obs.columns:
+    new_loc_cols = [col for col in location_columns if col not in df_obs.columns]
+    if new_loc_cols:
+        for col in new_loc_cols:
             df_obs[col] = ""
-        df_obs[col] = df_obs[col].fillna("").astype(object)
+    if location_columns:
+        df_obs[location_columns] = df_obs[location_columns].fillna("").astype(object)
 
     # --- Observation: image / review flags ---
     if "Images_Missing" not in df_obs.columns:
@@ -90,9 +95,10 @@ def _normalise_dataframes(df_reg, df_obs, config):
 
     # --- Registration: fill NaN, ensure UID and ProblemDescription ---
     if not df_reg.empty:
-        for col in df_reg.columns:
-            if col != "ObjectID":
-                df_reg[col] = df_reg[col].fillna("").astype(object)
+        # Fill NaN and cast to object in bulk for non-ObjectID columns
+        cols_to_fill = [col for col in df_reg.columns if col != "ObjectID"]
+        if cols_to_fill:
+            df_reg[cols_to_fill] = df_reg[cols_to_fill].fillna("").astype(object)
 
         if "UID" not in df_reg.columns:
             df_reg["UID"] = ""
