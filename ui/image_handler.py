@@ -291,22 +291,21 @@ class ImageHandlerMixin:
             self.image_index[oid] = [p for _, p in self.image_index[oid]]
 
 
-        updates = []
+        # PERFORMANCE OPTIMIZATION (Bolt): Vectorized check for 'Images_Missing' on the whole DataFrame index
+        # directly in the background thread, eliminating slow main-thread loops of .at/loc assignments.
         if self.app.df_obs is not None:
-            for oid in self.app.df_obs.index:
-                oid_str = str(oid)
-                has_img = oid_str in found_object_ids
-                updates.append((oid, not has_img))
-
-        self.root.after(0, lambda: self._apply_image_updates(updates))
-
+            has_img = self.app.df_obs.index.astype(str).isin(found_object_ids)
+            self.app.df_obs["Images_Missing"] = ~has_img
 
         self.app.dirty = True
 
-        self.root.after(0, lambda: self.image_scan_progress.configure(value=100))
-        self.root.after(0, lambda: self._hide_progress("Ready"))
-        self.root.after(0, self.refresh_list)
-        self._problem_cache.clear()
+        def _notify_ui():
+            self._problem_cache.clear()
+            self.refresh_list()
+            self.image_scan_progress.configure(value=100)
+            self._hide_progress("Ready")
+
+        self.root.after(0, _notify_ui)
 
 
     def _apply_image_updates(self, updates):
