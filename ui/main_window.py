@@ -1394,13 +1394,10 @@ class ObjectProgramUI(
             except Exception:
                 return None
 
-
-
-        if "value_cache" not in db:
-            try:
-                db["value_cache"] = db["df_reg"].groupby("ObjectID").first()
-            except Exception:
-                db["value_cache"] = db["reg_by_id"]
+        # PERFORMANCE OPTIMIZATION (Bolt):
+        # Removed completely unused `value_cache` assignment which was doing
+        # a very expensive `df.groupby("ObjectID").first()` operation on every DB load.
+        # This significantly accelerates historical database / books file loading.
 
         return db["reg_by_id"]
 
