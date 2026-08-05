@@ -4998,7 +4998,169 @@ class ObjectProgramUI(
                 except Exception:
                     pass
 
+        # If errors were logged this session, offer to view the log before exit
+        try:
+            from utils import session_had_errors, get_session_log_path
+            if session_had_errors():
+                show_log = messagebox.askyesno(
+                    "Errors occurred this session",
+                    "One or more errors were logged during this session.\n\n"
+                    "Would you like to view the error log before closing?",
+                    parent=self.root
+                )
+                if show_log:
+                    self.show_error_log_window(get_session_log_path())
+                    return   # Let user close the log window; they can exit from there
+        except Exception:
+            pass
+
         self.root.destroy()
+
+
+    def show_error_log_window(self, log_path: str | None = None) -> None:
+        """
+        Open a scrollable, styled Toplevel window that displays the current
+        session error log (or any specified log file).  Provides:
+          - Colour-coded lines (ERROR red, timestamp grey)
+          - Copy-to-clipboard button
+          - Open-in-Explorer button
+          - Close-and-exit button (destroys root)
+        """
+        from utils import get_session_log_path
+        import os
+
+        if log_path is None:
+            log_path = get_session_log_path()
+
+        # Read log content
+        try:
+            if os.path.exists(log_path):
+                with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                    log_text = f.read()
+            else:
+                log_text = "(No errors have been logged yet in this session.)"
+        except Exception as exc:
+            log_text = f"Could not read log file:\n{exc}"
+
+        win = tk.Toplevel(self.root)
+        win.title(f"Error Log — {os.path.basename(log_path)}")
+        win.resizable(True, True)
+        win.minsize(660, 420)
+        win.configure(bg="#1a1a2e")
+
+        import utils
+        utils.center_and_fit_toplevel(win, 760, 560)
+
+        # ── Header bar ──────────────────────────────────────────────────────
+        header = tk.Frame(win, bg="#16213e", pady=10)
+        header.pack(fill="x")
+
+        tk.Label(
+            header, text="⚠  Session Error Log",
+            bg="#16213e", fg="#e94560",
+            font=("Segoe UI", sc(13), "bold")
+        ).pack(side="left", padx=16)
+
+        tk.Label(
+            header, text=os.path.basename(log_path),
+            bg="#16213e", fg="#888888",
+            font=("Courier New", sc(9))
+        ).pack(side="right", padx=16)
+
+        # ── Log text area ────────────────────────────────────────────────────
+        text_frame = tk.Frame(win, bg="#1a1a2e")
+        text_frame.pack(fill="both", expand=True, padx=10, pady=(6, 0))
+
+        text_area = tk.Text(
+            text_frame,
+            wrap="none",
+            font=("Courier New", sc(9)),
+            bg="#0d1117",
+            fg="#c9d1d9",
+            insertbackground="white",
+            selectbackground="#264f78",
+            highlightthickness=0,
+            relief="flat",
+            state="normal"
+        )
+
+        v_scroll = ttk.Scrollbar(text_frame, orient="vertical", command=text_area.yview)
+        h_scroll = ttk.Scrollbar(win, orient="horizontal", command=text_area.xview)
+        text_area.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+
+        v_scroll.pack(side="right", fill="y")
+        text_area.pack(side="left", fill="both", expand=True)
+        h_scroll.pack(fill="x", padx=10, pady=(0, 4))
+
+        # Colour tags
+        text_area.tag_configure("error_line",  foreground="#ff6b6b", font=("Courier New", sc(9), "bold"))
+        text_area.tag_configure("ts_line",      foreground="#6e7681")
+        text_area.tag_configure("sep_line",     foreground="#30363d")
+        text_area.tag_configure("tb_line",      foreground="#adbac7")
+
+        # Insert log content with per-line colouring
+        for line in log_text.splitlines(keepends=True):
+            stripped = line.lstrip()
+            if stripped.startswith("[ERROR]") or "Error" in line[:30]:
+                tag = "error_line"
+            elif stripped.startswith("[") and "]" in stripped[:25]:  # timestamp lines
+                tag = "ts_line"
+            elif set(stripped.strip()).issubset(set("─═")):
+                tag = "sep_line"
+            else:
+                tag = "tb_line"
+            text_area.insert(tk.END, line, tag)
+
+        text_area.configure(state="disabled")
+        text_area.see(tk.END)   # scroll to bottom so latest error is visible
+
+        # ── Footer bar ───────────────────────────────────────────────────────
+        footer = tk.Frame(win, bg="#16213e", pady=8)
+        footer.pack(fill="x", side="bottom")
+
+        def _copy():
+            win.clipboard_clear()
+            win.clipboard_append(log_text)
+            copy_btn.config(text="Copied!")
+            win.after(1800, lambda: copy_btn.config(text="Copy to Clipboard"))
+
+        def _open_in_explorer():
+            try:
+                import subprocess
+                subprocess.Popen(["explorer", "/select,", os.path.abspath(log_path)])
+            except Exception:
+                pass
+
+        def _close_log_and_exit():
+            win.destroy()
+            self.root.destroy()
+
+        copy_btn = tk.Button(
+            footer, text="Copy to Clipboard", command=_copy,
+            bg="#0f3460", fg="#e0e0e0", relief="flat",
+            font=("Segoe UI", sc(9)), padx=10, pady=4, cursor="hand2"
+        )
+        copy_btn.pack(side="left", padx=(12, 6))
+
+        tk.Button(
+            footer, text="Open Logs Folder", command=_open_in_explorer,
+            bg="#0f3460", fg="#e0e0e0", relief="flat",
+            font=("Segoe UI", sc(9)), padx=10, pady=4, cursor="hand2"
+        ).pack(side="left", padx=6)
+
+        tk.Button(
+            footer, text="Close Log", command=win.destroy,
+            bg="#333355", fg="#e0e0e0", relief="flat",
+            font=("Segoe UI", sc(9)), padx=10, pady=4, cursor="hand2"
+        ).pack(side="right", padx=(6, 12))
+
+        tk.Button(
+            footer, text="Close Log & Exit App", command=_close_log_and_exit,
+            bg="#7a1c1c", fg="#ffffff", relief="flat",
+            font=("Segoe UI", sc(9), "bold"), padx=10, pady=4, cursor="hand2"
+        ).pack(side="right", padx=6)
+
+        win.grab_set()
 
 
 #--------- highlight funksjon

@@ -7,7 +7,7 @@ import os
 import json
 import ctypes
 import config
-from utils import debug_error
+from utils import debug_error, get_session_log_path, session_had_errors
 
 # ── User preferences file ────────────────────────────────────────────────────
 # When frozen as a PyInstaller exe, __file__ points to a temp extraction folder
@@ -27,21 +27,152 @@ try:
 except Exception:
     pass  # Non-Windows or already set — safe to ignore
 
+
+# ── Global exception hooks ────────────────────────────────────────────────────
+
+def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
+    """
+    Install two complementary exception hooks:
+
+    1. root.report_callback_exception  — catches every unhandled exception that
+       Tkinter swallows inside after(), trace callbacks, and event bindings.
+       By default Tkinter only prints these to stderr (invisible in windowed
+       apps), so the crash is completely silent without this override.
+
+    2. sys.excepthook — catches any unhandled exception that escapes the main
+       thread entirely (e.g., during startup before mainloop).
+    """
+
+    def _show_error_immediately(exc_type, exc_value, exc_tb):
+        """Format the traceback and immediately open a scrollable error dialog."""
+        import traceback as _tb
+        tb_text = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
+        short_msg = f"{exc_type.__name__}: {exc_value}"
+        debug_error("Unhandled callback exception", short_msg)
+
+        # Show the dialog via after() so we never block the event loop
+        def _open_dialog():
+            active_ui = ui_ref[0] if ui_ref else None
+            if active_ui is not None and hasattr(active_ui, "show_traceback_dialog"):
+                active_ui.show_traceback_dialog(
+                    "⚠ Unhandled Error",
+                    f"An error occurred — the program may behave unexpectedly.\n\n{short_msg}",
+                    tb_text
+                )
+            else:
+                # Fallback: plain messagebox before UI is ready
+                from tkinter import messagebox
+                messagebox.showerror(
+                    "Unhandled Error",
+                    f"{short_msg}\n\nThe full traceback has been saved to:\n{get_session_log_path()}"
+                )
+
+        try:
+            root.after(0, _open_dialog)
+        except Exception:
+            pass  # root may already be destroyed
+
+    # 1. Tkinter callback exceptions
+    def _tk_report(exc_type, exc_value, exc_tb):
+        _show_error_immediately(exc_type, exc_value, exc_tb)
+
+    root.report_callback_exception = _tk_report
+
+    # 2. Main-thread uncaught exceptions
+    def _excepthook(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        _show_error_immediately(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = _excepthook
+
+
+def _install_atexit_crash_reporter() -> None:
+    """
+    Write a human-readable crash report on process exit — including force-close
+    via Windows Task Manager (which sends SIGTERM, triggering atexit handlers).
+    The file is written only when at least one error was logged this session.
+    """
+    import atexit
+
+    def _on_exit():
+        if not session_had_errors():
+            return
+        try:
+            log_path = get_session_log_path()
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(
+                    f"\n{'═' * 80}\n"
+                    f"SESSION ENDED — {datetime.now():%Y-%m-%d %H:%M:%S}\n"
+                    f"{'═' * 80}\n"
+                )
+        except Exception:
+            pass
+
+    atexit.register(_on_exit)
+
+
+def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
+    """
+    On startup, look for log files from previous sessions that contain errors.
+    If found, show a notification banner offering to view the most recent one.
+    """
+    from utils import _get_log_dir, get_session_log_path
+    import glob
+
+    log_dir = _get_log_dir()
+    current_log = get_session_log_path()
+
+    # Find all session logs that are not the current one
+    pattern = os.path.join(log_dir, "arbor_*.log")
+    all_logs = sorted(glob.glob(pattern), reverse=True)
+    stale_logs = [p for p in all_logs if p != current_log and os.path.getsize(p) > 0]
+
+    if not stale_logs:
+        return
+
+    most_recent = stale_logs[0]
+
+    def _show_banner():
+        active_ui = ui_ref[0] if ui_ref else None
+        if active_ui is None:
+            return
+        if hasattr(active_ui, "show_banner"):
+            active_ui.show_banner(
+                f"⚠ Crash log from last session found — click to view",
+                banner_type="warning",
+                duration_ms=12000
+            )
+        # Also wire up the banner click if possible
+        if hasattr(active_ui, "_inline_banner_frame"):
+            active_ui._inline_banner_frame.bind(
+                "<Button-1>",
+                lambda e: active_ui.show_error_log_window(most_recent)
+            )
+
+    root.after(2000, _show_banner)
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+from datetime import datetime   # needed by _on_exit above
+
 if __name__ == "__main__":
     try:
         app = AppState()
         root = tk.Tk()
         # root.withdraw()  # Removed: don't hide main window to avoid invisible dialog bug
-        
+
         # ── Detect DPI scale factor (stored for info display only) ──────────────
         # winfo_fpixels('1i') returns pixels-per-inch on this screen.
         detected_dpi = root.winfo_fpixels('1i')
         detected_scale = round(detected_dpi / 96.0, 2)
 
         config._PREFS_PATH = _PREFS_PATH           # single shared path used everywhere
-        
+
         prefs = config.load_prefs()
-        
+
         if "custom_databases" in prefs:
             config.DATABASE_CONFIGS.update(prefs["custom_databases"])
 
@@ -57,25 +188,32 @@ if __name__ == "__main__":
         config._detected_scale = detected_scale
 
         ui = ObjectProgramUI(root, app)
-        
+
+        # ── ui_ref: mutable list so hooks set above can access 'ui' after it's created
+        ui_ref = [ui]
+
+        # ── Install global error hooks now that root & ui exist ─────────────────
+        _install_exception_hooks(root, ui_ref)
+        _install_atexit_crash_reporter()
+
         # Hide main window initially
         root.withdraw()
-        
+
         dialog = StartupDialog(root, app, ui)
-        
+
         # Ensure startup dialog is forcefully brought to the front
         dialog.win.attributes("-topmost", True)
         dialog.win.update()
         # You can turn off topmost after it's shown if you don't want it permanently stuck above other apps
         dialog.win.attributes("-topmost", False)
         dialog.win.focus_force()
-        
+
         root.wait_window(dialog.win)
 
         if not dialog.completed:
             root.destroy()
             sys.exit(0)
-            
+
         # Dialog completed successfully, show main window
         root.deiconify()
         root.state("zoomed")
@@ -86,6 +224,9 @@ if __name__ == "__main__":
         if hasattr(dialog, "selected_excel_path"):
             ui._show_progress("Loading database and images...", 100)
             ui.open_excel_from_path(dialog.selected_excel_path)
+
+        # Check for crash logs from previous sessions (shows a banner after 2 s)
+        _check_previous_crash_logs(root, ui_ref)
 
         def toggle_fullscreen(event=None):
             root.state("zoomed" if root.state() != "zoomed" else "normal")
