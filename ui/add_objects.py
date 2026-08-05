@@ -444,7 +444,8 @@ class AddObjectsWindow:
                 [f"Created {oid}"]
             )
 
-        self.main_window._list_dirty = True
+        self.main_window._invalidate_row_cache()
+        self.main_window.invalidate_search_index()
         self.main_window.refresh_list()
         
         # Select the first created object

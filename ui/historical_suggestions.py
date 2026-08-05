@@ -59,6 +59,12 @@ class HistoricalSuggestionsMixin:
             self._history_cache[cache_key] = suggestions
             return suggestions
 
+        db_oid_entries = []
+        for db in self.app.historical_dbs:
+            dict_cache = self._get_db_dict_cache(db)
+            if oid in dict_cache:
+                db_oid_entries.append((db["name"], dict_cache[oid]))
+
         field_to_prob = {
             v: k for k, v in self.problem_to_field.items()
         }
@@ -92,16 +98,12 @@ class HistoricalSuggestionsMixin:
 
             value_map = {}
 
-            for db in self.app.historical_dbs:
-                dict_cache = self._get_db_dict_cache(db)
-                if oid not in dict_cache:
-                    continue
-
-                field_vals = dict_cache[oid].get(field, [])
+            for db_name, oid_data in db_oid_entries:
+                field_vals = oid_data.get(field, [])
                 for val in field_vals:
                     if self.is_word_ignored(val):
                         continue
-                    value_map.setdefault(val, []).append(db["name"])
+                    value_map.setdefault(val, []).append(db_name)
 
             if value_map:
                 suggestions[field] = value_map

@@ -219,6 +219,7 @@ class DatabaseOpsMixin:
         self.refresh_list()
 
 
+        self.invalidate_search_index()
         self.build_search_index()
 
         if self.app.active_object_ids:

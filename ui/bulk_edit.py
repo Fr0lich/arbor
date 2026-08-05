@@ -339,6 +339,8 @@ class BulkEditWindow:
         self.main_window._hide_progress("Bulk apply complete")
         self.app.dirty = True
         self.main_window.update_dirty_ui()
+        self.main_window._invalidate_row_cache()
+        self.main_window.invalidate_search_index()
         self.main_window.refresh_list()
         
         # If currently looking at one of the affected, reload

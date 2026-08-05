@@ -1758,7 +1758,9 @@ class ObjectProgramUI(
             self.app.df_photo.loc[oid] = new_photo_row
 
         self.app.active_object_ids.append(oid)
-        self._list_dirty = True
+        self._invalidate_row_cache()
+        self.invalidate_search_index()
+        self.refresh_list()
     
         idx = len(self.app.active_object_ids) - 1
         self.object_list.selection_clear(0, tk.END)
@@ -1800,9 +1802,12 @@ class ObjectProgramUI(
             self.app.df_photo.loc[new_oid] = new_photo
 
         self.app.active_object_ids.append(new_oid)
-        self._list_dirty = True
+        self._invalidate_row_cache()
+        self.invalidate_search_index()
+        self.refresh_list()
     
         idx = len(self.app.active_object_ids) - 1
+        self.object_list.selection_clear(0, tk.END)
         self.object_list.selection_set(idx)
         self.object_list.see(idx)
 
@@ -2173,6 +2178,10 @@ class ObjectProgramUI(
         self.app.df_reg.loc[oid] = state["reg"]
         self.app.df_obs.loc[oid] = state["obs"]
     
+        self._invalidate_row_cache()
+        self.invalidate_search_index()
+        self.refresh_list()
+
         self.load_object(oid)
 
         self.app.dirty = True
@@ -2248,6 +2257,10 @@ class ObjectProgramUI(
 
         self.app.df_reg.loc[oid] = state["reg"]
         self.app.df_obs.loc[oid] = state["obs"]
+
+        self._invalidate_row_cache()
+        self.invalidate_search_index()
+        self.refresh_list()
 
         self.load_object(oid)
 
@@ -4382,7 +4395,7 @@ class ObjectProgramUI(
 
             
             if {"Genus", "Species"} & set(reg_changed_fields):
-                    self.build_search_index()
+                self.invalidate_search_index()
 
         
 
@@ -4394,6 +4407,18 @@ class ObjectProgramUI(
     def _invalidate_row_cache(self):
         """Mark the refresh_list() row-dict caches as stale so they are rebuilt on next refresh."""
         self._row_cache_dirty = True
+
+    def _get_obs_dict(self):
+        if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_obs_dict", None) is None:
+            obs_df = self.app.df_obs
+            self._cached_obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
+        return self._cached_obs_dict
+
+    def _get_reg_dict(self):
+        if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_reg_dict", None) is None:
+            reg_df = self.app.df_reg
+            self._cached_reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
+        return self._cached_reg_dict
 
 
     def update_location_summary(self, oid):
@@ -5281,11 +5306,7 @@ class ObjectProgramUI(
             start_idx = ids.index(self.app.current_object_id)
 
         # Use cached problem state; fall back to has_any_problem for cache misses
-        obs_dict = (
-            self._cached_obs_dict
-            if not getattr(self, "_row_cache_dirty", True) and self._cached_obs_dict
-            else self.app.df_obs.to_dict(orient="index")
-        )
+        obs_dict = self._get_obs_dict()
 
         for step in range(1, n + 1):
             i = (start_idx + step) % n
@@ -5330,11 +5351,7 @@ class ObjectProgramUI(
         total = len(ids)
 
         # Use cached obs dict for the reviewed check to avoid per-row .loc
-        obs_dict = (
-            self._cached_obs_dict
-            if not getattr(self, "_row_cache_dirty", True) and self._cached_obs_dict
-            else self.app.df_obs.to_dict(orient="index")
-        )
+        obs_dict = self._get_obs_dict()
 
         for step in range(1, total + 1):
             i = (start_idx + step) % total
@@ -6475,8 +6492,8 @@ class ObjectProgramUI(
         # PERFORMANCE OPTIMIZATION (Bolt): Converting DataFrames to dictionary structures once
         # allows O(1) dictionary lookup, bypassing Pandas Series creation and .loc index overhead entirely,
         # making the bulk filtering loop ~15-40x faster.
-        reg_dict = self.app.df_reg.to_dict(orient="index")
-        obs_dict = self.app.df_obs.to_dict(orient="index")
+        reg_dict = self._get_reg_dict()
+        obs_dict = self._get_obs_dict()
 
         # Pre-populate a set of IDs that exist in historical databases to make fast_has_history O(1) set lookup
         history_set = set()
