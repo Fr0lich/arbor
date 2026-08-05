@@ -88,9 +88,11 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         # State tracking
         self.items_list = []      # list of oids in order
+        self.items_set = set()    # fast lookup set
         self.item_data = {}       # oid -> {title, genus, species, reviewed, foreground, tags, ...}
         self.selected_iids = []   # list of selected oids
         self.focused_iid = None
+        self._resize_job = None
 
         # Event binding storage
         self.custom_bindings = []
@@ -223,7 +225,23 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _on_canvas_configure(self, event):
-        self.canvas.itemconfig(self.scrollable_frame_window, width=event.width)
+        self._last_canvas_width = event.width
+        if hasattr(self, "_resize_job") and self._resize_job:
+            try:
+                self.canvas.after_cancel(self._resize_job)
+            except Exception:
+                pass
+        self._resize_job = self.canvas.after(100, self._deferred_canvas_configure)
+
+    def _deferred_canvas_configure(self):
+        self._resize_job = None
+        if not self.winfo_exists():
+            return
+        width = getattr(self, "_last_canvas_width", self.canvas.winfo_width())
+        try:
+            self.canvas.itemconfig(self.scrollable_frame_window, width=width)
+        except Exception:
+            pass
 
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -672,6 +690,7 @@ class TreeviewListboxWrapper(ttk.Frame):
 
     def delete(self, first, last=None):
         self.items_list.clear()
+        self.items_set.clear()
         self.selected_iids.clear()
         self.focused_iid = None
         children = self.tree.get_children()
@@ -684,14 +703,26 @@ class TreeviewListboxWrapper(ttk.Frame):
                 card.destroy()
         self.item_data.clear()
 
-    def insert(self, index, title, genus=None, species=None, reviewed=None):
+    def insert(self, index, title, genus=None, species=None, reviewed=None, bulk=False):
         oid = title.split(" ")[0].strip()
-        if oid in self.items_list:
-            self.items_list.remove(oid)
+        if not bulk:
+            if oid in self.items_set:
+                try:
+                    self.items_list.remove(oid)
+                except ValueError:
+                    pass
+            else:
+                self.items_set.add(oid)
+        else:
+            self.items_set.add(oid)
+
         self.items_list.append(oid)
 
-        if self.tree.exists(oid):
-            self.tree.delete(oid)
+        if not bulk and self.tree.exists(oid):
+            try:
+                self.tree.delete(oid)
+            except Exception:
+                pass
 
         rev_char = "☑" if reviewed else "☐"
         row_tag = "even" if len(self.items_list) % 2 == 0 else "odd"
@@ -861,6 +892,11 @@ class TreeviewListboxWrapper(ttk.Frame):
             self.canvas.focus_set()
 
     def destroy(self):
+        if hasattr(self, "_resize_job") and self._resize_job:
+            try:
+                self.canvas.after_cancel(self._resize_job)
+            except Exception:
+                pass
         if self._trace_id and self.focus_mode_var:
             try:
                 self.focus_mode_var.trace_remove("write", self._trace_id)

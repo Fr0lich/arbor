@@ -55,10 +55,9 @@ class ImageHandlerMixin:
 
 
     def _on_canvas_resize(self, event):
-        canvas_width = event.width
-        self.image_canvas.itemconfig(self.image_window, width=canvas_width)
+        self._last_canvas_width = event.width
 
-        # Debounce image refresh on resize so it doesn't lag while dragging the window
+        # Debounce image container resizing and image refresh on resize so it doesn't lag while dragging sashes
         if hasattr(self, "_image_resize_job") and self._image_resize_job:
             try:
                 self.root.after_cancel(self._image_resize_job)
@@ -71,6 +70,11 @@ class ImageHandlerMixin:
         self._image_resize_job = None
         if not self.root.winfo_exists():
             return
+        width = getattr(self, "_last_canvas_width", self.image_canvas.winfo_width())
+        try:
+            self.image_canvas.itemconfig(self.image_window, width=width)
+        except Exception:
+            pass
         if self.object_loaded and getattr(self, "_image_paths", None):
             self.image_render_cache.clear()
             if self.image_view_mode == "gallery":

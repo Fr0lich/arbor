@@ -4771,16 +4771,15 @@ class ObjectProgramUI(
         # Collect suggestions for this specific ObjectID
         self.current_object_suggestions = {}
         if oid and self.app.historical_dbs:
-            for field in self.reg_columns:
-                vals = []
-                for db in self.app.historical_dbs:
-                    dict_cache = self._get_db_dict_cache(db)
-                    field_vals = dict_cache.get(oid, {}).get(field, [])
-                    for v in field_vals:
-                        if v not in vals:
-                            vals.append(v)
-                if vals:
-                    self.current_object_suggestions[field] = vals
+            for db in self.app.historical_dbs:
+                dict_cache = self._get_db_dict_cache(db)
+                oid_data = dict_cache.get(oid, {})
+                for field, field_vals in oid_data.items():
+                    if field in self.reg_columns:
+                        vals = self.current_object_suggestions.setdefault(field, [])
+                        for v in field_vals:
+                            if v not in vals:
+                                vals.append(v)
 
         self.loading_object = True
         try:
@@ -6251,7 +6250,7 @@ class ObjectProgramUI(
                 "locs": {k: v.get() for k, v in self.filter_location_vars.items() if v.get()},
                 "modes": {k: v.get() for k, v in self.filter_modes.items()}
             }
-            presets_file = os.path.join(self.app.data_dir, "filter_presets.json")
+            presets_file = os.path.join(os.path.dirname(_PREFS_PATH), "filter_presets.json")
             try:
                 if os.path.exists(presets_file):
                     with open(presets_file, "r", encoding="utf-8") as f:
@@ -6267,7 +6266,7 @@ class ObjectProgramUI(
 
     def load_filter_preset(self):
         import json, os
-        presets_file = os.path.join(self.app.data_dir, "filter_presets.json")
+        presets_file = os.path.join(os.path.dirname(_PREFS_PATH), "filter_presets.json")
         if not os.path.exists(presets_file):
             self.show_banner("No presets saved yet.", "info")
             return
@@ -6615,10 +6614,14 @@ class ObjectProgramUI(
             return all(results) if mode == "AND" else any(results)
 
    
+        building_var = self.filter_location_vars.get("Building")
+        floor_var = self.filter_location_vars.get("Floor")
+        cabinet_var = self.filter_location_vars.get("Cabinet")
+
         has_location_filter = (
-            self.filter_location_vars["Building"].get() or
-            self.filter_location_vars["Floor"].get() or
-            self.filter_location_vars["Cabinet"].get().strip()
+            (building_var and building_var.get()) or
+            (floor_var and floor_var.get()) or
+            (cabinet_var and cabinet_var.get().strip())
         )
 
         no_filters = all(len(v) == 0 for v in groups.values()) and not has_location_filter
@@ -6635,9 +6638,9 @@ class ObjectProgramUI(
         # avoiding thousands of expensive Tcl interpreter roundtrips inside the loop.
         group_modes = {group_name: self.filter_modes[group_name].get() for group_name in groups}
 
-        building_filter = self.filter_location_vars["Building"].get()
-        floor_filter = self.filter_location_vars["Floor"].get()
-        cabinet_filter = self.filter_location_vars["Cabinet"].get().strip().lower()
+        building_filter = building_var.get() if building_var else ""
+        floor_filter = floor_var.get() if floor_var else ""
+        cabinet_filter = cabinet_var.get().strip().lower() if cabinet_var else ""
 
         # PERFORMANCE OPTIMIZATION (Bolt): Define the helper function outside of the main loop
         # to avoid function object creation overhead on every iteration.
@@ -7079,7 +7082,7 @@ class ObjectProgramUI(
 
             reviewed = bool(reviewed_dict.get(oid, False))
             # PERFORMANCE OPTIMIZATION (Bolt): Pass the pre-calculated reviewed status to bypass costly individual loc queries on insert.
-            self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed)
+            self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed, bulk=True)
 
             color = None
             has_problem = self._problem_cache.get(oid, False)
