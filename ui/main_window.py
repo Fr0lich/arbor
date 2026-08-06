@@ -5082,7 +5082,10 @@ class ObjectProgramUI(
     def has_images(self, oid):
         if self.image_mode in ("online", "offline"):
             return True
-        return not self.app.df_obs.loc[oid, "Images_Missing"]
+        val = self.app.df_obs.loc[oid, "Images_Missing"]
+        if isinstance(val, pd.Series):
+            return not bool(val.iloc[0])
+        return not bool(val)
 
 
 
@@ -6466,22 +6469,34 @@ class ObjectProgramUI(
     def is_problem_active(self, oid, prob_col):
 
         if prob_col == "Other_problem":
-            return bool(self.app.df_obs.loc[oid, prob_col])
+            val = self.app.df_obs.loc[oid, prob_col]
+            if isinstance(val, pd.Series):
+                return bool(val.iloc[0])
+            return bool(val)
 
       
         if prob_col == "Reviewed":
-            return bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
+            val = self.app.df_obs.loc[oid, REVIEWED_COLUMN]
+            if isinstance(val, pd.Series):
+                return bool(val.iloc[0])
+            return bool(val)
 
         if oid not in self.obs_by_id.index:
             return False
 
         if prob_col == "Has_Images":
-            return not self.app.df_obs.loc[oid, "Images_Missing"]
+            val = self.app.df_obs.loc[oid, "Images_Missing"]
+            if isinstance(val, pd.Series):
+                return not bool(val.iloc[0])
+            return not bool(val)
 
         if prob_col == "Images_Missing":
             if self.image_mode in ("online", "offline"):
                 return False
-            return self.app.df_obs.loc[oid, "Images_Missing"]
+            val = self.app.df_obs.loc[oid, "Images_Missing"]
+            if isinstance(val, pd.Series):
+                return bool(val.iloc[0])
+            return bool(val)
 
       
         obs = self.obs_by_id.loc[oid]
@@ -6870,7 +6885,11 @@ class ObjectProgramUI(
         if self.image_mode in ("online", "offline"):
             has_images = True
         else:
-            has_images = not self.app.df_obs.loc[oid, "Images_Missing"]
+            val = self.app.df_obs.loc[oid, "Images_Missing"]
+            if isinstance(val, pd.Series):
+                has_images = not bool(val.iloc[0])
+            else:
+                has_images = not bool(val)
 
    
         has_problem = self.has_any_problem(oid)
@@ -7881,21 +7900,27 @@ class ObjectProgramUI(
                     return (1, str(oid))
             sorted_ids = sorted(ids, key=id_key, reverse=not ascending)
         elif col == "Genus":
-            sorted_ids = sorted(
-                ids,
-                key=lambda oid: str(self.app.df_reg.loc[oid].get("Genus", "")).lower(),
-                reverse=not ascending
-            )
+            def get_genus(oid):
+                val = self.app.df_reg.loc[oid]
+                if isinstance(val, pd.DataFrame):
+                    val = val.iloc[0]
+                return str(val.get("Genus", "")).lower()
+            sorted_ids = sorted(ids, key=get_genus, reverse=not ascending)
         elif col == "Species":
-            sorted_ids = sorted(
-                ids,
-                key=lambda oid: str(self.app.df_reg.loc[oid].get("Species", "")).lower(),
-                reverse=not ascending
-            )
+            def get_species(oid):
+                val = self.app.df_reg.loc[oid]
+                if isinstance(val, pd.DataFrame):
+                    val = val.iloc[0]
+                return str(val.get("Species", "")).lower()
+            sorted_ids = sorted(ids, key=get_species, reverse=not ascending)
         elif col == "Status":
             def status_key(oid):
                 try:
-                    reviewed = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
+                    val = self.app.df_obs.loc[oid, REVIEWED_COLUMN]
+                    if isinstance(val, pd.Series):
+                        reviewed = bool(val.iloc[0])
+                    else:
+                        reviewed = bool(val)
                 except Exception:
                     reviewed = False
                 has_problem = self._get_cached_problem(oid)

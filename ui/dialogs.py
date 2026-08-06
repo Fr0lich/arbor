@@ -1212,11 +1212,12 @@ class StartupDialog:
             self.safe_ui_call(lambda: self._finish_books_load(loaded))
         except Exception as e:
             debug_error("Load Books Failed", str(e))
+            err_msg = str(e)
             self.safe_ui_call(
-                lambda err=str(e): (
+                lambda: (
                     self.books_label.config(text="Load failed", foreground="red")
                     if hasattr(self, "books_label") else None,
-                    messagebox.showerror("Error", err),
+                    messagebox.showerror("Error", err_msg),
                     self.continue_btn.config(state="normal"),
                 )
             )
@@ -1256,8 +1257,9 @@ class StartupDialog:
                         "df_reg": df_reg, "reg_by_id": None,
                     })
                 except Exception as e:
+                    err_msg = str(e)
                     self.safe_ui_call(
-                        lambda err=str(e): messagebox.showwarning("Load failed", err)
+                        lambda: messagebox.showwarning("Load failed", err_msg)
                     )
                 self.safe_ui_call(
                     lambda i=i, total=total: self.progress_var.set((i / total) * 100)
@@ -1265,9 +1267,10 @@ class StartupDialog:
             self.safe_ui_call(lambda: self._finish_historical_load(loaded))
         except Exception as e:
             debug_error("Load Historical Failed", str(e))
+            err_msg = str(e)
             self.safe_ui_call(
-                lambda err=str(e): (
-                    messagebox.showerror("Error", err),
+                lambda: (
+                    messagebox.showerror("Error", err_msg),
                     self.continue_btn.config(state="normal"),
                 )
             )

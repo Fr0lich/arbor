@@ -25,6 +25,7 @@ class HistoricalSuggestionsMixin:
                 rows = reg_by_id.loc[oid]
 
                 if isinstance(rows, pd.DataFrame):
+                    # Handle duplicate rows with same ObjectID by gathering all unique column values across rows
                     for _, row in rows.iterrows():
                         for col, val in row.items():
                             if pd.notna(val):
@@ -34,7 +35,7 @@ class HistoricalSuggestionsMixin:
                                         oid_cache[col] = []
                                     if val_str not in oid_cache[col]:
                                         oid_cache[col].append(val_str)
-                else:
+                elif isinstance(rows, pd.Series):
                     for col, val in rows.items():
                          if pd.notna(val):
                             val_str = str(val).strip()
@@ -43,6 +44,9 @@ class HistoricalSuggestionsMixin:
                                     oid_cache[col] = []
                                 if val_str not in oid_cache[col]:
                                     oid_cache[col].append(val_str)
+                else:
+                    # Single value or fallback
+                    pass
             cache[oid] = oid_cache
 
         return cache
@@ -237,7 +241,7 @@ class HistoricalSuggestionsMixin:
             for i, sheet_name in enumerate(xls.sheet_names):
 
 
-                self.root.after(0, lambda: self.image_scan_progress.configure(value=i, maximum=total))
+                self.root.after(0, lambda current_idx=i, total_count=total: self.image_scan_progress.configure(value=current_idx, maximum=total_count))
 
 
                 try:
