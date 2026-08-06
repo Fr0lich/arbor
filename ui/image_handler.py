@@ -44,6 +44,13 @@ class ImageHandlerMixin:
         else:
             self.view_btn.pack_forget()
 
+        if self.image_mode == "offline":
+            if str(self.middle_frame) in self.panes.panes():
+                self.panes.forget(self.middle_frame)
+        else:
+            if str(self.middle_frame) not in self.panes.panes():
+                self.panes.insert(1, self.middle_frame, weight=3)
+
 
     def _bind_image_scroll(self):
         self.image_canvas.bind("<Enter>", lambda e: self.image_canvas.bind_all("<MouseWheel>", self._on_mousewheel))
