@@ -8,30 +8,44 @@ from collections import OrderedDict
 from utils import debug_error
 
 class HistoricalSuggestionsMixin:
-    def _get_db_dict_cache(self, db):
+    def _get_db_dict_cache(self, db, oid=None):
         if "dict_cache" not in db:
-            dict_cache = {}
-            df = db.get("df_reg")
-            if df is not None and not df.empty:
-                columns = list(df.columns)
-                if "ObjectID" in columns:
-                    obj_id_idx = columns.index("ObjectID")
-                    col_lists = [df[c].astype(str).tolist() for c in columns]
-                    for row in zip(*col_lists):
-                        oid = row[obj_id_idx].strip()
-                        if not oid or oid in ("nan", "None", "<NA>"):
-                            continue
-                        oid_cache = dict_cache.setdefault(oid, {})
-                        for col_idx, col_name in enumerate(columns):
-                            if col_idx == obj_id_idx:
-                                continue
-                            val_str = row[col_idx].strip()
-                            if val_str and val_str not in ("nan", "None", "<NA>"):
-                                vals_list = oid_cache.setdefault(col_name, [])
-                                if val_str not in vals_list:
-                                    vals_list.append(val_str)
-            db["dict_cache"] = dict_cache
-        return db["dict_cache"]
+            db["dict_cache"] = {}
+
+        cache = db["dict_cache"]
+
+        if oid is None:
+            return cache
+
+        if oid not in cache:
+            oid_cache = {}
+            reg_by_id = db.get("reg_by_id")
+
+            if reg_by_id is not None and oid in reg_by_id.index:
+                rows = reg_by_id.loc[oid]
+
+                if isinstance(rows, pd.DataFrame):
+                    for _, row in rows.iterrows():
+                        for col, val in row.items():
+                            if pd.notna(val):
+                                val_str = str(val).strip()
+                                if val_str and val_str != "nan":
+                                    if col not in oid_cache:
+                                        oid_cache[col] = []
+                                    if val_str not in oid_cache[col]:
+                                        oid_cache[col].append(val_str)
+                else:
+                    for col, val in rows.items():
+                         if pd.notna(val):
+                            val_str = str(val).strip()
+                            if val_str and val_str != "nan":
+                                if col not in oid_cache:
+                                    oid_cache[col] = []
+                                if val_str not in oid_cache[col]:
+                                    oid_cache[col].append(val_str)
+            cache[oid] = oid_cache
+
+        return cache
 
     def _get_combined_historical_cache(self):
         if getattr(self, "_cached_dbs_id", None) != id(self.app.historical_dbs):
@@ -69,7 +83,17 @@ class HistoricalSuggestionsMixin:
             self._history_cache[cache_key] = suggestions
             return suggestions
 
-        db_oid_entries = self._get_combined_historical_cache().get(oid, [])
+        db_oid_entries = self._get_combined_historical_cache().get(oid)
+
+        if not db_oid_entries:
+            db_oid_entries = []
+            for db in self.app.historical_dbs:
+                dict_cache = self._get_db_dict_cache(db, oid)
+                if oid in dict_cache and dict_cache[oid]:
+                    db_oid_entries.append((db["name"], dict_cache[oid]))
+
+            if hasattr(self, "_combined_db_oid_cache"):
+                self._combined_db_oid_cache[oid] = db_oid_entries
 
         field_to_prob = {
             v: k for k, v in self.problem_to_field.items()
