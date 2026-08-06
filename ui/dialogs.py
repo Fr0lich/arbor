@@ -37,6 +37,7 @@ class ZoomableImagePopup:
         self.img_id = None
         self.source = source
         self.is_online = is_online
+        self._stop_event = threading.Event()
         
         # Slett referanser når vinduet lukkes for å unngå minnelekkasje
         self.top.bind("<Destroy>", self._on_close)
@@ -62,22 +63,33 @@ class ZoomableImagePopup:
                 self.top.after_cancel(self._resize_job)
             except Exception:
                 pass
+        if hasattr(self, "_stop_event"):
+            self._stop_event.set()
         self.orig_img = None
         self.tk_img = None
 
     def _load_full_res(self):
         try:
             if self.is_online:
-                r = requests.get(self.source, timeout=10)
+                r = requests.get(self.source, stream=True, timeout=10)
                 if r.status_code == 200:
-                    full_img = Image.open(BytesIO(r.content))
+                    img_data = bytearray()
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if self._stop_event.is_set():
+                            r.close()
+                            return
+                        img_data.extend(chunk)
+                    full_img = Image.open(BytesIO(img_data))
+                else:
+                    full_img = None
             else:
                 full_img = Image.open(self.source)
             
             if full_img:
                 self.top.after(0, lambda: self._apply_full_res(full_img))
         except Exception as e:
-            self.top.after(0, lambda: self.top.title("Image (Failed to load full res)"))
+            if not getattr(self, "_stop_event", None) or not self._stop_event.is_set():
+                self.top.after(0, lambda: self.top.title("Image (Failed to load full res)"))
 
     def _apply_full_res(self, full_img):
         if not self.top.winfo_exists():
