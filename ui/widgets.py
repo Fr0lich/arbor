@@ -116,18 +116,23 @@ class TreeviewListboxWrapper(ttk.Frame):
         # Create Scrollable Canvas for Detailed Mode
         self.canvas_container = ttk.Frame(self)
         self.canvas = tk.Canvas(self.canvas_container, highlightthickness=0)
-        self.scrollable_frame = tk.Frame(self.canvas)
+        # PERFORMANCE OPTIMIZATION (Bolt): True Virtualization. Removed self.scrollable_frame.
 
-        self.scrollable_frame_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-
-        self.scrollable_frame.bind("<Configure>", self._on_frame_configure)
         self.canvas.bind("<Configure>", self._on_canvas_configure)
 
-        # Mousewheel on canvas/frame
+        # Intercept original scrolling methods to trigger virtual viewport updates
+        self.original_yview = self.canvas.yview
+        self.canvas.yview = self.custom_yview
+        self.canvas.yview_scroll = self.custom_yview_scroll
+        self.canvas.yview_moveto = self.custom_yview_moveto
+
+        # Mousewheel on canvas
         self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_mousewheel))
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
-        self.scrollable_frame.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_mousewheel))
-        self.scrollable_frame.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
+
+        self._card_height = None
+        self._active_card_windows = {} # Maps idx -> (window_id, frame_widget)
+        self._pending_viewport_update = None
 
         # Keyboard Navigation bindings for Detailed Mode
         self.bind("<Up>", self._on_keypress_up)
@@ -200,13 +205,13 @@ class TreeviewListboxWrapper(ttk.Frame):
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
         canvas_bg = "#1e1e2e" if is_dark else "#f3f3f3"
         self.canvas.configure(bg=canvas_bg)
-        self.scrollable_frame.configure(bg=canvas_bg)
 
         if focus_active:
             # Compact view (Treeview)
             self.canvas_container.pack_forget()
             self.tree.pack(fill="both", expand=True)
             self.active_view = "compact"
+            self._clear_virtual_cards()
         else:
             # Detailed view (Canvas Cards)
             self.tree.pack_forget()
@@ -214,35 +219,29 @@ class TreeviewListboxWrapper(ttk.Frame):
             self.canvas.pack(fill="both", expand=True)
             self.active_view = "detailed"
 
-            # PERFORMANCE OPTIMIZATION (Bolt): Asynchronously build card widgets in the background
-            self._lazy_build_cards(0)
+            if self._card_height is None:
+                self._measure_card_height()
+
+            # PERFORMANCE OPTIMIZATION (Bolt): True Virtualization.
+            self._schedule_viewport_update()
 
         self._sync_view_selections()
 
-    def _on_frame_configure(self, event):
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
     def _on_canvas_configure(self, event):
         self._last_canvas_width = event.width
-        if hasattr(self, "_resize_job") and self._resize_job:
+        if self._card_height is None and self.active_view == "detailed":
+            self._measure_card_height()
+        self._schedule_viewport_update()
+        # Update widths of all active virtual card windows
+        for win_id, _ in self._active_card_windows.values():
             try:
-                self.canvas.after_cancel(self._resize_job)
+                self.canvas.itemconfig(win_id, width=event.width)
             except Exception:
                 pass
-        self._resize_job = self.canvas.after(100, self._deferred_canvas_configure)
-
-    def _deferred_canvas_configure(self):
-        self._resize_job = None
-        if not self.winfo_exists():
-            return
-        width = getattr(self, "_last_canvas_width", self.canvas.winfo_width())
-        try:
-            self.canvas.itemconfig(self.scrollable_frame_window, width=width)
-        except Exception:
-            pass
 
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        self._schedule_viewport_update()
 
     def _on_treeview_click(self, event):
         region = self.tree.identify_region(event.x, event.y)
@@ -289,7 +288,7 @@ class TreeviewListboxWrapper(ttk.Frame):
                     self._set_bg_recursive(card, bg)
 
     def _set_bg_recursive(self, widget, bg_color):
-        if hasattr(widget, "is_badge") and widget.is_badge:
+        if getattr(widget, "is_badge", False):
             return
         try:
             widget.configure(bg=bg_color)
@@ -343,38 +342,129 @@ class TreeviewListboxWrapper(ttk.Frame):
         badge.is_badge = True
         return badge
 
-    def _lazy_build_cards(self, index=0):
-        if index == 0:
-            if hasattr(self, "_card_build_job") and self._card_build_job:
-                try:
-                    self.canvas.after_cancel(self._card_build_job)
-                except Exception:
-                    pass
-                self._card_build_job = None
 
-        if not self.winfo_exists() or self.active_view != "detailed":
+
+
+    def custom_yview(self, *args):
+        res = self.original_yview(*args)
+        self._schedule_viewport_update()
+        return res
+
+    def custom_yview_scroll(self, *args):
+        res = self.canvas.tk.call(self.canvas._w, 'yview', 'scroll', *args)
+        self._schedule_viewport_update()
+        return res
+
+    def custom_yview_moveto(self, *args):
+        res = self.canvas.tk.call(self.canvas._w, 'yview', 'moveto', *args)
+        self._schedule_viewport_update()
+        return res
+
+    def _measure_card_height(self):
+        if not self.items_list:
             return
 
-        batch_size = 30
-        end_idx = min(index + batch_size, len(self.items_list))
+        # Instantiate a dummy card to measure it
+        oid = self.items_list[0]
+        # Make sure item data exists
+        if oid not in self.item_data:
+            self.item_data[oid] = {"tags": [], "values": ["☐", oid, "", ""], "title": "", "genus": "", "species": "", "reviewed": False}
 
-        for i in range(index, end_idx):
-            oid = self.items_list[i]
-            if oid in self.item_data and "card_frame" not in self.item_data[oid]:
-                self._create_card_widget(oid)
+        dummy_card = self._create_card_widget(oid, self.canvas)
+        # Update idletasks to ensure geometry is calculated
+        self.update_idletasks()
 
-        if end_idx < len(self.items_list):
-            self._card_build_job = self.canvas.after(10, lambda: self._lazy_build_cards(end_idx))
-        else:
-            self._card_build_job = None
+        h = dummy_card.winfo_reqheight()
+        # Default fallback if somehow reqheight fails
+        self._card_height = h if h > 10 else 78
 
-    def _create_card_widget(self, oid):
-        # PERFORMANCE OPTIMIZATION (Bolt): Prevent duplicated widget creation
-        if oid in self.item_data and "card_frame" in self.item_data[oid]:
-            card_frame = self.item_data[oid]["card_frame"]
-            if card_frame and card_frame.winfo_exists():
-                return
+        dummy_card.destroy()
+        if "card_frame" in self.item_data[oid]:
+            del self.item_data[oid]["card_frame"]
 
+    def _clear_virtual_cards(self):
+        for win_id, card in self._active_card_windows.values():
+            try:
+                self.canvas.delete(win_id)
+                card.destroy()
+            except Exception:
+                pass
+        self._active_card_windows.clear()
+        for oid in self.item_data:
+            if "card_frame" in self.item_data[oid]:
+                del self.item_data[oid]["card_frame"]
+
+    def _schedule_viewport_update(self):
+        if self._pending_viewport_update:
+            self.after_cancel(self._pending_viewport_update)
+        self._pending_viewport_update = self.after(10, self._update_visible_cards)
+
+    def _update_visible_cards(self):
+        self._pending_viewport_update = None
+        if self.active_view != "detailed" or not self.winfo_exists():
+            return
+
+        if self._card_height is None:
+            self._measure_card_height()
+
+        if self._card_height is None:
+            return # still None, list might be empty
+
+        total_items = len(self.items_list)
+        total_height = total_items * self._card_height
+
+        canvas_width = getattr(self, "_last_canvas_width", self.canvas.winfo_width())
+        self.canvas.configure(scrollregion=(0, 0, canvas_width, max(total_height, 1)))
+
+        if total_items == 0:
+            self._clear_virtual_cards()
+            return
+
+        canvas_height = self.canvas.winfo_height()
+        if canvas_height <= 1:
+            return # Canvas not fully realized yet
+
+        y_top = self.canvas.canvasy(0)
+        y_bottom = self.canvas.canvasy(canvas_height)
+
+        start_idx = max(0, int(y_top // self._card_height) - 1)
+        end_idx = min(total_items, int(y_bottom // self._card_height) + 2)
+
+        visible_indices = set(range(start_idx, end_idx))
+        current_indices = set(self._active_card_windows.keys())
+
+        # Destroy cards scrolled out of view
+        for idx in current_indices - visible_indices:
+            win_id, card = self._active_card_windows.pop(idx)
+            try:
+                oid = self.items_list[idx]
+                if oid in self.item_data and "card_frame" in self.item_data[oid]:
+                    del self.item_data[oid]["card_frame"]
+            except IndexError:
+                pass
+            self.canvas.delete(win_id)
+            card.destroy()
+
+        # Create new cards scrolled into view
+        for idx in visible_indices - current_indices:
+            oid = self.items_list[idx]
+            card = self._create_card_widget(oid, self.canvas)
+            y_pos = idx * self._card_height
+
+            win_id = self.canvas.create_window(0, y_pos, window=card, anchor="nw", width=canvas_width)
+            self._active_card_windows[idx] = (win_id, card)
+
+            # Apply initial selection styling if selected
+            self._apply_tags_to_card(oid)
+            if oid in self.selected_iids:
+                is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
+                bg_selected = "#e8f5e9" if not is_dark else "#3b4252"
+                border_selected = "#3b6934" if not is_dark else "#a6e3a1"
+                card.configure(bg=bg_selected, highlightbackground=border_selected)
+                self._set_bg_recursive(card, bg_selected)
+
+
+    def _create_card_widget(self, oid, parent):
         from config import sc
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
 
@@ -384,7 +474,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         sec_text_color = "#6c757d" if not is_dark else "#a5adcb"
 
         card = tk.Frame(
-            self.scrollable_frame,
+            parent,
             bg=bg_color,
             highlightthickness=1,
             highlightbackground=border_color,
@@ -558,7 +648,12 @@ class TreeviewListboxWrapper(ttk.Frame):
         # Bind hover & selection on the entire card recursive
         self._bind_card_events(card, oid)
 
+        return card
+
     def _bind_card_events(self, widget, oid):
+        # We use a custom bindtag on the root card to handle all its children's events efficiently.
+        card_tag = f"Card_{oid}"
+
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
 
         def _on_enter(event):
@@ -571,33 +666,29 @@ class TreeviewListboxWrapper(ttk.Frame):
                 normal_bg = "#ffffff" if not is_dark else "#24273a"
                 self._set_bg_recursive(widget, normal_bg)
 
-        widget.bind("<Enter>", _on_enter, add="+")
-        widget.bind("<Leave>", _on_leave, add="+")
-        widget.bind("<Button-1>", lambda e, o=oid: self._on_card_click(o, e), add="+")
-        widget.bind("<Double-Button-1>", lambda e, o=oid: self._on_card_double_click(o, e), add="+")
+        # Bind to the card_tag instead of each widget
+        widget.bind_class(card_tag, "<Enter>", _on_enter, add="+")
+        widget.bind_class(card_tag, "<Leave>", _on_leave, add="+")
+        widget.bind_class(card_tag, "<Button-1>", lambda e, o=oid: self._on_card_click(o, e), add="+")
+        widget.bind_class(card_tag, "<Double-Button-1>", lambda e, o=oid: self._on_card_double_click(o, e), add="+")
 
         for seq, func, add in self.custom_bindings:
             if "Select" in seq or seq.startswith("<<"):
                 continue
-            widget.bind(seq, lambda e: func(e), add="+")
+            widget.bind_class(card_tag, seq, lambda e: func(e), add="+")
 
-        for child in widget.winfo_children():
-            if child != self.item_data[oid].get("cb_label"):
-                self._bind_card_events_recursive(child, oid, _on_enter, _on_leave)
+        cb_lbl = self.item_data[oid].get("cb_label")
 
-    def _bind_card_events_recursive(self, child, oid, on_enter, on_leave):
-        child.bind("<Enter>", on_enter, add="+")
-        child.bind("<Leave>", on_leave, add="+")
-        child.bind("<Button-1>", lambda e, o=oid: self._on_card_click(o, e), add="+")
-        child.bind("<Double-Button-1>", lambda e, o=oid: self._on_card_double_click(o, e), add="+")
+        def _add_tag_recursive(w):
+            if w == cb_lbl:
+                return # Don't override checkbox behavior
+            tags = w.bindtags()
+            if card_tag not in tags:
+                w.bindtags((tags[0], card_tag) + tags[1:])
+            for c in w.winfo_children():
+                _add_tag_recursive(c)
 
-        for seq, func, add in self.custom_bindings:
-            if "Select" in seq or seq.startswith("<<"):
-                continue
-            child.bind(seq, lambda e: func(e), add="+")
-
-        for grandchild in child.winfo_children():
-            self._bind_card_events_recursive(grandchild, oid, on_enter, on_leave)
+        _add_tag_recursive(widget)
 
     def _apply_tags_to_card(self, oid):
         if oid in self.item_data:
@@ -656,6 +747,8 @@ class TreeviewListboxWrapper(ttk.Frame):
     def see(self, index_or_iid):
         if not self.items_list:
             return
+
+        idx = -1
         if isinstance(index_or_iid, (int, float)):
             idx = int(index_or_iid)
             if 0 <= idx < len(self.items_list):
@@ -664,31 +757,30 @@ class TreeviewListboxWrapper(ttk.Frame):
                 return
         else:
             oid = str(index_or_iid)
+            if oid in self.items_list:
+                idx = self.items_list.index(oid)
 
         if self.active_view == "compact":
             if oid in self.items_list:
                 self.tree.see(oid)
         else:
-            if oid in self.item_data:
-                card = self.item_data[oid].get("card_frame")
-                if card and card.winfo_exists():
-                    self.scroll_to_widget(card)
+            if idx >= 0 and self._card_height:
+                y_target = idx * self._card_height
+                canvas_h = self.canvas.winfo_height()
+                total_items = len(self.items_list)
+                total_height = max(1, total_items * self._card_height)
 
-    def scroll_to_widget(self, widget):
-        self.canvas.update_idletasks()
-        try:
-            widget_y = widget.winfo_y()
-            widget_h = widget.winfo_height()
-            canvas_h = self.canvas.winfo_height()
-            scroll_region = self.canvas.bbox("all")
-            if scroll_region:
-                total_h = scroll_region[3] - scroll_region[1]
-                if total_h > canvas_h:
-                    target_y = widget_y - (canvas_h / 2) + (widget_h / 2)
-                    target_y = max(0, min(target_y, total_h - canvas_h))
-                    self.canvas.yview_moveto(target_y / total_h)
-        except Exception:
-            pass
+                # Center the item vertically
+                target_offset = max(0, y_target - (canvas_h / 2) + (self._card_height / 2))
+                target_fraction = target_offset / total_height
+
+                # Clamp fraction between 0.0 and 1.0
+                target_fraction = max(0.0, min(1.0, target_fraction))
+                self.canvas.yview_moveto(target_fraction)
+                # Ensure viewport updates immediately so card is rendered
+                self._update_visible_cards()
+
+
 
     def activate(self, index_or_iid):
         self.see(index_or_iid)
@@ -708,11 +800,9 @@ class TreeviewListboxWrapper(ttk.Frame):
         if children:
             self.tree.delete(*children)
 
-        for oid in self.item_data:
-            card = self.item_data[oid].get("card_frame")
-            if card and card.winfo_exists():
-                card.destroy()
+        self._clear_virtual_cards()
         self.item_data.clear()
+        self._schedule_viewport_update()
 
     def insert(self, index, title, genus=None, species=None, reviewed=None, color=None, bulk=False):
         oid = title.split(" ")[0].strip()
@@ -757,6 +847,9 @@ class TreeviewListboxWrapper(ttk.Frame):
             "tags": row_tags,
             "values": [rev_char, oid, genus or "", species or ""]
         }
+
+        if self.active_view == "detailed" and not bulk:
+            self._schedule_viewport_update()
 
     def itemconfig(self, index, **kwargs):
         foreground = kwargs.get("foreground")
@@ -848,14 +941,12 @@ class TreeviewListboxWrapper(ttk.Frame):
         if self.active_view == "compact":
             return self.tree.identify_row(y)
         else:
+            if not self._card_height or not self.items_list:
+                return ""
             canvas_y = self.canvas.canvasy(y)
-            for oid in self.items_list:
-                card = self.item_data.get(oid, {}).get("card_frame")
-                if card and card.winfo_exists():
-                    y_start = card.winfo_y()
-                    y_end = y_start + card.winfo_height()
-                    if y_start <= canvas_y <= y_end:
-                        return oid
+            idx = int(canvas_y // self._card_height)
+            if 0 <= idx < len(self.items_list):
+                return self.items_list[idx]
             if self.selected_iids:
                 return self.selected_iids[0]
             return ""
