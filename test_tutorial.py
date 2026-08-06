@@ -2,6 +2,7 @@ import unittest
 import tkinter as tk
 from ui.tutorial import TutorialManager, TutorialHighlight, TutorialPopup
 import config
+import pandas as pd
 
 class TestTutorial(unittest.TestCase):
     @classmethod
@@ -67,6 +68,32 @@ class TestTutorial(unittest.TestCase):
             hl.destroy()
         except Exception as e:
             self.fail(f"TutorialHighlight raised exception on unmapped widget: {e}")
+
+    def test_historical_resolver_unbind_on_destroy(self):
+        # Create a mock main app and window to verify the binding unbind cleanup
+        mock_app = type("MockApp", (object,), {
+            "root": self.root,
+            "reg_by_id": pd.DataFrame(index=["123"]),
+            "is_unknown": lambda self, x: False,
+            "problem_vars": {},
+            "problem_to_field": {},
+            "update_dirty_ui": lambda: None,
+            "app": type("App", (object,), {
+                "df_reg": pd.DataFrame(index=["123"]),
+                "df_obs": pd.DataFrame(index=["123"])
+            })()
+        })()
+        
+        from ui.historical_resolver import HistoricalConflictResolverWindow
+        # Instantiate window with minimal suggestions
+        win_inst = HistoricalConflictResolverWindow(mock_app, "123", {"field1": {}})
+        
+        # Verify win structure and mousewheel cleanup on destroy
+        self.assertTrue(win_inst.win.winfo_exists())
+        
+        # Destroy the window, which triggers _cleanup
+        win_inst.win.destroy()
+        self.root.update_idletasks()
 
 if __name__ == "__main__":
     unittest.main()

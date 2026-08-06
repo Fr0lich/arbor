@@ -106,7 +106,7 @@ class HistoricalConflictResolverWindow:
         
         self.dir_list.bind(
             "<Configure>",
-            lambda e: self.dir_canvas.configure(scrollregion=self.dir_canvas.bbox("all"))
+            lambda e: self.dir_canvas.configure(scrollregion=self.dir_canvas.bbox("all")) if e.widget == self.dir_list else None
         )
         
         dir_canvas_window = self.dir_canvas.create_window((0, 0), window=self.dir_list, anchor="nw")
@@ -139,7 +139,7 @@ class HistoricalConflictResolverWindow:
         
         self.scrollable_frame.bind(
             "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")) if e.widget == self.scrollable_frame else None
         )
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw", width=800)
         
@@ -149,7 +149,11 @@ class HistoricalConflictResolverWindow:
         
         # Bind mousewheel
         def _on_mousewheel(event):
-            self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            try:
+                if self.canvas.winfo_exists():
+                    self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            except Exception:
+                pass
         self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
         
         self.populate_fields()
@@ -165,6 +169,21 @@ class HistoricalConflictResolverWindow:
         btn_apply_all = tk.Button(footer, text="APPLY ALL RESOLVED (CTRL+A)", font=FONT_UI_BOLD, fg=COLORS["on_success"], bg=COLORS["success"], relief="flat", bd=0, padx=16, pady=8, command=self.apply_all)
         btn_apply_all.pack(side="right", padx=16, pady=6)
         
+        # Cleanup routine
+        def _cleanup(event=None):
+            if event and event.widget != self.win:
+                return
+            try:
+                self.canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+            try:
+                self.dir_canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+
+        self.win.bind("<Destroy>", _cleanup)
+
         btn_close = tk.Button(footer, text="CLOSE", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=16, pady=8, command=self.win.destroy)
         btn_close.pack(side="right", padx=8, pady=6)
 

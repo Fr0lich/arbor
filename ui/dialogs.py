@@ -1387,12 +1387,21 @@ class StartupDialog:
         else:
             menu.add_command(label="Enable Tutorials", command=self._toggle_disable_tutorials)
 
-        x = self.help_btn.winfo_rootx()
-        y = self.help_btn.winfo_rooty() + self.help_btn.winfo_height()
         try:
+            if hasattr(self, "help_btn") and self.help_btn.winfo_exists():
+                x = self.help_btn.winfo_rootx()
+                y = self.help_btn.winfo_rooty() + self.help_btn.winfo_height()
+            else:
+                x = 100
+                y = 100
             menu.tk_popup(x, y)
+        except Exception:
+            pass
         finally:
-            menu.grab_release()
+            try:
+                menu.grab_release()
+            except Exception:
+                pass
 
     def _toggle_disable_tutorials(self):
         import config
