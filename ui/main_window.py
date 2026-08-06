@@ -5255,7 +5255,16 @@ class ObjectProgramUI(
         def _open_in_explorer():
             try:
                 import subprocess
-                subprocess.Popen(["explorer", "/select,", os.path.abspath(log_path)])
+                path = os.path.abspath(log_path)
+
+                # Sanitize the argument to prevent argument injection.
+                # Valid existing Windows paths cannot contain double quotes or other malicious injection characters.
+                if os.path.exists(path):
+                    subprocess.Popen(["explorer", "/select,", path])
+                else:
+                    parent_dir = os.path.dirname(path)
+                    if os.path.exists(parent_dir):
+                        subprocess.Popen(["explorer", parent_dir])
             except Exception:
                 pass
 
