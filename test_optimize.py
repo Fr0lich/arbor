@@ -114,5 +114,46 @@ class TestOptimize(unittest.TestCase):
         other_sum = has_prob_series.drop("1", errors="ignore").sum()
         self.assertEqual(other_sum, 1)
 
+    def test_lazy_historical_cache_no_eager_evaluation(self):
+        # We need a small mock to stand in for ui and app
+        from ui.historical_suggestions import HistoricalSuggestionsMixin
+
+        class DummyApp:
+            def __init__(self):
+                self.historical_dbs = []
+
+        class DummyUI(HistoricalSuggestionsMixin):
+            def __init__(self):
+                self.app = DummyApp()
+
+        ui = DummyUI()
+        df = pd.DataFrame({
+            "ObjectID": ["A1", "A1", "B2"],
+            "Val": ["foo", "bar", "baz"]
+        })
+
+        db = {
+            "name": "TestDB",
+            "df_reg": df,
+            "reg_by_id": df.set_index("ObjectID")
+        }
+
+        # Check that when oid is None, it returns the empty cache without building it
+        cache = ui._get_db_dict_cache(db)
+        self.assertIsInstance(cache, dict)
+        self.assertEqual(len(cache), 0)
+
+        # Requesting a specific oid should build ONLY that oid's cache
+        cache = ui._get_db_dict_cache(db, oid="A1")
+        self.assertIn("A1", cache)
+        self.assertNotIn("B2", cache)
+
+        self.assertEqual(cache["A1"]["Val"], ["foo", "bar"])
+
+        # Requesting another oid
+        cache = ui._get_db_dict_cache(db, oid="B2")
+        self.assertIn("B2", cache)
+        self.assertEqual(cache["B2"]["Val"], ["baz"])
+
 if __name__ == "__main__":
     unittest.main()
