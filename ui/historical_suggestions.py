@@ -15,22 +15,21 @@ class HistoricalSuggestionsMixin:
             if df is not None and not df.empty:
                 columns = list(df.columns)
                 if "ObjectID" in columns:
-                    obj_id_idx = columns.index("ObjectID") + 1
-                    for row in df.itertuples():
-                        oid = str(row[obj_id_idx]).strip()
-                        if not oid or oid == "nan":
+                    obj_id_idx = columns.index("ObjectID")
+                    col_lists = [df[c].astype(str).tolist() for c in columns]
+                    for row in zip(*col_lists):
+                        oid = row[obj_id_idx].strip()
+                        if not oid or oid in ("nan", "None", "<NA>"):
                             continue
                         oid_cache = dict_cache.setdefault(oid, {})
                         for col_idx, col_name in enumerate(columns):
-                            if col_name == "ObjectID":
+                            if col_idx == obj_id_idx:
                                 continue
-                            val = row[col_idx + 1]
-                            if pd.notna(val):
-                                val_str = str(val).strip()
-                                if val_str and val_str != "nan":
-                                    vals_list = oid_cache.setdefault(col_name, [])
-                                    if val_str not in vals_list:
-                                        vals_list.append(val_str)
+                            val_str = row[col_idx].strip()
+                            if val_str and val_str not in ("nan", "None", "<NA>"):
+                                vals_list = oid_cache.setdefault(col_name, [])
+                                if val_str not in vals_list:
+                                    vals_list.append(val_str)
             db["dict_cache"] = dict_cache
         return db["dict_cache"]
 
@@ -403,25 +402,25 @@ class HistoricalSuggestionsMixin:
                     obj_id_col = "ObjectID"
                     if obj_id_col not in columns:
                         continue
-                    obj_id_idx = columns.index(obj_id_col) + 1  # +1 for Index
+                    obj_id_idx = columns.index(obj_id_col)
 
-                    for row in df.itertuples():
-                        oid = str(row[obj_id_idx]).strip()
-                        if not oid or oid == "nan":
+                    col_lists = [df[c].astype(str).tolist() for c in columns]
+
+                    for row in zip(*col_lists):
+                        oid = row[obj_id_idx].strip()
+                        if not oid or oid in ("nan", "None", "<NA>"):
                             done += 1
                             continue
                         if oid not in dict_cache:
                             oid_cache = {}
                             for col_idx, col_name in enumerate(columns):
-                                if col_name == obj_id_col:
+                                if col_idx == obj_id_idx:
                                     continue
-                                val = row[col_idx + 1]
-                                if pd.notna(val):
-                                    val_str = str(val).strip()
-                                    if val_str and val_str != "nan":
-                                        oid_cache.setdefault(col_name, [])
-                                        if val_str not in oid_cache[col_name]:
-                                            oid_cache[col_name].append(val_str)
+                                val_str = row[col_idx].strip()
+                                if val_str and val_str not in ("nan", "None", "<NA>"):
+                                    oid_cache.setdefault(col_name, [])
+                                    if val_str not in oid_cache[col_name]:
+                                        oid_cache[col_name].append(val_str)
                             dict_cache[oid] = oid_cache
                         done += 1
                         if total > 0 and done % 50 == 0:
