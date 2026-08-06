@@ -7225,7 +7225,7 @@ class ObjectProgramUI(
 
         # Trigger lazy deferred card building if in detailed view mode
         if getattr(self.object_list, "active_view", None) == "detailed":
-            self.object_list._lazy_build_cards(0)
+            self.object_list._schedule_viewport_update()
 
 
     def update_filter_button_text(self):
