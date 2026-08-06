@@ -291,10 +291,18 @@ class TreeviewListboxWrapper(ttk.Frame):
         if getattr(widget, "is_badge", False):
             return
         try:
+            if not widget.winfo_exists():
+                return
             widget.configure(bg=bg_color)
         except Exception:
             pass
-        for child in widget.winfo_children():
+
+        try:
+            children = widget.winfo_children()
+        except Exception:
+            return
+
+        for child in children:
             self._set_bg_recursive(child, bg_color)
 
     def _on_card_click(self, oid, event=None):
