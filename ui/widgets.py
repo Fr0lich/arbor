@@ -476,10 +476,12 @@ class TreeviewListboxWrapper(ttk.Frame):
         id_lbl.pack(side="left", padx=(sc(16), sc(8)))
         self.item_data[oid]["id_label"] = id_lbl
 
-        # Photo count
+        # Photo count — use the pre-built photo count dict if available.
+        # _precompute_startup_caches() builds _cached_photo_counts on the background
+        # thread so this is typically O(1). Falls back to computing on demand.
         photo_count = 0
         if self.main_window.app.df_photo is not None:
-            if not hasattr(self.main_window, "_cached_photo_counts") or getattr(self.main_window, "_row_cache_dirty", True):
+            if not hasattr(self.main_window, "_cached_photo_counts") or self.main_window._cached_photo_counts is None:
                 photo_df = self.main_window.app.df_photo
                 if photo_df is not None and not photo_df.empty:
                     self.main_window._cached_photo_counts = photo_df.index.value_counts().to_dict()

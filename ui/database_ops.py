@@ -146,13 +146,23 @@ class DatabaseOpsMixin:
             base_xlsx = base.replace(".autosave", "")
             output_path = f"{base_xlsx}_updated_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
 
-            # PERFORMANCE OPTIMIZATION (Bolt): Warm historical databases cache in the background thread
+            # PERFORMANCE OPTIMIZATION: Warm historical databases cache in the background thread
             # if they were loaded by the Startup Dialog, avoiding a multi-second main-thread freeze on startup.
             if getattr(self.app, "historical_dbs", None):
                 self.root.after(0, lambda: self.system_status.config(text="Warming historical database caches..."))
+                self.root.after(0, lambda: self.image_scan_progress.configure(value=62))
                 for db in self.app.historical_dbs:
                     self._get_db_dict_cache(db)
 
+            # PERFORMANCE OPTIMIZATION: Pre-compute all expensive in-memory caches
+            # (row dicts, problem cache, search index, photo counts) while still on
+            # the background thread. When _finish_open_excel runs on the main thread,
+            # it finds everything ready — refresh_list() skips the O(N×M) problem loop
+            # and the list populates in milliseconds instead of seconds.
+            self.root.after(0, lambda: self.system_status.config(text="Building indexes..."))
+            self.root.after(0, lambda: self.image_scan_progress.configure(value=70))
+            self._precompute_startup_caches(df_reg, df_obs, df_photo)
+            self.root.after(0, lambda: self.image_scan_progress.configure(value=82))
 
             def _safe_finish(p=path, op=output_path,
                              r=df_reg, o=df_obs, ph=df_photo, l=df_log):
@@ -229,19 +239,14 @@ class DatabaseOpsMixin:
         self.invalidate_search_index()
         self.build_search_index()
 
-        if self.app.active_object_ids:
-            self.root.after(0, self._select_first_object)
-
         self.initializing = False
         self.app.dirty = False
         self.update_dirty_ui()
         self.update_review_progress()
         self.update_object_count()
 
-
-
         self.system_status.config(text="Excel loaded - loading images...")
-        self.image_scan_progress.configure(value=70)
+        self.image_scan_progress.configure(value=85)
 
         self.start_autosave_loop()
         self._check_and_prompt_autosave(path)
@@ -252,13 +257,178 @@ class DatabaseOpsMixin:
                 args=(self.image_folder,),
                 daemon=True
             ).start()
+
+        # Detect whether we are in startup (LoadingWindow is active) or a
+        # mid-session file reload triggered from the menu.
+        in_startup = (getattr(self, '_loading_window', None) is not None)
+
+        if self.app.active_object_ids:
+            first_oid = self.app.active_object_ids[0]
+            if in_startup:
+                # Startup path: load the first object NOW (synchronous w.r.t. the
+                # event loop) so the window is fully populated before it appears.
+                # _startup_load_first_and_reveal will call _on_startup_ready() after
+                # load_object() finishes (or defer to build_image_index if scanning).
+                self.root.after(0, lambda oid=first_oid: self._startup_load_first_and_reveal(oid))
+            else:
+                # Normal mid-session reload: use the standard event-based flow.
+                self.root.after(0, self._select_first_object)
+                if not self.image_folder:
+                    self.image_scan_progress.configure(value=100)
+                    self._hide_progress("Ready")
         else:
-            self.image_scan_progress.configure(value=100)
-            self._hide_progress("Ready")
+            # No objects in database
+            if in_startup:
+                self.root.after(0, self._on_startup_ready)
+            elif not self.image_folder:
+                self.image_scan_progress.configure(value=100)
+                self._hide_progress("Ready")
 
 
         self.root.after(50, self.object_list.focus_set)
         self.root.title(f"arbor {self.app.config_name}")
+
+
+    def _on_startup_ready(self):
+        """
+        Called once ALL startup work is complete (first object loaded + image scan done).
+        Dismisses the LoadingWindow and reveals the main window in a fully ready state.
+        Previously _hide_progress("Ready") was called too early — before load_object()
+        had run — causing the user to see the main window populate itself.
+        """
+        self.image_scan_progress.configure(value=100)
+        self._hide_progress("Ready")
+
+    def _startup_load_first_and_reveal(self, first_oid):
+        """
+        During startup: directly call load_object() for the first record so the
+        main window is fully populated BEFORE the LoadingWindow is dismissed.
+        Only reveals the window (via _on_startup_ready) when no background image
+        scan is running; otherwise build_image_index._notify_ui handles the reveal.
+        """
+        # Select the first row in the list widget (visual sync)
+        self.object_list.selection_clear(0, tk.END)
+        self.object_list.selection_set(0)
+        self.object_list.see(0)
+
+        # Load the object directly — bypasses the 150ms debounce so we know
+        # exactly when it completes before deciding to reveal the window.
+        try:
+            self.load_object(first_oid)
+        except Exception as e:
+            debug_error("_startup_load_first_and_reveal", str(e))
+
+        # If no image folder is being scanned, reveal the window now.
+        # If there IS an image folder, build_image_index._notify_ui will call
+        # _on_startup_ready() when the scan finishes.
+        if not self.image_folder:
+            self._on_startup_ready()
+
+
+    def _precompute_startup_caches(self, df_reg, df_obs, df_photo):
+        """
+        Build all expensive in-memory caches while on the background loader thread.
+        By the time _finish_open_excel runs on the main thread, everything is ready:
+        - refresh_list() skips the O(N×M) problem-detection loop
+        - Sorts use O(1) dict lookups instead of pandas .loc[] per item
+        - Search uses a pre-built full-text index covering all registration columns
+        - Card widgets get photo counts from a pre-built dict
+
+        SAFETY: This method only writes to self._cached_* attributes which are
+        only READ (never written) by the main thread until _finish_open_excel sets
+        _row_cache_dirty = False. The assignment of the final dicts is atomic in CPython.
+        """
+        from repository import REVIEWED_COLUMN
+
+        # 1. Full row dicts — expensive DataFrame.to_dict() done once here
+        reg_dict = df_reg.to_dict(orient="index") if df_reg is not None else {}
+        obs_dict = df_obs.to_dict(orient="index") if df_obs is not None else {}
+
+        # 2. Lightweight per-column dicts used by refresh_list coloring and sorting
+        reviewed_dict = {}
+        genus_dict = {}
+        species_dict = {}
+        if df_obs is not None and REVIEWED_COLUMN in df_obs.columns:
+            reviewed_dict = df_obs[REVIEWED_COLUMN].to_dict()
+        if df_reg is not None and "Genus" in df_reg.columns:
+            genus_dict = df_reg["Genus"].to_dict()
+        if df_reg is not None and "Species" in df_reg.columns:
+            species_dict = df_reg["Species"].to_dict()
+
+        # 3. Problem cache — the O(N×M) loop that previously blocked the main thread.
+        #    Duplicates the logic from refresh_list() so that refresh_list() can skip it.
+        problem_cache = {}
+        problem_cols = getattr(self, "problem_columns", [])
+        problem_mapping = getattr(self, "problem_to_field", {})
+        include_image_problems = (self.image_mode == "folder")
+        active_ids = list(df_reg.index) if df_reg is not None else []
+
+        for oid in active_ids:
+            obs_row = obs_dict.get(oid, {})
+            reg_row = reg_dict.get(oid, {})
+            has_prob = False
+            for p in problem_cols:
+                if p == "Images_Missing":
+                    continue
+                if not include_image_problems and "Image" in p:
+                    continue
+                if p == "Other_problem":
+                    is_act = bool(obs_row.get(p, False))
+                elif p == "Reviewed":
+                    is_act = bool(obs_row.get(REVIEWED_COLUMN, False))
+                elif p == "Has_Images":
+                    is_act = not obs_row.get("Images_Missing", False)
+                else:
+                    obs_val = bool(obs_row.get(p, False))
+                    auto_val = False
+                    if p in problem_mapping:
+                        field = problem_mapping.get(p)
+                        if field:
+                            raw_val = reg_row.get(field, "")
+                            is_missing = (
+                                pd.isna(raw_val) or
+                                (isinstance(raw_val, str) and raw_val.strip() == "")
+                            )
+                            is_unknown = self.is_unknown(raw_val)
+                            auto_val = is_missing and not is_unknown
+                    is_act = obs_val or auto_val
+                if is_act:
+                    has_prob = True
+                    break
+            problem_cache[oid] = has_prob
+
+        # 4. Photo counts used by card widgets (avoids repeated value_counts() calls)
+        photo_counts = {}
+        if df_photo is not None and not df_photo.empty:
+            photo_counts = df_photo.index.value_counts().to_dict()
+
+        # 5. Full-text search index covering ALL registration columns (not just
+        #    Genus + Species). Stored as a lowercased joined string per ObjectID
+        #    for fast substring matching.
+        search_index = {}
+        if df_reg is not None:
+            all_cols = list(df_reg.columns)
+            for oid in active_ids:
+                reg_row = reg_dict.get(oid, {})
+                parts = [str(oid).lower()]
+                for col in all_cols:
+                    val = reg_row.get(col, "")
+                    if val and not pd.isna(val):
+                        val_str = str(val).strip().lower()
+                        if val_str:
+                            parts.append(val_str)
+                search_index[oid] = " ".join(parts)
+
+        # Atomically assign all caches so the main thread sees a consistent state
+        self._cached_reg_dict = reg_dict
+        self._cached_obs_dict = obs_dict
+        self._cached_reviewed_dict = reviewed_dict
+        self._cached_genus_dict = genus_dict
+        self._cached_species_dict = species_dict
+        self._row_cache_dirty = False
+        self._problem_cache = problem_cache
+        self._search_index_cache = search_index
+        self._cached_photo_counts = photo_counts
 
 
     def save_session(self, action):

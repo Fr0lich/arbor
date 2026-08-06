@@ -306,8 +306,12 @@ class ImageHandlerMixin:
         def _notify_ui():
             self._problem_cache.clear()
             self.refresh_list()
-            self.image_scan_progress.configure(value=100)
-            self._hide_progress("Ready")
+            # Use _on_startup_ready() instead of _hide_progress("Ready") directly.
+            # During startup, this ensures the LoadingWindow is dismissed only after
+            # both the image scan AND the first load_object() call have completed.
+            # Outside startup (no LoadingWindow), _on_startup_ready just calls
+            # _hide_progress("Ready") which behaves identically to the old code.
+            self._on_startup_ready()
 
         self.root.after(0, _notify_ui)
 

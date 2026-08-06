@@ -6974,7 +6974,13 @@ class ObjectProgramUI(
             self._inline_search_entry.config(foreground="gray")
 
     def _get_search_index(self):
-        """Lazily build a lowercase token string per ObjectID from ObjectID, Genus, Species."""
+        """
+        Return the search index {oid: token_string}.
+        During startup the index is pre-built by _precompute_startup_caches() so this
+        method just returns the cached result.  After a data-changing operation that
+        calls invalidate_search_index(), the cache is rebuilt lazily here covering
+        ALL registration columns (not just Genus + Species) for maximum recall.
+        """
         if self._search_index_cache is not None:
             return self._search_index_cache
 
@@ -6983,12 +6989,15 @@ class ObjectProgramUI(
             return index
 
         df = self.app.df_reg
-        search_cols = [c for c in ["Genus", "Species"] if c in df.columns]
+        # Index every column in df_reg for full-text search coverage
+        all_cols = list(df.columns)
+        reg_dict = self._get_reg_dict()
 
-        for row in df[search_cols].itertuples(name=None):
-            oid = row[0]
+        for oid in df.index:
+            reg_row = reg_dict.get(oid, {})
             parts = [str(oid).lower()]
-            for val in row[1:]:
+            for col in all_cols:
+                val = reg_row.get(col, "")
                 if val and not pd.isna(val):
                     val_str = str(val).strip().lower()
                     if val_str:
@@ -7115,51 +7124,58 @@ class ObjectProgramUI(
         # Is image mode folder?
         include_image_problems = (self.image_mode == "folder")
 
-        # Clear and pre-populate the problem cache for active objects
-        self._problem_cache.clear()
-        problem_cols = getattr(self, "problem_columns", [])
-        problem_mapping = getattr(self, "problem_to_field", {})
+        # PERFORMANCE OPTIMIZATION: Skip problem-cache computation if it was already
+        # pre-built by _precompute_startup_caches() on the background thread.
+        # The pre-built cache covers all active objects; we only run the O(N×M) loop
+        # when the cache is stale (e.g. after a user edit or image scan completion).
+        cache_complete = len(self._problem_cache) >= len(self.app.active_object_ids)
 
-        for oid in self.app.active_object_ids:
-            obs_row = obs_dict.get(oid, {})
-            reg_row = reg_dict.get(oid, {})
+        if not cache_complete:
+            # Clear and re-compute problem cache for active objects
+            self._problem_cache.clear()
+            problem_cols = getattr(self, "problem_columns", [])
+            problem_mapping = getattr(self, "problem_to_field", {})
 
-            has_prob = False
-            for p in problem_cols:
-                if p == "Images_Missing":
-                    continue
-                if not include_image_problems:
-                    if "Image" in p:
+            for oid in self.app.active_object_ids:
+                obs_row = obs_dict.get(oid, {})
+                reg_row = reg_dict.get(oid, {})
+
+                has_prob = False
+                for p in problem_cols:
+                    if p == "Images_Missing":
                         continue
+                    if not include_image_problems:
+                        if "Image" in p:
+                            continue
 
-                # Check if problem p is active
-                is_act = False
-                if p == "Other_problem":
-                    is_act = bool(obs_row.get(p, False))
-                elif p == "Reviewed":
-                    is_act = bool(obs_row.get(REVIEWED_COLUMN, False))
-                elif p == "Has_Images":
-                    is_act = not obs_row.get("Images_Missing", False)
-                else:
-                    obs_val = bool(obs_row.get(p, False))
-                    auto_val = False
-                    if p in problem_mapping:
-                        field = problem_mapping.get(p)
-                        if field:
-                            raw_val = reg_row.get(field, "")
-                            is_missing = (
-                                pd.isna(raw_val) or
-                                (isinstance(raw_val, str) and raw_val.strip() == "")
-                            )
-                            is_unknown = self.is_unknown(raw_val)
-                            auto_val = is_missing and not is_unknown
-                    is_act = obs_val or auto_val
+                    # Check if problem p is active
+                    is_act = False
+                    if p == "Other_problem":
+                        is_act = bool(obs_row.get(p, False))
+                    elif p == "Reviewed":
+                        is_act = bool(obs_row.get(REVIEWED_COLUMN, False))
+                    elif p == "Has_Images":
+                        is_act = not obs_row.get("Images_Missing", False)
+                    else:
+                        obs_val = bool(obs_row.get(p, False))
+                        auto_val = False
+                        if p in problem_mapping:
+                            field = problem_mapping.get(p)
+                            if field:
+                                raw_val = reg_row.get(field, "")
+                                is_missing = (
+                                    pd.isna(raw_val) or
+                                    (isinstance(raw_val, str) and raw_val.strip() == "")
+                                )
+                                is_unknown = self.is_unknown(raw_val)
+                                auto_val = is_missing and not is_unknown
+                        is_act = obs_val or auto_val
 
-                if is_act:
-                    has_prob = True
-                    break
+                    if is_act:
+                        has_prob = True
+                        break
 
-            self._problem_cache[oid] = has_prob
+                self._problem_cache[oid] = has_prob
 
         # PERFORMANCE OPTIMIZATION (Bolt): Precompute a Python set of historical object IDs
         # to perform fast O(1) membership checks instead of index scans inside the loop.
@@ -7399,21 +7415,28 @@ class ObjectProgramUI(
             self.app.active_object_ids = sorted(ids, key=id_key)
 
         elif sort_key == "Genus A-Z":
+            # OPTIMIZATION: use cached genus dict — O(1) per item vs creating a new
+            # pandas Series per item via df_reg.loc[oid] which was O(N) allocations.
+            genus_dict = self._cached_genus_dict or {}
             self.app.active_object_ids = sorted(
                 ids,
-                key=lambda oid: str(self.app.df_reg.loc[oid].get("Genus", "")).lower()
+                key=lambda oid: str(genus_dict.get(oid, "") or "").lower()
             )
 
         elif sort_key == "Reviewed first":
+            # OPTIMIZATION: use cached reviewed dict — O(1) per item
+            reviewed_dict = self._cached_reviewed_dict or {}
             self.app.active_object_ids = sorted(
                 ids,
-                key=lambda oid: 0 if bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN]) else 1
+                key=lambda oid: 0 if bool(reviewed_dict.get(oid, False)) else 1
             )
 
         elif sort_key == "Problems first":
+            # OPTIMIZATION: use pre-built problem cache — O(1) per item
+            problem_cache = self._problem_cache or {}
             self.app.active_object_ids = sorted(
                 ids,
-                key=lambda oid: 0 if self.has_any_problem(oid) else 1
+                key=lambda oid: 0 if problem_cache.get(oid, False) else 1
             )
 
         self._list_dirty = True
