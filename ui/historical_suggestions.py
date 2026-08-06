@@ -33,6 +33,17 @@ class HistoricalSuggestionsMixin:
             db["dict_cache"] = dict_cache
         return db["dict_cache"]
 
+    def _get_combined_historical_cache(self):
+        if getattr(self, "_cached_dbs_id", None) != id(self.app.historical_dbs):
+            self._cached_dbs_id = id(self.app.historical_dbs)
+            self._combined_db_oid_cache = {}
+            if self.app.historical_dbs:
+                for db in self.app.historical_dbs:
+                    db_name = db["name"]
+                    for o, data in self._get_db_dict_cache(db).items():
+                        self._combined_db_oid_cache.setdefault(o, []).append((db_name, data))
+        return self._combined_db_oid_cache
+
     def collect_historical_suggestions(self, oid, show_all_override=None):
 
 
@@ -58,11 +69,7 @@ class HistoricalSuggestionsMixin:
             self._history_cache[cache_key] = suggestions
             return suggestions
 
-        db_oid_entries = []
-        for db in self.app.historical_dbs:
-            dict_cache = self._get_db_dict_cache(db)
-            if oid in dict_cache:
-                db_oid_entries.append((db["name"], dict_cache[oid]))
+        db_oid_entries = self._get_combined_historical_cache().get(oid, [])
 
         field_to_prob = {
             v: k for k, v in self.problem_to_field.items()
@@ -267,6 +274,7 @@ class HistoricalSuggestionsMixin:
 
     def _finish_load_books(self, loaded):
         self._history_cache = OrderedDict()
+        self._cached_dbs_id = None
 
         if hasattr(self, "image_scan_progress"):
             try:
@@ -462,6 +470,7 @@ class HistoricalSuggestionsMixin:
         # Invalidate the LRU suggestion cache so it is rebuilt from warm data
         if hasattr(self, "_history_cache"):
             self._history_cache.clear()
+        self._cached_dbs_id = None
         self.system_status.config(text="Historical data ready")
         # Refresh the history indicator for the current object
         oid = self.app.current_object_id
