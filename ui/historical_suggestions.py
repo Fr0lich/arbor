@@ -8,31 +8,44 @@ from collections import OrderedDict
 from utils import debug_error
 
 class HistoricalSuggestionsMixin:
-    def _get_db_dict_cache(self, db):
+    def _get_db_dict_cache(self, db, oid=None):
         if "dict_cache" not in db:
-            dict_cache = {}
-            df = db.get("df_reg")
-            if df is not None and not df.empty:
-                columns = list(df.columns)
-                if "ObjectID" in columns:
-                    obj_id_idx = columns.index("ObjectID") + 1
-                    for row in df.itertuples():
-                        oid = str(row[obj_id_idx]).strip()
-                        if not oid or oid == "nan":
-                            continue
-                        oid_cache = dict_cache.setdefault(oid, {})
-                        for col_idx, col_name in enumerate(columns):
-                            if col_name == "ObjectID":
-                                continue
-                            val = row[col_idx + 1]
+            db["dict_cache"] = {}
+
+        cache = db["dict_cache"]
+
+        if oid is None:
+            return cache
+
+        if oid not in cache:
+            oid_cache = {}
+            reg_by_id = db.get("reg_by_id")
+
+            if reg_by_id is not None and oid in reg_by_id.index:
+                rows = reg_by_id.loc[oid]
+
+                if isinstance(rows, pd.DataFrame):
+                    for _, row in rows.iterrows():
+                        for col, val in row.items():
                             if pd.notna(val):
                                 val_str = str(val).strip()
                                 if val_str and val_str != "nan":
-                                    vals_list = oid_cache.setdefault(col_name, [])
-                                    if val_str not in vals_list:
-                                        vals_list.append(val_str)
-            db["dict_cache"] = dict_cache
-        return db["dict_cache"]
+                                    if col not in oid_cache:
+                                        oid_cache[col] = []
+                                    if val_str not in oid_cache[col]:
+                                        oid_cache[col].append(val_str)
+                else:
+                    for col, val in rows.items():
+                         if pd.notna(val):
+                            val_str = str(val).strip()
+                            if val_str and val_str != "nan":
+                                if col not in oid_cache:
+                                    oid_cache[col] = []
+                                if val_str not in oid_cache[col]:
+                                    oid_cache[col].append(val_str)
+            cache[oid] = oid_cache
+
+        return cache
 
     def collect_historical_suggestions(self, oid, show_all_override=None):
 
@@ -61,8 +74,8 @@ class HistoricalSuggestionsMixin:
 
         db_oid_entries = []
         for db in self.app.historical_dbs:
-            dict_cache = self._get_db_dict_cache(db)
-            if oid in dict_cache:
+            dict_cache = self._get_db_dict_cache(db, oid)
+            if oid in dict_cache and dict_cache[oid]:
                 db_oid_entries.append((db["name"], dict_cache[oid]))
 
         field_to_prob = {

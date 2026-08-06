@@ -114,5 +114,65 @@ class TestOptimize(unittest.TestCase):
         other_sum = has_prob_series.drop("1", errors="ignore").sum()
         self.assertEqual(other_sum, 1)
 
+
+    def test_lazy_history_loading(self):
+        # Create dummy app state
+        from models import AppState
+        app = AppState()
+        app.historical_dbs = []
+
+        n_rows = 100
+        n_cols = 5
+        data = {f"Col{i}": [f"Val{i}_{j}" for j in range(n_rows)] for i in range(n_cols)}
+        data["ObjectID"] = [f"ID-{i}" for i in range(n_rows)]
+        df = pd.DataFrame(data)
+
+        # Build db obj
+        db = {
+            "name": "ARK1",
+            "path": "path1",
+            "df_reg": df,
+            "reg_by_id": df.set_index("ObjectID"),
+        }
+        app.historical_dbs.append(db)
+
+        # Create minimal mixin class instance
+        from ui.historical_suggestions import HistoricalSuggestionsMixin
+        import tkinter as tk
+
+        class DummyUI(HistoricalSuggestionsMixin):
+            def __init__(self):
+                self.app = app
+                self.problem_to_field = {"Col0_prob": "Col0"}
+                self.reg_by_id = pd.DataFrame(columns=["Col0"])
+                self.reg_by_id.loc["ID-1"] = [""]
+                # Mock tk variables
+                self.show_all_history_var = type("MockVar", (), {"get": lambda: False})
+
+            def is_unknown(self, val):
+                return not val
+
+            def is_problem_active(self, oid, prob):
+                return True
+
+            def is_word_ignored(self, val):
+                return False
+
+        ui = DummyUI()
+
+        # It should compute efficiently only for ID-1
+        suggestions = ui.collect_historical_suggestions("ID-1")
+
+        # Verify dictionary cache structure inside db
+        self.assertIn("dict_cache", db)
+        self.assertIn("ID-1", db["dict_cache"])
+        self.assertNotIn("ID-2", db["dict_cache"])
+
+        self.assertEqual(db["dict_cache"]["ID-1"]["Col0"], ["Val0_1"])
+
+        # Verify fetching suggestions works
+        self.assertIn("Col0", suggestions)
+        self.assertEqual(list(suggestions["Col0"].keys()), ["Val0_1"])
+
 if __name__ == "__main__":
     unittest.main()

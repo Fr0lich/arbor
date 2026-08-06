@@ -146,14 +146,6 @@ class DatabaseOpsMixin:
             base_xlsx = base.replace(".autosave", "")
             output_path = f"{base_xlsx}_updated_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
 
-            # PERFORMANCE OPTIMIZATION: Warm historical databases cache in the background thread
-            # if they were loaded by the Startup Dialog, avoiding a multi-second main-thread freeze on startup.
-            if getattr(self.app, "historical_dbs", None):
-                self.root.after(0, lambda: self.system_status.config(text="Warming historical database caches..."))
-                self.root.after(0, lambda: self.image_scan_progress.configure(value=62))
-                for db in self.app.historical_dbs:
-                    self._get_db_dict_cache(db)
-
             # PERFORMANCE OPTIMIZATION: Pre-compute all expensive in-memory caches
             # (row dicts, problem cache, search index, photo counts) while still on
             # the background thread. When _finish_open_excel runs on the main thread,

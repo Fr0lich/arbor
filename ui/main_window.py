@@ -4881,7 +4881,7 @@ class ObjectProgramUI(
         self.current_object_suggestions = {}
         if oid and self.app.historical_dbs:
             for db in self.app.historical_dbs:
-                dict_cache = self._get_db_dict_cache(db)
+                dict_cache = self._get_db_dict_cache(db, oid)
                 oid_data = dict_cache.get(oid, {})
                 for field, field_vals in oid_data.items():
                     if field in self.reg_columns:
