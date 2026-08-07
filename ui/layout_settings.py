@@ -213,8 +213,15 @@ class LayoutSettingsMixin:
 
         # Mousewheel
         def _on_mousewheel(e):
-            canvas.yview_scroll(int(-1*(e.delta/120)), "units")
+            if canvas.winfo_exists():
+                canvas.yview_scroll(int(-1*(e.delta/120)), "units")
         win.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _close_layout_win():
+            win.unbind_all("<MouseWheel>")
+            win.destroy()
+
+        win.protocol("WM_DELETE_WINDOW", _close_layout_win)
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -318,9 +325,9 @@ class LayoutSettingsMixin:
 
         def on_ok():
             on_apply()
-            win.destroy()
+            _close_layout_win()
 
-        ttk.Button(btn_row, text="Cancel", command=win.destroy, width=10, style="Tool.TButton").pack(side="right", padx=4)
+        ttk.Button(btn_row, text="Cancel", command=_close_layout_win, width=10, style="Tool.TButton").pack(side="right", padx=4)
         ttk.Button(btn_row, text="OK", command=on_ok, width=10, style="Primary.TButton").pack(side="right", padx=4)
 
         apply_btn = ttk.Button(btn_row, text="Apply", command=on_apply, width=10, style="Primary.TButton")
