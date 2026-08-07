@@ -8,24 +8,8 @@ class LayoutSettingsMixin:
         menubar.add_command(label="Layout", command=self.open_layout_settings)
 
 
-    def open_layout_settings(self):
-        if hasattr(self, "layout_win") and self.layout_win.winfo_exists():
-            self.layout_win.lift()
-            return
 
-        win = tk.Toplevel(self.root)
-        win.title("Layout Settings")
-        win.transient(self.root)
-        win.geometry(f"{sc(460)}x{sc(600)}")
-        self.layout_win = win
-
-        bg_color = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
-        win.configure(background=bg_color)
-
-        main_frame = ttk.Frame(win, padding=sc(12))
-        main_frame.pack(fill="both", expand=True)
-
-        # --- Initialize draft variables ---
+    def _init_layout_draft_vars(self):
         self.draft_show_list_var = tk.BooleanVar(value=self.show_list_var.get())
         self.draft_show_search_var = tk.BooleanVar(value=self.show_search_var.get())
         self.draft_show_reg_var = tk.BooleanVar(value=self.show_reg_var.get())
@@ -44,7 +28,49 @@ class LayoutSettingsMixin:
         for k, v in self.toolbar_vars.items():
             self.draft_toolbar_vars[k] = tk.BooleanVar(value=v.get())
 
-        # --- Presets Section ---
+
+    def _on_apply_layout_settings(self):
+        # Copy drafts to main variables
+        self.show_list_var.set(self.draft_show_list_var.get())
+        self.show_search_var.set(self.draft_show_search_var.get())
+        self.show_reg_var.set(self.draft_show_reg_var.get())
+        self.show_images_var.set(self.draft_show_images_var.get())
+        self.location_in_center_var.set(self.draft_location_in_center_var.get())
+        self.show_image_tools_var.set(self.draft_show_image_tools_var.get())
+        self.show_bulk_edit_var.set(self.draft_show_bulk_edit_var.get())
+
+        self.focus_mode_var.set(self.draft_layout_focus_mode_var.get())
+        self.snap_lock_var.set(self.draft_snap_lock_var.get())
+        self.image_stack_var.set(self.draft_image_stack_var.get())
+
+        self.large_reviewed_button_var.set(self.draft_large_reviewed_button_var.get())
+        self.dashboard_mode_var.set("Embedded" if self.draft_dashboard_embedded_var.get() else "Window")
+
+        for k, v in self.draft_toolbar_vars.items():
+            self.toolbar_vars[k].set(v.get())
+
+        # Apply changes in UI
+        self.toggle_list_panel()
+        self.toggle_search_panel()
+        self.toggle_location_panel()
+        self.toggle_images_panel()
+        self.toggle_reg_panel()
+        self.toggle_image_tools()
+        self.toggle_bulk_edit_btn()
+        self.toggle_dashboard_mode()
+        self._toggle_toolbar_buttons()
+        self.update_reg_fields_visibility()
+
+        self.image_view_mode = "stack" if self.image_stack_var.get() else "gallery"
+        if hasattr(self, "view_btn"):
+            self.view_btn.config(text=f"View: {self.image_view_mode}")
+
+        # Save layout as last applied layout state
+        self.save_layout_as("Last Applied")
+        self.system_status.config(text="Layout settings applied.")
+
+
+    def _build_layout_presets_section(self, main_frame):
         preset_lf = ttk.LabelFrame(main_frame, text="Layout Presets", padding=sc(8))
         preset_lf.pack(fill="x", pady=(0, 10))
 
@@ -80,7 +106,7 @@ class LayoutSettingsMixin:
                             if tb_name in self.draft_toolbar_vars:
                                 self.draft_toolbar_vars[tb_name].set(tb_val)
                     if self.layout_dynamic_update_var.get():
-                        on_apply()
+                        self._on_apply_layout_settings()
 
         self.layout_dialog_preset_cb.bind("<<ComboboxSelected>>", on_load_preset)
 
@@ -106,7 +132,6 @@ class LayoutSettingsMixin:
             name = preset_name_var.get().strip()
             if not name:
                 return
-            # Save the current draft states as the preset layout
             import config
             prefs = config.load_prefs()
             if "layouts" not in prefs:
@@ -175,26 +200,10 @@ class LayoutSettingsMixin:
         ttk.Button(preset_row3, text="Set Current as Startup Default", command=self.set_current_as_startup_default, style="Primary.TButton").pack(side="left", fill="x", expand=True, padx=2)
         ttk.Button(preset_row3, text="Reset Layout to Factory", command=self.reset_layout_to_factory, style="Tool.TButton").pack(side="right", fill="x", expand=True, padx=2)
 
-        # --- Update dynamically checkbox ---
-        dyn_frame = ttk.Frame(main_frame)
-        dyn_frame.pack(fill="x", pady=(0, 6))
+        return preset_lf
 
-        def toggle_dynamic_update():
-            if self.layout_dynamic_update_var.get():
-                apply_btn.config(state="disabled")
-                on_apply()
-            else:
-                apply_btn.config(state="normal")
 
-        dyn_cb = ttk.Checkbutton(
-            dyn_frame,
-            text="Update dynamically",
-            variable=self.layout_dynamic_update_var,
-            command=toggle_dynamic_update
-        )
-        dyn_cb.pack(side="left")
-
-        # --- Options & Toggles Section (Scrollable Frame) ---
+    def _build_layout_options_section(self, main_frame, win, bg_color):
         scroll_container = ttk.Frame(main_frame)
         scroll_container.pack(fill="both", expand=True)
 
@@ -211,24 +220,19 @@ class LayoutSettingsMixin:
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
 
-        # Mousewheel
         def _on_mousewheel(e):
             if canvas.winfo_exists():
                 canvas.yview_scroll(int(-1*(e.delta/120)), "units")
         win.bind_all("<MouseWheel>", _on_mousewheel)
 
-        def _close_layout_win():
-            win.unbind_all("<MouseWheel>")
-            win.destroy()
-
-        win.protocol("WM_DELETE_WINDOW", _close_layout_win)
+        self._layout_canvas = canvas
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
         def on_switch_toggle():
             if self.layout_dynamic_update_var.get():
-                on_apply()
+                self._on_apply_layout_settings()
 
         def create_toggle_row(parent, label_text, var):
             row = ttk.Frame(parent)
@@ -239,7 +243,6 @@ class LayoutSettingsMixin:
             sw.pack(side="right")
             return row
 
-        # Panels Visibility
         panels_lf = ttk.LabelFrame(scrollable_frame, text="Show/Hide Panels", padding=sc(8))
         panels_lf.pack(fill="x", pady=(0, 10))
         create_toggle_row(panels_lf, "Object ID List (Left)", self.draft_show_list_var)
@@ -250,7 +253,6 @@ class LayoutSettingsMixin:
         create_toggle_row(panels_lf, "Image Zoom Tools", self.draft_show_image_tools_var)
         create_toggle_row(panels_lf, "Bulk Edit Button", self.draft_show_bulk_edit_var)
 
-        # Persistent Behaviors
         behaviors_lf = ttk.LabelFrame(scrollable_frame, text="Persistent Behaviors", padding=sc(8))
         behaviors_lf.pack(fill="x", pady=(0, 10))
         create_toggle_row(behaviors_lf, "Focus Mode by default", self.draft_layout_focus_mode_var)
@@ -259,7 +261,6 @@ class LayoutSettingsMixin:
         create_toggle_row(behaviors_lf, "Embedded Session Dashboard", self.draft_dashboard_embedded_var)
         create_toggle_row(behaviors_lf, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var)
 
-        # Toolbar buttons
         toolbar_lf = ttk.LabelFrame(scrollable_frame, text="Show Toolbar Buttons", padding=sc(8))
         toolbar_lf.pack(fill="x", pady=(0, 10))
 
@@ -279,59 +280,75 @@ class LayoutSettingsMixin:
             sw = ToggleSwitch(cell, var, command=on_switch_toggle, ui_ref=self)
             sw.pack(side="right")
 
-        # --- Bottom Buttons (Apply, OK, Cancel) ---
+        return scroll_container
+
+
+    def _build_layout_bottom_buttons(self, main_frame, win):
         btn_row = ttk.Frame(main_frame, padding=(0, 6, 0, 0))
         btn_row.pack(fill="x", side="bottom")
 
-        def on_apply():
-            # Copy drafts to main variables
-            self.show_list_var.set(self.draft_show_list_var.get())
-            self.show_search_var.set(self.draft_show_search_var.get())
-            self.show_reg_var.set(self.draft_show_reg_var.get())
-            self.show_images_var.set(self.draft_show_images_var.get())
-            self.location_in_center_var.set(self.draft_location_in_center_var.get())
-            self.show_image_tools_var.set(self.draft_show_image_tools_var.get())
-            self.show_bulk_edit_var.set(self.draft_show_bulk_edit_var.get())
+        def _close_layout_win():
+            if hasattr(self, "_layout_canvas") and self._layout_canvas.winfo_exists():
+                win.unbind_all("<MouseWheel>")
+            win.destroy()
 
-            self.focus_mode_var.set(self.draft_layout_focus_mode_var.get())
-            self.snap_lock_var.set(self.draft_snap_lock_var.get())
-            self.image_stack_var.set(self.draft_image_stack_var.get())
-
-            self.large_reviewed_button_var.set(self.draft_large_reviewed_button_var.get())
-            self.dashboard_mode_var.set("Embedded" if self.draft_dashboard_embedded_var.get() else "Window")
-
-            for k, v in self.draft_toolbar_vars.items():
-                self.toolbar_vars[k].set(v.get())
-
-            # Apply changes in UI
-            self.toggle_list_panel()
-            self.toggle_search_panel()
-            self.toggle_location_panel()
-            self.toggle_images_panel()
-            self.toggle_reg_panel()
-            self.toggle_image_tools()
-            self.toggle_bulk_edit_btn()
-            self.toggle_dashboard_mode()
-            self._toggle_toolbar_buttons()
-            self.update_reg_fields_visibility()
-
-            self.image_view_mode = "stack" if self.image_stack_var.get() else "gallery"
-            if hasattr(self, "view_btn"):
-                self.view_btn.config(text=f"View: {self.image_view_mode}")
-
-            # Save layout as last applied layout state
-            self.save_layout_as("Last Applied")
-            self.system_status.config(text="Layout settings applied.")
+        win.protocol("WM_DELETE_WINDOW", _close_layout_win)
 
         def on_ok():
-            on_apply()
+            self._on_apply_layout_settings()
             _close_layout_win()
 
         ttk.Button(btn_row, text="Cancel", command=_close_layout_win, width=10, style="Tool.TButton").pack(side="right", padx=4)
         ttk.Button(btn_row, text="OK", command=on_ok, width=10, style="Primary.TButton").pack(side="right", padx=4)
 
-        apply_btn = ttk.Button(btn_row, text="Apply", command=on_apply, width=10, style="Primary.TButton")
+        apply_btn = ttk.Button(btn_row, text="Apply", command=self._on_apply_layout_settings, width=10, style="Primary.TButton")
         apply_btn.pack(side="right", padx=4)
+
+        return btn_row, apply_btn, _close_layout_win
+
+    def open_layout_settings(self):
+        if hasattr(self, "layout_win") and getattr(self.layout_win, "winfo_exists", lambda: False)():
+            self.layout_win.lift()
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("Layout Settings")
+        win.transient(self.root)
+        win.geometry(f"{sc(460)}x{sc(600)}")
+        self.layout_win = win
+
+        bg_color = "#1e1e2e" if getattr(self, "dark_mode_active", False) else "#f3f3f3"
+        win.configure(background=bg_color)
+
+        main_frame = ttk.Frame(win, padding=sc(12))
+        main_frame.pack(fill="both", expand=True)
+
+        self._init_layout_draft_vars()
+
+        preset_lf = self._build_layout_presets_section(main_frame)
+
+        dyn_frame = ttk.Frame(main_frame)
+        dyn_frame.pack(fill="x", pady=(0, 6))
+
+        def toggle_dynamic_update():
+            if self.layout_dynamic_update_var.get():
+                apply_btn.config(state="disabled")
+                self._on_apply_layout_settings()
+            else:
+                apply_btn.config(state="normal")
+
+        dyn_cb = ttk.Checkbutton(
+            dyn_frame,
+            text="Update dynamically",
+            variable=self.layout_dynamic_update_var,
+            command=toggle_dynamic_update
+        )
+        dyn_cb.pack(side="left")
+
+        scroll_container = self._build_layout_options_section(main_frame, win, bg_color)
+
+        btn_row, apply_btn, close_win = self._build_layout_bottom_buttons(main_frame, win)
+
         if self.layout_dynamic_update_var.get():
             apply_btn.config(state="disabled")
         else:
@@ -344,9 +361,11 @@ class LayoutSettingsMixin:
         import config
         prefs = config.load_prefs()
         if "layout_settings" not in prefs.get("completed_tutorials", []):
-            from ui.tutorial import TutorialManager
-            win.after(500, lambda: TutorialManager().start_tutorial("layout_settings", win))
-
+            try:
+                from ui.tutorial import TutorialManager
+                win.after(500, lambda: TutorialManager().start_tutorial("layout_settings", win))
+            except Exception:
+                pass
 
     def save_layout_as_dialog(self):
         from tkinter import simpledialog
