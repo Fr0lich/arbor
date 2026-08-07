@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
 import threading
+import re
 from datetime import datetime
 import pandas as pd
 from PIL import Image, ImageTk
@@ -668,6 +669,7 @@ class StartupDialog:
             if not self._folder_row.winfo_ismapped():
                 self._folder_row.pack(fill="x", pady=(int(4 * self._scale), 0))
                 self._folder_row.update_idletasks()  # ✅ animation polish
+                self._resize_to_fit()
         else:
             if self._folder_row.winfo_ismapped():
                 self._folder_row.pack_forget()
@@ -687,6 +689,27 @@ class StartupDialog:
                 except:
                     pass
 
+
+    def _resize_to_fit(self):
+        try:
+            self.win.update_idletasks()
+            req_h = self._outer.winfo_reqheight()
+            canv_h = self._outer.master.winfo_height()
+            if canv_h > 1 and req_h > canv_h:
+                cur_win_h = self.win.winfo_height()
+                missing_h = req_h - canv_h
+
+                max_h = self.win.winfo_screenheight() - 100
+                target_win_h = min(cur_win_h + missing_h, max_h)
+
+                if target_win_h > cur_win_h:
+                    geom = self.win.geometry()
+                    m = re.match(r"(\d+)x(\d+)([-+]\d+)([-+]\d+)", geom)
+                    if m:
+                        w, h, x, y = m.groups()
+                        self.win.geometry(f"{w}x{target_win_h}{x}{y}")
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Recent Projects table
