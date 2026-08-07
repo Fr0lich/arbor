@@ -1,6 +1,7 @@
 import pandas as pd
 import os
-from repository import SQLiteRepository, _normalise_dataframes, _normalise_log_dataframe
+from unittest import mock
+from repository import ExcelRepository, SQLiteRepository, _normalise_dataframes, _normalise_log_dataframe
 
 class TestRepository:
     def test_normalise_dataframes(self):
@@ -54,3 +55,41 @@ class TestRepository:
         assert list(df_reg_read["ObjectID"]) == ["1", "2"]
         assert list(df_obs_read["ObjectID"]) == ["1", "2"]
         assert list(df_photo_read["ObjectID"]) == ["1"]
+
+    @mock.patch("repository.ExcelRepository.load_excel")
+    @mock.patch("repository.SQLiteRepository.save_sqlite")
+    def test_import_from_excel(self, mock_save_sqlite, mock_load_excel, tmp_path):
+        # Create a dummy excel file to be backed up
+        excel_path = tmp_path / "data.xlsx"
+        excel_path.write_text("dummy content")
+
+        sqlite_path = tmp_path / "data.db"
+        config = {"ui_sections": {}}
+
+        # Setup mock return values for load_excel
+        mock_df_reg = pd.DataFrame({"ObjectID": ["1"]})
+        mock_df_obs = pd.DataFrame({"ObjectID": ["1"]})
+        mock_df_photo = pd.DataFrame({"ObjectID": ["1"]})
+        mock_df_log = pd.DataFrame({"ObjectID": ["1"]})
+        mock_load_excel.return_value = (mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log)
+
+        # Execute the method under test
+        result = SQLiteRepository.import_from_excel(str(excel_path), str(sqlite_path), config)
+
+        # Assert correct methods were called
+        mock_load_excel.assert_called_once_with(str(excel_path), config)
+        mock_save_sqlite.assert_called_once_with(str(sqlite_path), mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log)
+
+        # Assert return values
+        assert result == (mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log)
+
+        # Assert backup was created correctly
+        backup_dir = tmp_path / "backups"
+        assert backup_dir.exists()
+        assert backup_dir.is_dir()
+
+        backup_files = list(backup_dir.iterdir())
+        assert len(backup_files) == 1
+        assert backup_files[0].name.startswith("data.xlsx.backup_")
+        assert backup_files[0].name.endswith(".xlsx")
+        assert backup_files[0].read_text() == "dummy content"

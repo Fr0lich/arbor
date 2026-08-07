@@ -415,9 +415,9 @@ class HistoricalConflictResolverWindow:
             # If resolved, update dir list
             if status_code not in ("ERR", "CFCT") and field in self.field_frames:
                 f_frame = self.field_frames[field]
-                f_frame.winfo_children()[0].configure(bg=COLORS["success"])
-                f_frame.winfo_children()[1].configure(fg=COLORS["success"])
-                f_frame.winfo_children()[2].configure(text="OK", fg=COLORS["success"])
+                f_frame.winfo_children()[1].configure(bg=COLORS["success"])
+                f_frame.winfo_children()[2].configure(fg=COLORS["success"])
+                f_frame.winfo_children()[3].configure(text="OK", fg=COLORS["success"])
                 
         self.stats_label.configure(text=f"RESOLVED: {resolved}/{len(self.fields)}    ERR: {err}    CFCT: {cfct}")
         
