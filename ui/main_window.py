@@ -3186,7 +3186,7 @@ class ObjectProgramUI(
         # ----------------------------------------------------------------
         # LAYER 2: Stitch Top Navigation Bar
         # Replaces the old 2-row raw-grid toolbar.
-        # Structure: [TITLE] [FILE|NAVIGATE|PROBLEMS|CREATE|HISTORY] ... [STATUS]
+        # Structure: [TITLE] [FILE|DATA|PROBLEMS|CREATE|HISTORY] ... [STATUS]
         # ----------------------------------------------------------------
         nav_bar_bg = "#f9f9f9"
         nav_border = "#c4c7c7"
@@ -3238,9 +3238,12 @@ class ObjectProgramUI(
         btn_file = _nav_btn(nav_links_frame, "FILE",     self.open_excel)
         self.add_tooltip(btn_file, "Open an Excel database file")
 
-        # NAVIGATE — active state indicator (current view, no command)
-        btn_nav = _nav_btn(nav_links_frame, "NAVIGATE", lambda: None)
-        self.add_tooltip(btn_nav, "Active workspace navigation view")
+
+
+
+        # DATA — active state indicator (current view, no command)
+        btn_dat = _nav_btn(nav_links_frame, "DATA",   self.open_advanced_menu)
+        self.add_tooltip(btn_, "Load earlier databases")
 
         # IMAGES — jump to next problem
         btn_img = _nav_btn(nav_links_frame, "IMAGES", self.open_image_menu)
@@ -3307,10 +3310,7 @@ class ObjectProgramUI(
             command=self.open_image_menu)
         self.toolbar_buttons['Images'].pack(side="left", padx=1)
 
-        self.toolbar_buttons['Data'] = ttk.Button(
-            secondary_frame, text="Data", style="Nav.TButton",
-            command=self.open_advanced_menu)
-        self.toolbar_buttons['Data'].pack(side="left", padx=1)
+
 
 
         self.show_all_history_var = tk.BooleanVar(value=False)
@@ -4046,28 +4046,77 @@ class ObjectProgramUI(
         self.commit_current_object()
 
 
+--
+
 
     def open_advanced_menu(self):
-        btn = self.toolbar_buttons.get('Data')
-        
-        menu = tk.Menu(self.root, tearoff=0)
-        menu.add_command(label="Load books", command=self.load_books_file)
-        menu.add_command(label="Load earlier databases", command=self.load_historical_databases)
-        menu.add_separator()
-        menu.add_checkbutton(
-            label="Show all historical data",
+        if (
+            hasattr(self, "advanced_win")
+            and self.advanced_win
+            and self.advanced_win.winfo_exists()
+        ):
+            self.advanced_win.focus_force()
+            self.advanced_win.lift()
+            return
+
+        win = tk.Toplevel(self.root)
+        self.advanced_win = win
+
+        win.title("Data Options")
+        win.resizable(False, False)
+        win.transient(self.root)
+
+        bg_color = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
+        win.configure(background=bg_color)
+
+        import utils
+        utils.center_and_fit_toplevel(win, sc(400), sc(250))
+
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        frame = ttk.Frame(win, padding=sc(16))
+        frame.pack(fill="both", expand=True)
+
+        # Header
+        lbl_header = ttk.Label(
+            frame,
+            text="DATA OPTIONS",
+            font=("Segoe UI", sc(12), "bold"),
+            foreground="#1a1c1c" if not self.dark_mode_active else "#cdd6f4"
+        )
+        lbl_header.pack(anchor="w", pady=(0, 10))
+
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 15))
+
+        def run_cmd(cmd):
+            win.destroy()
+            cmd()
+
+        # Buttons
+        ttk.Button(
+            frame,
+            text="Load books",
+            command=lambda: run_cmd(self.load_books_file)
+        ).pack(fill="x", pady=(0, 6))
+
+        ttk.Button(
+            frame,
+            text="Load earlier databases",
+            command=lambda: run_cmd(self.load_historical_databases)
+        ).pack(fill="x", pady=(0, 12))
+
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 12))
+
+        ttk.Checkbutton(
+            frame,
+            text="Show all historical data",
             variable=self.show_all_history_var,
             command=self._on_history_toggle
-        )
-        
-        if btn and btn.winfo_exists() and btn.winfo_ismapped():
-            x = btn.winfo_rootx()
-            y = btn.winfo_rooty() + btn.winfo_height()
-        else:
-            x = self.root.winfo_pointerx()
-            y = self.root.winfo_pointery()
-            
-        menu.post(x, y)
+        ).pack(anchor="w")
+
+
+
+
 
     def build_search_popup(self):
         # Popup-vindu for sÃ¸ketreff
