@@ -4904,7 +4904,7 @@ class ToolTipManager:
         close_btn = ttk.Button(footer, text="Close", command=dialog.destroy)
         close_btn.pack(side="right")
 
-    def show_banner(self, text, banner_type="info", duration_ms=4000):
+    def show_banner(self, text, banner_type="info", duration_ms=4000, action_callback=None):
         """Displays an inline notification banner at the top of the workspace."""
         if not hasattr(self, "_inline_banner_frame"):
             return
@@ -4950,6 +4950,19 @@ class ToolTipManager:
             anchor="w"
         )
         text_lbl.pack(side="left", fill="x", expand=True)
+
+        if action_callback:
+            def _on_click(e):
+                action_callback()
+                self.hide_banner()
+
+            for w in (self._inline_banner_frame, inner, icon_lbl, text_lbl):
+                w.bind("<Button-1>", _on_click)
+                w.config(cursor="hand2")
+        else:
+            self._inline_banner_frame.unbind("<Button-1>")
+            for w in (self._inline_banner_frame, inner, icon_lbl, text_lbl):
+                w.config(cursor="")
 
         # Close Button
         close_btn = tk.Button(
