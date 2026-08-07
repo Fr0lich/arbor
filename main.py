@@ -141,13 +141,8 @@ def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
             active_ui.show_banner(
                 f"⚠ Crash log from last session found — click to view",
                 banner_type="warning",
-                duration_ms=12000
-            )
-        # Also wire up the banner click if possible
-        if hasattr(active_ui, "_inline_banner_frame"):
-            active_ui._inline_banner_frame.bind(
-                "<Button-1>",
-                lambda e: active_ui.show_error_log_window(most_recent)
+                duration_ms=12000,
+                action_callback=lambda: active_ui.show_error_log_window(most_recent)
             )
 
     root.after(2000, _show_banner)
