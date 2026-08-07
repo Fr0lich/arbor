@@ -197,7 +197,7 @@ if __name__ == "__main__":
         _install_atexit_crash_reporter()
 
         # Hide main window initially
-        root.withdraw()
+        # root.withdraw()
 
         dialog = StartupDialog(root, app, ui)
 
@@ -215,7 +215,7 @@ if __name__ == "__main__":
             sys.exit(0)
 
         # Dialog completed successfully, hide main window during loading
-        root.withdraw()
+        # root.withdraw()
 
         if hasattr(dialog, "selected_excel_path"):
             from ui.dialogs import LoadingWindow
