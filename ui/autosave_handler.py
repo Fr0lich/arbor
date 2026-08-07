@@ -39,8 +39,8 @@ class AutosaveMixin:
         ttk.Button(frame, text="Apply", command=_apply).pack(pady=(8, 0))
 
 
-    def _write_pickle_async(self, path, callback=None):
-        """Save the current in-memory state to a pickle file in a background thread."""
+    def _write_json_async(self, path, callback=None):
+        """Save the current in-memory state to a json file in a background thread."""
         if getattr(self, '_save_in_progress', False):
             return
 
@@ -62,22 +62,22 @@ class AutosaveMixin:
 
         def save_worker():
             try:
-                import pickle
+                import json
                 data = {
-                    "df_reg": df_reg_copy,
-                    "df_obs": df_obs_copy,
-                    "df_photo": df_photo_copy,
-                    "df_log": df_log_copy
+                    "df_reg": df_reg_copy.to_json(orient="table") if df_reg_copy is not None else None,
+                    "df_obs": df_obs_copy.to_json(orient="table") if df_obs_copy is not None else None,
+                    "df_photo": df_photo_copy.to_json(orient="table") if df_photo_copy is not None else None,
+                    "df_log": df_log_copy.to_json(orient="table") if df_log_copy is not None else None
                 }
                 # Write to tmp first then replace for atomic safety
                 tmp_path = path + ".tmp"
-                with open(tmp_path, "wb") as f:
-                    pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+                with open(tmp_path, "w") as f:
+                    json.dump(data, f)
                 os.replace(tmp_path, path)
                 self.root.after(0, lambda: callback(True, None) if callback else None)
             except Exception as e:
                 from utils import debug_error
-                debug_error("_write_pickle_async worker", str(e))
+                debug_error("_write_json_async worker", str(e))
                 err_msg = str(e)
                 self.root.after(0, lambda err=err_msg: callback(False, err) if callback else None)
             finally:
@@ -126,9 +126,9 @@ class AutosaveMixin:
                         self.set_status_badge("autosaved", "Autosave failed")
                         self.set_status_badge("error", f"Autosave Error")
 
-                # PERFORMANCE OPTIMIZATION (Bolt): Use pickle for autosave, which is ~200x faster than Excel.
-                if autosave_path.endswith(".pkl"):
-                    self._write_pickle_async(autosave_path, on_autosave_complete)
+                # PERFORMANCE OPTIMIZATION (Bolt): Use JSON for autosave, which is safer and fast.
+                if autosave_path.endswith(".json"):
+                    self._write_json_async(autosave_path, on_autosave_complete)
                 else:
                     self._write_excel_async(autosave_path, on_autosave_complete)
 
@@ -172,9 +172,9 @@ class AutosaveMixin:
         if not self.app.excel_path:
             return
         autosave_path = self._autosave_path()
-        # PERFORMANCE OPTIMIZATION (Bolt): Backward-compatible fallback check for legacy excel autosave
+        # PERFORMANCE OPTIMIZATION (Bolt): Backward-compatible fallback check for legacy autosaves
         if not os.path.exists(autosave_path):
-            alt_path = autosave_path.replace(".pkl", ".xlsx")
+            alt_path = autosave_path.replace(".json", ".xlsx")
             if os.path.exists(alt_path):
                 autosave_path = alt_path
             else:
@@ -212,15 +212,17 @@ class AutosaveMixin:
     def _restore_autosave(self, autosave_path, original_path):
         """Load data from the autosave file into the current session."""
         try:
-            # PERFORMANCE OPTIMIZATION (Bolt): Support restoring both the high-performance pickle autosave and legacy Excel autosave.
-            if autosave_path.endswith(".pkl"):
-                import pickle
-                with open(autosave_path, "rb") as f:
-                    data = pickle.load(f)
-                df_reg = data["df_reg"]
-                df_obs = data["df_obs"]
-                df_photo = data["df_photo"]
-                df_log = data["df_log"]
+            # PERFORMANCE OPTIMIZATION (Bolt): Support restoring both the JSON autosave and legacy Excel autosave.
+            if autosave_path.endswith(".json"):
+                import json
+                import pandas as pd
+                from io import StringIO
+                with open(autosave_path, "r") as f:
+                    data = json.load(f)
+                df_reg = pd.read_json(StringIO(data["df_reg"]), orient="table") if data.get("df_reg") else None
+                df_obs = pd.read_json(StringIO(data["df_obs"]), orient="table") if data.get("df_obs") else None
+                df_photo = pd.read_json(StringIO(data["df_photo"]), orient="table") if data.get("df_photo") else None
+                df_log = pd.read_json(StringIO(data["df_log"]), orient="table") if data.get("df_log") else None
             else:
                 from repository import ExcelRepository
                 df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(autosave_path, self.app.config)
@@ -264,7 +266,7 @@ class AutosaveMixin:
         if not os.path.isdir(archive_dir):
             return
         archives = sorted(
-            [f for f in os.listdir(archive_dir) if f.endswith(".xlsx") or f.endswith(".pkl")],
+            [f for f in os.listdir(archive_dir) if f.endswith(".xlsx") or f.endswith(".json")],
             reverse=True
         )
         if len(archives) > 10:
@@ -291,7 +293,7 @@ class AutosaveMixin:
             messagebox.showinfo("No archives", "No archived autosaves found.", parent=self.root)
             return
         archives = sorted(
-            [f for f in os.listdir(archive_dir) if f.endswith(".xlsx") or f.endswith(".pkl")],
+            [f for f in os.listdir(archive_dir) if f.endswith(".xlsx") or f.endswith(".json")],
             reverse=True
         )
         if not archives:

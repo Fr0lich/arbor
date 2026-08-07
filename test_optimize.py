@@ -59,35 +59,43 @@ class TestOptimize(unittest.TestCase):
         self.assertEqual(msg, "Test Exception")
         self.assertEqual(t, "mock_traceback")
 
-    def test_pickle_serialization_and_deserialization(self):
-        # Test that df dataframes can be pickled and unpickled correctly
+    def test_json_serialization_and_deserialization(self):
+        # Test that df dataframes can be json serialized and deserialized safely
+        import json
+        from io import StringIO
+
         df_reg = pd.DataFrame({"ObjectID": ["1", "2"], "Genus": ["Genus1", "Genus2"]})
         df_obs = pd.DataFrame({"ObjectID": ["1", "2"], "Reviewed": [True, False]})
         df_photo = pd.DataFrame({"ObjectID": ["1"]})
         df_log = pd.DataFrame({"Timestamp": ["2025-02-15"]})
 
         data = {
-            "df_reg": df_reg,
-            "df_obs": df_obs,
-            "df_photo": df_photo,
-            "df_log": df_log
+            "df_reg": df_reg.to_json(orient="table"),
+            "df_obs": df_obs.to_json(orient="table"),
+            "df_photo": df_photo.to_json(orient="table"),
+            "df_log": df_log.to_json(orient="table")
         }
 
         # Use temporary file
-        fd, temp_path = tempfile.mkstemp(suffix=".pkl")
+        fd, temp_path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         try:
-            with open(temp_path, "wb") as f:
-                pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+            with open(temp_path, "w") as f:
+                json.dump(data, f)
 
             # Load it back
-            with open(temp_path, "rb") as f:
-                loaded = pickle.load(f)
+            with open(temp_path, "r") as f:
+                loaded = json.load(f)
 
-            self.assertTrue(loaded["df_reg"].equals(df_reg))
-            self.assertTrue(loaded["df_obs"].equals(df_obs))
-            self.assertTrue(loaded["df_photo"].equals(df_photo))
-            self.assertTrue(loaded["df_log"].equals(df_log))
+            restored_df_reg = pd.read_json(StringIO(loaded["df_reg"]), orient="table")
+            restored_df_obs = pd.read_json(StringIO(loaded["df_obs"]), orient="table")
+            restored_df_photo = pd.read_json(StringIO(loaded["df_photo"]), orient="table")
+            restored_df_log = pd.read_json(StringIO(loaded["df_log"]), orient="table")
+
+            self.assertTrue(restored_df_reg.equals(df_reg))
+            self.assertTrue(restored_df_obs.equals(df_obs))
+            self.assertTrue(restored_df_photo.equals(df_photo))
+            self.assertTrue(restored_df_log.equals(df_log))
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)

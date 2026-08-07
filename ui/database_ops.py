@@ -126,22 +126,23 @@ class DatabaseOpsMixin:
 
             self.root.after(0, lambda: self.image_scan_progress.configure(value=10))
 
-            # PERFORMANCE OPTIMIZATION (Bolt): Read via standard library pickle if it's a binary autosave file.
-            if path.endswith(".pkl"):
-                import pickle
-                with open(path, "rb") as f:
-                    data = pickle.load(f)
-                df_reg = data["df_reg"]
-                df_obs = data["df_obs"]
-                df_photo = data["df_photo"]
-                df_log = data["df_log"]
+            # PERFORMANCE OPTIMIZATION (Bolt): Read via json if it's a json autosave file.
+            if path.endswith(".json"):
+                import json
+                from io import StringIO
+                with open(path, "r") as f:
+                    data = json.load(f)
+                df_reg = pd.read_json(StringIO(data["df_reg"]), orient="table") if data.get("df_reg") else None
+                df_obs = pd.read_json(StringIO(data["df_obs"]), orient="table") if data.get("df_obs") else None
+                df_photo = pd.read_json(StringIO(data["df_photo"]), orient="table") if data.get("df_photo") else None
+                df_log = pd.read_json(StringIO(data["df_log"]), orient="table") if data.get("df_log") else None
             else:
                 df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(path, self.app.config)
 
             self.root.after(0, lambda: self.image_scan_progress.configure(value=60))
 
             base, _ = os.path.splitext(path)
-            # Ensure the output path uses .xlsx even if we loaded from a .pkl autosave
+            # Ensure the output path uses .xlsx even if we loaded from a .json autosave
             base_xlsx = base.replace(".autosave", "")
             output_path = f"{base_xlsx}_updated_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
 
@@ -180,7 +181,7 @@ class DatabaseOpsMixin:
     def _finish_open_excel(self, path, output_path, df_reg, df_obs, df_photo, df_log):
         # PERFORMANCE OPTIMIZATION (Bolt): Reconstruct the original Excel path as active path if loaded from an autosave
         if ".autosave" in path:
-            orig_path = path.replace(".autosave.pkl", ".xlsx").replace(".autosave.xlsx", ".xlsx")
+            orig_path = path.replace(".autosave.json", ".xlsx").replace(".autosave.xlsx", ".xlsx")
             if os.path.exists(orig_path):
                 path = orig_path
 

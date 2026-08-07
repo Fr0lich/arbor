@@ -233,7 +233,7 @@ Arbor is executed on high-resolution, variable-DPI displays.
 - **Eager Error Capturing:** When scheduling deferred callbacks (e.g., `self.root.after`) inside exception handling blocks, capture the target exception message or traceback eagerly using default argument parameters (e.g., `lambda em=err_msg: ...`) rather than referencing free variables from the deleted exception scope to avoid silent `NameError` exceptions.
 
 ### Rule 4: Compact Form Serialization (Autosaves)
-- **Use `.autosave.pkl`:** Temporary background sessions are serialized into the fast binary pickle file format (`.autosave.pkl`). Ensure any custom UI state is serializable or properly decoupled from visual Tkinter widgets.
+- **Use `.autosave.json`:** Temporary background sessions are serialized into the fast string JSON file format (`.autosave.json`). Ensure any custom UI state is serializable or properly decoupled from visual Tkinter widgets.
 - **Edit Source, Not Artifacts:** If a file is a compiled build artifact, do not edit it directly. Trace the code back to its Python source under the `ui/` directory and recompile accordingly.
 
 ---
