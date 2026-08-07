@@ -69,8 +69,19 @@ def _normalise_dataframes(df_reg, df_obs, config):
     if new_loc_cols:
         for col in new_loc_cols:
             df_obs[col] = ""
+
+
     if location_columns:
         df_obs[location_columns] = df_obs[location_columns].fillna("").astype(object)
+
+    for field in sections.get("location", []):
+        if field.get("type") == "checkbox":
+            col = field["name"]
+            if col in df_obs.columns:
+                df_obs[col] = df_obs[col].replace({"": "False", None: "False"}).fillna("False")
+                df_obs[col] = df_obs[col].replace({True: "True", False: "False"}).astype(str)
+
+
 
     # --- Observation: image / review flags ---
     if "Images_Missing" not in df_obs.columns:
