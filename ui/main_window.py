@@ -6570,28 +6570,29 @@ class ToolTipManager:
                 
             all_widgets.append((name.lower(), f, COLORS["surface"]))
 
+        # Cache children for Quick Search
+        for text, frame, orig_bg in all_widgets:
+            cached = []
+            for child in frame.winfo_children():
+                if isinstance(child, tk.Frame) and child.cget("width") == 4: continue
+                cached.append(child)
+            frame._cached_children = cached
+
         # Quick Search
         def on_search(*args):
             q = search_var.get().lower().strip()
             for text, frame, orig_bg in all_widgets:
                 if not q:
-                    frame.config(bg=orig_bg)
-                    for child in frame.winfo_children():
-                        if isinstance(child, tk.Frame) and child.cget("width") == 4: continue
-                        try: child.config(bg=orig_bg)
-                        except: pass
+                    bg_color = orig_bg
                 elif q in text:
-                    frame.config(bg=COLORS["surface_container_highest"])
-                    for child in frame.winfo_children():
-                        if isinstance(child, tk.Frame) and child.cget("width") == 4: continue
-                        try: child.config(bg=COLORS["surface_container_highest"])
-                        except: pass
+                    bg_color = COLORS["surface_container_highest"]
                 else:
-                    frame.config(bg=orig_bg)
-                    for child in frame.winfo_children():
-                        if isinstance(child, tk.Frame) and child.cget("width") == 4: continue
-                        try: child.config(bg=orig_bg)
-                        except: pass
+                    bg_color = orig_bg
+
+                frame.config(bg=bg_color)
+                for child in getattr(frame, "_cached_children", []):
+                    try: child.config(bg=bg_color)
+                    except: pass
                         
         search_var.trace("w", on_search)
 
