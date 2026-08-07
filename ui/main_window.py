@@ -1959,7 +1959,8 @@ class ToolTipManager:
     def _on_checkbox_change(self, name, var):
         if name == "Loaned out":
             from datetime import datetime
-            if var.get() == "True":
+            val = str(var.get()).strip().lower()
+            if val in ("true", "1"):
                 self.reg_vars["Loaned out date"].set(datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
             else:
                 self.reg_vars["Loaned out date"].set("")
