@@ -73,7 +73,7 @@ class AutosaveMixin:
                 pass
             self._autosave_job = None
         self._autosave_job = self.root.after(
-            config.AUTOSAVE_INTERVAL_MS,
+            AUTOSAVE_INTERVAL_MS,
             self._autosave_tick
         )
 
