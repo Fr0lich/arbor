@@ -54,7 +54,7 @@ class GroupEditorWindow:
         misc = [f for f in all_fields if f not in assigned_fields]
         if misc:
             # Check if Miscellaneous is already in groups
-            if not any(g["name"] == "Miscellaneous" for g in self.groups):
+            if "Miscellaneous" not in {g["name"] for g in self.groups}:
                 self.groups.append({"name": "Miscellaneous", "fields": misc})
 
     def _create_card_frame(self, parent, title):
@@ -680,7 +680,7 @@ class FieldGroupEditorDialog(GroupEditorWindow):
         misc = [f for f in all_fields if f not in assigned_fields]
         if misc:
             # Check if Miscellaneous is already in groups
-            if not any(g["name"] == "Miscellaneous" for g in self.groups):
+            if "Miscellaneous" not in {g["name"] for g in self.groups}:
                 self.groups.append({"name": "Miscellaneous", "fields": misc})
 
         self.win = tk.Toplevel(parent)
