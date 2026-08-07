@@ -1,9 +1,6 @@
-import os
 import tkinter as tk
 from tkinter import ttk, messagebox
-import config
 from config import sc
-from utils import debug_error
 from repository import REVIEWED_COLUMN
 
 class DashboardMixin:

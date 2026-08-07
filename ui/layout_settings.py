@@ -1,7 +1,5 @@
-import os
 import tkinter as tk
-from tkinter import ttk, messagebox
-import config
+from tkinter import ttk
 from config import sc
 from ui.widgets import ToggleSwitch
 
@@ -404,7 +402,7 @@ class LayoutSettingsMixin:
 
     def set_current_as_startup_default(self):
         import config
-        from tkinter import simpledialog, messagebox
+        from tkinter import messagebox
         prefs = config.load_prefs()
         saved = prefs.get("layouts", {}).get("saved", {})
         if not saved:

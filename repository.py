@@ -4,7 +4,6 @@ import os
 import shutil
 import sqlite3
 import datetime
-from config import DATABASE_CONFIGS
 from utils import debug_error
 
 # ---------------------------------------------------------------------------
@@ -172,7 +171,7 @@ class ExcelRepository:
         # We try importing 'calamine' for a further 5-10x parsing speedup.
         engine = "openpyxl"
         try:
-            import calamine
+            import calamine  # noqa: F401
             engine = "calamine"
         except ImportError:
             pass

@@ -1,8 +1,6 @@
-import pytest
-from repository import ExcelRepository, SQLiteRepository
+from repository import SQLiteRepository
 import pandas as pd
 import os
-import sqlite3
 
 class TestSaving:
     def test_export_to_excel(self, tmp_path):
