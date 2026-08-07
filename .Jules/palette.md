@@ -15,3 +15,7 @@
 ## 2024-05-18 - [Delayed Tooltips over Instant Tooltips]
 **Learning:** Instant tooltips without delays cause severe flickering and visual noise when hovering across dense toolbars or status icons, degrading the desktop application experience. Unstyled, system-default tooltips also break visual immersion, especially in dark mode.
 **Action:** Always implement a ~500ms delay for tooltips and ensure they adapt to the application's theme (light/dark mode) using standard UI background and border colors.
+
+## 2025-08-03 - [Missing Tooltips on Navigation Buttons]
+**Learning:** The 'Nav.TButton' flat-style buttons on the secondary navigation bar lack tooltips indicating their functions and shortcuts, hurting accessibility and discoverability.
+**Action:** Use `self.add_tooltip()` for these interface elements to provide clear context for screen-readers and hover users without taking up real estate.
