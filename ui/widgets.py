@@ -534,20 +534,27 @@ class TreeviewListboxWrapper(ttk.Frame):
             loaned = bool(loaned_raw)
 
         # Accent strip color (left 4px border)
-        if has_history:
-            accent_color = "#5ab0e8" if is_dark else "#0284C7"
+
+
+        if reviewed:
+            accent_color = "#4CAF50" if is_dark else "#2E7D32" # green
+        elif has_history and has_problem:
+            accent_color = "#BB86FC" if is_dark else "#7B1FA2" # purple
         elif has_problem:
-            accent_color = "#f28b82" if is_dark else "#C62828"
+            accent_color = "#f28b82" if is_dark else "#C62828" # red
+        elif has_history:
+            accent_color = "#5ab0e8" if is_dark else "#0284C7" # blue
         else:
-            accent_color = canvas_bg  # visually transparent
+            accent_color = canvas_bg # visually transparent
+
 
         # Status badge
-        if has_history:
-            badge_label, badge_bg, badge_fg = "CFCT", "#0284C7", "#ffffff"
+        if reviewed:
+            badge_label, badge_bg, badge_fg = "OK",   "#2E7D32", "#ffffff"
         elif has_problem:
             badge_label, badge_bg, badge_fg = "ERR",  "#C62828", "#ffffff"
-        elif reviewed:
-            badge_label, badge_bg, badge_fg = "OK",   "#2E7D32", "#ffffff"
+        elif has_history:
+            badge_label, badge_bg, badge_fg = "CFCT", "#0284C7", "#ffffff"
         else:
             badge_label, badge_bg, badge_fg = "UKN",  "#FBC02D", "#1a1c1c"
 

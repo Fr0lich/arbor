@@ -1,0 +1,81 @@
+[2026-08-07 09:44:55] [ERROR] Unhandled callback exception — KeyError: 'Loaned out date'
+Traceback (most recent call last):
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\tkinter\__init__.py", line 1968, in __call__
+    return self.func(*args)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\ijbrekke\Documents\arbor\ui\main_window.py", line 555, in <lambda>
+    command=lambda n=name, v=var: self._on_checkbox_change(n, v),
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ijbrekke\Documents\arbor\ui\main_window.py", line 1927, in _on_checkbox_change
+    self.reg_vars["Loaned out date"].set(datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+KeyError: 'Loaned out date'
+
+────────────────────────────────────────────────────────────────────────────────
+[2026-08-07 09:55:40] [ERROR] Unhandled callback exception — TclError: unknown option "-fg"
+Traceback (most recent call last):
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\tkinter\__init__.py", line 1968, in __call__
+    return self.func(*args)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\ijbrekke\Documents\arbor\ui\historical_suggestions.py", line 203, in open_historical_suggestions
+    HistoricalConflictResolverWindow(self, oid, suggestions)
+  File "C:\Users\ijbrekke\Documents\arbor\ui\historical_resolver.py", line 67, in __init__
+    self.build_ui()
+  File "C:\Users\ijbrekke\Documents\arbor\ui\historical_resolver.py", line 204, in build_ui
+    self.update_stats()
+  File "C:\Users\ijbrekke\Documents\arbor\ui\historical_resolver.py", line 419, in update_stats
+    f_frame.winfo_children()[1].configure(fg=COLORS["success"])
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\tkinter\__init__.py", line 1722, in configure
+    return self._configure('configure', cnf, kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\tkinter\__init__.py", line 1712, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: unknown option "-fg"
+
+────────────────────────────────────────────────────────────────────────────────
+[2026-08-07 09:55:58] [ERROR] _load_image_async worker — broken data stream when reading image file
+Traceback (most recent call last):
+  File "C:\Users\ijbrekke\Documents\arbor\ui\image_handler.py", line 461, in worker
+    img = self.original_pil_cache[path].copy()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ijbrekke\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PIL\Image.py", line 1365, in copy
+    self.load()
+  File "C:\Users\ijbrekke\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PIL\ImageFile.py", line 431, in load
+    raise _get_oserror(err_code, encoder=False)
+OSError: broken data stream when reading image file
+
+────────────────────────────────────────────────────────────────────────────────
+[2026-08-07 09:55:58] [ERROR] _load_image_async worker
+Traceback (most recent call last):
+  File "C:\Users\ijbrekke\Documents\arbor\ui\image_handler.py", line 461, in worker
+    img = self.original_pil_cache[path].copy()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ijbrekke\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PIL\Image.py", line 1365, in copy
+    self.load()
+  File "C:\Users\ijbrekke\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PIL\ImageFile.py", line 392, in load
+    s = read(read_bytes)
+        ^^^^^^^^^^^^^^^^
+  File "C:\Users\ijbrekke\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PIL\JpegImagePlugin.py", line 417, in load_read
+    assert self.fp is not None
+           ^^^^^^^^^^^^^^^^^^^
+AssertionError
+
+────────────────────────────────────────────────────────────────────────────────
+[2026-08-07 09:56:02] [ERROR] Unhandled callback exception — KeyError: 'Loaned out date'
+Traceback (most recent call last):
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\tkinter\__init__.py", line 1968, in __call__
+    return self.func(*args)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\ijbrekke\Documents\arbor\ui\main_window.py", line 555, in <lambda>
+    command=lambda n=name, v=var: self._on_checkbox_change(n, v),
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ijbrekke\Documents\arbor\ui\main_window.py", line 1929, in _on_checkbox_change
+    self.reg_vars["Loaned out date"].set("")
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+KeyError: 'Loaned out date'
+
+────────────────────────────────────────────────────────────────────────────────
+
+════════════════════════════════════════════════════════════════════════════════
+SESSION ENDED — 2026-08-07 09:56:23
+════════════════════════════════════════════════════════════════════════════════
