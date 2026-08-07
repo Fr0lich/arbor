@@ -214,12 +214,9 @@ class AutosaveMixin:
             self.app.df_photo = df_photo
             self.app.df_log = df_log
 
-            if "ObjectID" in self.app.df_reg.columns:
-                self.app.df_reg.set_index("ObjectID", inplace=True)
-            if "ObjectID" in self.app.df_obs.columns:
-                self.app.df_obs.set_index("ObjectID", inplace=True)
-            if "ObjectID" in self.app.df_photo.columns:
-                self.app.df_photo.set_index("ObjectID", inplace=True)
+            for df in (self.app.df_reg, self.app.df_obs, self.app.df_photo):
+                if "ObjectID" in df.columns:
+                    df.set_index("ObjectID", inplace=True)
 
             self.app.initial_df_obs = self.app.df_obs.copy()
             self.reg_by_id = self.app.df_reg
