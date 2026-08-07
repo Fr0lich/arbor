@@ -3478,16 +3478,19 @@ class ToolTipManager:
             secondary_frame, text="◄ Prev", style="Nav.TButton",
             command=lambda: self.navigate_object(-1))
         self.toolbar_buttons['Prev'].pack(side="left", padx=1)
+        self.add_tooltip(self.toolbar_buttons['Prev'], "Previous object")
 
         self.toolbar_buttons['Next'] = ttk.Button(
             secondary_frame, text="Next ►", style="Nav.TButton",
             command=lambda: self.navigate_object(1))
         self.toolbar_buttons['Next'].pack(side="left", padx=1)
+        self.add_tooltip(self.toolbar_buttons['Next'], "Next object")
 
         self.toolbar_buttons['Last'] = ttk.Button(
             secondary_frame, text="Last", style="Nav.TButton",
             command=self.goto_last_object)
         self.toolbar_buttons['Last'].pack(side="left", padx=2)
+        self.add_tooltip(self.toolbar_buttons['Last'], "Return to last visited object")
 
 
 
@@ -3514,11 +3517,13 @@ class ToolTipManager:
             secondary_frame, text="New Object", style="Nav.TButton",
             command=self.add_new_object)
         self.toolbar_buttons['New Object'].pack(side="left", padx=2)
+        self.add_tooltip(self.toolbar_buttons['New Object'], "Create a new museum object (Ctrl+N)")
 
         self.toolbar_buttons['Images'] = ttk.Button(
             secondary_frame, text="Images", style="Nav.TButton",
             command=self.open_image_menu)
         self.toolbar_buttons['Images'].pack(side="left", padx=1)
+        self.add_tooltip(self.toolbar_buttons['Images'], "Manage images for current object")
 
 
 
