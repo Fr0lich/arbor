@@ -6,37 +6,7 @@ from config import AUTOSAVE_INTERVAL_MS, AUTOSAVE_SUFFIX, sc
 from utils import debug_error
 
 class AutosaveMixin:
-    def open_autosave_settings(self):
-        """Let the user configure the autosave interval (takes effect immediately)."""
-        import config as _cfg
-        win = tk.Toplevel(self.root)
-        win.title("Autosave Settings")
-        import utils
-        utils.center_and_fit_toplevel(win, 300, 150)
-        win.resizable(False, False)
-        win.grab_set()
-
-        frame = ttk.Frame(win, padding=15)
-        frame.pack(fill="both", expand=True)
-
-        current_minutes = _cfg.AUTOSAVE_INTERVAL_MS // 60000
-        ttk.Label(frame, text="Autosave every (minutes):").pack(anchor="w")
-        var = tk.IntVar(value=current_minutes)
-        spin = ttk.Spinbox(frame, from_=1, to=60, textvariable=var, width=8)
-        spin.pack(anchor="w", pady=6)
-        ttk.Label(frame, text="(1-60 minutes)", foreground="gray").pack(anchor="w")
-
-        def _apply():
-            mins = max(1, min(60, var.get()))
-            _cfg.AUTOSAVE_INTERVAL_MS = mins * 60 * 1000
-            # Cancel current scheduled job and reschedule with new interval
-            if self._autosave_job:
-                self.root.after_cancel(self._autosave_job)
-                self._autosave_job = None
-            self._schedule_autosave()
-            win.destroy()
-
-        ttk.Button(frame, text="Apply", command=_apply).pack(pady=(8, 0))
+    # open_autosave_settings has been replaced by the unified open_settings_window in main_window.py
 
 
     def _write_pickle_async(self, path, callback=None):
@@ -103,7 +73,7 @@ class AutosaveMixin:
                 pass
             self._autosave_job = None
         self._autosave_job = self.root.after(
-            AUTOSAVE_INTERVAL_MS,
+            config.AUTOSAVE_INTERVAL_MS,
             self._autosave_tick
         )
 

@@ -1654,17 +1654,12 @@ class ObjectProgramUI(
         # SETTINGS
         settings_menu = tk.Menu(menubar, tearoff=0)
         settings_menu.add_command(
-            label="Autosave interval...",
-            command=self.open_autosave_settings
+            label="Settings...",
+            command=self.open_settings_window
         )
         settings_menu.add_command(
             label="Configure Registration Tabs...",
             command=self.open_tab_config_editor
-        )
-        settings_menu.add_separator()
-        settings_menu.add_command(
-            label="UI Scale...",
-            command=self.open_ui_scale_settings
         )
         menubar.add_cascade(label="Settings", menu=settings_menu)
         self.menubar = menubar
@@ -2017,7 +2012,270 @@ class ObjectProgramUI(
         )
 
 
-    # def open_settings_window(self):
+    def open_settings_window(self):
+        if hasattr(self, "settings_window") and self.settings_window and self.settings_window.winfo_exists():
+            self.settings_window.lift()
+            self.settings_window.focus_force()
+            return
+
+        from config import sc
+        import utils
+        import config as _cfg
+
+        COLORS = {
+            "surface": "#f9f9f9",
+            "surface_dim": "#dadada",
+            "surface_container_low": "#f3f3f3",
+            "surface_container_highest": "#e2e2e2",
+            "on_surface": "#1a1c1c",
+            "on_surface_variant": "#444748",
+            "outline": "#747878",
+            "outline_variant": "#c4c7c7",
+            "primary": "#000000",
+            "on_primary": "#ffffff",
+            "secondary": "#3b6934",
+            "error": "#ba1a1a",
+            "botanical_green": "#3e7b3e",
+            "search_orange": "#d9480f",
+            "surface_tint": "#5f5e5e"
+        }
+
+        FONT_HEADLINE = ("Hanken Grotesk", sc(14), "bold")
+        FONT_LABEL = ("JetBrains Mono", sc(10), "bold")
+        FONT_DATA = ("JetBrains Mono", sc(11))
+
+        win = tk.Toplevel(self.root)
+        self.settings_window = win
+        win.title("Settings")
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.grab_set()
+
+        utils.center_and_fit_toplevel(win, sc(520), sc(420))
+
+        win.bind("<Destroy>", lambda e: setattr(self, "settings_window", None) if e.widget == win else None)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        main_container = tk.Frame(win, bg=COLORS["surface"], bd=0, highlightthickness=0)
+        main_container.pack(fill="both", expand=True)
+
+        header = tk.Frame(main_container, bg=COLORS["surface_container_low"], height=sc(56))
+        header.pack(fill="x", side="top")
+        header.pack_propagate(False)
+        tk.Frame(header, bg=COLORS["outline"], height=1).pack(fill="x", side="bottom")
+
+        left_header = tk.Frame(header, bg=COLORS["surface_container_low"])
+        left_header.pack(side="left", fill="y", padx=sc(16))
+        tk.Label(left_header, text="Settings", font=FONT_HEADLINE, fg=COLORS["primary"], bg=COLORS["surface_container_low"]).pack(side="left", pady=sc(12))
+
+        tab_nav = tk.Frame(main_container, bg=COLORS["surface_container_highest"], height=sc(40))
+        tab_nav.pack(fill="x", side="top")
+        tk.Frame(tab_nav, bg=COLORS["outline"], height=1).pack(fill="x", side="bottom")
+
+        tab_content_area = tk.Frame(main_container, bg=COLORS["surface"])
+        tab_content_area.pack(fill="both", expand=True)
+
+        settings_tabs = {}
+        settings_tab_buttons = {}
+
+        def show_tab(tab_name):
+            for name, frame in settings_tabs.items():
+                frame.pack_forget()
+            settings_tabs[tab_name].pack(fill="both", expand=True)
+
+            for name, btn_tuple in settings_tab_buttons.items():
+                btn, border = btn_tuple
+                if name == tab_name:
+                    btn.config(fg=COLORS["primary"], bg=COLORS["surface"])
+                    border.config(bg=COLORS["primary"])
+                else:
+                    btn.config(fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"])
+                    border.config(bg=COLORS["outline"])
+
+        def create_tab_btn(name, label):
+            btn_frame = tk.Frame(tab_nav, bg=COLORS["surface_container_highest"])
+            btn_frame.pack(side="left", fill="y")
+
+            tk.Frame(btn_frame, bg=COLORS["outline"], width=1).pack(side="right", fill="y")
+            bottom_border = tk.Frame(btn_frame, bg=COLORS["outline"], height=2)
+            bottom_border.pack(side="bottom", fill="x")
+
+            btn = tk.Button(btn_frame, text=label, font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"], bd=0, relief="flat", padx=sc(16), cursor="hand2", command=lambda n=name: show_tab(n))
+            btn.pack(side="top", fill="both", expand=True)
+            settings_tab_buttons[name] = (btn, bottom_border)
+
+        create_tab_btn("general", "General")
+        create_tab_btn("appearance", "Appearance")
+
+        def create_group(parent, title):
+            group = tk.Frame(parent, bg=COLORS["surface"], highlightbackground=COLORS["outline"], highlightthickness=1)
+            group.pack(fill="x", pady=(0, sc(12)))
+            tk.Label(group, text=title.upper(), font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", padx=sc(12), pady=(sc(12), sc(6)))
+            content = tk.Frame(group, bg=COLORS["surface"])
+            content.pack(fill="x", padx=sc(12), pady=(0, sc(12)))
+            return content
+
+        # TAB 1: GENERAL
+        tab_general = tk.Frame(tab_content_area, bg=COLORS["surface"])
+        settings_tabs["general"] = tab_general
+
+        general_inner = tk.Frame(tab_general, bg=COLORS["surface"])
+        general_inner.pack(fill="both", expand=True, padx=sc(16), pady=sc(16))
+
+        g_autosave = create_group(general_inner, "Autosave Settings")
+        f_auto = tk.Frame(g_autosave, bg=COLORS["surface"])
+        f_auto.pack(fill="x", pady=sc(4))
+
+        tk.Label(f_auto, text="Autosave every (minutes):", font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"]).pack(side="left")
+
+        current_minutes = _cfg.AUTOSAVE_INTERVAL_MS // 60000
+        autosave_var = tk.StringVar(value=str(current_minutes))
+
+        spin_frame = tk.Frame(f_auto, bg=COLORS["surface"], highlightbackground=COLORS["outline"], highlightthickness=1)
+        spin_frame.pack(side="left", padx=sc(12))
+
+        spin = ttk.Spinbox(spin_frame, from_=1, to=60, textvariable=autosave_var, width=6, font=FONT_DATA)
+        spin.pack(padx=sc(2), pady=sc(2))
+
+        tk.Label(g_autosave, text="Note: Saves are done atomically using background pickles.", font=("Segoe UI", sc(9)), fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", pady=(sc(6), 0))
+
+        g_system = create_group(general_inner, "System Guidance")
+        f_tutorial = tk.Frame(g_system, bg=COLORS["surface"])
+        f_tutorial.pack(fill="x", pady=sc(4))
+
+        prefs = _cfg.load_prefs()
+        disable_tutorials = prefs.get("disable_tutorials", False)
+        tutorials_var = tk.BooleanVar(value=not disable_tutorials)
+
+        chk_frame = tk.Frame(f_tutorial, bg=COLORS["surface"])
+        chk_frame.pack(fill="x", pady=sc(2))
+        chk = tk.Checkbutton(chk_frame, variable=tutorials_var, bg=COLORS["surface"], activebackground=COLORS["surface"], bd=0, highlightthickness=0)
+        chk.pack(side="left")
+
+        tk.Label(chk_frame, text="Enable Interactive Tutorials", font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"]).pack(side="left", padx=sc(8))
+
+        tk.Label(g_system, text="Disabling tutorials stops workflow wizards and guidance banners.", font=("Segoe UI", sc(9)), fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", pady=(sc(6), 0))
+
+        # TAB 2: APPEARANCE
+        tab_appearance = tk.Frame(tab_content_area, bg=COLORS["surface"])
+        settings_tabs["appearance"] = tab_appearance
+
+        appearance_inner = tk.Frame(tab_appearance, bg=COLORS["surface"])
+        appearance_inner.pack(fill="both", expand=True, padx=sc(16), pady=sc(16))
+
+        g_scaling = create_group(appearance_inner, "Interface Scaling")
+
+        detected_scale = getattr(_cfg, "_detected_scale", 1.0)
+        current_scale = prefs.get("ui_scale", _cfg.UI_SCALE)
+
+        lbl_info = tk.Label(g_scaling, text=f"DPI Ratio Detected: {detected_scale:.0%}   |   Active Scale: {current_scale:.0%}", font=FONT_LABEL, fg=COLORS["secondary"], bg=COLORS["surface"])
+        lbl_info.pack(anchor="w", pady=(0, sc(8)))
+
+        scale_var = tk.DoubleVar(value=current_scale)
+
+        options = [0.75, 0.90, 1.0, 1.10, 1.25, 1.50]
+        labels = [
+            "75%    very compact",
+            "90%    compact",
+            "100%   default (rec.)",
+            "110%   slightly larger",
+            "125%   large",
+            "150%   very large"
+        ]
+
+        radio_container = tk.Frame(g_scaling, bg=COLORS["surface"])
+        radio_container.pack(fill="x", pady=sc(4))
+
+        col1 = tk.Frame(radio_container, bg=COLORS["surface"])
+        col1.pack(side="left", expand=True, fill="both")
+        col2 = tk.Frame(radio_container, bg=COLORS["surface"])
+        col2.pack(side="left", expand=True, fill="both")
+
+        for idx, (val, lbl) in enumerate(zip(options, labels)):
+            target_col = col1 if idx < 3 else col2
+            f_rad = tk.Frame(target_col, bg=COLORS["surface"])
+            f_rad.pack(fill="x", pady=sc(2))
+
+            rad = tk.Radiobutton(f_rad, variable=scale_var, value=val, bg=COLORS["surface"], activebackground=COLORS["surface"], bd=0, highlightthickness=0)
+            rad.pack(side="left")
+
+            lbl_rad = tk.Label(f_rad, text=lbl, font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"])
+            lbl_rad.pack(side="left", padx=sc(8))
+
+        lbl_warning = tk.Label(g_scaling, text="⚠ Changes to UI Scale require a restart of Arbor to take full effect.", font=("Segoe UI", sc(9), "bold"), fg=COLORS["search_orange"], bg=COLORS["surface"])
+        lbl_warning.pack(anchor="w", pady=(sc(10), 0))
+
+        # Footer Action Bar
+        footer = tk.Frame(main_container, bg=COLORS["surface_container_low"], height=sc(56))
+        footer.pack(fill="x", side="bottom")
+        footer.pack_propagate(False)
+        tk.Frame(footer, bg=COLORS["outline"], height=1).pack(fill="x", side="top")
+
+        right_footer = tk.Frame(footer, bg=COLORS["surface_container_low"])
+        right_footer.pack(side="right", fill="y", padx=sc(16))
+
+        tk.Button(right_footer, text="Cancel", font=FONT_LABEL, fg=COLORS["on_surface"], bg=COLORS["surface"], bd=1, relief="solid", padx=sc(16), pady=sc(4), cursor="hand2", command=win.destroy).pack(side="left", padx=sc(8), pady=sc(12))
+
+        def _save_settings():
+            try:
+                mins = int(autosave_var.get())
+                if mins < 1 or mins > 60:
+                    raise ValueError()
+            except ValueError:
+                messagebox.showerror("Error", "Autosave interval must be a number between 1 and 60 minutes.", parent=win)
+                return
+
+            prefs = _cfg.load_prefs() or {}
+
+            old_autosave_ms = _cfg.AUTOSAVE_INTERVAL_MS
+            new_autosave_ms = mins * 60 * 1000
+
+            old_disable_tutorials = prefs.get("disable_tutorials", False)
+            new_disable_tutorials = not tutorials_var.get()
+
+            old_ui_scale = prefs.get("ui_scale", _cfg.UI_SCALE)
+            new_ui_scale = scale_var.get()
+
+            scale_changed = (new_ui_scale != old_ui_scale)
+
+            # Apply immediate actions:
+            if new_autosave_ms != old_autosave_ms:
+                _cfg.AUTOSAVE_INTERVAL_MS = new_autosave_ms
+                if getattr(self, "_autosave_job", None):
+                    try:
+                        self.root.after_cancel(self._autosave_job)
+                    except:
+                        pass
+                    self._autosave_job = None
+                if hasattr(self, "_schedule_autosave"):
+                    self._schedule_autosave()
+
+            if new_disable_tutorials != old_disable_tutorials:
+                prefs["disable_tutorials"] = new_disable_tutorials
+                if new_disable_tutorials:
+                    from ui.tutorial import TutorialManager
+                    try:
+                        TutorialManager().close_tutorial()
+                    except:
+                        pass
+
+            if scale_changed:
+                prefs["ui_scale"] = new_ui_scale
+                prefs["user_set"] = True
+
+            prefs["autosave_interval"] = mins
+            _cfg.save_prefs(prefs)
+
+            win.destroy()
+
+            if scale_changed:
+                messagebox.showinfo("Restart Required", "UI Scale changes will take effect after restarting the application.", parent=self.root)
+
+        apply_btn = tk.Button(right_footer, text="Save Settings  |  Ctrl+Enter", font=FONT_LABEL, fg=COLORS["on_primary"], bg=COLORS["botanical_green"], bd=0, relief="flat", padx=sc(16), pady=sc(4), cursor="hand2", command=_save_settings)
+        apply_btn.pack(side="left", pady=sc(12))
+
+        win.bind("<Control-Return>", lambda e: _save_settings())
+        show_tab("general")
 
 
 
@@ -2424,103 +2682,6 @@ class ObjectProgramUI(
 
 
 #--- autosave
-
-
-    def open_ui_scale_settings(self):
-        """Let the user choose a UI scale factor. Saved to user_prefs.json; requires restart."""
-        import config as _cfg
-        import json
-
-        prefs_path = _cfg._PREFS_PATH
-
-
-        # Load current prefs
-        try:
-            with open(prefs_path, "r", encoding="utf-8") as f:
-                prefs = json.load(f)
-        except Exception:
-            prefs = {}
-
-        current_scale = prefs.get("ui_scale", _cfg.UI_SCALE)
-        detected = getattr(_cfg, "_detected_scale", 1.0)
-
-        win = tk.Toplevel(self.root)
-        win.title("UI Scale")
-        # No hardcoded geometry  let Tkinter size to fit contents on any screen
-        win.resizable(True, True)
-        win.grab_set()
-
-        frame = ttk.Frame(win, padding=20)
-        frame.pack(fill="both", expand=True)
-
-        ttk.Label(
-            frame,
-            text="UI Scale  (font & widget size)",
-            font=("Segoe UI", sc(11), "bold")
-        ).pack(anchor="w", pady=(0, 4))
-
-        ttk.Label(
-            frame,
-            text=(
-                f"Screen DPI ratio detected: {detected:.0%}\n"
-                f"Currently active: {current_scale:.0%}\n"
-                f"Changes take effect after restarting the application."
-            ),
-            foreground="gray",
-            justify="left"
-        ).pack(anchor="w", pady=(0, 12))
-
-        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 10))
-
-        options = [0.75, 0.90, 1.0, 1.10, 1.25]
-        labels  = [
-            "75%    very compact",
-            "90%    compact",
-            "100%   default (recommended)",
-            "110%   slightly larger",
-            "125%   large",
-        ]
-
-        scale_var = tk.DoubleVar(value=current_scale)
-
-        for val, lbl in zip(options, labels):
-            ttk.Radiobutton(
-                frame,
-                text=lbl,
-                variable=scale_var,
-                value=val
-            ).pack(anchor="w", pady=2)
-
-        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(12, 0))
-
-        btn_frame = ttk.Frame(frame)
-        btn_frame.pack(fill="x", pady=(8, 0))
-
-        def _apply():
-            chosen = scale_var.get()
-            prefs["ui_scale"] = chosen
-            prefs["user_set"] = True   # mark as explicit user choice
-            try:
-                with open(prefs_path, "w", encoding="utf-8") as f:
-                    json.dump(prefs, f, indent=2)
-            except Exception as e:
-                messagebox.showerror("Error", f"Could not save preferences:\n{e}")
-                return
-            win.destroy()
-            messagebox.showinfo(
-                "Restart required",
-                f"UI Scale set to {chosen:.0%}.\n\nPlease restart the application for the change to take effect."
-            )
-
-        ttk.Button(btn_frame, text="Apply", command=_apply, width=10).pack(side="right", padx=(6, 0))
-        ttk.Button(btn_frame, text="Cancel", command=win.destroy, width=10).pack(side="left")
-
-        # Let Tk calculate the required size, then lock it
-        win.update_idletasks()
-        win.minsize(win.winfo_reqwidth() + 20, win.winfo_reqheight() + 10)
-
-
-
 
 
     def open_tab_config_editor(self):
