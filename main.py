@@ -172,6 +172,12 @@ if __name__ == "__main__":
 
         prefs = config.load_prefs()
 
+        if "autosave_interval" in prefs:
+            try:
+                config.AUTOSAVE_INTERVAL_MS = int(prefs["autosave_interval"]) * 60 * 1000
+            except Exception:
+                pass
+
         if "custom_databases" in prefs:
             config.DATABASE_CONFIGS.update(prefs["custom_databases"])
 
