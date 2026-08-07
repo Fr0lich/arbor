@@ -22,8 +22,8 @@ class HistoricalSuggestionsMixin:
 
                 if isinstance(rows, pd.DataFrame):
                     # Handle duplicate rows with same ObjectID by gathering all unique column values across rows
-                    for _, row in rows.iterrows():
-                        for col, val in row.items():
+                    for row in rows.itertuples(index=False, name=None):
+                        for col, val in zip(rows.columns, row):
                             if pd.notna(val):
                                 val_str = str(val).strip()
                                 if val_str and val_str != "nan":
