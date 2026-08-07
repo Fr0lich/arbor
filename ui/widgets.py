@@ -6,12 +6,17 @@ class ToggleSwitch(tk.Canvas):
         from config import sc
         scaled_w = sc(width) if ui_ref else width
         scaled_h = sc(height) if ui_ref else height
+        kwargs.setdefault('takefocus', 1)
         super().__init__(parent, width=scaled_w, height=scaled_h, highlightthickness=0, bd=0, **kwargs)
         self.variable = variable
         self.command = command
         self.ui_ref = ui_ref
 
         self.bind("<Button-1>", self._on_click)
+        self.bind("<space>", self._on_click)
+        self.bind("<Return>", self._on_click)
+        self.bind("<FocusIn>", lambda e: self.draw())
+        self.bind("<FocusOut>", lambda e: self.draw())
         self.bind("<Configure>", lambda e: self.draw())
         self._trace_id = self.variable.trace_add("write", lambda *args: self.draw())
 
@@ -71,6 +76,10 @@ class ToggleSwitch(tk.Canvas):
             knob_color = fg_knob_inactive
 
         self.create_rectangle(x, pad, x + knob_size, pad + knob_size, fill=knob_color, outline="")
+
+        if self.focus_get() == self:
+            focus_color = "#4dabf7" if is_dark else "#0058a3"
+            self.create_rectangle(0, 0, w-1, h-1, outline=focus_color, width=2, dash=(2, 2))
 
     def destroy(self):
         try:
