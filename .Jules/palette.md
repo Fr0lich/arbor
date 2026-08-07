@@ -11,3 +11,7 @@
 ## 2025-08-03 - [Structured Cards and Auto-Advance Workflow Enhancements]
 **Learning:** Dividing large, flat metadata lists into themed, visually distinct card containers with icons improves visual grouping, layout structure, and cognitive scanning for audit operators. Combining this with an "Auto-next after review" option in the sticky action bar makes record processing extremely fast and fluid by automating navigation between items upon successful mark.
 **Action:** Implement scrollable canvas views for card sections with distinct header icons/typography and automatic card-level visibility toggles in compact or Focus views.
+
+## 2024-05-18 - [Delayed Tooltips over Instant Tooltips]
+**Learning:** Instant tooltips without delays cause severe flickering and visual noise when hovering across dense toolbars or status icons, degrading the desktop application experience. Unstyled, system-default tooltips also break visual immersion, especially in dark mode.
+**Action:** Always implement a ~500ms delay for tooltips and ensure they adapt to the application's theme (light/dark mode) using standard UI background and border colors.
