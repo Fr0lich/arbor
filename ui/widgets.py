@@ -1,6 +1,16 @@
 import tkinter as tk
 from tkinter import ttk
 
+def create_toggle_row(parent, label_text, var, command=None, ui_ref=None):
+    from config import sc
+    row = ttk.Frame(parent)
+    row.pack(fill="x", pady=sc(4))
+    lbl = ttk.Label(row, text=label_text)
+    lbl.pack(side="left", anchor="w")
+    sw = ToggleSwitch(row, var, command=command, ui_ref=ui_ref)
+    sw.pack(side="right")
+    return row
+
 class ToggleSwitch(tk.Canvas):
     def __init__(self, parent, variable, command=None, width=42, height=22, ui_ref=None, **kwargs):
         from config import sc
