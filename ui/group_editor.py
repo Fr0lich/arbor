@@ -650,3 +650,54 @@ class GroupEditorWindow:
             
         self.groups[g_idx]["fields"].pop(f_idx)
         self.on_tab_select(None)
+
+
+class FieldGroupEditorDialog(GroupEditorWindow):
+    def __init__(self, parent, all_fields, current_groups, on_save, app=None):
+        self.parent = parent
+        self.on_save_callback = on_save
+
+        if app is not None:
+            self.app = app
+        else:
+            class DummyApp:
+                def __init__(self, fields):
+                    self.config = {
+                        "ui_sections": {
+                            "registration": [{"name": f, "type": "text"} for f in fields]
+                        }
+                    }
+            self.app = DummyApp(all_fields)
+
+        import copy
+        self.groups = copy.deepcopy(current_groups)
+
+        # Ensure Miscellaneous exists if needed
+        assigned_fields = set()
+        for g in self.groups:
+            assigned_fields.update(g.get("fields", []))
+
+        misc = [f for f in all_fields if f not in assigned_fields]
+        if misc:
+            # Check if Miscellaneous is already in groups
+            if not any(g["name"] == "Miscellaneous" for g in self.groups):
+                self.groups.append({"name": "Miscellaneous", "fields": misc})
+
+        self.win = tk.Toplevel(parent)
+        self.win.title("Configure Field Groups")
+        self.win.configure(bg="#f9f9f9")
+        self.win.bind("<Escape>", lambda e: self.win.destroy())
+        self.win.transient(parent)
+
+        self.setup_styles()
+        self._build_ui()
+
+        import utils
+        utils.center_and_fit_toplevel(self.win, sc(640), sc(480))
+
+        self.refresh_tabs_list()
+
+    def save_settings(self):
+        if self.on_save_callback:
+            self.on_save_callback(self.groups)
+        self.win.destroy()
