@@ -1505,19 +1505,64 @@ class ObjectProgramUI(
 
 #----- tool tips
 
+class ToolTipManager:
+    def __init__(self, delay=500):
+        self.delay = delay
+        self._id = None
+        self.tooltip = None
+
+    def enter(self, w, t, is_dark, e):
+        self.schedule(w, t, is_dark, e)
+
+    def leave(self, w, e):
+        self.unschedule(w)
+        self.hide()
+
+    def schedule(self, w, t, is_dark, e):
+        self.unschedule(w)
+        x = e.x_root + 15
+        y = e.y_root + 15
+        self._id = w.after(self.delay, lambda: self.show(w, t, is_dark, x, y))
+
+    def unschedule(self, w):
+        if self._id:
+            w.after_cancel(self._id)
+            self._id = None
+
+    def show(self, w, t, is_dark, x, y):
+        self.hide()
+        self.tooltip = tk.Toplevel(w)
+        self.tooltip.wm_overrideredirect(True)
+        self.tooltip.wm_geometry(f"+{x}+{y}")
+
+        from config import sc
+        bg_col = "#1e1e2d" if is_dark else "#f3f3f3"
+        fg_col = "#ffffff" if is_dark else "#000000"
+        border_col = "#444748" if is_dark else "#cccccc"
+
+        lbl = tk.Label(self.tooltip, text=t,
+                       background=bg_col, foreground=fg_col,
+                       font=("Inter", sc(9)),
+                       padx=sc(6), pady=sc(4),
+                       borderwidth=1, relief="solid", highlightbackground=border_col)
+        lbl.pack()
+
+    def hide(self):
+        if self.tooltip:
+            try:
+                self.tooltip.destroy()
+            except tk.TclError:
+                pass
+            self.tooltip = None
+
     def add_tooltip(self, widget, text):
-        def enter(e):
-            widget.tooltip = tk.Toplevel(widget)
-            widget.tooltip.wm_overrideredirect(True)
-            widget.tooltip.wm_geometry(f"+{e.x_root+10}+{e.y_root+10}")
-            tk.Label(widget.tooltip, text=text, background="yellow").pack()
+        if not hasattr(self, "_tooltip_manager"):
+            self._tooltip_manager = ToolTipManager()
 
-        def leave(e):
-            if hasattr(widget, "tooltip"):
-                widget.tooltip.destroy()
-
-        widget.bind("<Enter>", enter)
-        widget.bind("<Leave>", leave)
+        is_dark = getattr(self, "dark_mode_active", False)
+        widget.bind("<Enter>", lambda e, w=widget, t=text, d=is_dark: self._tooltip_manager.enter(w, t, d, e))
+        widget.bind("<Leave>", lambda e, w=widget: self._tooltip_manager.leave(w, e))
+        widget.bind("<ButtonPress>", lambda e, w=widget: self._tooltip_manager.leave(w, e), add="+")
 
 #---- Menu
 
