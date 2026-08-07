@@ -3241,9 +3241,9 @@ class ObjectProgramUI(
 
 
 
-        # DATA — active state indicator (current view, no command)
+        # DATA — opens data menu
         btn_dat = _nav_btn(nav_links_frame, "DATA",   self.open_advanced_menu)
-        self.add_tooltip(btn_, "Load earlier databases")
+        self.add_tooltip(btn_dat, "Load earlier databases")
 
         # IMAGES — jump to next problem
         btn_img = _nav_btn(nav_links_frame, "IMAGES", self.open_image_menu)
@@ -4046,7 +4046,6 @@ class ObjectProgramUI(
         self.commit_current_object()
 
 
---
 
 
     def open_advanced_menu(self):
