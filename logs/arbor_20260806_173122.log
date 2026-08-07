@@ -1,0 +1,53 @@
+[2026-08-06 17:31:59] [ERROR] Unhandled callback exception — TclError: unknown option "-style"
+Traceback (most recent call last):
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1921, in __call__
+    return self.func(*args)
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 839, in callit
+    func(*args)
+  File "C:\Users\johan\Desktop\9\1\arbor-main\arbor-main\ui\main_window.py", line 7787, in _validate_fields
+    self.reg_entries["Species"].configure(style="Normal.TEntry")
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1675, in configure
+    return self._configure('configure', cnf, kw)
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1665, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: unknown option "-style"
+
+────────────────────────────────────────────────────────────────────────────────
+[2026-08-06 17:31:59] [ERROR] Unhandled callback exception — TclError: unknown option "-style"
+Traceback (most recent call last):
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1921, in __call__
+    return self.func(*args)
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 839, in callit
+    func(*args)
+  File "C:\Users\johan\Desktop\9\1\arbor-main\arbor-main\ui\main_window.py", line 7787, in _validate_fields
+    self.reg_entries["Species"].configure(style="Normal.TEntry")
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1675, in configure
+    return self._configure('configure', cnf, kw)
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1665, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: unknown option "-style"
+
+────────────────────────────────────────────────────────────────────────────────
+[2026-08-06 17:33:17] [ERROR] Unhandled callback exception — TclError: unknown option "-fg"
+Traceback (most recent call last):
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1921, in __call__
+    return self.func(*args)
+  File "C:\Users\johan\Desktop\9\1\arbor-main\arbor-main\ui\historical_suggestions.py", line 203, in open_historical_suggestions
+    HistoricalConflictResolverWindow(self, oid, suggestions)
+  File "C:\Users\johan\Desktop\9\1\arbor-main\arbor-main\ui\historical_resolver.py", line 67, in __init__
+    self.build_ui()
+  File "C:\Users\johan\Desktop\9\1\arbor-main\arbor-main\ui\historical_resolver.py", line 204, in build_ui
+    self.update_stats()
+  File "C:\Users\johan\Desktop\9\1\arbor-main\arbor-main\ui\historical_resolver.py", line 419, in update_stats
+    f_frame.winfo_children()[1].configure(fg=COLORS["success"])
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1675, in configure
+    return self._configure('configure', cnf, kw)
+  File "C:\Users\johan\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1665, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: unknown option "-fg"
+
+────────────────────────────────────────────────────────────────────────────────
+
+════════════════════════════════════════════════════════════════════════════════
+SESSION ENDED — 2026-08-06 17:34:35
+════════════════════════════════════════════════════════════════════════════════

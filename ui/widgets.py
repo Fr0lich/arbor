@@ -272,23 +272,27 @@ class TreeviewListboxWrapper(ttk.Frame):
 
     def redraw_cards_highlights(self):
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-        bg_selected = "#e8f5e9" if not is_dark else "#3b4252"
-        border_selected = "#3b6934" if not is_dark else "#a6e3a1"
-        bg_normal = "#ffffff" if not is_dark else "#24273a"
-        border_normal = "#e0e0e0" if not is_dark else "#494d64"
+        bg_selected = "#ffffff" if not is_dark else "#2d3149"
+        accent_selected = "#2e6b30" if not is_dark else "#a6e3a1"
+        bg_normal = "#f3f3f3" if not is_dark else "#24273a"
 
         for oid in self.items_list:
             if oid in self.item_data:
-                card = self.item_data[oid].get("card_frame")
-                if card and card.winfo_exists():
+                card_body = self.item_data[oid].get("card_body")
+                accent_strip = self.item_data[oid].get("accent_strip")
+                accent_normal = self.item_data[oid].get("accent_color_normal", bg_normal)
+                if card_body and card_body.winfo_exists():
                     is_sel = oid in self.selected_iids
                     bg = bg_selected if is_sel else bg_normal
-                    bd = border_selected if is_sel else border_normal
-                    card.configure(bg=bg, highlightbackground=bd)
-                    self._set_bg_recursive(card, bg)
+                    self._set_bg_recursive(card_body, bg)
+                if accent_strip and accent_strip.winfo_exists():
+                    is_sel = oid in self.selected_iids
+                    accent_strip.configure(bg=accent_selected if is_sel else accent_normal)
 
     def _set_bg_recursive(self, widget, bg_color):
         if getattr(widget, "is_badge", False):
+            return
+        if getattr(widget, "is_accent_strip", False):
             return
         try:
             if not widget.winfo_exists():
@@ -306,15 +310,40 @@ class TreeviewListboxWrapper(ttk.Frame):
             self._set_bg_recursive(child, bg_color)
 
     def _on_card_click(self, oid, event=None):
+        """Single-click: select card and navigate to its object."""
         self.selected_iids = [oid]
         self.focused_iid = oid
-        self._sync_view_selections()
-        self.event_generate("<<ListboxSelect>>")
+        self.redraw_cards_highlights()
+        # Sync treeview selection silently — flag tells on_list_select not to
+        # double-navigate (it would also block on _is_searching if active).
+        self._card_driving_nav = True
+        try:
+            if set(self.tree.selection()) != set(self.selected_iids):
+                self.tree.selection_set(self.selected_iids)
+        except Exception:
+            pass
+        finally:
+            self._card_driving_nav = False
+        mw = self.main_window
+        # Commit unsaved edits on the previously loaded object
+        if hasattr(mw, "commit_current_object"):
+            mw.commit_current_object()
+        # Navigate directly – bypasses the _is_searching guard in on_list_select
+        if hasattr(mw, "_list_select_job") and mw._list_select_job:
+            try:
+                mw.root.after_cancel(mw._list_select_job)
+            except Exception:
+                pass
+        if hasattr(mw, "_deferred_list_select"):
+            mw._list_select_job = mw.root.after(
+                100, lambda o=oid: mw._deferred_list_select(o)
+            )
+        elif hasattr(mw, "load_object"):
+            mw.root.after(100, lambda o=oid: mw.load_object(o))
 
     def _on_card_double_click(self, oid, event):
+        # Single-click already handles full navigation; just replay it.
         self._on_card_click(oid, event)
-        if hasattr(self.main_window, "_on_list_double_click"):
-            self.main_window._on_list_double_click(event)
 
     def _on_checkbox_click(self, oid, event):
         self.main_window._toggle_reviewed_for_id(oid)
@@ -466,85 +495,37 @@ class TreeviewListboxWrapper(ttk.Frame):
             self._apply_tags_to_card(oid)
             if oid in self.selected_iids:
                 is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-                bg_selected = "#e8f5e9" if not is_dark else "#3b4252"
-                border_selected = "#3b6934" if not is_dark else "#a6e3a1"
-                card.configure(bg=bg_selected, highlightbackground=border_selected)
-                self._set_bg_recursive(card, bg_selected)
+                bg_selected = "#ffffff" if not is_dark else "#2d3149"
+                accent_selected = "#2e6b30" if not is_dark else "#a6e3a1"
+                card_body = self.item_data[oid].get("card_body")
+                accent_strip = self.item_data[oid].get("accent_strip")
+                if card_body and card_body.winfo_exists():
+                    self._set_bg_recursive(card_body, bg_selected)
+                if accent_strip and accent_strip.winfo_exists():
+                    accent_strip.configure(bg=accent_selected)
 
 
     def _create_card_widget(self, oid, parent):
         from config import sc
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
 
-        bg_color = "#ffffff" if not is_dark else "#24273a"
-        border_color = "#e0e0e0" if not is_dark else "#494d64"
-        text_color = "#000000" if not is_dark else "#cad3f5"
-        sec_text_color = "#6c757d" if not is_dark else "#a5adcb"
+        # Color tokens
+        canvas_bg      = "#1e1e2e" if is_dark else "#f9f9f9"
+        card_bg        = "#24273a" if is_dark else "#f3f3f3"
+        text_primary   = "#cad3f5" if is_dark else "#1a1c1c"
+        text_secondary = "#a5adcb" if is_dark else "#4c4546"
+        family_color   = "#a6e3a1" if is_dark else "#2e6b30"
 
-        card = tk.Frame(
-            parent,
-            bg=bg_color,
-            highlightthickness=1,
-            highlightbackground=border_color,
-            bd=0,
-            padx=sc(6),
-            pady=sc(6)
-        )
-        card.pack(fill="x", padx=sc(4), pady=sc(3))
-        self.item_data[oid]["card_frame"] = card
-
+        # Data
         obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else {}
         reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else {}
-        obs_row = obs_dict.get(oid, {})
-        reg_row = reg_dict.get(oid, {})
+        obs_row  = obs_dict.get(oid, {})
+        reg_row  = reg_dict.get(oid, {})
 
-        # --- Top Line Frame ---
-        top_line = tk.Frame(card, bg=bg_color)
-        top_line.pack(fill="x", anchor="w")
-
-        reviewed = self.item_data[oid].get("reviewed", False)
-        rev_char = "☑" if reviewed else "☐"
-        cb_color = "#28a745" if reviewed else sec_text_color
-
-        cb_lbl = tk.Label(
-            top_line,
-            text=rev_char,
-            bg=bg_color,
-            fg=cb_color,
-            font=("Segoe UI", sc(11), "bold"),
-            cursor="hand2"
-        )
-        cb_lbl.pack(side="left", padx=(0, sc(4)))
-        cb_lbl.bind("<Button-1>", lambda e, o=oid: self._on_checkbox_click(o, e))
-        self.item_data[oid]["cb_label"] = cb_lbl
-
-        genus = reg_row.get("Genus", "")
-        species = reg_row.get("Species", "")
-        tax_text = f"{genus} {species}".strip()
-        if not tax_text:
-            tax_text = "Unknown Specimen"
-
-        tax_lbl = tk.Label(
-            top_line,
-            text=tax_text,
-            bg=bg_color,
-            fg=text_color,
-            font=("Segoe UI", sc(9), "italic bold"),
-            anchor="w"
-        )
-        tax_lbl.pack(side="left", padx=(0, sc(4)))
-        self.item_data[oid]["tax_label"] = tax_lbl
-
-        # Problem status badge (Amber)
         has_problem = self.main_window._get_cached_problem(oid) if hasattr(self.main_window, "_get_cached_problem") else False
-        if has_problem:
-            badge_bg = "#ffe0b2" if not is_dark else "#443622"
-            badge_fg = "#e65100" if not is_dark else "#ffb74d"
-            badge_bd = "#ffb74d" if not is_dark else "#ffe0b2"
-            p_badge = self._create_badge(top_line, "Issue", badge_bg, badge_fg, badge_bd)
-            p_badge.pack(side="left", padx=sc(2))
+        has_history = self.main_window._has_history(oid) if hasattr(self.main_window, "_has_history") else False
+        reviewed    = self.item_data[oid].get("reviewed", False)
 
-        # Loaned out status badge (Blue)
         loaned = False
         loaned_raw = obs_row.get("Loaned out", False)
         if isinstance(loaned_raw, str):
@@ -552,31 +533,99 @@ class TreeviewListboxWrapper(ttk.Frame):
         else:
             loaned = bool(loaned_raw)
 
+        # Accent strip color (left 4px border)
+        if has_history:
+            accent_color = "#5ab0e8" if is_dark else "#0284C7"
+        elif has_problem:
+            accent_color = "#f28b82" if is_dark else "#C62828"
+        else:
+            accent_color = canvas_bg  # visually transparent
+
+        # Status badge
+        if has_history:
+            badge_label, badge_bg, badge_fg = "CFCT", "#0284C7", "#ffffff"
+        elif has_problem:
+            badge_label, badge_bg, badge_fg = "ERR",  "#C62828", "#ffffff"
+        elif reviewed:
+            badge_label, badge_bg, badge_fg = "OK",   "#2E7D32", "#ffffff"
+        else:
+            badge_label, badge_bg, badge_fg = "UKN",  "#FBC02D", "#1a1c1c"
+
+        # Outer container (canvas-colored so accent strip "floats")
+        outer_frame = tk.Frame(parent, bg=canvas_bg, bd=0, highlightthickness=0, cursor="hand2")
+        outer_frame.pack(fill="x", pady=sc(1))
+        self.item_data[oid]["card_frame"] = outer_frame
+
+        # 4px left accent strip
+        accent_strip = tk.Frame(outer_frame, bg=accent_color, width=sc(4), bd=0, highlightthickness=0)
+        accent_strip.pack(side="left", fill="y")
+        accent_strip.pack_propagate(False)
+        accent_strip.is_accent_strip = True
+        self.item_data[oid]["accent_strip"]        = accent_strip
+        self.item_data[oid]["accent_color_normal"] = accent_color
+
+        # Card body
+        card_body = tk.Frame(outer_frame, bg=card_bg, bd=0, highlightthickness=0,
+                             padx=sc(8), pady=sc(6), cursor="hand2")
+        card_body.pack(side="left", fill="both", expand=True)
+        self.item_data[oid]["card_body"] = card_body
+
+        # Row 1: checkbox · scientific name · status badge
+        row1 = tk.Frame(card_body, bg=card_bg)
+        row1.pack(fill="x", anchor="w")
+
+        rev_char = "☑" if reviewed else "☐"
+        cb_color = "#28a745" if reviewed else text_secondary
+        cb_lbl = tk.Label(row1, text=rev_char, bg=card_bg, fg=cb_color,
+                          font=("Segoe UI", sc(10), "bold"), cursor="hand2")
+        cb_lbl.pack(side="left", padx=(0, sc(4)))
+        cb_lbl.bind("<Button-1>", lambda e, o=oid: self._on_checkbox_click(o, e))
+        self.item_data[oid]["cb_label"] = cb_lbl
+
+        genus   = str(reg_row.get("Genus",   "") or "").strip()
+        species = str(reg_row.get("Species", "") or "").strip()
+        tax_text = f"{genus} {species}".strip() or "Unknown Specimen"
+
+        tax_lbl = tk.Label(row1, text=tax_text, bg=card_bg, fg=text_primary,
+                           font=("Georgia", sc(9), "italic bold"), anchor="w")
+        tax_lbl.pack(side="left", fill="x", expand=True, padx=(0, sc(4)))
+        self.item_data[oid]["tax_label"] = tax_lbl
+
+        s_badge = self._create_badge(row1, badge_label, badge_bg, badge_fg, badge_bg)
+        s_badge.pack(side="right", padx=(sc(2), 0))
+
         if loaned:
-            badge_bg = "#e3f2fd" if not is_dark else "#203040"
-            badge_fg = "#0d47a1" if not is_dark else "#64b5f6"
-            badge_bd = "#90caf9" if not is_dark else "#bbdefb"
-            l_badge = self._create_badge(top_line, "Loaned Out", badge_bg, badge_fg, badge_bd)
-            l_badge.pack(side="left", padx=sc(2))
+            l_bg = "#203040" if is_dark else "#e3f2fd"
+            l_fg = "#64b5f6" if is_dark else "#0d47a1"
+            l_bd = "#bbdefb" if is_dark else "#90caf9"
+            l_badge = self._create_badge(row1, "Loaned", l_bg, l_fg, l_bd)
+            l_badge.pack(side="right", padx=(sc(2), sc(2)))
 
-        # --- Middle Line Frame ---
-        mid_line = tk.Frame(card, bg=bg_color)
-        mid_line.pack(fill="x", anchor="w", pady=(sc(2), 0))
+        # Row 2: family · separator · catalog ID · photo count
+        row2 = tk.Frame(card_body, bg=card_bg)
+        row2.pack(fill="x", anchor="w", pady=(sc(3), 0))
 
-        truncated_id = oid.split("-")[-1]
-        id_lbl = tk.Label(
-            mid_line,
-            text=truncated_id,
-            bg=bg_color,
-            fg=text_color,
-            font=("Segoe UI", sc(9), "bold")
-        )
-        id_lbl.pack(side="left", padx=(sc(16), sc(8)))
+        family = str(reg_row.get("Family", "") or "").strip()
+        if family in ("nan", "None"):
+            family = ""
+
+        left_pad = sc(18)
+        if family:
+            fam_lbl = tk.Label(row2, text=family.upper(), bg=card_bg, fg=family_color,
+                               font=("Segoe UI", sc(8), "bold"), anchor="w")
+            fam_lbl.pack(side="left", padx=(left_pad, 0))
+            sep_lbl = tk.Label(row2, text="•", bg=card_bg, fg=text_secondary,
+                               font=("Segoe UI", sc(8)))
+            sep_lbl.pack(side="left", padx=sc(3))
+            id_pad = 0
+        else:
+            id_pad = left_pad
+
+        id_lbl = tk.Label(row2, text=oid, bg=card_bg, fg=text_primary,
+                          font=("Consolas", sc(8)))
+        id_lbl.pack(side="left", padx=(id_pad, 0))
         self.item_data[oid]["id_label"] = id_lbl
 
-        # Photo count — use the pre-built photo count dict if available.
-        # _precompute_startup_caches() builds _cached_photo_counts on the background
-        # thread so this is typically O(1). Falls back to computing on demand.
         photo_count = 0
         if self.main_window.app.df_photo is not None:
             if not hasattr(self.main_window, "_cached_photo_counts") or self.main_window._cached_photo_counts is None:
@@ -586,110 +635,99 @@ class TreeviewListboxWrapper(ttk.Frame):
                 else:
                     self.main_window._cached_photo_counts = {}
             photo_count = self.main_window._cached_photo_counts.get(oid, 0)
-
-        local_count = 0
         if hasattr(self.main_window, "image_index"):
-            local_count = len(self.main_window.image_index.get(oid, []))
+            photo_count = max(photo_count, len(self.main_window.image_index.get(oid, [])))
 
-        photo_count = max(local_count, photo_count)
+        photo_lbl = tk.Label(row2, text=f"\U0001f4f7 {photo_count}", bg=card_bg, fg=text_secondary,
+                             font=("Segoe UI", sc(8)))
+        photo_lbl.pack(side="right", padx=(sc(4), 0))
 
-        photo_lbl = tk.Label(
-            mid_line,
-            text=f"📷 {photo_count} photo{'s' if photo_count != 1 else ''}",
-            bg=bg_color,
-            fg=sec_text_color,
-            font=("Segoe UI", sc(8))
-        )
-        photo_lbl.pack(side="left")
+        # Row 3: location
+        row3 = tk.Frame(card_body, bg=card_bg)
+        row3.pack(fill="x", anchor="w", pady=(sc(2), 0))
 
-        # --- Bottom Line Frame ---
-        bot_line = tk.Frame(card, bg=bg_color)
-        bot_line.pack(fill="x", anchor="w", pady=(sc(2), 0))
+        def _clean(v):
+            s = str(v).strip()
+            return "" if s in ("nan", "None", "") else s
 
-        building = str(obs_row.get("Building", "")).strip()
-        floor = str(obs_row.get("Floor", "")).strip()
-        extra = str(obs_row.get("Extra", "")).strip()
-        stored_as = str(obs_row.get("Stored as", "")).strip()
-        cabinet = str(obs_row.get("Cabinet", "")).strip()
-
-        if building in ("nan", "None"): building = ""
-        if floor in ("nan", "None"): floor = ""
-        if extra in ("nan", "None"): extra = ""
-        if stored_as in ("nan", "None"): stored_as = ""
-        if cabinet in ("nan", "None"): cabinet = ""
-
-        parts = []
-        if floor:
-            parts.append(f"Floor {floor}")
-        if extra:
-            parts.append(extra)
-        floor_room = ", ".join(parts) if parts else ""
-
-        parts_stored = []
-        if stored_as:
-            parts_stored.append(stored_as)
-        if cabinet:
-            parts_stored.append(f"Cab {cabinet}")
-        stored_as_val = " / ".join(parts_stored) if parts_stored else ""
+        building  = _clean(obs_row.get("Building",  ""))
+        floor     = _clean(obs_row.get("Floor",     ""))
+        extra     = _clean(obs_row.get("Extra",     ""))
+        stored_as = _clean(obs_row.get("Stored as", ""))
+        cabinet   = _clean(obs_row.get("Cabinet",   ""))
 
         loc_parts = []
-        if building:
-            loc_parts.append(building)
-        if floor_room:
-            loc_parts.append(floor_room)
-        if stored_as_val:
-            loc_parts.append(stored_as_val)
+        if building: loc_parts.append(building)
+        fr = ", ".join(filter(None, [f"Floor {floor}" if floor else "", extra]))
+        if fr: loc_parts.append(fr)
+        st = " / ".join(filter(None, [stored_as, f"Cab {cabinet}" if cabinet else ""]))
+        if st: loc_parts.append(st)
+        loc_text = " \u2022 ".join(loc_parts) if loc_parts else "No location info"
 
-        loc_text = " • ".join(loc_parts) if loc_parts else "No Location Info"
+        loc_lbl = tk.Label(row3, text=loc_text, bg=card_bg, fg=text_secondary,
+                           font=("Segoe UI", sc(8)), anchor="w", justify="left")
+        loc_lbl.pack(side="left", padx=(left_pad, 0), fill="x", expand=True)
 
-        loc_lbl = tk.Label(
-            bot_line,
-            text=loc_text,
-            bg=bg_color,
-            fg=sec_text_color,
-            font=("Segoe UI", sc(8)),
-            anchor="w",
-            justify="left"
-        )
-        loc_lbl.pack(side="left", padx=(sc(16), 0), fill="x", expand=True)
+        self._bind_card_events(outer_frame, card_body, oid)
+        return outer_frame
 
-        # Bind hover & selection on the entire card recursive
-        self._bind_card_events(card, oid)
-
-        return card
-
-    def _bind_card_events(self, widget, oid):
-        # We use a custom bindtag on the root card to handle all its children's events efficiently.
+    def _bind_card_events(self, widget, card_body, oid):
+        """Attach hover, click, and context-menu bindings via a shared bindtag."""
         card_tag = f"Card_{oid}"
-
-        is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
+        is_dark  = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
+        card_bg  = "#24273a" if is_dark else "#f3f3f3"
+        hover_bg = "#30354f" if is_dark else "#e8e8e8"
 
         def _on_enter(event):
             if oid not in self.selected_iids:
-                hover_bg = "#f5f5f5" if not is_dark else "#2a2d42"
-                self._set_bg_recursive(widget, hover_bg)
+                self._set_bg_recursive(card_body, hover_bg)
 
         def _on_leave(event):
             if oid not in self.selected_iids:
-                normal_bg = "#ffffff" if not is_dark else "#24273a"
-                self._set_bg_recursive(widget, normal_bg)
+                self._set_bg_recursive(card_body, card_bg)
 
-        # Bind to the card_tag instead of each widget
-        widget.bind_class(card_tag, "<Enter>", _on_enter, add="+")
-        widget.bind_class(card_tag, "<Leave>", _on_leave, add="+")
-        widget.bind_class(card_tag, "<Button-1>", lambda e, o=oid: self._on_card_click(o, e), add="+")
-        widget.bind_class(card_tag, "<Double-Button-1>", lambda e, o=oid: self._on_card_double_click(o, e), add="+")
+        def _on_card_right_click(e, o=oid):
+            self._on_card_click(o, e)
+            if hasattr(self.main_window, "_show_context_menu"):
+                self.main_window._show_context_menu(e)
 
+        widget.bind_class(card_tag, "<Enter>",           _on_enter,  add="+")
+        widget.bind_class(card_tag, "<Leave>",           _on_leave,  add="+")
+        widget.bind_class(card_tag, "<Button-1>",
+                          lambda e, o=oid: self._on_card_click(o, e),        add="+")
+        widget.bind_class(card_tag, "<Double-Button-1>",
+                          lambda e, o=oid: self._on_card_double_click(o, e), add="+")
+        widget.bind_class(card_tag, "<Button-3>", _on_card_right_click, add="+")
+
+        # Only pass through non-mouse keyboard bindings from the global list.
+        # Mouse button events (<Button-*>, <Double-*>, <Control-Button-*>) are
+        # already handled explicitly above; including them again would cause the
+        # context-menu to open on left-click and duplicate bindings.
+        _skip = {"<Button-1>", "<Button-2>", "<Button-3>",
+                 "<Double-Button-1>", "<Double-Button-2>", "<Double-Button-3>",
+                 "<Control-Button-1>", "<Control-Button-3>",
+                 "<MouseWheel>"}
         for seq, func, add in self.custom_bindings:
             if "Select" in seq or seq.startswith("<<"):
                 continue
+            if seq in _skip or "Button" in seq:
+                continue
             widget.bind_class(card_tag, seq, lambda e: func(e), add="+")
+
+        # MouseWheel fix: when the mouse moves from canvas background onto a card,
+        # the canvas fires <Leave> → unbind_all(<MouseWheel>).  Re-register it on
+        # every card <Enter> so scrolling works while hovering over card widgets.
+        widget.bind_class(
+            card_tag, "<Enter>",
+            lambda e: self.canvas.bind_all("<MouseWheel>", self._on_mousewheel),
+            add="+"
+        )
 
         cb_lbl = self.item_data[oid].get("cb_label")
 
         def _add_tag_recursive(w):
             if w == cb_lbl:
-                return # Don't override checkbox behavior
+                return
             tags = w.bindtags()
             if card_tag not in tags:
                 w.bindtags((tags[0], card_tag) + tags[1:])

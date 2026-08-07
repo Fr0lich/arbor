@@ -926,8 +926,9 @@ class ImageHandlerMixin:
                     r = self._get_http_session().get(url, timeout=5)
                     if r.status_code == 200:
                         return Image.open(BytesIO(r.content))
-                except Exception as e:
-                    debug_error("Suppressed Error", str(e))
+                except Exception:
+                    # Connection errors (e.g. RemoteDisconnected) are expected when
+                    # an image URL does not exist — silently skip to the next attempt.
                     pass
             return None
 

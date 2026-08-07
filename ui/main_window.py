@@ -4773,6 +4773,10 @@ class ObjectProgramUI(
     def on_list_select(self, event=None):
         if self.loading_object:
             return
+        # Card click drives navigation directly via _deferred_list_select;
+        # suppress this handler to avoid a duplicate (and potentially search-blocked) load.
+        if getattr(self.object_list, "_card_driving_nav", False):
+            return
 
         sel = self.object_list.curselection()
         if hasattr(self, "bulk_edit_btn"):
