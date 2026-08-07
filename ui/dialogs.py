@@ -1004,9 +1004,9 @@ class StartupDialog:
         self._refresh_launch_state()
 
         # Check for autosave
-        # PERFORMANCE OPTIMIZATION (Bolt): Backward-compatible check for the new high-performance .autosave.pkl or legacy .autosave.xlsx.
+        # SECURITY FIX: Backward-compatible check for the new secure .autosave.json or legacy .autosave.xlsx.
         base, _ = os.path.splitext(path)
-        autosave_path = base + ".autosave.pkl"
+        autosave_path = base + ".autosave.json"
         if not os.path.exists(autosave_path):
             autosave_path = base + ".autosave.xlsx"
 

@@ -4042,7 +4042,7 @@ class ObjectProgramUI(
         self.commit_current_object()
 
 
---
+
 
 
     def open_advanced_menu(self):

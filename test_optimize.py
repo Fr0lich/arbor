@@ -1,6 +1,7 @@
 import unittest
 import pandas as pd
-import pickle
+import json
+import io
 import os
 import tempfile
 from ui.main_window import ObjectProgramUI
@@ -74,15 +75,23 @@ class TestOptimize(unittest.TestCase):
         }
 
         # Use temporary file
-        fd, temp_path = tempfile.mkstemp(suffix=".pkl")
+        fd, temp_path = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         try:
-            with open(temp_path, "wb") as f:
-                pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+            json_data = {
+                k: v.to_json(orient="table") if v is not None else None
+                for k, v in data.items()
+            }
+            with open(temp_path, "w") as f:
+                json.dump(json_data, f)
 
             # Load it back
-            with open(temp_path, "rb") as f:
-                loaded = pickle.load(f)
+            with open(temp_path, "r") as f:
+                loaded_json = json.load(f)
+            loaded = {
+                k: pd.read_json(io.StringIO(v), orient="table") if v is not None else None
+                for k, v in loaded_json.items()
+            }
 
             self.assertTrue(loaded["df_reg"].equals(df_reg))
             self.assertTrue(loaded["df_obs"].equals(df_obs))
