@@ -1,4 +1,3 @@
-import pytest
 import pandas as pd
 from collections import OrderedDict
 from ui.historical_suggestions import HistoricalSuggestionsMixin

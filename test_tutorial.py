@@ -1,6 +1,6 @@
 import unittest
 import tkinter as tk
-from ui.tutorial import TutorialManager, TutorialHighlight, TutorialPopup
+from ui.tutorial import TutorialManager, TutorialHighlight
 import config
 import pandas as pd
 

@@ -1,8 +1,5 @@
-import pytest
 from repository import ExcelRepository
 import pandas as pd
-import os
-import sqlite3
 
 class TestLoading:
     def test_loading_excel(self, tmp_path):

@@ -2,8 +2,6 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 import config
-from datetime import datetime
-import json
 
 def sc(n):
     return config.sc(n)

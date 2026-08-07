@@ -1,8 +1,6 @@
 import tkinter as tk
-from tkinter import ttk
 import json
 import os
-import time
 import sys
 
 class TutorialManager:

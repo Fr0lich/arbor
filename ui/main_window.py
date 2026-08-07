@@ -19,24 +19,20 @@ from tkinter import ttk, filedialog, messagebox
 import os
 import re
 import time
-import threading
 from datetime import datetime
 import pandas as pd
 import getpass
-from PIL import Image, ImageTk
 
 # Pre-compiled regex patterns for speed optimization
 _NUMERIC_OID_PATTERN = re.compile(r"\b(\d+)\b")
 _NORMALIZE_NON_WORD_PATTERN = re.compile(r'[^\w\s]')
 _NORMALIZE_SPACE_PATTERN = re.compile(r'\s+')
 
-from io import BytesIO
-import json
 import uuid
 
 from collections import OrderedDict
-from config import DATABASE_CONFIGS, AUTOSAVE_INTERVAL_MS, AUTOSAVE_SUFFIX, sc
-from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN, ONLINE_EXISTS_COLUMN
+from config import sc
+from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
 from models import AppState
 from utils import debug_error
 

@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk
-import pandas as pd
 
 class ToggleSwitch(tk.Canvas):
     def __init__(self, parent, variable, command=None, width=42, height=22, ui_ref=None, **kwargs):
