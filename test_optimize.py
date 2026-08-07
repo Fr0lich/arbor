@@ -2,7 +2,6 @@ import unittest
 import pandas as pd
 import pickle
 import os
-import shutil
 import tempfile
 from ui.main_window import ObjectProgramUI
 

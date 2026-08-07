@@ -2,7 +2,6 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
-import config
 from config import AUTOSAVE_INTERVAL_MS, AUTOSAVE_SUFFIX, sc
 from utils import debug_error
 

@@ -4,7 +4,6 @@ from ui.main_window import ObjectProgramUI
 from ui.dialogs import StartupDialog
 import sys
 import os
-import json
 import ctypes
 import config
 from utils import debug_error, get_session_log_path, session_had_errors

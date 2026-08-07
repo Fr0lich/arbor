@@ -1,10 +1,9 @@
 import os
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import filedialog, messagebox
 import threading
 from datetime import datetime
 import pandas as pd
-import config
 from utils import debug_error
 from repository import ExcelRepository, REVIEWED_COLUMN
 

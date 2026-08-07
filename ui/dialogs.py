@@ -7,8 +7,7 @@ import pandas as pd
 from PIL import Image, ImageTk
 from io import BytesIO
 import requests
-from config import DATABASE_CONFIGS, sc, AUTOSAVE_SUFFIX, get_recent_files, add_recent_file
-from repository import ExcelRepository
+from config import DATABASE_CONFIGS, sc, get_recent_files, add_recent_file
 from utils import debug_error
 
 class ZoomableImagePopup:
@@ -1329,7 +1328,6 @@ class StartupDialog:
             return
 
         # Map path to a DATABASE_CONFIG by matching file stem, or default to first
-        import config as _cfg
         matched_config = None
         matched_name = None
         basename = os.path.basename(path).lower()

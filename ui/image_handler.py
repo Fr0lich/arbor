@@ -4,10 +4,7 @@ from tkinter import ttk, filedialog, messagebox
 import threading
 from PIL import Image, ImageTk
 from io import BytesIO
-import config
 from config import sc
-from utils import debug_error
-from collections import OrderedDict
 
 MAX_IMAGE_CACHE = 40
 

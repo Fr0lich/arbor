@@ -1,7 +1,4 @@
-import pytest
-import tkinter as tk
 from ui.image_handler import ImageHandlerMixin
-from models import AppState
 
 class DummyApp:
     def __init__(self):
