@@ -1567,7 +1567,7 @@ class ObjectProgramUI(
             self.show_banner("Field groups updated successfully.", "success")
             
         from ui.group_editor import FieldGroupEditorDialog
-        FieldGroupEditorDialog(self.root, all_fields, current_groups, _on_save)
+        FieldGroupEditorDialog(self.root, all_fields, current_groups, _on_save, self.app)
 
     def build_menu(self):
         menubar = tk.Menu(self.root)
