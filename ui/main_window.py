@@ -3284,8 +3284,8 @@ class ObjectProgramUI(
         self.sb_settings_btn = ttk.Button(
             self.sb_buttons_frame,
             text="SETTINGS",
-            style="Tool.TButton",
-            command=self.open_focus_settings
+            style="Nav.TButton",
+            command=self.open_settings_window
         )
         self.sb_settings_btn.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
 
@@ -3295,7 +3295,7 @@ class ObjectProgramUI(
         self.sb_help_btn = ttk.Button(
             self.sb_buttons_frame,
             text="HELP",
-            style="Tool.TButton",
+            style="Nav.TButton",
             command=self.open_help_window
         )
         self.sb_help_btn.grid(row=0, column=2, sticky="nsew", padx=(2, 6), pady=3)
