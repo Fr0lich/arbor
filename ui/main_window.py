@@ -8125,23 +8125,33 @@ class ObjectProgramUI(
             style.map("Error.TEntry", fieldbackground=[("!disabled", err_bg)])
             style.map("Normal.TEntry", fieldbackground=[("!disabled", norm_bg)])
 
+        def apply_validation_style(widget, style_name, bg_color):
+            try:
+                widget.configure(style=style_name)
+            except tk.TclError:
+                # Fallback for standard tk.Entry or tk.Text
+                try:
+                    widget.configure(bg=bg_color)
+                except tk.TclError:
+                    pass
+
         # Rule 1: Genus but no Species (Warning)
         genus = self.reg_vars.get("Genus", tk.StringVar()).get().strip()
         species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
         
         if genus and not species and "Species" in self.reg_entries:
-            self.reg_entries["Species"].configure(style="Warning.TEntry")
+            apply_validation_style(self.reg_entries["Species"], "Warning.TEntry", warn_bg)
         elif "Species" in self.reg_entries:
-            self.reg_entries["Species"].configure(style="Normal.TEntry")
+            apply_validation_style(self.reg_entries["Species"], "Normal.TEntry", norm_bg)
 
         # Rule 2: Building/Location empty but no Loc Problem (Error)
         building = self.reg_vars.get("Building", tk.StringVar()).get().strip()
         loc_prob = self.problem_vars.get("Loc_Problem", tk.BooleanVar()).get()
         
         if not building and not loc_prob and "Building" in self.reg_entries:
-            self.reg_entries["Building"].configure(style="Error.TEntry")
+            apply_validation_style(self.reg_entries["Building"], "Error.TEntry", err_bg)
         elif "Building" in self.reg_entries:
-            self.reg_entries["Building"].configure(style="Normal.TEntry")
+            apply_validation_style(self.reg_entries["Building"], "Normal.TEntry", norm_bg)
 
 
     def _run_fuzzy_match(self, field_name, widget):
