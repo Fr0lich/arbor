@@ -22,6 +22,7 @@ import time
 from datetime import datetime
 import pandas as pd
 import getpass
+import utils
 
 # Pre-compiled regex patterns for speed optimization
 _NUMERIC_OID_PATTERN = re.compile(r"\b(\d+)\b")
@@ -4684,7 +4685,7 @@ class ObjectProgramUI(
 
         for col, widget in self.reg_entries.items():
 
-            old = str(self.app.df_reg.loc[oid, col])
+            old = utils.fmt_pandas_val(self.app.df_reg.loc[oid, col])
 
             if isinstance(widget, tk.Text):
                 new = widget.get("1.0", tk.END).strip()
@@ -4734,7 +4735,7 @@ class ObjectProgramUI(
         # -------- LOCATION --------
         if not skip_heavy:
             for col, var in self.location_vars.items():
-                old = str(self.app.df_obs.loc[oid, col])
+                old = utils.fmt_pandas_val(self.app.df_obs.loc[oid, col])
                 new = var.get()
 
                 if old != new:
@@ -4829,18 +4830,10 @@ class ObjectProgramUI(
 
 
 
-        def fmt(v):
-            if pd.isna(v) or v == "":
-                return ""
-            if isinstance(v, float) and v.is_integer():
-                return str(int(v))
-            return str(v)
-
-
-        floor = fmt(obs.get("Floor", ""))
-        cabinet = fmt(obs.get("Cabinet", ""))
-        building = fmt(obs.get("Building", ""))
-        extra = fmt(obs.get(" ", ""))
+        floor = utils.fmt_pandas_val(obs.get("Floor", ""))
+        cabinet = utils.fmt_pandas_val(obs.get("Cabinet", ""))
+        building = utils.fmt_pandas_val(obs.get("Building", ""))
+        extra = utils.fmt_pandas_val(obs.get(" ", ""))
 
 
         loaned_raw = obs.get("Loaned out", False)
@@ -5277,14 +5270,7 @@ class ObjectProgramUI(
 
             for col, var in self.location_vars.items():
                 val = obs.get(col, "")
-
-                if pd.isna(val) or val == "":
-                    var.set("")  
-                else:
-                    if isinstance(val, float) and val.is_integer():
-                        var.set(str(int(val)))
-                    else:
-                        var.set(str(val))
+                var.set(utils.fmt_pandas_val(val))
 
 
             if oid in self.photo_by_id.index:

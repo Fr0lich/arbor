@@ -2,6 +2,15 @@ import traceback
 import os
 import sys
 from datetime import datetime
+import pandas as pd
+
+def fmt_pandas_val(val):
+    if pd.isna(val) or val == "":
+        return ""
+    if isinstance(val, float) and val.is_integer():
+        return str(int(val))
+    return str(val)
+
 
 # ── Canonical log directory ──────────────────────────────────────────────────
 # Always sits in a "logs/" folder next to the .exe (frozen) or main.py (dev).
