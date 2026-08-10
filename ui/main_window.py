@@ -620,6 +620,7 @@ class ObjectProgramUI(
                 font=("JetBrains Mono", sc(font_size), "bold"),
                 activebackground=cb_active_bg,
                 activeforeground=cb_active_fg,
+                selectcolor=bg_col,
                 highlightthickness=0, bd=0
             )
             cb.pack(side="left")
@@ -2216,7 +2217,7 @@ class ObjectProgramUI(
 
         chk_frame = tk.Frame(f_tutorial, bg=COLORS["surface"])
         chk_frame.pack(fill="x", pady=sc(2))
-        chk = tk.Checkbutton(chk_frame, variable=tutorials_var, bg=COLORS["surface"], activebackground=COLORS["surface"], bd=0, highlightthickness=0)
+        chk = tk.Checkbutton(chk_frame, variable=tutorials_var, bg=COLORS["surface"], activebackground=COLORS["surface"], selectcolor=COLORS["surface"], bd=0, highlightthickness=0)
         chk.pack(side="left")
 
         tk.Label(chk_frame, text="Enable Interactive Tutorials", font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"]).pack(side="left", padx=sc(8))
@@ -6456,7 +6457,7 @@ class ObjectProgramUI(
         def make_chk(parent, text, var, color_bar=None):
             f = tk.Frame(parent, bg=COLORS["surface"])
             f.pack(fill="x", pady=sc(2))
-            chk = tk.Checkbutton(f, variable=var, bg=COLORS["surface"], activebackground=COLORS["surface"], bd=0, highlightthickness=0, command=self.update_filter_button_text)
+            chk = tk.Checkbutton(f, variable=var, bg=COLORS["surface"], activebackground=COLORS["surface"], selectcolor=COLORS["surface"], bd=0, highlightthickness=0, command=self.update_filter_button_text)
             chk.pack(side="left")
             if color_bar:
                 tk.Frame(f, bg=color_bar, width=4, height=sc(12)).pack(side="left", padx=(sc(4), sc(8)))

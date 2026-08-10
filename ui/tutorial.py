@@ -297,7 +297,7 @@ class TutorialPopup:
         # Skip check
         if is_first:
             self.skip_var = tk.BooleanVar()
-            chk_skip = tk.Checkbutton(self.frame, text="Don't show this again", variable=self.skip_var, bg="#ffffff", activebackground="#ffffff", command=self.save_skip_pref)
+            chk_skip = tk.Checkbutton(self.frame, text="Don't show this again", variable=self.skip_var, bg="#ffffff", activebackground="#ffffff", selectcolor="#ffffff", command=self.save_skip_pref)
             chk_skip.pack(anchor="w", padx=15, pady=(0, 10))
 
         self.win.update_idletasks()
