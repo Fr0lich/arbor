@@ -5991,7 +5991,7 @@ class ObjectProgramUI(
         grid_frame = ttk.Frame(frame)
         grid_frame.pack(fill="both", expand=True)
 
-        self.location_entries = []
+        popup_location_entries = []
 
         # Render each location field dynamically
         for row, field in enumerate(self.app.config["ui_sections"]["location"]):
@@ -6026,14 +6026,14 @@ class ObjectProgramUI(
                 )
 
             widget.grid(row=row, column=1, sticky="ew", pady=6)
-            self.location_entries.append(widget)
+            popup_location_entries.append(widget)
 
             # Keyboard navigation bindings for entries inside pop-up
-            widget.bind("<Shift-Up>", self._location_nav_up)
-            widget.bind("<Shift-Down>", self._location_nav_down)
-            widget.bind("<Control-Up>", self._location_nav_up)
-            widget.bind("<Control-Down>", self._location_nav_down)
-            widget.bind("<Return>", self._location_nav_down)
+            widget.bind("<Shift-Up>", lambda e, entries=popup_location_entries: self._navigate_list(entries, -1) or "break")
+            widget.bind("<Shift-Down>", lambda e, entries=popup_location_entries: self._navigate_list(entries, 1) or "break")
+            widget.bind("<Control-Up>", lambda e, entries=popup_location_entries: self._navigate_list(entries, -1) or "break")
+            widget.bind("<Control-Down>", lambda e, entries=popup_location_entries: self._navigate_list(entries, 1) or "break")
+            widget.bind("<Return>", lambda e, entries=popup_location_entries: self._navigate_list(entries, 1) or "break")
 
         grid_frame.columnconfigure(1, weight=1)
 
@@ -6076,9 +6076,6 @@ class ObjectProgramUI(
 
         # Esc binding to close
         win.bind("<Escape>", lambda e: win.destroy())
-        
-        # When closing, clear self.location_entries to prevent navigation bugs
-        win.bind("<Destroy>", lambda e: self.location_entries.clear() if e.widget == win else None)
 
     def update_location_summary_view(self):
         pass
@@ -6211,7 +6208,7 @@ class ObjectProgramUI(
         grid_frame = ttk.Frame(frame)
         grid_frame.pack(fill="both", expand=True)
 
-        self.problem_checkbuttons = []
+        popup_problem_checkbuttons = []
 
         # Re-create checkbuttons in the popup sharing the same BooleanVars
         for i, field in enumerate(self.app.config["ui_sections"]["problems"]):
@@ -6231,12 +6228,12 @@ class ObjectProgramUI(
                 command=lambda: self.update_reg_fields_visibility(skip_snap=True)
             )
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=8)
-            self.problem_checkbuttons.append(cb)
+            popup_problem_checkbuttons.append(cb)
 
-            cb.bind("<Shift-Up>", self._problem_nav_up)
-            cb.bind("<Shift-Down>", self._problem_nav_down)
-            cb.bind("<Control-Up>", self._problem_nav_up)
-            cb.bind("<Control-Down>", self._problem_nav_down)
+            cb.bind("<Shift-Up>", lambda e, entries=popup_problem_checkbuttons: self._navigate_list(entries, -1) or "break")
+            cb.bind("<Shift-Down>", lambda e, entries=popup_problem_checkbuttons: self._navigate_list(entries, 1) or "break")
+            cb.bind("<Control-Up>", lambda e, entries=popup_problem_checkbuttons: self._navigate_list(entries, -1) or "break")
+            cb.bind("<Control-Down>", lambda e, entries=popup_problem_checkbuttons: self._navigate_list(entries, 1) or "break")
             cb.bind("<Return>", lambda e, c=cb: self._toggle_specific_checkbox(c))
 
         grid_frame.columnconfigure(0, weight=1)
@@ -6292,9 +6289,6 @@ class ObjectProgramUI(
         cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=win.cget("bg")))
 
         win.bind("<Escape>", lambda e: win.destroy())
-        
-        # When closing, clear self.problem_checkbuttons to prevent navigation bugs
-        win.bind("<Destroy>", lambda e: self.problem_checkbuttons.clear() if e.widget == win else None)
 
     # ---------- Filter ----------
     def open_filter_menu(self):
