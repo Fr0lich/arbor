@@ -34,7 +34,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Effort:** Small
 * **Recommended change:** Refactor all code to exclusively instantiate and use `ToolTipManager` for consistent delays, theming, and memory cleanup.
 
-### 6. Remove Misleading `.empty` Checks on Columns
+### 6. [COMPLETED] Remove Misleading `.empty` Checks on Columns
 * **Why it matters:** In `repository.py`, `if not df_reg.empty:` is used before populating columns. `.empty` checks if rows == 0. A new database has 0 rows but still needs column initialization! This breaks schemas on fresh databases.
 * **Impact:** High
 * **Effort:** Small

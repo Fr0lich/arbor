@@ -45,9 +45,9 @@ def _normalise_dataframes(df_reg, df_obs, config):
     registration_columns = [f["name"] for f in sections.get("registration", [])]
 
     # --- ObjectID ---
-    if not df_reg.empty and "ObjectID" in df_reg.columns:
+    if "ObjectID" in df_reg.columns:
         df_reg["ObjectID"] = df_reg["ObjectID"].astype(str).str.strip()
-    if not df_obs.empty and "ObjectID" in df_obs.columns:
+    if "ObjectID" in df_obs.columns:
         df_obs["ObjectID"] = df_obs["ObjectID"].astype(str).str.strip()
 
     # --- Registration: ensure all defined registration columns exist ---
@@ -287,7 +287,7 @@ class SQLiteRepository:
         # Normalise both main dataframes
         df_reg, df_obs = _normalise_dataframes(df_reg, df_obs, config)
 
-        if not df_photo.empty and "ObjectID" in df_photo.columns:
+        if "ObjectID" in df_photo.columns:
             df_photo["ObjectID"] = df_photo["ObjectID"].astype(str).str.strip()
 
         return df_reg, df_obs, df_photo, df_log
@@ -318,7 +318,7 @@ class SQLiteRepository:
             df_obs_save = df_obs_save.reset_index()
 
         df_photo_save = df_photo.copy()
-        if not df_photo_save.empty and "ObjectID" not in df_photo_save.columns:
+        if "ObjectID" not in df_photo_save.columns:
             df_photo_save = df_photo_save.reset_index()
 
         df_reg_save.to_sql("Registration", conn, if_exists="replace", index=False)
