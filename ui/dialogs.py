@@ -1468,8 +1468,25 @@ class LoadingWindow:
         self.excel_path = excel_path
         
         self.win = tk.Toplevel(self.parent)
-        self.win.title("Loading Database")
-        self.win.configure(bg="#1e1e2e")
+        self.win.title("arbor — Loading Database")
+
+        # Determine theme palette
+        is_dark = getattr(self.ui, "dark_mode_active", False)
+
+        if is_dark:
+            bg_color = "#1e1e2e"
+            fg_title = "#cdd6f4"
+            fg_status = "#a6adc8"
+            bar_trough = "#313244"
+            bar_color = "#cba6f7"
+        else:
+            bg_color = "#f9f9f9"
+            fg_title = "#1a1c1c"
+            fg_status = "#444748"
+            bar_trough = "#e2e2e2"
+            bar_color = "#000000"
+
+        self.win.configure(bg=bg_color)
         self.win.resizable(False, False)
         
         # Center the splash window
@@ -1485,18 +1502,18 @@ class LoadingWindow:
         tk.Label(
             self.win,
             text="Initializing Application",
-            font=("Segoe UI", sc(12), "bold"),
-            bg="#1e1e2e",
-            fg="#cba6f7"  # Pastel accent color
+            font=("Segoe UI", sc(14), "bold"),
+            bg=bg_color,
+            fg=fg_title
         ).pack(pady=(sc(24), sc(10)))
         
         # Progress status label (saved as attribute to easily update)
         self.status_lbl = tk.Label(
             self.win,
             text="Loading Excel database...",
-            font=("Segoe UI", sc(9)),
-            bg="#1e1e2e",
-            fg="#cdd6f4"  # Off-white
+            font=("Courier New", sc(9)),
+            bg=bg_color,
+            fg=fg_status
         )
         self.status_lbl.pack(pady=(0, sc(8)))
         
@@ -1505,8 +1522,8 @@ class LoadingWindow:
         style.theme_use("clam")
         style.configure(
             "Splash.Horizontal.TProgressbar",
-            troughcolor="#313244",
-            background="#cba6f7",
+            troughcolor=bar_trough,
+            background=bar_color,
             thickness=sc(8),
             borderwidth=0
         )
