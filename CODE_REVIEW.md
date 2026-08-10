@@ -127,25 +127,4 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Impact:** High
 * **Effort:** Medium
 * **Recommended change:** Extend `utils.debug_error` and `_install_exception_hooks` to intercept mainloop errors, pause the app, and throw a "Something went wrong" Tkinter dialog offering a safe Autosave before closing.
-
----
-
-## 3. The single most important improvement to make next
-
-**Fix the Failing Test Suite & Advanced Settings Save Crash (Quick Win #1)**
-
-The most urgent issue right now is broken code. The application has a known bug in `AdvancedSettingsWindow.save_settings` that causes it to crash with a `KeyError: 'action_dark_mode'` when trying to access the Tk variable of a "button" item type. This is currently breaking the automated tests and would prevent users from saving any settings.
-
-**The Fix:**
-In `ui/advanced_settings.py`, modify the `save_settings` loop to ignore button schema items:
-
-```python
-for item in ADVANCED_SETTINGS_SCHEMA:
-    if item["type"] == "button":
-        continue
-
-    item_id = item["id"]
-    # ... rest of save logic
-```
-
-*After making this fix and passing the CI test suite, the highest priority structural task is breaking down the monolithic 8,700-line `ui/main_window.py` (High Impact Improvement #1) to enable further safe development.*
+*after making a fix, update this file.*
