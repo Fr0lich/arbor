@@ -468,7 +468,6 @@ class DatabaseOpsMixin:
         self._cached_species_dict = species_dict
         self._row_cache_dirty = False
         self._problem_cache = problem_cache
-        self._search_index_cache = search_index
         self._cached_photo_counts = photo_counts
 
 
