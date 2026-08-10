@@ -529,31 +529,97 @@ class ImageHandlerMixin:
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _on_image_scroll(self, *args):
+        self.image_scroll.set(*args)
+        if hasattr(self, "_update_virtual_stack"):
+            if hasattr(self, "_virtual_scroll_job") and self._virtual_scroll_job:
+                self.root.after_cancel(self._virtual_scroll_job)
+            self._virtual_scroll_job = self.root.after(150, self._update_virtual_stack)
+
+    def _update_virtual_stack(self):
+        self._virtual_scroll_job = None
+        if not hasattr(self, "_placeholder_frames") or not self._placeholder_frames:
+            return
+
+        try:
+            y0 = self.image_canvas.canvasy(0)
+            y1 = self.image_canvas.canvasy(self.image_canvas.winfo_height())
+        except tk.TclError:
+            return
+
+        # Add a buffer to load images slightly before they become visible
+        buffer = 400
+
+        for i, frame in enumerate(self._placeholder_frames):
+            frame_y = frame.winfo_y()
+            frame_h = frame.winfo_height()
+
+            is_visible = (frame_y + frame_h >= y0 - buffer) and (frame_y <= y1 + buffer)
+
+            if is_visible and i not in self._virtual_cards:
+                path = self._image_paths[i]
+
+                # Allow frame to adapt to image height once loaded
+                frame.pack_propagate(True)
+
+                lbl = ttk.Label(frame, text="Loading image...")
+                lbl.pack(fill="both", expand=True)
+
+                lbl.bind("<ButtonPress-1>", self._on_pan_start)
+                lbl.bind("<B1-Motion>", self._on_pan_drag)
+
+                lbl.bind(
+                    "<Double-Button-1>",
+                    lambda e, p=path: self.open_image_web(p)
+                )
+
+                self._load_image_async(path, large=True, target_widget=lbl)
+                self._virtual_cards[i] = lbl
+
+            elif not is_visible and i in self._virtual_cards:
+                # Cancel pending loads by destroying the target widget
+                for widget in frame.winfo_children():
+                    widget.destroy()
+
+                # Restore fixed placeholder height
+                frame.configure(height=getattr(self, "_estimated_card_height", 350))
+                frame.pack_propagate(False)
+                del self._virtual_cards[i]
+
     def _render_image_stack(self):
         self._update_image_controls_visibility()
 
         for w in self.image_container.winfo_children():
             w.destroy()
 
+        self._virtual_cards = {}
+        self._placeholder_frames = []
+
         if not self._image_paths:
             return
 
+        try:
+            available_width = self.image_canvas.winfo_width()
+            if available_width < 300:
+                available_width = 800
+        except Exception:
+            available_width = 800
+
+        # Estimate a height for the placeholder frame to reserve space for the image
+        estimated_height = int(350 * 0.85 * self.image_zoom_factor) + 20
+        if estimated_height < 100:
+            estimated_height = 100
+        self._estimated_card_height = estimated_height
+
         for path in self._image_paths:
-            frame = ttk.Frame(self.image_container)
+            # Use ttk.Frame to avoid background color mismatch issues
+            frame = ttk.Frame(self.image_container, height=estimated_height, width=int(available_width * 0.95))
+            frame.pack_propagate(False)
             frame.pack(pady=10)
+            self._placeholder_frames.append(frame)
 
-            lbl = ttk.Label(frame, text="Loading image...")
-            lbl.pack()
-
-            lbl.bind("<ButtonPress-1>", self._on_pan_start)
-            lbl.bind("<B1-Motion>", self._on_pan_drag)
-
-            lbl.bind(
-                "<Double-Button-1>",
-                lambda e, p=path: self.open_image_web(p)
-            )
-
-            self._load_image_async(path, large=True, target_widget=lbl)
+        self.root.update_idletasks()
+        self._update_virtual_stack()
 
     def _render_image_gallery(self):
         self._update_image_controls_visibility()
