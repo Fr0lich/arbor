@@ -6023,6 +6023,7 @@ class ObjectProgramUI(
         grid_frame = ttk.Frame(frame)
         grid_frame.pack(fill="both", expand=True)
 
+        orig_location_entries = list(getattr(self, "location_entries", []))
         self.location_entries = []
 
         # Render each location field dynamically
@@ -6109,8 +6110,12 @@ class ObjectProgramUI(
         # Esc binding to close
         win.bind("<Escape>", lambda e: win.destroy())
         
-        # When closing, clear self.location_entries to prevent navigation bugs
-        win.bind("<Destroy>", lambda e: self.location_entries.clear() if e.widget == win else None)
+        # When closing, restore self.location_entries to prevent navigation bugs
+        def restore_locations(e):
+            if e.widget == win:
+                self.location_entries = orig_location_entries
+
+        win.bind("<Destroy>", restore_locations)
 
     def update_location_summary_view(self):
         pass
@@ -6243,6 +6248,7 @@ class ObjectProgramUI(
         grid_frame = ttk.Frame(frame)
         grid_frame.pack(fill="both", expand=True)
 
+        orig_problem_checkbuttons = list(getattr(self, "problem_checkbuttons", []))
         self.problem_checkbuttons = []
 
         # Re-create checkbuttons in the popup sharing the same BooleanVars
@@ -6325,8 +6331,12 @@ class ObjectProgramUI(
 
         win.bind("<Escape>", lambda e: win.destroy())
         
-        # When closing, clear self.problem_checkbuttons to prevent navigation bugs
-        win.bind("<Destroy>", lambda e: self.problem_checkbuttons.clear() if e.widget == win else None)
+        # When closing, restore self.problem_checkbuttons to prevent navigation bugs
+        def restore_problems(e):
+            if e.widget == win:
+                self.problem_checkbuttons = orig_problem_checkbuttons
+
+        win.bind("<Destroy>", restore_problems)
 
     # ---------- Filter ----------
     def open_filter_menu(self):
