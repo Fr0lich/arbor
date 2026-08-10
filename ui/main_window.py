@@ -593,6 +593,16 @@ class ObjectProgramUI(
         var = self.location_vars.get(name)
         if not var: return None
         
+        is_dark = getattr(self, "dark_mode_active", False)
+        # Determine theme colors
+        lbl_fg = "#a6adc8" if is_dark else "#444748"
+        entry_bg = "#2a2b3c" if is_dark else "#ffffff"
+        entry_fg = "#cdd6f4" if is_dark else "#000000"
+        entry_insert = "#cdd6f4" if is_dark else "#000000"
+        cb_fg = "#cdd6f4" if is_dark else "#000000"
+        cb_active_bg = "#1e1e2e" if is_dark else bg_col
+        cb_active_fg = "#cdd6f4" if is_dark else "#000000"
+        
         container = tk.Frame(parent, bg=bg_col)
         
         if ftype == "checkbox":
@@ -606,10 +616,10 @@ class ObjectProgramUI(
                 variable=var,
                 onvalue="True", offvalue="False",
                 command=lambda n=name, v=var: self._on_checkbox_change(n, v),
-                bg=bg_col, fg="#000000",
+                bg=bg_col, fg=cb_fg,
                 font=("JetBrains Mono", sc(font_size), "bold"),
-                activebackground=bg_col,
-                activeforeground="#000000",
+                activebackground=cb_active_bg,
+                activeforeground=cb_active_fg,
                 highlightthickness=0, bd=0
             )
             cb.pack(side="left")
@@ -618,12 +628,12 @@ class ObjectProgramUI(
             if is_horiz:
                 # Label on top
                 lbl = tk.Label(container, text=name.upper(), font=("JetBrains Mono", sc(font_size-2), "bold"),
-                             bg=bg_col, fg="#444748", anchor="w")
+                             bg=bg_col, fg=lbl_fg, anchor="w")
                 lbl.pack(fill="x", pady=(0,2))
             else:
                 # Label on left
                 lbl = tk.Label(container, text=name.upper(), width=14, font=("JetBrains Mono", sc(font_size), "bold"),
-                             bg=bg_col, fg="#444748", anchor="w")
+                             bg=bg_col, fg=lbl_fg, anchor="w")
                 lbl.pack(side="left")
 
             if ftype == "choice":
@@ -646,9 +656,9 @@ class ObjectProgramUI(
                     container, textvariable=var,
                     state="disabled" if field_def.get("readonly") else "normal",
                     font=(font_family, sc(font_size)),
-                    bg="#ffffff", fg="#000000",
-                    insertbackground="#000000",
-                    highlightthickness=1, highlightbackground=bd_col, highlightcolor="#000000",
+                    bg=entry_bg, fg=entry_fg,
+                    insertbackground=entry_insert,
+                    highlightthickness=1, highlightbackground=bd_col, highlightcolor=entry_insert,
                     relief="flat"
                 )
                 widget.bind("<FocusOut>", lambda e: self.commit_current_object())
@@ -726,23 +736,24 @@ class ObjectProgramUI(
         return presets_frame
 
     def _build_vertical_location_ui(self):
-        bg_col = "#ffffff"
-        bd_col = "#d1d1d1"
+        is_dark = getattr(self, "dark_mode_active", False)
+        bg_col = "#1e1e2e" if is_dark else "#f3f3f3"
+        fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
+        bd_col = "#313244" if is_dark else "#d1d1d1"
         
-        main_box = tk.Frame(self.location_frame, bg=bg_col, highlightthickness=1, highlightbackground=bd_col)
-        main_box.pack(fill="both", expand=True, padx=4, pady=4)
+        # 1. Header Frame (flat, borderless, matching LeftPane background)
+        hdr = tk.Frame(self.location_frame, bg=bg_col)
+        hdr.pack(fill="x", pady=(4, 8))
         
-        # Header
-        hdr = tk.Frame(main_box, bg="#f3f3f3", highlightthickness=0)
-        hdr.pack(fill="x")
+        title = tk.Label(hdr, text="LOCATION", font=("Hanken Grotesk", sc(11), "bold"), bg=bg_col, fg=fg_col)
+        title.pack(side="left", padx=4)
         
-        title = tk.Label(hdr, text="LOCATION", font=("Hanken Grotesk", sc(12), "bold"), bg="#f3f3f3", fg="#000000")
-        title.pack(side="left", padx=8, pady=4)
+        sep = tk.Frame(self.location_frame, bg=bd_col, height=1)
+        sep.pack(fill="x", pady=(0, 10))
         
-        tk.Frame(main_box, bg=bd_col, height=1).pack(fill="x") # sep
-        
-        content = tk.Frame(main_box, bg=bg_col)
-        content.pack(fill="both", expand=True, padx=12, pady=12)
+        # Content frame packed inside
+        content = tk.Frame(self.location_frame, bg=bg_col)
+        content.pack(fill="both", expand=True, padx=4)
         
         field_names_order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
         
@@ -750,15 +761,17 @@ class ObjectProgramUI(
             field = next((f for f in self.app.config["ui_sections"]["location"] if f["name"] == name), None)
             if not field: continue
             
-            row = self._create_loc_widget(content, name, field.get("type", "text"), field, "JetBrains Mono", 10, bg_col, "#000000", bd_col, is_horiz=False)
+            row = self._create_loc_widget(content, name, field.get("type", "text"), field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=False)
             if row:
-                row.pack(fill="x", pady=4)
+                row.pack(fill="x", pady=3)
                 
-        tk.Frame(content, bg=bd_col, height=1).pack(fill="x", pady=8) # sep
+        # Thin divider before Loaned out checkbox
+        sep2 = tk.Frame(content, bg=bd_col, height=1)
+        sep2.pack(fill="x", pady=6)
         
         loan_field = next((f for f in self.app.config["ui_sections"]["location"] if f["name"] == "Loaned out"), None)
         if loan_field:
-            row = self._create_loc_widget(content, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 10, bg_col, "#000000", bd_col, is_horiz=False)
+            row = self._create_loc_widget(content, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=False)
             if row:
                 children = row.winfo_children()
                 if children:
@@ -768,43 +781,38 @@ class ObjectProgramUI(
                 row.pack(fill="x", pady=4)
 
     def _build_horizontal_location_ui(self):
-        bg_col = "#ffffff"
-        bd_col = "#d1d1d1"
+        is_dark = getattr(self, "dark_mode_active", False)
+        bg_col = "#1e1e2e" if is_dark else "#f3f3f3"
+        fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
+        bd_col = "#313244" if is_dark else "#d1d1d1"
+        header_bg = "#11111b" if is_dark else "#eaeaea"
         
-        main_box = tk.Frame(self.loc_frame_horizontal, bg=bg_col, highlightthickness=1, highlightbackground=bd_col)
-        main_box.pack(fill="both", expand=True, padx=4, pady=4)
+        # No main_box wrapper frame. Pack directly into self.loc_frame_horizontal
+        hdr = tk.Frame(self.loc_frame_horizontal, bg=header_bg)
+        hdr.pack(fill="x", pady=(2, 4))
         
-        # Header
-        hdr = tk.Frame(main_box, bg="#f3f3f3", highlightthickness=0)
-        hdr.pack(fill="x")
-        
-        title = tk.Label(hdr, text="LOCATION", font=("JetBrains Mono", sc(10), "bold"), bg="#f3f3f3", fg="#444748")
+        title = tk.Label(hdr, text="LOCATION", font=("JetBrains Mono", sc(10), "bold"), bg=header_bg, fg=fg_col)
         title.pack(side="left", padx=8, pady=4)
         
         loan_field = next((f for f in self.app.config["ui_sections"]["location"] if f["name"] == "Loaned out"), None)
         if loan_field:
-            row = self._create_loc_widget(hdr, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 9, "#f3f3f3", "#000000", bd_col, is_horiz=True)
+            row = self._create_loc_widget(hdr, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 9, header_bg, fg_col, bd_col, is_horiz=True)
             if row:
                 children = row.winfo_children()
                 if children:
                     cb_frame = children[0]
-                    presets_ui = self._build_presets_ui(cb_frame, "#f3f3f3", bd_col, is_horiz=True)
+                    presets_ui = self._build_presets_ui(cb_frame, header_bg, bd_col, is_horiz=True)
                     presets_ui.pack(side="left", padx=(0, 10))
                 row.pack(side="right", padx=8)
                 
-        tk.Frame(main_box, bg=bd_col, height=1).pack(fill="x") # sep
+        # Content Grid packed directly inside self.loc_frame_horizontal
+        content = tk.Frame(self.loc_frame_horizontal, bg=bg_col)
+        content.pack(fill="x", padx=8, pady=4)
         
-        # Content Grid
-        content = tk.Frame(main_box, bg=bg_col)
-        content.pack(fill="x", padx=8, pady=8)
-        
-        # 5 columns
         for i in range(5):
             content.columnconfigure(i, weight=1, uniform="col")
             
         field_names_order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
-        
-        # We need 5 columns for horizontal
         for idx, name in enumerate(field_names_order):
             field = next((f for f in self.app.config["ui_sections"]["location"] if f["name"] == name), None)
             if not field: continue
@@ -812,7 +820,7 @@ class ObjectProgramUI(
             cell = tk.Frame(content, bg=bg_col)
             cell.grid(row=0, column=idx, sticky="nsew", padx=4)
             
-            row = self._create_loc_widget(cell, name, field.get("type", "text"), field, "JetBrains Mono", 10, bg_col, "#000000", bd_col, is_horiz=True)
+            row = self._create_loc_widget(cell, name, field.get("type", "text"), field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=True)
             if row:
                 row.pack(fill="x")
 
