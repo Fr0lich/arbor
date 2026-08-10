@@ -6,7 +6,7 @@ It integrates various mixins (Autosave, ImageHandler, Suggestions, etc.) and con
 dynamic database visualizer window using Tkinter.
 """
 
-from ui.widgets import ToggleSwitch, TreeviewListboxWrapper, create_toggle_row
+from ui.widgets import ToggleSwitch, TreeviewListboxWrapper
 from ui.autosave_handler import AutosaveMixin
 from ui.image_handler import ImageHandlerMixin
 from ui.historical_suggestions import HistoricalSuggestionsMixin
@@ -1660,7 +1660,10 @@ class ObjectProgramUI(
 
         
         tools_menu = tk.Menu(menubar, tearoff=0)
-        tools_menu.add_command(label="Bulk Edit", command=self.open_bulk_edit_window)
+        import config
+        advanced_prefs = config.load_prefs().get("advanced", {})
+        if advanced_prefs.get("enable_bulk_editor", False):
+            tools_menu.add_command(label="Bulk Edit", command=self.open_bulk_edit_window)
         menubar.add_cascade(label="Tools", menu=tools_menu)
         # FILTER
         filter_menu = tk.Menu(menubar, tearoff=0)
@@ -1707,6 +1710,11 @@ class ObjectProgramUI(
         settings_menu.add_command(
             label="Configure Registration Tabs...",
             command=self.open_tab_config_editor
+        )
+        settings_menu.add_separator()
+        settings_menu.add_command(
+            label="Advanced Settings...",
+            command=self.open_advanced_settings
         )
         menubar.add_cascade(label="Settings", menu=settings_menu)
         self.menubar = menubar
@@ -2060,6 +2068,26 @@ class ObjectProgramUI(
         )
 
 
+    def open_advanced_settings(self):
+        if hasattr(self, "advanced_settings_win") and self.advanced_settings_win and self.advanced_settings_win.win.winfo_exists():
+            self.advanced_settings_win.win.lift()
+            self.advanced_settings_win.win.focus_force()
+            return
+        
+        from ui.advanced_settings import AdvancedSettingsWindow
+        self.advanced_settings_win = AdvancedSettingsWindow(self.root, self)
+
+    def update_focus_toggle_visibility(self):
+        if not hasattr(self, "focus_quick_frame"):
+            return
+        import config
+        advanced_prefs = config.load_prefs().get("advanced", {})
+        if advanced_prefs.get("enable_focus_mode_toggle", False):
+            self.focus_quick_frame.pack(side="right", padx=(0, 4))
+        else:
+            self.focus_quick_frame.pack_forget()
+
+
     def open_settings_window(self):
         if hasattr(self, "settings_window") and self.settings_window and self.settings_window.winfo_exists():
             self.settings_window.lift()
@@ -2258,6 +2286,14 @@ class ObjectProgramUI(
         footer.pack(fill="x", side="bottom")
         footer.pack_propagate(False)
         tk.Frame(footer, bg=COLORS["outline"], height=1).pack(fill="x", side="top")
+
+        left_footer = tk.Frame(footer, bg=COLORS["surface_container_low"])
+        left_footer.pack(side="left", fill="y", padx=sc(16))
+        tk.Button(
+            left_footer, text="Advanced...", font=FONT_LABEL, fg=COLORS["on_surface"], 
+            bg=COLORS["surface"], bd=1, relief="solid", padx=sc(16), pady=sc(4), 
+            cursor="hand2", command=self.open_advanced_settings
+        ).pack(side="left", pady=sc(12))
 
         right_footer = tk.Frame(footer, bg=COLORS["surface_container_low"])
         right_footer.pack(side="right", fill="y", padx=sc(16))
@@ -2996,17 +3032,26 @@ class ObjectProgramUI(
         def on_switch_toggle():
             if self.focus_dynamic_update_var.get():
                 on_apply()
+
+        def create_toggle_row(parent, label_text, var):
+            row = ttk.Frame(parent)
+            row.pack(fill="x", pady=sc(4))
+            lbl = ttk.Label(row, text=label_text)
+            lbl.pack(side="left", anchor="w")
+            sw = ToggleSwitch(row, var, command=on_switch_toggle, ui_ref=self)
+            sw.pack(side="right")
+            return row
             
         opts_lf = ttk.LabelFrame(scrollable_frame, text="General Options", padding=sc(8))
         opts_lf.pack(fill="x", pady=(0, 10))
-        create_toggle_row(opts_lf, "Dynamic Problem Fallback", self.draft_focus_fallback_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(opts_lf, "Dynamic Problem Fallback", self.draft_focus_fallback_var)
         
         sec_lf = ttk.LabelFrame(scrollable_frame, text="Sections Visibility", padding=sc(8))
         sec_lf.pack(fill="x", pady=(0, 10))
         if "Problems" in self.draft_focus_visibility_vars:
-            create_toggle_row(sec_lf, "Problems Section", self.draft_focus_visibility_vars["Problems"], command=on_switch_toggle, ui_ref=self)
+            create_toggle_row(sec_lf, "Problems Section", self.draft_focus_visibility_vars["Problems"])
         if "Location" in self.draft_focus_visibility_vars:
-            create_toggle_row(sec_lf, "Location Section", self.draft_focus_visibility_vars["Location"], command=on_switch_toggle, ui_ref=self)
+            create_toggle_row(sec_lf, "Location Section", self.draft_focus_visibility_vars["Location"])
             
         reg_lf = ttk.LabelFrame(scrollable_frame, text="Registration Fields", padding=sc(8))
         reg_lf.pack(fill="x", pady=(0, 10))
@@ -3014,7 +3059,7 @@ class ObjectProgramUI(
         if getattr(self.app, "config", None) and "ui_sections" in self.app.config:
             for field in self.app.config["ui_sections"].get("registration", []):
                 name = field["name"]
-                create_toggle_row(reg_lf, name, self.draft_focus_visibility_vars[name], command=on_switch_toggle, ui_ref=self)
+                create_toggle_row(reg_lf, name, self.draft_focus_visibility_vars[name])
 
         # --- Bottom Buttons (Apply, OK, Cancel) ---
         btn_row = ttk.Frame(main_frame, padding=(0, 6, 0, 0))
@@ -3248,6 +3293,12 @@ class ObjectProgramUI(
 
     def toggle_bulk_edit_btn(self):
         if hasattr(self, 'bulk_edit_btn'):
+            import config
+            advanced_prefs = config.load_prefs().get("advanced", {})
+            if not advanced_prefs.get("enable_bulk_editor", False):
+                self.bulk_edit_btn.pack_forget()
+                return
+
             if self.show_bulk_edit_var.get():
                 self.bulk_edit_btn.pack(side="bottom", fill="x", pady=(2, 0))
             else:
@@ -3774,7 +3825,10 @@ class ObjectProgramUI(
         self.context_menu.add_command(label="Mark Selected as Reviewed", command=lambda: self._context_set_reviewed(True))
         self.context_menu.add_command(label="Mark Selected as Not Reviewed", command=lambda: self._context_set_reviewed(False))
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="Bulk Edit Selected", command=self.open_bulk_edit_window)
+        import config
+        advanced_prefs = config.load_prefs().get("advanced", {})
+        if advanced_prefs.get("enable_bulk_editor", False):
+            self.context_menu.add_command(label="Bulk Edit Selected", command=self.open_bulk_edit_window)
         self.context_menu.add_command(label="Duplicate Object", command=lambda: self._shortcut_duplicate_object(None))
         self.context_menu.add_command(label="Delete Object", command=self.delete_current_object)
 
@@ -3978,17 +4032,18 @@ class ObjectProgramUI(
         )
 
         # Focus Mode toggle (stays in header)
-        focus_quick_frame = ttk.Frame(reg_header, style="RightPane.TFrame")
-        focus_quick_frame.pack(side="right", padx=(0, 4))
+        self.focus_quick_frame = ttk.Frame(reg_header, style="RightPane.TFrame")
+        self.focus_quick_frame.pack(side="right", padx=(0, 4))
 
         self.focus_problems_cb = ToggleSwitch(
-            focus_quick_frame,
+            self.focus_quick_frame,
             self.focus_mode_var,
             command=self.toggle_focus_mode_from_ui,
             ui_ref=self
         )
         self.focus_problems_cb.pack(side="right", padx=(4, 0))
-        ttk.Label(focus_quick_frame, text="Focus Mode", font=("Hanken Grotesk", sc(9))).pack(side="right")
+        ttk.Label(self.focus_quick_frame, text="Focus Mode", font=("Hanken Grotesk", sc(9))).pack(side="right")
+        self.update_focus_toggle_visibility()
 
         # -------------------------------------------------------
         # Stitch: Fixed action bar — packed at BOTTOM before canvas
