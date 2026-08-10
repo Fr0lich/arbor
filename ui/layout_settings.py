@@ -594,9 +594,21 @@ class LayoutSettingsMixin:
             style.configure("MiddlePane.TFrame", background="#181825")
             style.configure("RightPane.TFrame", background="#1e1e2e")
             style.configure("LeftPane.TLabel", background="#1e1e2e", foreground=fg_color)
-            style.configure("LeftPane.TCheckbutton", background="#1e1e2e", foreground=fg_color)
+            cb_opts = {
+                "indicatorbackground": field_bg,
+                "indicatorforeground": fg_color,
+                "upperbordercolor": border_color,
+                "lowerbordercolor": border_color
+            }
+            style.configure("LeftPane.TCheckbutton", background="#1e1e2e", foreground=fg_color, **cb_opts)
+            style.map("LeftPane.TCheckbutton",
+                      background=[("active", "#1e1e2e")],
+                      indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
             style.configure("RightPane.TLabel", background="#1e1e2e", foreground=fg_color)
-            style.configure("RightPane.TCheckbutton", background="#1e1e2e", foreground=fg_color)
+            style.configure("RightPane.TCheckbutton", background="#1e1e2e", foreground=fg_color, **cb_opts)
+            style.map("RightPane.TCheckbutton",
+                      background=[("active", "#1e1e2e")],
+                      indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
             style.configure("MiddlePane.TLabel", background="#181825", foreground=fg_color)
             style.configure("TButton", background=field_bg, foreground=fg_color,
                             bordercolor=border_color, lightcolor=border_color, darkcolor=border_color,
@@ -636,8 +648,10 @@ class LayoutSettingsMixin:
             style.map("TCombobox", fieldbackground=[("readonly", field_bg)],
                       selectbackground=[("readonly", select_bg)], selectforeground=[("readonly", select_fg)])
 
-            style.configure("TCheckbutton", background=bg_color, foreground=fg_color)
-            style.map("TCheckbutton", background=[("active", bg_color)])
+            style.configure("TCheckbutton", background=bg_color, foreground=fg_color, **cb_opts)
+            style.map("TCheckbutton",
+                      background=[("active", bg_color)],
+                      indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
 
             style.configure("Treeview", background=field_bg, foreground=fg_color,
                             fieldbackground=field_bg, bordercolor=border_color, rowheight=28)
@@ -773,9 +787,21 @@ class LayoutSettingsMixin:
             style.configure("MiddlePane.TFrame", background="#ffffff")
             style.configure("RightPane.TFrame", background="#f5f5f5")
             style.configure("LeftPane.TLabel", background="#f5f5f5", foreground=fg_color)
-            style.configure("LeftPane.TCheckbutton", background="#f5f5f5", foreground=fg_color)
+            cb_opts = {
+                "indicatorbackground": field_bg,
+                "indicatorforeground": fg_color,
+                "upperbordercolor": border_color,
+                "lowerbordercolor": border_color
+            }
+            style.configure("LeftPane.TCheckbutton", background="#f5f5f5", foreground=fg_color, **cb_opts)
+            style.map("LeftPane.TCheckbutton",
+                      background=[("active", "#f5f5f5")],
+                      indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
             style.configure("RightPane.TLabel", background="#f5f5f5", foreground=fg_color)
-            style.configure("RightPane.TCheckbutton", background="#f5f5f5", foreground=fg_color)
+            style.configure("RightPane.TCheckbutton", background="#f5f5f5", foreground=fg_color, **cb_opts)
+            style.map("RightPane.TCheckbutton",
+                      background=[("active", "#f5f5f5")],
+                      indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
             style.configure("MiddlePane.TLabel", background="#ffffff", foreground=fg_color)
             style.configure("TButton", background="#e8e8e8", foreground=fg_color,
                             bordercolor=border_color, lightcolor="#e8e8e8", darkcolor="#c4c7c7",
@@ -818,8 +844,10 @@ class LayoutSettingsMixin:
             style.map("TCombobox", fieldbackground=[("readonly", bg_color)],
                       selectbackground=[("readonly", select_bg)], selectforeground=[("readonly", select_fg)])
 
-            style.configure("TCheckbutton", background=bg_color, foreground=fg_color)
-            style.map("TCheckbutton", background=[("active", bg_color)])
+            style.configure("TCheckbutton", background=bg_color, foreground=fg_color, **cb_opts)
+            style.map("TCheckbutton",
+                      background=[("active", bg_color)],
+                      indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
 
             style.configure("Treeview", background=field_bg, foreground=fg_color,
                             fieldbackground=field_bg, bordercolor=border_color, rowheight=28)
