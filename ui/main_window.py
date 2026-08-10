@@ -3958,7 +3958,7 @@ class ObjectProgramUI(
             lambda e: self.image_canvas.configure(scrollregion=self.image_canvas.bbox("all"))
         )
 
-        self.image_canvas.configure(yscrollcommand=self.image_scroll.set)
+        self.image_canvas.configure(yscrollcommand=self._on_image_scroll)
         
         self.image_canvas.pack(side="left", fill="both", expand=True)
 
@@ -4882,7 +4882,7 @@ class ObjectProgramUI(
     def ui_error(self, title, msg):
         self.root.after(0, lambda: messagebox.showerror(title, msg))
 
-    def show_traceback_dialog(self, title, message, traceback_text):
+    def show_traceback_dialog(self, title, message, traceback_text, is_crash=False):
         """Displays a scrollable monospace traceback dialog for errors."""
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
@@ -4948,8 +4948,37 @@ class ObjectProgramUI(
         copy_btn = ttk.Button(footer, text="Copy to Clipboard", command=copy_traceback)
         copy_btn.pack(side="left")
 
-        close_btn = ttk.Button(footer, text="Close", command=dialog.destroy)
-        close_btn.pack(side="right")
+        if is_crash:
+            def emergency_autosave():
+                try:
+                    import json
+                    data = {
+                        "df_reg": self.app.df_reg.copy() if self.app.df_reg is not None else None,
+                        "df_obs": self.app.df_obs.copy() if self.app.df_obs is not None else None,
+                        "df_photo": self.app.df_photo.copy() if self.app.df_photo is not None else None,
+                        "df_log": getattr(self.app, 'df_log', None).copy() if getattr(self.app, 'df_log', None) is not None else None
+                    }
+                    json_data = {
+                        k: v.to_json(orient="table") if v is not None else None
+                        for k, v in data.items()
+                    }
+                    save_path = self._autosave_path() + ".crash"
+                    with open(save_path, "w") as f:
+                        json.dump(json_data, f)
+                    from tkinter import messagebox
+                    messagebox.showinfo("Emergency Save", f"Data safely backed up to:\n{save_path}", parent=dialog)
+                except Exception as e:
+                    from tkinter import messagebox
+                    messagebox.showerror("Emergency Save Failed", f"Failed to autosave:\n{e}", parent=dialog)
+
+            save_btn = ttk.Button(footer, text="Emergency Autosave", command=emergency_autosave)
+            save_btn.pack(side="left", padx=10)
+
+            quit_btn = ttk.Button(footer, text="Quit Application", command=self.root.destroy)
+            quit_btn.pack(side="right")
+        else:
+            close_btn = ttk.Button(footer, text="Close", command=dialog.destroy)
+            close_btn.pack(side="right")
 
     def show_banner(self, text, banner_type="info", duration_ms=4000, action_callback=None):
         """Displays an inline notification banner at the top of the workspace."""
