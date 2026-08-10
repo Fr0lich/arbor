@@ -13,6 +13,7 @@ from ui.historical_suggestions import HistoricalSuggestionsMixin
 from ui.layout_settings import LayoutSettingsMixin
 from ui.dashboard import DashboardMixin
 from ui.database_ops import DatabaseOpsMixin
+from ui.log_viewer import LogViewerMixin
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -175,7 +176,8 @@ class ObjectProgramUI(
     HistoricalSuggestionsMixin,
     LayoutSettingsMixin,
     DashboardMixin,
-    DatabaseOpsMixin
+    DatabaseOpsMixin,
+    LogViewerMixin
 ):
 # ---------- UI helpers ----------
     @property
@@ -3430,7 +3432,7 @@ class ObjectProgramUI(
             return lbl
 
         _sb_link(sb_right, "DB_STATUS",  lambda: None)   # placeholder — connect later
-        _sb_link(sb_right, "LOG_VIEWER", lambda: None)   # placeholder — connect later
+        _sb_link(sb_right, "LOG_VIEWER", self.open_log_viewer_window)
 
         # ----------------------------------------------------------------
         # LAYER 2: Stitch Top Navigation Bar
