@@ -2056,6 +2056,12 @@ class ObjectProgramUI(
         popup.add_command(label="Toggle image view", command=self.toggle_image_view)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
+    def show_create_dropdown(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        popup.add_command(label="New Object", command=self.add_new_object)
+        popup.add_command(label="New Database", command=self.create_new_database)
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
     def show_settings_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
         popup.add_command(label="General Settings...", command=self.open_settings_window)
@@ -3485,7 +3491,7 @@ class ObjectProgramUI(
 
         # DATA — opens data menu
         btn_dat = _nav_btn(nav_links_frame, "DATA ▾",   self.show_data_dropdown)
-        self.add_tooltip(btn_dat, "Load book lists and historical databases")
+        self.add_tooltip(btn_dat, "Load historical databases")
 
         # IMAGES — jump to next problem
         btn_img = _nav_btn(nav_links_frame, "IMAGES ▾", self.show_images_dropdown)
@@ -3493,11 +3499,11 @@ class ObjectProgramUI(
 
         # CREATE — add new object or database
         btn_create = _nav_btn(nav_links_frame, "CREATE",   self.show_create_dropdown)
-        self.add_tooltip(btn_create, "Create a new museum object or database")
+        self.add_tooltip(btn_create, "Create a new object or database")
 
         # HISTORY — recent objects popup
         btn_hist = _nav_btn(nav_links_frame, "HISTORY",  self.open_recent_popup)
-        self.add_tooltip(btn_hist, "View recently visited museum objects")
+        self.add_tooltip(btn_hist, "View recently visited objects")
 
         # 1px separator before secondary controls
         tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)
@@ -3507,16 +3513,16 @@ class ObjectProgramUI(
         secondary_frame.pack(side="left", fill="y", padx=4)
 
         self.toolbar_buttons['Prev'] = ttk.Button(
-            secondary_frame, text="◄ Prev", style="Nav.TButton",
+            secondary_frame, text="◄", style="Nav.TButton",
             command=lambda: self.navigate_object(-1))
         self.toolbar_buttons['Prev'].pack(side="left", padx=1)
-        self.add_tooltip(self.toolbar_buttons['Prev'], "Previous object")
+        self.add_tooltip(self.toolbar_buttons['Prev'], "Previous in list")
 
         self.toolbar_buttons['Next'] = ttk.Button(
-            secondary_frame, text="Next ►", style="Nav.TButton",
+            secondary_frame, text="►", style="Nav.TButton",
             command=lambda: self.navigate_object(1))
         self.toolbar_buttons['Next'].pack(side="left", padx=1)
-        self.add_tooltip(self.toolbar_buttons['Next'], "Next object")
+        self.add_tooltip(self.toolbar_buttons['Next'], "Next in list")
 
         self.toolbar_buttons['Last'] = ttk.Button(
             secondary_frame, text="Last", style="Nav.TButton",
@@ -3544,18 +3550,9 @@ class ObjectProgramUI(
         tk.Frame(secondary_frame, bg=nav_border, width=1).pack(side="left", fill="y", pady=6)
 
 
-#free buttons
-        self.toolbar_buttons['New Object'] = ttk.Button(
-            secondary_frame, text="New Object", style="Nav.TButton",
-            command=self.add_new_object)
-        self.toolbar_buttons['New Object'].pack(side="left", padx=2)
-        self.add_tooltip(self.toolbar_buttons['New Object'], "Create a new museum object (Ctrl+N)")
 
-        self.toolbar_buttons['Images'] = ttk.Button(
-            secondary_frame, text="Images", style="Nav.TButton",
-            command=self.open_image_menu)
-        self.toolbar_buttons['Images'].pack(side="left", padx=1)
-        self.add_tooltip(self.toolbar_buttons['Images'], "Manage images for current object")
+
+
 
 
 
@@ -3655,7 +3652,7 @@ class ObjectProgramUI(
         sort_frame = ttk.Frame(left)
         sort_frame.pack(fill="x", padx=4, pady=(0, 2))
 
-        ttk.Label(sort_frame, text="Sort:", font=("Segoe UI", sc(8))).pack(side="left")
+       
 
         self.sort_var = tk.StringVar(value="ID")
 
@@ -3701,7 +3698,7 @@ class ObjectProgramUI(
         self.left_panes.add(self.left_bottom_container, weight=0)
 
         # ---------- FILTER ----------
-        self.toolbar_buttons['Filter'] = ttk.Button(sort_frame, text="Filter", style="Tool.TButton", command=self.open_filter_menu)
+        self.toolbar_buttons['Filter'] = ttk.Button(sort_frame, text="Filter", style="Nav.TButton", command=self.open_filter_menu)
         self.toolbar_buttons['Filter'].pack(side="left", padx=(4, 0))
         self.filter_btn = self.toolbar_buttons['Filter']
         self.add_tooltip(self.toolbar_buttons['Filter'], "Ctrl+G")
