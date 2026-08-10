@@ -420,9 +420,45 @@ class DatabaseOpsMixin:
         # 5. Full-text search index covering ALL registration columns (not just
         #    Genus + Species). Stored as a dictionary per ObjectID
         #    for fast substring matching and priority ranking.
+        search_index = {}
+        if df_reg is not None:
+            df_str = df_reg.fillna("").astype(str)
+            for col in df_str.columns:
+                df_str[col] = df_str[col].str.strip().str.lower()
 
-        self.search_engine.invalidate_search_index()
-        search_index = self.search_engine.get_search_index(df_reg, reg_dict)
+            all_cols = list(df_reg.columns)
+            genus_idx = all_cols.index('Genus') if 'Genus' in all_cols else -1
+            species_idx = all_cols.index('Species') if 'Species' in all_cols else -1
+            family_idx = all_cols.index('Family') if 'Family' in all_cols else -1
+
+            for row in df_str.itertuples(index=True, name=None):
+                oid = row[0]
+                oid_str = str(oid).lower()
+
+                genus = row[genus_idx + 1] if genus_idx != -1 else ""
+                species = row[species_idx + 1] if species_idx != -1 else ""
+                family = row[family_idx + 1] if family_idx != -1 else ""
+
+                if genus and species:
+                    genus_species_str = f"{genus} {species}"
+                elif genus:
+                    genus_species_str = genus
+                elif species:
+                    genus_species_str = species
+                else:
+                    genus_species_str = ""
+
+                parts = [oid_str]
+                for val in row[1:]:
+                    if val:
+                        parts.append(val)
+
+                search_index[oid] = {
+                    "id": oid_str,
+                    "genus_species": genus_species_str,
+                    "family": family,
+                    "all": " ".join(parts)
+                }
 
         # Atomically assign all caches so the main thread sees a consistent state
         self._cached_reg_dict = reg_dict
