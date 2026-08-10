@@ -45,14 +45,15 @@ def session_had_errors() -> bool:
     return _SESSION_HAS_ERRORS
 
 
-def debug_error(context: str, extra: str = "") -> None:
+def debug_error(context: str, extra: str = "", is_crash: bool = False) -> None:
     """Log an error with full traceback to the session log and to stdout."""
     global _SESSION_HAS_ERRORS
     _SESSION_HAS_ERRORS = True
 
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     tb = traceback.format_exc()
-    msg = f"[{ts}] [ERROR] {context}"
+    crash_prefix = "[CRASH] " if is_crash else ""
+    msg = f"[{ts}] [ERROR] {crash_prefix}{context}"
     if extra:
         msg += f" — {extra}"
     msg += f"\n{tb}"
