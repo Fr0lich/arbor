@@ -92,7 +92,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Effort:** Large
 * **Recommended change:** Use `models.AppState` as a strict "Single Source of Truth." UI should dispatch events to update the state, and the state should trigger UI redraws (similar to an MVC or Flux architecture).
 
-### 5. Pre-compute Global Search Index
+### [COMPLETED] 5. Pre-compute Global Search Index
 * **Why it matters:** Filtering across a massive Pandas dataframe for every keystroke in the search bar is laggy.
 * **Impact:** Medium
 * **Effort:** Medium
