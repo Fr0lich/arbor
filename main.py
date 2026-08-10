@@ -156,7 +156,10 @@ if __name__ == "__main__":
     try:
         app = AppState()
         root = tk.Tk()
-        # root.withdraw()  # Removed: don't hide main window to avoid invisible dialog bug
+        try:
+            root.attributes("-alpha", 0.0)
+        except Exception:
+            pass
 
         # ── Detect DPI scale factor (stored for info display only) ──────────────
         # winfo_fpixels('1i') returns pixels-per-inch on this screen.
@@ -221,6 +224,10 @@ if __name__ == "__main__":
             from ui.dialogs import LoadingWindow
             loading_win = LoadingWindow(root, dialog.selected_excel_path, ui)
         else:
+            try:
+                root.attributes("-alpha", 1.0)
+            except Exception:
+                pass
             root.deiconify()
             root.state("zoomed")
             from ui.tutorial import TutorialManager

@@ -1547,6 +1547,10 @@ class LoadingWindow:
             pass
         
         # Show main window
+        try:
+            self.parent.attributes("-alpha", 1.0)
+        except Exception:
+            pass
         self.parent.deiconify()
         self.parent.state("zoomed")
         
