@@ -13,6 +13,7 @@ from ui.historical_suggestions import HistoricalSuggestionsMixin
 from ui.layout_settings import LayoutSettingsMixin
 from ui.dashboard import DashboardMixin
 from ui.database_ops import DatabaseOpsMixin
+from ui.log_viewer import LogViewerMixin
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -175,7 +176,8 @@ class ObjectProgramUI(
     HistoricalSuggestionsMixin,
     LayoutSettingsMixin,
     DashboardMixin,
-    DatabaseOpsMixin
+    DatabaseOpsMixin,
+    LogViewerMixin
 ):
 # ---------- UI helpers ----------
     @property
@@ -3430,7 +3432,7 @@ class ObjectProgramUI(
             return lbl
 
         _sb_link(sb_right, "DB_STATUS",  lambda: None)   # placeholder — connect later
-        _sb_link(sb_right, "LOG_VIEWER", lambda: None)   # placeholder — connect later
+        _sb_link(sb_right, "LOG_VIEWER", self.open_log_viewer_window)
 
         # ----------------------------------------------------------------
         # LAYER 2: Stitch Top Navigation Bar
@@ -3735,6 +3737,7 @@ class ObjectProgramUI(
         self._inline_search_entry.bind("<Escape>",      self._clear_inline_search)
         self._inline_search_entry.bind("<FocusIn>",     self._search_focus_in)
         self._inline_search_entry.bind("<FocusOut>",    self._search_focus_out)
+        self._inline_search_entry.bind("<Button-1>",    self._search_focus_in)
         self._inline_search_entry.bind("<Return>",      self._on_search_bar_enter)
         
         def _focus_list(event):
@@ -3951,7 +3954,7 @@ class ObjectProgramUI(
             lambda e: self.image_canvas.configure(scrollregion=self.image_canvas.bbox("all"))
         )
 
-        self.image_canvas.configure(yscrollcommand=self.image_scroll.set)
+        self.image_canvas.configure(yscrollcommand=self._on_image_scroll)
         
         self.image_canvas.pack(side="left", fill="both", expand=True)
 
