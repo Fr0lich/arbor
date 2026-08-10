@@ -18,7 +18,7 @@
       "id": "image_source",
       "target": "image_source_frame",
       "title": "Image Source",
-      "text": "Choose where Arbor should load high-resolution images from.\nOnline is recommended if you have a stable connection.",
+      "text": "Choose where Arbor should load images from.\nOnline is recommended if you have a stable connection.",
       "placement": "top"
     },
     {
@@ -85,7 +85,7 @@
       "id": "hr_intro",
       "target": null,
       "title": "Historical Conflict Resolver",
-      "text": "Welcome to the Conflict Resolver.\nHere you can see differences between the current record and previous years' data.",
+      "text": "Welcome to the Conflict Resolver.\nHere you can see differences between the current record and older data.",
       "placement": "center"
     },
     {
