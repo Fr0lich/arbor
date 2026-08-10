@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from config import sc
-from ui.widgets import ToggleSwitch
+from ui.widgets import ToggleSwitch, create_toggle_row
 
 class LayoutSettingsMixin:
     def _build_layout_menu(self, menubar):
@@ -245,21 +245,21 @@ class LayoutSettingsMixin:
 
         panels_lf = ttk.LabelFrame(scrollable_frame, text="Show/Hide Panels", padding=sc(8))
         panels_lf.pack(fill="x", pady=(0, 10))
-        create_toggle_row(panels_lf, "Object ID List (Left)", self.draft_show_list_var)
-        create_toggle_row(panels_lf, "Searchbar", self.draft_show_search_var)
-        create_toggle_row(panels_lf, "Registration Panel (Right)", self.draft_show_reg_var)
-        create_toggle_row(panels_lf, "Images Panel (Middle Top)", self.draft_show_images_var)
-        create_toggle_row(panels_lf, "Location Window Position: Left / Center", self.draft_location_in_center_var)
-        create_toggle_row(panels_lf, "Image Zoom Tools", self.draft_show_image_tools_var)
-        create_toggle_row(panels_lf, "Bulk Edit Button", self.draft_show_bulk_edit_var)
+        create_toggle_row(panels_lf, "Object ID List (Left)", self.draft_show_list_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_lf, "Searchbar", self.draft_show_search_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_lf, "Registration Panel (Right)", self.draft_show_reg_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_lf, "Images Panel (Middle Top)", self.draft_show_images_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_lf, "Location Window Position: Left / Center", self.draft_location_in_center_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_lf, "Image Zoom Tools", self.draft_show_image_tools_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_lf, "Bulk Edit Button", self.draft_show_bulk_edit_var, command=on_switch_toggle, ui_ref=self)
 
         behaviors_lf = ttk.LabelFrame(scrollable_frame, text="Persistent Behaviors", padding=sc(8))
         behaviors_lf.pack(fill="x", pady=(0, 10))
-        create_toggle_row(behaviors_lf, "Focus Mode by default", self.draft_layout_focus_mode_var)
-        create_toggle_row(behaviors_lf, "Snap lock when focusing problems", self.draft_snap_lock_var)
-        create_toggle_row(behaviors_lf, "View images as stack by default", self.draft_image_stack_var)
-        create_toggle_row(behaviors_lf, "Embedded Session Dashboard", self.draft_dashboard_embedded_var)
-        create_toggle_row(behaviors_lf, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var)
+        create_toggle_row(behaviors_lf, "Focus Mode by default", self.draft_layout_focus_mode_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behaviors_lf, "Snap lock when focusing problems", self.draft_snap_lock_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behaviors_lf, "View images as stack by default", self.draft_image_stack_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behaviors_lf, "Embedded Session Dashboard", self.draft_dashboard_embedded_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behaviors_lf, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var, command=on_switch_toggle, ui_ref=self)
 
         toolbar_lf = ttk.LabelFrame(scrollable_frame, text="Show Toolbar Buttons", padding=sc(8))
         toolbar_lf.pack(fill="x", pady=(0, 10))

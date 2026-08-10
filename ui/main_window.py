@@ -6,7 +6,7 @@ It integrates various mixins (Autosave, ImageHandler, Suggestions, etc.) and con
 dynamic database visualizer window using Tkinter.
 """
 
-from ui.widgets import ToggleSwitch, TreeviewListboxWrapper
+from ui.widgets import ToggleSwitch, TreeviewListboxWrapper, create_toggle_row
 from ui.autosave_handler import AutosaveMixin
 from ui.image_handler import ImageHandlerMixin
 from ui.historical_suggestions import HistoricalSuggestionsMixin
@@ -2996,26 +2996,17 @@ class ObjectProgramUI(
         def on_switch_toggle():
             if self.focus_dynamic_update_var.get():
                 on_apply()
-
-        def create_toggle_row(parent, label_text, var):
-            row = ttk.Frame(parent)
-            row.pack(fill="x", pady=sc(4))
-            lbl = ttk.Label(row, text=label_text)
-            lbl.pack(side="left", anchor="w")
-            sw = ToggleSwitch(row, var, command=on_switch_toggle, ui_ref=self)
-            sw.pack(side="right")
-            return row
             
         opts_lf = ttk.LabelFrame(scrollable_frame, text="General Options", padding=sc(8))
         opts_lf.pack(fill="x", pady=(0, 10))
-        create_toggle_row(opts_lf, "Dynamic Problem Fallback", self.draft_focus_fallback_var)
+        create_toggle_row(opts_lf, "Dynamic Problem Fallback", self.draft_focus_fallback_var, command=on_switch_toggle, ui_ref=self)
         
         sec_lf = ttk.LabelFrame(scrollable_frame, text="Sections Visibility", padding=sc(8))
         sec_lf.pack(fill="x", pady=(0, 10))
         if "Problems" in self.draft_focus_visibility_vars:
-            create_toggle_row(sec_lf, "Problems Section", self.draft_focus_visibility_vars["Problems"])
+            create_toggle_row(sec_lf, "Problems Section", self.draft_focus_visibility_vars["Problems"], command=on_switch_toggle, ui_ref=self)
         if "Location" in self.draft_focus_visibility_vars:
-            create_toggle_row(sec_lf, "Location Section", self.draft_focus_visibility_vars["Location"])
+            create_toggle_row(sec_lf, "Location Section", self.draft_focus_visibility_vars["Location"], command=on_switch_toggle, ui_ref=self)
             
         reg_lf = ttk.LabelFrame(scrollable_frame, text="Registration Fields", padding=sc(8))
         reg_lf.pack(fill="x", pady=(0, 10))
@@ -3023,7 +3014,7 @@ class ObjectProgramUI(
         if getattr(self.app, "config", None) and "ui_sections" in self.app.config:
             for field in self.app.config["ui_sections"].get("registration", []):
                 name = field["name"]
-                create_toggle_row(reg_lf, name, self.draft_focus_visibility_vars[name])
+                create_toggle_row(reg_lf, name, self.draft_focus_visibility_vars[name], command=on_switch_toggle, ui_ref=self)
 
         # --- Bottom Buttons (Apply, OK, Cancel) ---
         btn_row = ttk.Frame(main_frame, padding=(0, 6, 0, 0))
