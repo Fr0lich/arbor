@@ -190,19 +190,18 @@ if __name__ == "__main__":
         config.UI_SCALE = ui_scale
         config._detected_scale = detected_scale
 
-        ui = ObjectProgramUI(root, app)
-
         # ── ui_ref: mutable list so hooks set above can access 'ui' after it's created
-        ui_ref = [ui]
+        ui_ref = [None]
 
-        # ── Install global error hooks now that root & ui exist ─────────────────
+        # ── Install global error hooks ─────────────────
         _install_exception_hooks(root, ui_ref)
         _install_atexit_crash_reporter()
 
         # Hide main window initially
-        # root.withdraw()
+        root.withdraw()
 
-        dialog = StartupDialog(root, app, ui)
+        # We do not pass ui to StartupDialog yet, because ui has not been created.
+        dialog = StartupDialog(root, app)
 
         # Ensure startup dialog is forcefully brought to the front
         dialog.win.attributes("-topmost", True)
@@ -217,12 +216,34 @@ if __name__ == "__main__":
             root.destroy()
             sys.exit(0)
 
-        # Dialog completed successfully, hide main window during loading
-        # root.withdraw()
+        # Dialog completed successfully. Now construct the heavy Main Window UI.
+        ui = ObjectProgramUI(root, app)
+        ui_ref[0] = ui
+
+        # Apply user configurations determined by the StartupDialog
+        if getattr(dialog, "image_mode_val", "online") == "online":
+            ui.enable_online_images()
+        elif getattr(dialog, "image_mode_val", "online") == "folder":
+            ui.image_mode = "folder"
+            ui.image_folder = getattr(dialog, "image_folder_val", "")
+        elif getattr(dialog, "image_mode_val", "online") == "offline":
+            ui.enable_offline_mode()
+
+        ui.apply_config()
 
         if hasattr(dialog, "selected_excel_path"):
             from ui.dialogs import LoadingWindow
             loading_win = LoadingWindow(root, dialog.selected_excel_path, ui)
+        elif hasattr(dialog, "db_path_var") and dialog.db_path_var.get().strip():
+            ui.open_excel_from_path(dialog.db_path_var.get().strip())
+            try:
+                root.attributes("-alpha", 1.0)
+            except Exception:
+                pass
+            root.deiconify()
+            root.state("zoomed")
+            from ui.tutorial import TutorialManager
+            TutorialManager().continue_pending_tutorial(root)
         else:
             try:
                 root.attributes("-alpha", 1.0)

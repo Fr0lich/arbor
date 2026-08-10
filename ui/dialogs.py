@@ -220,10 +220,9 @@ class StartupDialog:
 
     # ------------------------------------------------------------------
 
-    def __init__(self, parent, app, ui):
+    def __init__(self, parent, app):
         self.parent = parent
         self.app = app
-        self.ui = ui
 
         import config as _cfg
         self._scale = getattr(_cfg, "_detected_scale", 1.0)
@@ -1057,9 +1056,7 @@ class StartupDialog:
         if not path:
             return
         self.import_path_var.set(path)
-        # Fire the existing LOAD_EXCEL event so the app can pre-load data
         self.selected_excel_path = path
-        self.parent.after(100, lambda: self.parent.event_generate("<<LOAD_EXCEL>>"))
 
 
 
@@ -1072,7 +1069,6 @@ class StartupDialog:
 
         if folder:
             config.set_last_dir("last_image_dir", folder)
-            self.ui.image_folder = folder
             self.image_folder_var.set(folder)
 
 
@@ -1373,24 +1369,17 @@ class StartupDialog:
         # Record in recent files
         add_recent_file(path)
 
-        # Set image mode
+        # Set image mode properties for main to read
         mode = self.image_mode.get()
-        if mode == "online":
-            self.ui.enable_online_images()
-        elif mode == "folder":
-            if not self.image_folder_var.get():
-                messagebox.showerror("Error", "Please select a local image directory or switch to Online/Offline mode.")
-                return
-            self.ui.image_mode = "folder"
-        elif mode == "offline":
-            self.ui.enable_offline_mode()
+        if mode == "folder" and not self.image_folder_var.get():
+            messagebox.showerror("Error", "Please select a local image directory or switch to Online/Offline mode.")
+            return
 
-        # Fire load event so the main window loads the chosen file
+        self.image_mode_val = mode
+        self.image_folder_val = self.image_folder_var.get()
         self.selected_excel_path = path
-        self.parent.after(10, lambda: self.parent.event_generate("<<LOAD_EXCEL>>"))
 
         self.win.update_idletasks()
-        self.ui.apply_config()
         self.win.destroy()
 
     def show_help(self):
