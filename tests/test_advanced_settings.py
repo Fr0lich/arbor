@@ -36,7 +36,8 @@ def test_schema_structure():
         assert "tab" in item
         assert "group" in item
         assert "label" in item
-        assert "default" in item
+        if item["type"] != "button":
+            assert "default" in item
 
 def test_advanced_settings_initialization(root, mock_main_window):
     """Test instantiating AdvancedSettingsWindow and loading defaults."""
@@ -45,6 +46,8 @@ def test_advanced_settings_initialization(root, mock_main_window):
         
         # Verify that all items from schema are registered in Tk variables
         for item in ADVANCED_SETTINGS_SCHEMA:
+            if item["type"] == "button":
+                continue
             assert item["id"] in adv_win.vars
             val = adv_win.vars[item["id"]].get()
             if item["type"] == "toggle":
