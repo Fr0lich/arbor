@@ -2,8 +2,11 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageFile
 from io import BytesIO
+
+# Allow loading truncated images to prevent broken data stream errors
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 from config import sc
 
 MAX_IMAGE_CACHE = 40
