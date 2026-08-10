@@ -244,6 +244,7 @@ class ObjectProgramUI(
         self.toolbar_vars = {}
         
         self.show_list_var = tk.BooleanVar(value=True)
+        self.show_list_scrollbar_var = tk.BooleanVar(value=True)
         self.show_search_var = tk.BooleanVar(value=True)
         self.show_images_var = tk.BooleanVar(value=True)
         self.location_in_center_var = tk.BooleanVar(value=False)
@@ -3248,6 +3249,19 @@ class ObjectProgramUI(
         self.toggle_images_panel()
         return "break"
 
+    def toggle_list_scrollbar(self):
+        if not hasattr(self, 'object_list_scroll') or not hasattr(self, 'object_list'):
+            return
+        is_compact = getattr(self.object_list, 'active_view', 'detailed') == 'compact'
+        show_in_detailed = self.show_list_scrollbar_var.get()
+
+        if is_compact or show_in_detailed:
+            if not self.object_list_scroll.winfo_manager():
+                self.object_list_scroll.pack(side="right", fill="y", before=self.object_list)
+        else:
+            if self.object_list_scroll.winfo_manager():
+                self.object_list_scroll.pack_forget()
+
     def toggle_list_panel(self):
         if self.show_list_var.get():
             self.panes.insert(0, self.left_frame, weight=1)
@@ -3792,8 +3806,8 @@ class ObjectProgramUI(
         # Koble listbox -> scrollbar
         self.object_list.configure(yscrollcommand=self.object_list_scroll.set)
 
-        self.object_list.pack(side="left", fill="both", expand=True)
         self.object_list_scroll.pack(side="right", fill="y")
+        self.object_list.pack(side="left", fill="both", expand=True)
 
         self.object_list.bind("<<ListboxSelect>>", self.on_list_select)
         self.object_list.bind("<Double-Button-1>", self._on_list_double_click)
@@ -3804,6 +3818,7 @@ class ObjectProgramUI(
         )
         self.object_list.bind("<Button-1>", self._on_list_click_pre, add="+")
         self.object_list.bind("<Button-3>", self._show_context_menu)
+        self.focus_mode_var.trace_add("write", lambda *args: self.toggle_list_scrollbar())
         self.object_list.bind("<Control-Button-1>", self._show_context_menu)
 
         # Context menu

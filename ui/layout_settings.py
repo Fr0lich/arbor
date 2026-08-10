@@ -11,6 +11,7 @@ class LayoutSettingsMixin:
 
     def _init_layout_draft_vars(self):
         self.draft_show_list_var = tk.BooleanVar(value=self.show_list_var.get())
+        self.draft_show_list_scrollbar_var = tk.BooleanVar(value=self.show_list_scrollbar_var.get())
         self.draft_show_search_var = tk.BooleanVar(value=self.show_search_var.get())
         self.draft_show_reg_var = tk.BooleanVar(value=self.show_reg_var.get())
         self.draft_show_images_var = tk.BooleanVar(value=self.show_images_var.get())
@@ -32,6 +33,7 @@ class LayoutSettingsMixin:
     def _on_apply_layout_settings(self):
         # Copy drafts to main variables
         self.show_list_var.set(self.draft_show_list_var.get())
+        self.show_list_scrollbar_var.set(self.draft_show_list_scrollbar_var.get())
         self.show_search_var.set(self.draft_show_search_var.get())
         self.show_reg_var.set(self.draft_show_reg_var.get())
         self.show_images_var.set(self.draft_show_images_var.get())
@@ -51,6 +53,7 @@ class LayoutSettingsMixin:
 
         # Apply changes in UI
         self.toggle_list_panel()
+        self.toggle_list_scrollbar()
         self.toggle_search_panel()
         self.toggle_location_panel()
         self.toggle_images_panel()
@@ -89,6 +92,7 @@ class LayoutSettingsMixin:
                 layout = prefs.get("layouts", {}).get("saved", {}).get(val)
                 if layout:
                     self.draft_show_list_var.set(layout.get("show_list", True))
+                    self.draft_show_list_scrollbar_var.set(layout.get("show_list_scrollbar", True))
                     self.draft_show_search_var.set(layout.get("show_search", True))
                     self.draft_show_reg_var.set(layout.get("show_reg", True))
                     self.draft_show_images_var.set(layout.get("show_images", True))
@@ -160,6 +164,7 @@ class LayoutSettingsMixin:
                 "image_view_mode": "stack" if self.draft_image_stack_var.get() else "gallery",
                 "toolbar_buttons": tb_states,
                 "show_list": self.draft_show_list_var.get(),
+                "show_list_scrollbar": self.draft_show_list_scrollbar_var.get(),
                 "show_search": self.draft_show_search_var.get(),
                 "show_reg": self.draft_show_reg_var.get(),
                 "show_images": self.draft_show_images_var.get(),
@@ -248,6 +253,7 @@ class LayoutSettingsMixin:
         panels_lf = ttk.LabelFrame(scrollable_frame, text="Show/Hide Panels", padding=sc(8))
         panels_lf.pack(fill="x", pady=(0, 10))
         create_toggle_row(panels_lf, "Object ID List (Left)", self.draft_show_list_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_lf, "Object ID List Scrollbar (Card View)", self.draft_show_list_scrollbar_var, command=on_switch_toggle, ui_ref=self)
         create_toggle_row(panels_lf, "Searchbar", self.draft_show_search_var, command=on_switch_toggle, ui_ref=self)
         create_toggle_row(panels_lf, "Registration Panel (Right)", self.draft_show_reg_var, command=on_switch_toggle, ui_ref=self)
         create_toggle_row(panels_lf, "Images Panel (Middle Top)", self.draft_show_images_var, command=on_switch_toggle, ui_ref=self)
@@ -409,6 +415,7 @@ class LayoutSettingsMixin:
             "image_view_mode": getattr(self, "image_view_mode", "gallery"),
             "toolbar_buttons": tb_states,
             "show_list": self.show_list_var.get(),
+            "show_list_scrollbar": self.show_list_scrollbar_var.get(),
             "show_search": self.show_search_var.get(),
             "show_images": self.show_images_var.get(),
             "location_in_center": self.location_in_center_var.get(),
@@ -483,6 +490,7 @@ class LayoutSettingsMixin:
         self.image_stack_var.set(layout.get("image_stack", False))
         self.dashboard_mode_var.set(layout.get("dashboard_mode", "Window"))
         self.show_list_var.set(layout.get("show_list", True))
+        self.show_list_scrollbar_var.set(layout.get("show_list_scrollbar", True))
         self.show_search_var.set(layout.get("show_search", True))
         self.show_images_var.set(layout.get("show_images", True))
         self.location_in_center_var.set(layout.get("location_in_center", False))

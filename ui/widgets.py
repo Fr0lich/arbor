@@ -245,6 +245,9 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         self._sync_view_selections()
 
+        if hasattr(self.main_window, "toggle_list_scrollbar"):
+            self.main_window.toggle_list_scrollbar()
+
     def _on_canvas_configure(self, event):
         self._last_canvas_width = event.width
         if self._card_height is None and self.active_view == "detailed":
