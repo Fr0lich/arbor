@@ -27,3 +27,7 @@
 ## 2025-02-18 - [Tcl Interpreter Overheads in Filter Loop and Slow .loc in Dashboard Scan]
 **Learning:** Calling Tkinter `.get()` on Tcl variables inside a hot loop (over thousands of records) introduces massive latency due to repeated cross-process interpreter roundtrips. Extracting variables outside the loop prevents this entirely. Similarly, scanning all rows in a DataFrame with `.loc` to compute dashboard stats causes massive CPU lag. Using Pandas vectorized `.any(axis=1)` executes in pure C, resolving lag and speeding up lists/reviews by ~1000x.
 **Action:** Always pre-fetch Tkinter variables and define helper lambdas/functions outside of database iteration loops, and prefer vectorized Pandas operations over manual row-by-row `.loc` scans for database metrics.
+
+## 2025-02-19 - [Pandas .apply Overhead for Simple Condition Checks]
+**Learning:** During database load, iterating over thousands of registration rows with `.apply(self.is_unknown)` to determine if a value matches a small set of "unknown" string variants introduces significant Python interpreter overhead because `.apply()` executes a custom Python function per row. Replacing this with `.astype(str).str.strip().str.lower().isin(...)` completely vectorizes the operation, running entirely in C and noticeably reducing CPU usage and latency during background cache pre-computation.
+**Action:** Always replace `.apply()` calls that perform basic type checking, string manipulation, or equality checks with equivalent Pandas vectorized string (`.str`) and membership (`.isin`) methods.
