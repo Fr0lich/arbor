@@ -122,7 +122,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Effort:** Small
 * **Recommended change:** Add `python-calamine` to `requirements.txt` and remove the fallback to guarantee the speed boost for everyone.
 
-### 10. Implement Robust Crash Recovery / Error Boundaries
+### [COMPLETED] 10. Implement Robust Crash Recovery / Error Boundaries
 * **Why it matters:** Unhandled exceptions in Tkinter print to stderr, leaving the UI in an undefined, broken state without the user knowing.
 * **Impact:** High
 * **Effort:** Medium

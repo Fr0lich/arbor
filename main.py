@@ -47,16 +47,17 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
         import traceback as _tb
         tb_text = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
         short_msg = f"{exc_type.__name__}: {exc_value}"
-        debug_error("Unhandled callback exception", short_msg)
+        debug_error("Unhandled callback exception", short_msg, is_crash=True)
 
         # Show the dialog via after() so we never block the event loop
         def _open_dialog():
             active_ui = ui_ref[0] if ui_ref else None
             if active_ui is not None and hasattr(active_ui, "show_traceback_dialog"):
                 active_ui.show_traceback_dialog(
-                    "⚠ Unhandled Error",
-                    f"An error occurred — the program may behave unexpectedly.\n\n{short_msg}",
-                    tb_text
+                    "⚠ Something went wrong",
+                    f"A critical error occurred — the program has paused to prevent data corruption. Please save an emergency backup before closing.\n\n{short_msg}",
+                    tb_text,
+                    is_crash=True
                 )
             else:
                 # Fallback: plain messagebox before UI is ready
