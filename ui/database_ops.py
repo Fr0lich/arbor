@@ -358,47 +358,57 @@ class DatabaseOpsMixin:
         if df_reg is not None and "Species" in df_reg.columns:
             species_dict = df_reg["Species"].to_dict()
 
-        # 3. Problem cache — the O(N×M) loop that previously blocked the main thread.
+        # 3. Problem cache — Vectorized generation to prevent main thread blocking
         #    Duplicates the logic from refresh_list() so that refresh_list() can skip it.
         problem_cache = {}
         problem_cols = getattr(self, "problem_columns", [])
         problem_mapping = getattr(self, "problem_to_field", {})
         include_image_problems = (self.image_mode == "folder")
-        active_ids = list(df_reg.index) if df_reg is not None else []
 
-        for oid in active_ids:
-            obs_row = obs_dict.get(oid, {})
-            reg_row = reg_dict.get(oid, {})
-            has_prob = False
+        if df_reg is not None and not df_reg.empty:
+            has_prob_series = pd.Series(False, index=df_reg.index)
+
             for p in problem_cols:
                 if p == "Images_Missing":
                     continue
                 if not include_image_problems and "Image" in p:
                     continue
+
                 if p == "Other_problem":
-                    is_act = bool(obs_row.get(p, False))
+                    if df_obs is not None and "Other_problem" in df_obs.columns:
+                        vals = df_obs["Other_problem"].fillna(False).astype(bool)
+                        has_prob_series |= vals.reindex(has_prob_series.index, fill_value=False)
                 elif p == "Reviewed":
-                    is_act = bool(obs_row.get(REVIEWED_COLUMN, False))
+                    if df_obs is not None and REVIEWED_COLUMN in df_obs.columns:
+                        vals = df_obs[REVIEWED_COLUMN].fillna(False).astype(bool)
+                        has_prob_series |= vals.reindex(has_prob_series.index, fill_value=False)
                 elif p == "Has_Images":
-                    is_act = not obs_row.get("Images_Missing", False)
+                    if df_obs is not None and "Images_Missing" in df_obs.columns:
+                        vals = ~df_obs["Images_Missing"].fillna(False).astype(bool)
+                        has_prob_series |= vals.reindex(has_prob_series.index, fill_value=True)
+                    else:
+                        has_prob_series |= True
                 else:
-                    obs_val = bool(obs_row.get(p, False))
-                    auto_val = False
+                    obs_val = pd.Series(False, index=df_reg.index)
+                    if df_obs is not None and p in df_obs.columns:
+                        vals = df_obs[p].fillna(False).astype(bool)
+                        obs_val = vals.reindex(has_prob_series.index, fill_value=False)
+
+                    auto_val = pd.Series(False, index=df_reg.index)
                     if p in problem_mapping:
                         field = problem_mapping.get(p)
                         if field:
-                            raw_val = reg_row.get(field, "")
-                            is_missing = (
-                                pd.isna(raw_val) or
-                                (isinstance(raw_val, str) and raw_val.strip() == "")
-                            )
-                            is_unknown = self.is_unknown(raw_val)
-                            auto_val = is_missing and not is_unknown
-                    is_act = obs_val or auto_val
-                if is_act:
-                    has_prob = True
-                    break
-            problem_cache[oid] = has_prob
+                            if field in df_reg.columns:
+                                raw_vals = df_reg[field]
+                                is_missing = raw_vals.isna() | (raw_vals.astype(str).str.strip() == "")
+                                is_unknown = raw_vals.apply(self.is_unknown)
+                                auto_val = is_missing & ~is_unknown
+                            else:
+                                auto_val = pd.Series(True, index=df_reg.index)
+
+                    has_prob_series |= (obs_val | auto_val)
+
+            problem_cache = has_prob_series.to_dict()
 
         # 4. Photo counts used by card widgets (avoids repeated value_counts() calls)
         photo_counts = {}
