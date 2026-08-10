@@ -110,6 +110,126 @@ ADVANCED_SETTINGS_SCHEMA = [
         "default": "Default (Red)",
         "refresh_type": "immediate",
         "callback": "refresh_styles_and_highlights"
+    },
+    {
+        "id": "action_dark_mode",
+        "type": "button",
+        "tab": "UX & Themes",
+        "group": "Interface",
+        "label": "Toggle Dark Mode",
+        "description": "Switch the interface theme between light and dark mode.",
+        "button_text": "Toggle Theme",
+        "callback": "toggle_dark_mode"
+    },
+    {
+        "id": "action_dashboard",
+        "type": "button",
+        "tab": "UX & Themes",
+        "group": "Interface",
+        "label": "Session Dashboard",
+        "description": "Open the session statistics and logs dashboard.",
+        "button_text": "Open Dashboard",
+        "callback": "open_session_dashboard_window"
+    },
+    {
+        "id": "action_statistics",
+        "type": "button",
+        "tab": "UX & Themes",
+        "group": "Interface",
+        "label": "Database Statistics",
+        "description": "Examine overall counts and checklists of registered records.",
+        "button_text": "View Statistics",
+        "callback": "show_statistics"
+    },
+    {
+        "id": "action_reg_tabs",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Layout & Tabs",
+        "label": "Configure Registration Tabs",
+        "description": "Configure the metadata accordions and panels layout.",
+        "button_text": "Configure Tabs",
+        "callback": "open_tab_config_editor"
+    },
+    {
+        "id": "action_field_groups",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Layout & Tabs",
+        "label": "Edit Field Groups",
+        "description": "Add, remove, or customize grouping of text input fields.",
+        "button_text": "Edit Groups",
+        "callback": "open_group_editor"
+    },
+    {
+        "id": "action_ignored_words",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Presets & Dictionaries",
+        "label": "Configure Ignored Words",
+        "description": "Add or remove terms ignored by spelling checkbooks.",
+        "button_text": "Configure Words",
+        "callback": "open_ignored_words_editor"
+    },
+    {
+        "id": "action_save_preset",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Presets & Dictionaries",
+        "label": "Save Data Preset",
+        "description": "Save current input fields configuration as a profile preset.",
+        "button_text": "Save Preset...",
+        "callback": "save_data_preset_dialog"
+    },
+    {
+        "id": "action_load_preset",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Presets & Dictionaries",
+        "label": "Load Data Preset",
+        "description": "Apply a previously saved input fields profile configuration.",
+        "button_text": "Load Preset...",
+        "callback": "show_load_data_preset_popup"
+    },
+    {
+        "id": "action_focus_settings",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Layout & Tabs",
+        "label": "Focus Settings",
+        "description": "Configure field visibility and behaviors when focusing problems.",
+        "button_text": "Focus Settings...",
+        "callback": "open_focus_settings"
+    },
+    {
+        "id": "action_layout_settings",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Layout & Tabs",
+        "label": "Layout Settings",
+        "description": "Customize panels visibility, default behaviors, and toolbar buttons.",
+        "button_text": "Layout Settings...",
+        "callback": "open_layout_settings"
+    },
+    {
+        "id": "action_mark_reviewed",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Presets & Dictionaries",
+        "label": "Mark Filtered as Reviewed",
+        "description": "Mark all currently filtered objects as reviewed.",
+        "button_text": "Mark Reviewed",
+        "callback": "batch_set_reviewed_true"
+    },
+    {
+        "id": "action_unmark_reviewed",
+        "type": "button",
+        "tab": "Tools & Editors",
+        "group": "Presets & Dictionaries",
+        "label": "Unmark Filtered as Reviewed",
+        "description": "Unmark all currently filtered objects as reviewed.",
+        "button_text": "Unmark Reviewed",
+        "callback": "batch_set_reviewed_false"
     }
 ]
 

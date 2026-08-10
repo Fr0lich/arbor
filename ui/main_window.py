@@ -418,7 +418,11 @@ class ObjectProgramUI(
 
         self.object_id_var = tk.StringVar()
         self._init_focus_prefs()
-        self.build_menu()
+        self.data_presets_menu = tk.Menu(self.root, tearoff=0)
+        self.load_data_preset_menu = tk.Menu(self.data_presets_menu, tearoff=0)
+        self.data_presets_menu.add_command(label="Save Current Fields as Preset...", command=self.save_data_preset_dialog)
+        self.data_presets_menu.add_cascade(label="Load Preset", menu=self.load_data_preset_menu)
+        self._refresh_load_data_preset_menu()
         self.build_ui()
         self.apply_saved_layout()
         self._autosave_job = None
@@ -1617,109 +1621,7 @@ class ObjectProgramUI(
         from ui.group_editor import FieldGroupEditorDialog
         FieldGroupEditorDialog(self.root, all_fields, current_groups, _on_save, self.app)
 
-    def build_menu(self):
-        menubar = tk.Menu(self.root)
 
-        
-        file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="New Database", command=self.create_new_database)
-        file_menu.add_command(label="Open Excel", command=self.open_excel)
-        file_menu.add_command(label="Save", command=lambda: self.save_session("SAVE"))
-        file_menu.add_command(label="Save As...", command=self.save_as)
-        file_menu.add_command(label="Export filtered list...", command=self.export_filtered_list)
-        file_menu.add_separator()
-        file_menu.add_command(label="Restore earlier autosave...", command=self.open_autosave_manager)
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.on_close)
-        menubar.add_cascade(label="File", menu=file_menu)
-
-        
-        img_menu = tk.Menu(menubar, tearoff=0)
-        img_menu.add_command(label="Image Source", command=self.open_image_menu)
-        img_menu.add_command(label="Toggle image view", command=self.toggle_image_view)
-        menubar.add_cascade(label="Images", menu=img_menu)
-
-        
-        data_menu = tk.Menu(menubar, tearoff=0)
-        data_menu.add_command(label="Load Books", command=self.load_books_file)
-        data_menu.add_command(label="Load earlier databases", command=self.load_historical_databases)
-        data_menu.add_command(label="Edit Field Groups...", command=self.open_group_editor)
-        data_menu.add_separator()
-        data_menu.add_command(label="Configure Ignored Words...", command=self.open_ignored_words_editor)
-        data_menu.add_separator()
-        
-        self.data_presets_menu = tk.Menu(data_menu, tearoff=0)
-        data_menu.add_cascade(label="Data Presets", menu=self.data_presets_menu)
-        
-        self.load_data_preset_menu = tk.Menu(self.data_presets_menu, tearoff=0)
-        self.data_presets_menu.add_command(label="Save Current Fields as Preset...", command=self.save_data_preset_dialog)
-        self.data_presets_menu.add_cascade(label="Load Preset", menu=self.load_data_preset_menu)
-        self._refresh_load_data_preset_menu()
-        
-        menubar.add_cascade(label="Data", menu=data_menu)
-
-
-        
-        tools_menu = tk.Menu(menubar, tearoff=0)
-        import config
-        advanced_prefs = config.load_prefs().get("advanced", {})
-        if advanced_prefs.get("enable_bulk_editor", False):
-            tools_menu.add_command(label="Bulk Edit", command=self.open_bulk_edit_window)
-        menubar.add_cascade(label="Tools", menu=tools_menu)
-        # FILTER
-        filter_menu = tk.Menu(menubar, tearoff=0)
-        filter_menu.add_command(label="Open Filter Menu", command=self.open_filter_menu)
-        menubar.add_cascade(label="Filter", menu=filter_menu)
-
-        view_menu = tk.Menu(menubar, tearoff=0)
-        view_menu.add_command(label="Statistics", command=self.show_statistics)
-        view_menu.add_command(label="Session Dashboard", command=self.open_session_dashboard_window)
-        view_menu.add_command(label="Dark Mode", command=self.toggle_dark_mode)
-
-
-
-        menubar.add_cascade(label="View", menu=view_menu)
-
-        # ADVANCED
-        advanced_menu = tk.Menu(menubar, tearoff=0)
-        advanced_menu.add_command(label="Create new Object", command=self.add_new_object)
-        advanced_menu.add_command(label="Delete Object", command=self.delete_current_object)
-        advanced_menu.add_separator()
-        advanced_menu.add_command(
-            label="Mark filtered as Reviewed",
-            command=lambda: self._batch_set_reviewed(True)
-        )
-        advanced_menu.add_command(
-            label="Unmark filtered as Reviewed",
-            command=lambda: self._batch_set_reviewed(False)
-        )
-        menubar.add_cascade(label="Advanced", menu=advanced_menu)
-
-        # FOCUS
-        self._build_focus_menu(menubar)
-        # LAYOUT
-        self._build_layout_menu(menubar)
-        # HELP
-        menubar.add_command(label="Help", command=self.open_help_window)
-
-        # SETTINGS
-        settings_menu = tk.Menu(menubar, tearoff=0)
-        settings_menu.add_command(
-            label="Settings...",
-            command=self.open_settings_window
-        )
-        settings_menu.add_command(
-            label="Configure Registration Tabs...",
-            command=self.open_tab_config_editor
-        )
-        settings_menu.add_separator()
-        settings_menu.add_command(
-            label="Advanced Settings...",
-            command=self.open_advanced_settings
-        )
-        menubar.add_cascade(label="Settings", menu=settings_menu)
-        self.menubar = menubar
-        self.root.config(menu=menubar)
 
 
 #-------- Def shortcuts
@@ -2108,6 +2010,58 @@ class ObjectProgramUI(
                 self._update_all_problem_row_styles()
             except Exception as e:
                 print(f"Error updating problem styles: {e}")
+
+    def show_load_data_preset_popup(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        import config
+        prefs = config.load_prefs()
+        saved = prefs.get("data_presets", {})
+        if not saved:
+            popup.add_command(label="(No saved presets)", state="disabled")
+        else:
+            for name in sorted(saved.keys()):
+                popup.add_command(label=name, command=lambda n=name: self.apply_saved_data_preset(n))
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def show_file_dropdown(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        popup.add_command(label="New Database", command=self.create_new_database)
+        popup.add_command(label="Open Excel", command=self.open_excel)
+        popup.add_command(label="Save", command=lambda: self.save_session("SAVE"))
+        popup.add_command(label="Save As...", command=self.save_as)
+        popup.add_command(label="Export filtered list...", command=self.export_filtered_list)
+        popup.add_separator()
+        popup.add_command(label="Restore earlier autosave...", command=self.open_autosave_manager)
+        popup.add_separator()
+        popup.add_command(label="Exit", command=self.on_close)
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def show_data_dropdown(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        popup.add_command(label="Load Books", command=self.load_books_file)
+        popup.add_command(label="Load earlier databases", command=self.load_historical_databases)
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def show_images_dropdown(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        popup.add_command(label="Image Source", command=self.open_image_menu)
+        popup.add_command(label="Toggle image view", command=self.toggle_image_view)
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def show_settings_dropdown(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        popup.add_command(label="General Settings...", command=self.open_settings_window)
+        popup.add_command(label="Layout Settings...", command=self.open_layout_settings)
+        popup.add_command(label="Focus Settings...", command=self.open_focus_settings)
+        popup.add_separator()
+        popup.add_command(label="Advanced Settings...", command=self.open_advanced_settings)
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def batch_set_reviewed_true(self):
+        self._batch_set_reviewed(True)
+
+    def batch_set_reviewed_false(self):
+        self._batch_set_reviewed(False)
 
 
 
@@ -3403,9 +3357,9 @@ class ObjectProgramUI(
 
         self.sb_settings_btn = ttk.Button(
             self.sb_buttons_frame,
-            text="SETTINGS",
+            text="SETTINGS ▾",
             style="Nav.TButton",
-            command=self.open_settings_window
+            command=self.show_settings_dropdown
         )
         self.sb_settings_btn.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
 
@@ -3512,19 +3466,19 @@ class ObjectProgramUI(
             return btn
 
         # FILE — opens the file/open dialog
-        btn_file = _nav_btn(nav_links_frame, "FILE",     self.open_excel)
-        self.add_tooltip(btn_file, "Open an Excel database file")
+        btn_file = _nav_btn(nav_links_frame, "FILE ▾",     self.show_file_dropdown)
+        self.add_tooltip(btn_file, "Database file options")
 
 
 
 
         # DATA — opens data menu
-        btn_dat = _nav_btn(nav_links_frame, "DATA",   self.open_advanced_menu)
-        self.add_tooltip(btn_dat, "Load earlier databases")
+        btn_dat = _nav_btn(nav_links_frame, "DATA ▾",   self.show_data_dropdown)
+        self.add_tooltip(btn_dat, "Load book lists and historical databases")
 
         # IMAGES — jump to next problem
-        btn_img = _nav_btn(nav_links_frame, "IMAGES", self.open_image_menu)
-        self.add_tooltip(btn_img, "Manage image folder or scan settings")
+        btn_img = _nav_btn(nav_links_frame, "IMAGES ▾", self.show_images_dropdown)
+        self.add_tooltip(btn_img, "Image source and view options")
 
         # CREATE — add new object or database
         btn_create = _nav_btn(nav_links_frame, "CREATE",   self.show_create_dropdown)

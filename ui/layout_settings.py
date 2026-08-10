@@ -234,12 +234,14 @@ class LayoutSettingsMixin:
             if self.layout_dynamic_update_var.get():
                 self._on_apply_layout_settings()
 
-        def create_toggle_row(parent, label_text, var):
+        def create_toggle_row(parent, label_text, var, command=None, ui_ref=None):
             row = ttk.Frame(parent)
             row.pack(fill="x", pady=sc(4))
             lbl = ttk.Label(row, text=label_text)
             lbl.pack(side="left", anchor="w")
-            sw = ToggleSwitch(row, var, command=on_switch_toggle, ui_ref=self)
+            cmd = command if command is not None else on_switch_toggle
+            ref = ui_ref if ui_ref is not None else self
+            sw = ToggleSwitch(row, var, command=cmd, ui_ref=ref)
             sw.pack(side="right")
             return row
 
