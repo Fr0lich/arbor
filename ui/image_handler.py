@@ -96,7 +96,7 @@ class ImageHandlerMixin:
         win = tk.Toplevel(self.root)
         self.image_settings_window = win
         win.title("Image Source Settings")
-        win.resizable(False, False)
+        win.resizable(True, True)
         win.transient(self.root)
 
         import utils

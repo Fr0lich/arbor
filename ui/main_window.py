@@ -2100,7 +2100,7 @@ class ObjectProgramUI(
         win = tk.Toplevel(self.root)
         self.settings_window = win
         win.title("Settings")
-        win.resizable(False, False)
+        win.resizable(True, True)
         win.transient(self.root)
         win.grab_set()
 
@@ -2350,7 +2350,7 @@ class ObjectProgramUI(
         win = tk.Toplevel(self.root)
         self.help_win = win
         win.title("Help Center")
-        win.resizable(False, False)
+        win.resizable(True, True)
         win.transient(self.root)
         
         import utils
@@ -2850,6 +2850,7 @@ class ObjectProgramUI(
         win.title("Focus Settings")
         win.transient(self.root)
         win.geometry(f"{sc(420)}x{sc(600)}")
+        win.resizable(True, True)
         self.focus_win = win
         
         bg_color = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
@@ -2974,9 +2975,13 @@ class ObjectProgramUI(
         )
         dyn_cb.pack(side="left")
 
-        # --- Options & Visibility Section (Scrollable Frame) ---
+        # --- Bottom Buttons Row (packed FIRST at bottom) ---
+        btn_row = ttk.Frame(main_frame, padding=(0, 6, 0, 0))
+        btn_row.pack(fill="x", side="bottom")
+
+        # --- Options & Visibility Section (Scrollable Frame, packed to fill remaining space) ---
         scroll_container = ttk.Frame(main_frame)
-        scroll_container.pack(fill="both", expand=True)
+        scroll_container.pack(fill="both", expand=True, side="top")
 
         canvas = tk.Canvas(scroll_container, highlightthickness=0, bd=0, bg=bg_color)
         scrollbar = ttk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
@@ -3038,9 +3043,7 @@ class ObjectProgramUI(
                 name = field["name"]
                 create_toggle_row(reg_lf, name, self.draft_focus_visibility_vars[name])
 
-        # --- Bottom Buttons (Apply, OK, Cancel) ---
-        btn_row = ttk.Frame(main_frame, padding=(0, 6, 0, 0))
-        btn_row.pack(fill="x", side="bottom")
+
 
         def on_apply():
             # Copy draft states to actual vars
@@ -3890,6 +3893,14 @@ class ObjectProgramUI(
         self.view_btn.pack(side="right")
         self.update_image_view_button()
 
+        self.source_btn = ttk.Button(
+            header,
+            text="Source...",
+            style="Tool.TButton",
+            command=self.open_image_menu
+        )
+        self.source_btn.pack(side="right", padx=(0, 4))
+
         self.images_missing_label = ttk.Label(
             header,
             text="",
@@ -4302,7 +4313,7 @@ class ObjectProgramUI(
         self.advanced_win = win
 
         win.title("Data Options")
-        win.resizable(False, False)
+        win.resizable(True, True)
         win.transient(self.root)
 
         bg_color = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
@@ -5978,7 +5989,7 @@ class ObjectProgramUI(
         win = tk.Toplevel(self.root)
         self.location_window = win
         win.title("Edit Location")
-        win.resizable(False, False)
+        win.resizable(True, True)
         win.transient(self.root)
 
         import utils
@@ -6200,7 +6211,7 @@ class ObjectProgramUI(
         win = tk.Toplevel(self.root)
         self.problems_window = win
         win.title("Edit Problem Flags")
-        win.resizable(False, False)
+        win.resizable(True, True)
         win.transient(self.root)
 
         import utils

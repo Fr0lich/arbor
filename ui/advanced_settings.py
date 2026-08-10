@@ -266,7 +266,7 @@ class AdvancedSettingsWindow:
         self.win.title("Advanced Settings")
         self.win.geometry(f"{sc(700)}x{sc(500)}")
         self.win.configure(bg=self.COLORS["surface"])
-        self.win.resizable(False, False)
+        self.win.resizable(True, True)
         self.win.transient(self.parent)
         self.win.grab_set()
 
