@@ -7359,29 +7359,39 @@ class ObjectProgramUI(
 
         df = self.app.df_reg
         # Index every column in df_reg for full-text search coverage
+        df_str = df.fillna("").astype(str)
+        for col in df_str.columns:
+            df_str[col] = df_str[col].str.strip().str.lower()
+
         all_cols = list(df.columns)
-        reg_dict = self._get_reg_dict()
+        genus_idx = all_cols.index('Genus') if 'Genus' in all_cols else -1
+        species_idx = all_cols.index('Species') if 'Species' in all_cols else -1
+        family_idx = all_cols.index('Family') if 'Family' in all_cols else -1
 
-        for oid in df.index:
-            reg_row = reg_dict.get(oid, {})
-            id_str = str(oid).lower()
-            parts = [id_str]
+        for row in df_str.itertuples(index=True, name=None):
+            oid = row[0]
+            oid_str = str(oid).lower()
 
-            genus = str(reg_row.get("Genus", "")).strip().lower() if not pd.isna(reg_row.get("Genus", "")) else ""
-            species = str(reg_row.get("Species", "")).strip().lower() if not pd.isna(reg_row.get("Species", "")) else ""
-            genus_species_str = f"{genus} {species}".strip()
+            genus = row[genus_idx + 1] if genus_idx != -1 else ""
+            species = row[species_idx + 1] if species_idx != -1 else ""
+            family = row[family_idx + 1] if family_idx != -1 else ""
 
-            family = str(reg_row.get("Family", "")).strip().lower() if not pd.isna(reg_row.get("Family", "")) else ""
+            if genus and species:
+                genus_species_str = f"{genus} {species}"
+            elif genus:
+                genus_species_str = genus
+            elif species:
+                genus_species_str = species
+            else:
+                genus_species_str = ""
 
-            for col in all_cols:
-                val = reg_row.get(col, "")
-                if val and not pd.isna(val):
-                    val_str = str(val).strip().lower()
-                    if val_str:
-                        parts.append(val_str)
+            parts = [oid_str]
+            for val in row[1:]:
+                if val:
+                    parts.append(val)
 
             index[oid] = {
-                "id": id_str,
+                "id": oid_str,
                 "genus_species": genus_species_str,
                 "family": family,
                 "all": " ".join(parts)
