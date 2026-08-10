@@ -216,10 +216,17 @@ class ImageHandlerMixin:
 
 
     def build_online_image_urls(self, oid):
-        pattern = self.app.config.get(
-            "image_url_pattern",
-            "https://www.unimus.no/photos/image/jpeg/O-V-OE-{num:04d}{suffix}.jpg"
-        )
+        import config
+        advanced_prefs = config.load_prefs().get("advanced", {})
+        pattern_override = advanced_prefs.get("image_url_pattern_override", "").strip()
+        
+        if pattern_override:
+            pattern = pattern_override
+        else:
+            pattern = self.app.config.get(
+                "image_url_pattern",
+                "https://www.unimus.no/photos/image/jpeg/O-V-OE-{num:04d}{suffix}.jpg"
+            )
         if not pattern:
             return []
 
@@ -457,6 +464,17 @@ class ImageHandlerMixin:
 
                 img = self.original_pil_cache[path].copy()
 
+                # Get advanced settings resampling algorithm
+                import config
+                advanced_prefs = config.load_prefs().get("advanced", {})
+                algo_name = advanced_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)")
+                if "BILINEAR" in algo_name:
+                    resample_filter = Image.BILINEAR
+                elif "NEAREST" in algo_name:
+                    resample_filter = Image.NEAREST
+                else:
+                    resample_filter = Image.LANCZOS
+
                 # Apply rotation
                 if large and rot != 0:
                     img = img.rotate(rot, expand=True)
@@ -471,7 +489,7 @@ class ImageHandlerMixin:
                         new_w = int(img_w * ratio)
                         new_h = int(img_h * ratio)
                         if new_w > 0 and new_h > 0:
-                            img = img.resize((new_w, new_h), Image.LANCZOS)
+                            img = img.resize((new_w, new_h), resample_filter)
                 else:
                     # Modern square thumbnails centered and scaled by DPI scale factor
                     size = int(max(1, int(70 * dpi_scale)))
@@ -482,7 +500,7 @@ class ImageHandlerMixin:
                     right = (img_w + min_dim) / 2
                     bottom = (img_h + min_dim) / 2
                     img = img.crop((left, top, right, bottom))
-                    img = img.resize((size, size), Image.LANCZOS)
+                    img = img.resize((size, size), resample_filter)
 
                 def callback(pil_img=img):
                     if token != getattr(self, "_image_load_token", 0):
@@ -860,6 +878,16 @@ class ImageHandlerMixin:
             width = 800
         canvas_h = height if height > 150 else 350
 
+        import config
+        advanced_prefs = config.load_prefs().get("advanced", {})
+        algo_name = advanced_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)")
+        if "BILINEAR" in algo_name:
+            resample_filter = Image.BILINEAR
+        elif "NEAREST" in algo_name:
+            resample_filter = Image.NEAREST
+        else:
+            resample_filter = Image.LANCZOS
+
         if large:
             max_width = int(width * 0.95 * self.image_zoom_factor)
             max_height = int(canvas_h * 0.85 * self.image_zoom_factor)
@@ -870,7 +898,7 @@ class ImageHandlerMixin:
                 new_w = int(img_w * ratio)
                 new_h = int(img_h * ratio)
                 if new_w > 0 and new_h > 0:
-                    img = img.resize((new_w, new_h), Image.LANCZOS)
+                    img = img.resize((new_w, new_h), resample_filter)
         else:
             # Modern square thumbnails centered and scaled by DPI scale factor
             size = int(sc(70))
@@ -881,7 +909,7 @@ class ImageHandlerMixin:
             right = (img_w + min_dim) / 2
             bottom = (img_h + min_dim) / 2
             img = img.crop((left, top, right, bottom))
-            img = img.resize((size, size), Image.LANCZOS)
+            img = img.resize((size, size), resample_filter)
 
 
         tk_img = ImageTk.PhotoImage(img)

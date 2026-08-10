@@ -87,3 +87,49 @@ def center_and_fit_toplevel(win, base_w=None, base_h=None):
     y = (screen_h // 2) - (h // 2)
 
     win.geometry(f"{w}x{h}+{x}+{y}")
+
+
+def get_log_level() -> str:
+    """Return the configured log verbosity level."""
+    try:
+        import json
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            
+        prefs_path = os.path.join(base_dir, "user_prefs.json")
+        if os.path.exists(prefs_path):
+            with open(prefs_path, "r", encoding="utf-8") as f:
+                prefs = json.load(f)
+                return prefs.get("advanced", {}).get("log_verbosity", "ERROR")
+    except Exception:
+        pass
+    return "ERROR"
+
+
+def debug_log(level: str, context: str, extra: str = "") -> None:
+    """Log a message at the specified level if it meets the verbosity requirements."""
+    levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
+    current_level = get_log_level()
+    
+    req_idx = levels.index(level) if level in levels else 1
+    curr_idx = levels.index(current_level) if current_level in levels else 3
+    
+    if req_idx < curr_idx:
+        return
+
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    msg = f"[{ts}] [{level}] {context}"
+    if extra:
+        msg += f" — {extra}"
+        
+    print(msg)
+    
+    try:
+        log_path = get_session_log_path()
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
+

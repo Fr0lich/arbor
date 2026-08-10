@@ -8,10 +8,69 @@ from ui.widgets import ToggleSwitch
 # Central registry of advanced features.
 # Add new items here to dynamically expose them in the UI.
 ADVANCED_SETTINGS_SCHEMA = [
+    # SYSTEM & BACKUPS
+    {
+        "id": "enable_excel_import_backup",
+        "type": "toggle",
+        "tab": "System & Backups",
+        "group": "Backup & Intervals",
+        "label": "Enable Backup on Excel Import",
+        "description": "Creates a timestamped backup copy inside a 'backups' folder whenever importing an Excel file.",
+        "default": True,
+        "refresh_type": "none"
+    },
+    {
+        "id": "autosave_archive_limit",
+        "type": "choice",
+        "tab": "System & Backups",
+        "group": "Backup & Intervals",
+        "label": "Autosave Archive Warning Limit",
+        "description": "Number of archived autosaves kept before prompting the user to clean them up.",
+        "choices": ["5", "10", "20", "50"],
+        "default": "10",
+        "refresh_type": "none"
+    },
+    {
+        "id": "log_verbosity",
+        "type": "choice",
+        "tab": "System & Backups",
+        "group": "Logging",
+        "label": "System Logging Verbosity",
+        "description": "Set level of diagnostic logging stored in the session logs folder.",
+        "choices": ["ERROR", "WARNING", "INFO", "DEBUG"],
+        "default": "ERROR",
+        "refresh_type": "none"
+    },
+    
+    # GRAPHICS & IMAGES
+    {
+        "id": "image_resampling_algorithm",
+        "type": "choice",
+        "tab": "Graphics & Images",
+        "group": "Image Rendering Engine",
+        "label": "Image Resampling Algorithm",
+        "description": "Choose filter quality for image zoom. Lanczos is high-quality but slower.",
+        "choices": ["LANCZOS (High Quality)", "BILINEAR (Balanced)", "NEAREST (Fast draft / Pixelated)"],
+        "default": "LANCZOS (High Quality)",
+        "refresh_type": "immediate",
+        "callback": "refresh_image_rendering"
+    },
+    {
+        "id": "image_url_pattern_override",
+        "type": "text",
+        "tab": "Graphics & Images",
+        "group": "Online Image Fetcher",
+        "label": "Image URL Pattern Override",
+        "description": "Override database image pattern. Leave empty to use database default.",
+        "default": "",
+        "refresh_type": "none"
+    },
+
+    # UX & THEMES
     {
         "id": "enable_bulk_editor",
         "type": "toggle",
-        "tab": "Features",
+        "tab": "UX & Themes",
         "group": "Unfinished Features",
         "label": "Enable Bulk Editor",
         "description": "Allows mass updates to selected rows. Requires application restart.",
@@ -21,13 +80,36 @@ ADVANCED_SETTINGS_SCHEMA = [
     {
         "id": "enable_focus_mode_toggle",
         "type": "toggle",
-        "tab": "Features",
+        "tab": "UX & Themes",
         "group": "Unfinished Features",
         "label": "Show Focus Mode Toggle",
         "description": "Shows the Focus Mode switch in the top-right header of the main window.",
         "default": False,
         "refresh_type": "immediate",
         "callback": "update_focus_toggle_visibility"
+    },
+    {
+        "id": "enable_problem_highlights",
+        "type": "toggle",
+        "tab": "UX & Themes",
+        "group": "Problem Highlights",
+        "label": "Enable Problem Highlights",
+        "description": "If disabled, problem fields will not highlight their background colors.",
+        "default": True,
+        "refresh_type": "immediate",
+        "callback": "refresh_styles_and_highlights"
+    },
+    {
+        "id": "problem_highlight_color",
+        "type": "choice",
+        "tab": "UX & Themes",
+        "group": "Problem Highlights",
+        "label": "Highlight Color Style",
+        "description": "Choose the color to highlight problematic fields with.",
+        "choices": ["Default (Red)", "Yellow", "Orange", "Blue"],
+        "default": "Default (Red)",
+        "refresh_type": "immediate",
+        "callback": "refresh_styles_and_highlights"
     }
 ]
 
@@ -78,9 +160,15 @@ class AdvancedSettingsWindow:
         # Build Tkinter variables mapping to setting IDs
         self.vars = {}
         for item in ADVANCED_SETTINGS_SCHEMA:
+            current_val = self.advanced_prefs.get(item["id"], item.get("default", ""))
+            
             if item["type"] == "toggle":
-                current_val = self.advanced_prefs.get(item["id"], item.get("default", False))
-                self.vars[item["id"]] = tk.BooleanVar(value=current_val)
+                # Ensure it resolves to a boolean
+                if isinstance(current_val, str):
+                    current_val = (current_val.lower() == "true")
+                self.vars[item["id"]] = tk.BooleanVar(value=bool(current_val))
+            elif item["type"] in ("choice", "text"):
+                self.vars[item["id"]] = tk.StringVar(value=str(current_val))
 
         # Build Main Layout Containers
         self.main_container = tk.Frame(self.win, bg=self.COLORS["surface"], bd=0, highlightthickness=0)
@@ -158,8 +246,16 @@ class AdvancedSettingsWindow:
         self.tab_buttons[name] = (btn, bottom_border)
 
     def build_tabs(self):
-        # Extract unique tabs
-        tab_names = sorted(list(set(item["tab"] for item in ADVANCED_SETTINGS_SCHEMA)))
+        # Extract unique tabs in order
+        tab_order = ["System & Backups", "Graphics & Images", "UX & Themes"]
+        tab_names = [t for t in tab_order if any(item["tab"] == t for item in ADVANCED_SETTINGS_SCHEMA)]
+        
+        # Fallback for any tab names not in explicit order
+        all_tabs = set(item["tab"] for item in ADVANCED_SETTINGS_SCHEMA)
+        for t in all_tabs:
+            if t not in tab_names:
+                tab_names.append(t)
+
         if not tab_names:
             tab_names = ["General"]
 
@@ -206,6 +302,11 @@ class AdvancedSettingsWindow:
                 for item in group_items:
                     if item["type"] == "toggle":
                         self.create_toggle_row(group_content, item["label"], item.get("description", ""), self.vars[item["id"]])
+                    elif item["type"] == "choice":
+                        self.create_choice_row(group_content, item["label"], item.get("description", ""), 
+                                               self.vars[item["id"]], item.get("choices", []))
+                    elif item["type"] == "text":
+                        self.create_text_row(group_content, item["label"], item.get("description", ""), self.vars[item["id"]])
                     elif item["type"] == "button":
                         # Support trigger buttons
                         callback_name = item.get("callback")
@@ -214,7 +315,8 @@ class AdvancedSettingsWindow:
                                                 item.get("button_text", "Open"), cmd)
 
         # Show first tab by default
-        self.show_tab(tab_names[0])
+        if tab_names:
+            self.show_tab(tab_names[0])
 
     def create_group(self, parent, title):
         group = tk.Frame(parent, bg=self.COLORS["surface"], highlightbackground=self.COLORS["outline"], highlightthickness=1)
@@ -245,6 +347,45 @@ class AdvancedSettingsWindow:
         sw.pack(side="right", padx=sc(8), pady=sc(4), anchor="center")
         return row
 
+    def create_choice_row(self, parent, label_text, desc_text, var, choices):
+        row = tk.Frame(parent, bg=self.COLORS["surface"])
+        row.pack(fill="x", pady=sc(6))
+
+        left_pane = tk.Frame(row, bg=self.COLORS["surface"])
+        left_pane.pack(side="left", fill="both", expand=True)
+
+        lbl = tk.Label(left_pane, text=label_text, font=self.FONT_LABEL, fg=self.COLORS["on_surface"], bg=self.COLORS["surface"])
+        lbl.pack(anchor="w")
+
+        if desc_text:
+            desc = tk.Label(left_pane, text=desc_text, font=("Segoe UI", sc(9)), fg=self.COLORS["on_surface_variant"], bg=self.COLORS["surface"])
+            desc.pack(anchor="w", pady=(sc(2), 0))
+
+        cb = ttk.Combobox(row, textvariable=var, values=choices, state="readonly", width=25, font=self.FONT_DATA)
+        cb.pack(side="right", padx=sc(8), pady=sc(4), anchor="center")
+        return row
+
+    def create_text_row(self, parent, label_text, desc_text, var):
+        row = tk.Frame(parent, bg=self.COLORS["surface"])
+        row.pack(fill="x", pady=sc(6))
+
+        left_pane = tk.Frame(row, bg=self.COLORS["surface"])
+        left_pane.pack(side="left", fill="both", expand=True)
+
+        lbl = tk.Label(left_pane, text=label_text, font=self.FONT_LABEL, fg=self.COLORS["on_surface"], bg=self.COLORS["surface"])
+        lbl.pack(anchor="w")
+
+        if desc_text:
+            desc = tk.Label(left_pane, text=desc_text, font=("Segoe UI", sc(9)), fg=self.COLORS["on_surface_variant"], bg=self.COLORS["surface"])
+            desc.pack(anchor="w", pady=(sc(2), 0))
+
+        entry_frame = tk.Frame(row, bg=self.COLORS["surface"], highlightbackground=self.COLORS["outline"], highlightthickness=1)
+        entry_frame.pack(side="right", padx=sc(8), pady=sc(4), anchor="center")
+
+        entry = tk.Entry(entry_frame, textvariable=var, font=self.FONT_DATA, fg=self.COLORS["on_surface"], bg=self.COLORS["surface"], bd=0, width=25)
+        entry.pack(padx=sc(4), pady=sc(2))
+        return row
+
     def create_button_row(self, parent, label_text, desc_text, button_text, command):
         row = tk.Frame(parent, bg=self.COLORS["surface"])
         row.pack(fill="x", pady=sc(6))
@@ -270,7 +411,6 @@ class AdvancedSettingsWindow:
             return
         method = getattr(self.main_window, callback_name, None)
         if method and callable(method):
-            # Run callback
             method()
         else:
             messagebox.showerror("Error", f"Callback '{callback_name}' not implemented in MainWindow.", parent=self.win)
@@ -284,20 +424,28 @@ class AdvancedSettingsWindow:
         immediate_callbacks = []
 
         for item in ADVANCED_SETTINGS_SCHEMA:
+            item_id = item["id"]
+            old_val = self.advanced_prefs.get(item_id, item.get("default", ""))
+            
+            # Resolve old val types to prevent unnecessary string vs boolean changes
             if item["type"] == "toggle":
-                item_id = item["id"]
-                old_val = self.advanced_prefs.get(item_id, item.get("default", False))
-                new_val = self.vars[item_id].get()
+                if isinstance(old_val, str):
+                    old_val = (old_val.lower() == "true")
+                old_val = bool(old_val)
+                new_val = bool(self.vars[item_id].get())
+            else:
+                old_val = str(old_val)
+                new_val = str(self.vars[item_id].get()).strip()
 
-                if new_val != old_val:
-                    prefs["advanced"][item_id] = new_val
-                    
-                    # Check refresh/restart action type
-                    refresh_type = item.get("refresh_type", "none")
-                    if refresh_type == "restart":
-                        restart_needed = True
-                    elif refresh_type == "immediate" and "callback" in item:
-                        immediate_callbacks.append(item["callback"])
+            if new_val != old_val:
+                prefs["advanced"][item_id] = new_val
+                
+                # Check refresh/restart action type
+                refresh_type = item.get("refresh_type", "none")
+                if refresh_type == "restart":
+                    restart_needed = True
+                elif refresh_type == "immediate" and "callback" in item:
+                    immediate_callbacks.append(item["callback"])
 
         # Save to disk
         config.save_prefs(prefs)

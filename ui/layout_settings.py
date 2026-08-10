@@ -654,6 +654,31 @@ class LayoutSettingsMixin:
             style.configure("TNotebook.Tab", background=field_bg, foreground=fg_color, bordercolor=border_color)
             style.map("TNotebook.Tab", background=[("selected", bg_color)])
 
+            # Get advanced settings for highlights
+            advanced_prefs = config.load_prefs().get("advanced", {})
+            enable_hl = advanced_prefs.get("enable_problem_highlights", True)
+            hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+            
+            if not enable_hl:
+                problem_bg = "#181825"
+                problem_fg = fg_color
+            else:
+                if "Yellow" in hl_color_name:
+                    problem_bg = "#5f5b2e"
+                    problem_fg = "#f9e2af"
+                elif "Orange" in hl_color_name:
+                    problem_bg = "#5f4520"
+                    problem_fg = "#fab387"
+                elif "Blue" in hl_color_name:
+                    problem_bg = "#203a5f"
+                    problem_fg = "#89b4fa"
+                else:  # Default (Red)
+                    problem_bg = "#5c1e1e"
+                    problem_fg = "#f38ba8"
+
+            style.configure("Problem.TEntry", fieldbackground=problem_bg, foreground=problem_fg)
+            style.configure("Problem.TCombobox", fieldbackground=problem_bg, foreground=problem_fg)
+
             style.configure("Dirty.TButton", foreground="#f38ba8", background=field_bg)
             style.configure("HistoryHighlight.TLabel", background="#f9e2af", foreground="#1e1e2e",
                             font=("Segoe UI", sc(10), "bold"))
@@ -662,8 +687,6 @@ class LayoutSettingsMixin:
             style.configure("Hover.TFrame", background="#313244")
             style.configure("Success.TEntry", fieldbackground="#a6e3a1", foreground="#1e1e2e")
             style.configure("Success.TCombobox", fieldbackground="#a6e3a1", foreground="#1e1e2e")
-            style.configure("Problem.TEntry", fieldbackground="#5c1e1e", foreground="#f38ba8")
-            style.configure("Problem.TCombobox", fieldbackground="#5c1e1e", foreground="#f38ba8")
 
             self.status_badge_colors = {
                 "saved":     {"bg": "#2e3f2f", "fg": "#a6e3a1"},
@@ -818,10 +841,30 @@ class LayoutSettingsMixin:
             style.configure("Highlight.TEntry", fieldbackground="#fff3a3", foreground="black")
             style.configure("Hover.TLabel", background="#eeeeee")
             style.configure("Hover.TFrame", background="#eeeeee")
-            style.configure("Success.TEntry", fieldbackground="#d4edda", foreground="black")
-            style.configure("Success.TCombobox", fieldbackground="#d4edda", foreground="black")
-            style.configure("Problem.TEntry", fieldbackground="#ffdad6", foreground="#ba1a1a")
-            style.configure("Problem.TCombobox", fieldbackground="#ffdad6", foreground="#ba1a1a")
+            # Get advanced settings for highlights
+            advanced_prefs = config.load_prefs().get("advanced", {})
+            enable_hl = advanced_prefs.get("enable_problem_highlights", True)
+            hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+            
+            if not enable_hl:
+                problem_bg = "#ffffff"
+                problem_fg = fg_color
+            else:
+                if "Yellow" in hl_color_name:
+                    problem_bg = "#fff9c4"
+                    problem_fg = "#1a1c1c"
+                elif "Orange" in hl_color_name:
+                    problem_bg = "#ffe0b2"
+                    problem_fg = "#1a1c1c"
+                elif "Blue" in hl_color_name:
+                    problem_bg = "#e3f2fd"
+                    problem_fg = "#1a1c1c"
+                else:  # Default (Red)
+                    problem_bg = "#ffdad6"
+                    problem_fg = "#ba1a1a"
+
+            style.configure("Problem.TEntry", fieldbackground=problem_bg, foreground=problem_fg)
+            style.configure("Problem.TCombobox", fieldbackground=problem_bg, foreground=problem_fg)
 
             self.status_badge_colors = {
                 "saved":     {"bg": "#d4edda", "fg": "#155724"},

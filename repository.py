@@ -345,15 +345,20 @@ class SQLiteRepository:
         Returns:
             (df_reg, df_obs, df_photo, df_log) — the data that was imported.
         """
-        backup_dir = os.path.join(os.path.dirname(excel_path), "backups")
-        os.makedirs(backup_dir, exist_ok=True)
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = os.path.join(
-            backup_dir,
-            os.path.basename(excel_path) + f".backup_{timestamp}.xlsx"
-        )
-        shutil.copy2(excel_path, backup_path)
-        print(f"Backed up {excel_path} to {backup_path}")
+        import config as _app_cfg
+        advanced_prefs = _app_cfg.load_prefs().get("advanced", {})
+        enable_backup = advanced_prefs.get("enable_excel_import_backup", True)
+        
+        if enable_backup:
+            backup_dir = os.path.join(os.path.dirname(excel_path), "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(
+                backup_dir,
+                os.path.basename(excel_path) + f".backup_{timestamp}.xlsx"
+            )
+            shutil.copy2(excel_path, backup_path)
+            print(f"Backed up {excel_path} to {backup_path}")
 
         df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(excel_path, config)
         SQLiteRepository.save_sqlite(sqlite_path, df_reg, df_obs, df_photo, df_log)

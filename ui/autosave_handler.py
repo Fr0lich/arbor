@@ -252,7 +252,10 @@ class AutosaveMixin:
             key=lambda f: os.path.getmtime(os.path.join(archive_dir, f)),
             reverse=True
         )
-        if len(archives) > 10:
+        import config as _app_cfg
+        advanced_prefs = _app_cfg.load_prefs().get("advanced", {})
+        limit = int(advanced_prefs.get("autosave_archive_limit", "10"))
+        if len(archives) > limit:
             self.root.after(500, lambda: self._prompt_archive_clutter(archive_dir, archives))
 
 

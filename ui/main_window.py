@@ -2088,6 +2088,28 @@ class ObjectProgramUI(
         else:
             self.focus_quick_frame.pack_forget()
 
+    def refresh_image_rendering(self):
+        if hasattr(self, "image_render_cache"):
+            self.image_render_cache.clear()
+        if hasattr(self, "refresh_image_view"):
+            try:
+                self.refresh_image_view()
+            except Exception as e:
+                print(f"Error refreshing image view: {e}")
+
+    def refresh_styles_and_highlights(self):
+        if hasattr(self, "apply_theme"):
+            try:
+                self.apply_theme()
+            except Exception as e:
+                print(f"Error applying theme: {e}")
+        if hasattr(self, "_update_all_problem_row_styles"):
+            try:
+                self._update_all_problem_row_styles()
+            except Exception as e:
+                print(f"Error updating problem styles: {e}")
+
+
 
     def open_settings_window(self):
         if hasattr(self, "settings_window") and self.settings_window and self.settings_window.winfo_exists():
@@ -8412,10 +8434,38 @@ class ObjectProgramUI(
           2. Field label (ttk.Label) — error foreground or normal
           3. Entry / Combobox widget — Problem.TEntry style or TEntry
         """
+        # Get advanced settings for highlights
+        import config
+        advanced_prefs = config.load_prefs().get("advanced", {})
+        enable_hl = advanced_prefs.get("enable_problem_highlights", True)
+        hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+
         is_dark = getattr(self, "dark_mode_active", False)
-        err_fg      = "#f38ba8" if is_dark else "#ba1a1a"
+        
+        # Determine colors
+        if not enable_hl:
+            err_fg = "#cdd6f4" if is_dark else "#1a1c1c"
+            bar_active = "#1e1e2e" if is_dark else "#f3f3f3"
+            tint = "#1e1e2e" if is_dark else "#ffffff"
+        else:
+            if "Yellow" in hl_color_name:
+                err_fg = "#f9e2af" if is_dark else "#b28000"
+                bar_active = "#f9e2af" if is_dark else "#b28000"
+                tint = "#5f5b2e" if is_dark else "#fff9c4"
+            elif "Orange" in hl_color_name:
+                err_fg = "#fab387" if is_dark else "#b25900"
+                bar_active = "#fab387" if is_dark else "#b25900"
+                tint = "#5f4520" if is_dark else "#ffe0b2"
+            elif "Blue" in hl_color_name:
+                err_fg = "#89b4fa" if is_dark else "#0066b2"
+                bar_active = "#89b4fa" if is_dark else "#0066b2"
+                tint = "#203a5f" if is_dark else "#e3f2fd"
+            else:  # Default (Red)
+                err_fg = "#f38ba8" if is_dark else "#ba1a1a"
+                bar_active = "#ba1a1a" if not is_dark else "#f38ba8"
+                tint = "#5c1e1e" if is_dark else "#ffdad6"
+
         norm_fg     = "#cdd6f4" if is_dark else "#1a1c1c"
-        bar_active  = "#ba1a1a" if not is_dark else "#f38ba8"
         bar_normal  = "#1e1e2e" if is_dark else "#f3f3f3"  # matches ttk.Frame bg — invisible
 
         # 1. Border bar
@@ -8440,7 +8490,6 @@ class ObjectProgramUI(
             try:
                 if isinstance(widget, tk.Text):
                     # Classic Text widget — set background directly
-                    tint = "#5c1e1e" if is_dark else "#ffdad6"
                     norm_bg = "#1e1e2e" if is_dark else "#ffffff"
                     widget.config(background=tint if is_active else norm_bg)
                 elif isinstance(widget, ttk.Combobox):
