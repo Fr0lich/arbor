@@ -53,22 +53,19 @@ def _normalise_dataframes(df_reg, df_obs, config):
     # --- Registration: ensure all defined registration columns exist ---
     new_reg_cols = [col for col in registration_columns if col not in df_reg.columns]
     if new_reg_cols:
-        for col in new_reg_cols:
-            df_reg[col] = ""
+        df_reg[new_reg_cols] = pd.DataFrame({col: "" for col in new_reg_cols}, index=df_reg.index)
 
     # --- Observation: problem columns ---
     new_prob_cols = [col for col in problem_columns if col not in df_obs.columns]
     if new_prob_cols:
-        for col in new_prob_cols:
-            df_obs[col] = False
+        df_obs[new_prob_cols] = pd.DataFrame({col: False for col in new_prob_cols}, index=df_obs.index)
     if problem_columns:
         df_obs[problem_columns] = df_obs[problem_columns].fillna(False).astype(bool)
 
     # --- Observation: location columns ---
     new_loc_cols = [col for col in location_columns if col not in df_obs.columns]
     if new_loc_cols:
-        for col in new_loc_cols:
-            df_obs[col] = ""
+        df_obs[new_loc_cols] = pd.DataFrame({col: "" for col in new_loc_cols}, index=df_obs.index)
 
 
     if location_columns:
