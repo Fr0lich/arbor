@@ -418,21 +418,35 @@ class DatabaseOpsMixin:
             photo_counts = df_photo.index.value_counts().to_dict()
 
         # 5. Full-text search index covering ALL registration columns (not just
-        #    Genus + Species). Stored as a lowercased joined string per ObjectID
-        #    for fast substring matching.
+        #    Genus + Species). Stored as a dictionary per ObjectID
+        #    for fast substring matching and priority ranking.
         search_index = {}
         if df_reg is not None:
             all_cols = list(df_reg.columns)
             for oid in df_reg.index:
                 reg_row = reg_dict.get(oid, {})
-                parts = [str(oid).lower()]
+                id_str = str(oid).lower()
+                parts = [id_str]
+
+                genus = str(reg_row.get("Genus", "")).strip().lower() if not pd.isna(reg_row.get("Genus", "")) else ""
+                species = str(reg_row.get("Species", "")).strip().lower() if not pd.isna(reg_row.get("Species", "")) else ""
+                genus_species_str = f"{genus} {species}".strip()
+
+                family = str(reg_row.get("Family", "")).strip().lower() if not pd.isna(reg_row.get("Family", "")) else ""
+
                 for col in all_cols:
                     val = reg_row.get(col, "")
                     if val and not pd.isna(val):
                         val_str = str(val).strip().lower()
                         if val_str:
                             parts.append(val_str)
-                search_index[oid] = " ".join(parts)
+
+                search_index[oid] = {
+                    "id": id_str,
+                    "genus_species": genus_species_str,
+                    "family": family,
+                    "all": " ".join(parts)
+                }
 
         # Atomically assign all caches so the main thread sees a consistent state
         self._cached_reg_dict = reg_dict
