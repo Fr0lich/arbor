@@ -7286,7 +7286,27 @@ class ObjectProgramUI(
                 return
 
             index = self._get_search_index()
-            matched = [oid for oid, tokens in index.items() if query in tokens]
+            matched_with_priority = []
+
+            for oid, tokens_dict in index.items():
+                if query not in tokens_dict["all"]:
+                    continue
+
+                if query == tokens_dict["id"]:
+                    priority = 1
+                elif query in tokens_dict["id"]:
+                    priority = 2
+                elif query in tokens_dict["genus_species"]:
+                    priority = 3
+                elif query in tokens_dict["family"]:
+                    priority = 4
+                else:
+                    priority = 5
+
+                matched_with_priority.append((priority, oid))
+
+            matched_with_priority.sort(key=lambda x: x[0])
+            matched = [oid for priority, oid in matched_with_priority]
 
             self.app.active_object_ids = matched
             self.refresh_list()
@@ -7320,7 +7340,7 @@ class ObjectProgramUI(
 
     def _get_search_index(self):
         """
-        Return the search index {oid: token_string}.
+        Return the search index {oid: token_dict}.
         During startup the index is pre-built by _precompute_startup_caches() so this
         method just returns the cached result.  After a data-changing operation that
         calls invalidate_search_index(), the cache is rebuilt lazily here covering
@@ -7340,14 +7360,28 @@ class ObjectProgramUI(
 
         for oid in df.index:
             reg_row = reg_dict.get(oid, {})
-            parts = [str(oid).lower()]
+            id_str = str(oid).lower()
+            parts = [id_str]
+
+            genus = str(reg_row.get("Genus", "")).strip().lower() if not pd.isna(reg_row.get("Genus", "")) else ""
+            species = str(reg_row.get("Species", "")).strip().lower() if not pd.isna(reg_row.get("Species", "")) else ""
+            genus_species_str = f"{genus} {species}".strip()
+
+            family = str(reg_row.get("Family", "")).strip().lower() if not pd.isna(reg_row.get("Family", "")) else ""
+
             for col in all_cols:
                 val = reg_row.get(col, "")
                 if val and not pd.isna(val):
                     val_str = str(val).strip().lower()
                     if val_str:
                         parts.append(val_str)
-            index[oid] = " ".join(parts)
+
+            index[oid] = {
+                "id": id_str,
+                "genus_species": genus_species_str,
+                "family": family,
+                "all": " ".join(parts)
+            }
 
         self._search_index_cache = index
         return index
