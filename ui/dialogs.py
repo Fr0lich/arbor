@@ -237,7 +237,7 @@ class StartupDialog:
         self.win = tk.Toplevel(parent)
         self.win.title("arbor — Project Setup")
         self.win.resizable(True, True)
-        self.win.minsize(500, 520)
+        self.win.minsize(500, 680)
         self.win.configure(bg=self.C_BG)
 
         self.win.bind("<Configure>", self._on_resize)
@@ -270,7 +270,7 @@ class StartupDialog:
         import utils
 
         w = int(640 * self._scale)
-        h = int(640 * self._scale)
+        h = int(680 * self._scale)
 
         self.win.geometry(f"{w}x{h}")
         utils.center_and_fit_toplevel(self.win, w, h)
@@ -932,12 +932,12 @@ class StartupDialog:
         new_w = self.win.winfo_width()
         new_h = self.win.winfo_height()
 
-        base_w, base_h = 640, 600
+        base_w, base_h = 640, 680
         scale = min(new_w / base_w, new_h / base_h)
         scale = max(0.75, min(scale, 1.4))
 
         # Detect compact mode
-        compact = new_w < 580 or new_h < 520
+        compact = new_w < 580 or new_h < 600
 
         # Only update if something meaningful changed
         if abs(scale - self._last_scale) < 0.05 and compact == self._compact:
