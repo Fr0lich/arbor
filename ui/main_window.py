@@ -935,14 +935,14 @@ class ObjectProgramUI(
         tab_canvas.pack(side="left", fill="both", expand=True)
         tab_scroll.pack(side="right", fill="y")
 
-        self._reg_tabs["Specimen Audit"] = {
+        self._reg_tabs["General Data"] = {
             "container": tab_container,
             "canvas": tab_canvas,
             "frame": tab_frame,
             "fields": all_fields
         }
 
-        self.reg_notebook.add(tab_container, text="Specimen Audit")
+        self.reg_notebook.add(tab_container, text="General Data")
 
         # Generate card layout inside the tab frame
         for c in card_defs:
