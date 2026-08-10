@@ -3735,6 +3735,7 @@ class ObjectProgramUI(
         self._inline_search_entry.bind("<Escape>",      self._clear_inline_search)
         self._inline_search_entry.bind("<FocusIn>",     self._search_focus_in)
         self._inline_search_entry.bind("<FocusOut>",    self._search_focus_out)
+        self._inline_search_entry.bind("<Button-1>",    self._search_focus_in)
         self._inline_search_entry.bind("<Return>",      self._on_search_bar_enter)
         
         def _focus_list(event):
