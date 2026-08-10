@@ -544,6 +544,9 @@ class AdvancedSettingsWindow:
         immediate_callbacks = []
 
         for item in ADVANCED_SETTINGS_SCHEMA:
+            if item["type"] == "button":
+                continue
+
             item_id = item["id"]
             old_val = self.advanced_prefs.get(item_id, item.get("default", ""))
             
