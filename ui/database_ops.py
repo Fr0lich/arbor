@@ -421,7 +421,7 @@ class DatabaseOpsMixin:
         search_index = {}
         if df_reg is not None:
             all_cols = list(df_reg.columns)
-            for oid in active_ids:
+            for oid in df_reg.index:
                 reg_row = reg_dict.get(oid, {})
                 parts = [str(oid).lower()]
                 for col in all_cols:
