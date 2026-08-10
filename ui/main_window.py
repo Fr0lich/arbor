@@ -3954,7 +3954,7 @@ class ObjectProgramUI(
             lambda e: self.image_canvas.configure(scrollregion=self.image_canvas.bbox("all"))
         )
 
-        self.image_canvas.configure(yscrollcommand=self.image_scroll.set)
+        self.image_canvas.configure(yscrollcommand=self._on_image_scroll)
         
         self.image_canvas.pack(side="left", fill="both", expand=True)
 
