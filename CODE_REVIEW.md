@@ -80,7 +80,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Effort:** Medium
 * **Recommended change:** Use Python `threading` and a `queue.Queue`. Start the load in a thread, and use `root.after(100, check_queue)` to poll for completion, allowing the Loading Window animation to play smoothly.
 
-### 3. Implement Virtualized Treeview/Canvas for Images
+### 3. Implement Virtualized Treeview/Canvas for Images -x
 * **Why it matters:** While `TreeviewListboxWrapper` uses virtualization for text cards, `ImageHandlerMixin._render_image_gallery` creates Tkinter widgets for *every* image at once. This destroys performance on datasets with 1,000+ images.
 * **Impact:** High
 * **Effort:** Medium
@@ -92,7 +92,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Effort:** Large
 * **Recommended change:** Use `models.AppState` as a strict "Single Source of Truth." UI should dispatch events to update the state, and the state should trigger UI redraws (similar to an MVC or Flux architecture).
 
-### 5. Pre-compute Global Search Index
+### 5. Pre-compute Global Search Index -x
 * **Why it matters:** Filtering across a massive Pandas dataframe for every keystroke in the search bar is laggy.
 * **Impact:** Medium
 * **Effort:** Medium
