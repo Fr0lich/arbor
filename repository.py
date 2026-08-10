@@ -81,38 +81,44 @@ def _normalise_dataframes(df_reg, df_obs, config):
 
 
     # --- Observation: image / review flags ---
+    new_obs_cols = {}
     if "Images_Missing" not in df_obs.columns:
-        df_obs["Images_Missing"] = True
-    df_obs["Images_Missing"] = df_obs["Images_Missing"].fillna(True).astype(bool)
-
+        new_obs_cols["Images_Missing"] = True
     if "Images_Problem" not in df_obs.columns:
-        df_obs["Images_Problem"] = False
-    df_obs["Images_Problem"] = df_obs["Images_Problem"].fillna(False).astype(bool)
-
+        new_obs_cols["Images_Problem"] = False
     if REVIEWED_COLUMN not in df_obs.columns:
-        df_obs[REVIEWED_COLUMN] = False
-    df_obs[REVIEWED_COLUMN] = df_obs[REVIEWED_COLUMN].fillna(False).astype(bool)
-
+        new_obs_cols[REVIEWED_COLUMN] = False
     if REVIEWED_AT_COLUMN not in df_obs.columns:
-        df_obs[REVIEWED_AT_COLUMN] = ""
+        new_obs_cols[REVIEWED_AT_COLUMN] = ""
+    if ONLINE_EXISTS_COLUMN not in df_obs.columns:
+        new_obs_cols[ONLINE_EXISTS_COLUMN] = False
+
+    if new_obs_cols:
+        df_obs[list(new_obs_cols.keys())] = pd.DataFrame(new_obs_cols, index=df_obs.index)
+
+    df_obs["Images_Missing"] = df_obs["Images_Missing"].fillna(True).astype(bool)
+    df_obs["Images_Problem"] = df_obs["Images_Problem"].fillna(False).astype(bool)
+    df_obs[REVIEWED_COLUMN] = df_obs[REVIEWED_COLUMN].fillna(False).astype(bool)
     df_obs[REVIEWED_AT_COLUMN] = df_obs[REVIEWED_AT_COLUMN].fillna("").astype(object)
 
-    if ONLINE_EXISTS_COLUMN not in df_obs.columns:
-        df_obs[ONLINE_EXISTS_COLUMN] = False
-
     # --- Registration: fill NaN, ensure UID and ProblemDescription ---
+    # Fill NaN and cast to object in bulk for non-ObjectID columns
+    cols_to_fill = [col for col in df_reg.columns if col != "ObjectID"]
+    if cols_to_fill:
+        df_reg[cols_to_fill] = df_reg[cols_to_fill].fillna("").astype(object)
+
+    new_reg_cols = {}
+    if "UID" not in df_reg.columns:
+        new_reg_cols["UID"] = ""
+    if "ProblemDescription" not in df_reg.columns:
+        new_reg_cols["ProblemDescription"] = ""
+
+    if new_reg_cols:
+        df_reg[list(new_reg_cols.keys())] = pd.DataFrame(new_reg_cols, index=df_reg.index)
+
+    df_reg["ProblemDescription"] = df_reg["ProblemDescription"].astype(object)
+
     if not df_reg.empty:
-        # Fill NaN and cast to object in bulk for non-ObjectID columns
-        cols_to_fill = [col for col in df_reg.columns if col != "ObjectID"]
-        if cols_to_fill:
-            df_reg[cols_to_fill] = df_reg[cols_to_fill].fillna("").astype(object)
-
-        if "UID" not in df_reg.columns:
-            df_reg["UID"] = ""
-        if "ProblemDescription" not in df_reg.columns:
-            df_reg["ProblemDescription"] = ""
-        df_reg["ProblemDescription"] = df_reg["ProblemDescription"].astype(object)
-
         # Generate short UIDs for any row that is missing one
         missing_uid = df_reg["UID"].isna() | (df_reg["UID"].astype(str).str.strip() == "")
         if missing_uid.any():
