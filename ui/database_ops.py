@@ -420,33 +420,9 @@ class DatabaseOpsMixin:
         # 5. Full-text search index covering ALL registration columns (not just
         #    Genus + Species). Stored as a dictionary per ObjectID
         #    for fast substring matching and priority ranking.
-        search_index = {}
-        if df_reg is not None:
-            all_cols = list(df_reg.columns)
-            for oid in df_reg.index:
-                reg_row = reg_dict.get(oid, {})
-                id_str = str(oid).lower()
-                parts = [id_str]
 
-                genus = str(reg_row.get("Genus", "")).strip().lower() if not pd.isna(reg_row.get("Genus", "")) else ""
-                species = str(reg_row.get("Species", "")).strip().lower() if not pd.isna(reg_row.get("Species", "")) else ""
-                genus_species_str = f"{genus} {species}".strip()
-
-                family = str(reg_row.get("Family", "")).strip().lower() if not pd.isna(reg_row.get("Family", "")) else ""
-
-                for col in all_cols:
-                    val = reg_row.get(col, "")
-                    if val and not pd.isna(val):
-                        val_str = str(val).strip().lower()
-                        if val_str:
-                            parts.append(val_str)
-
-                search_index[oid] = {
-                    "id": id_str,
-                    "genus_species": genus_species_str,
-                    "family": family,
-                    "all": " ".join(parts)
-                }
+        self.search_engine.invalidate_search_index()
+        search_index = self.search_engine.get_search_index(df_reg, reg_dict)
 
         # Atomically assign all caches so the main thread sees a consistent state
         self._cached_reg_dict = reg_dict
@@ -456,7 +432,6 @@ class DatabaseOpsMixin:
         self._cached_species_dict = species_dict
         self._row_cache_dirty = False
         self._problem_cache = problem_cache
-        self._search_index_cache = search_index
         self._cached_photo_counts = photo_counts
 
 

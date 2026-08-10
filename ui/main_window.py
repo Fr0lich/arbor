@@ -306,7 +306,11 @@ class ObjectProgramUI(
         self._list_dirty = False
         self._inline_search_job = None       # debounce timer for live search
         self._banner_timer_id = None
-        self._search_index_cache = None      # lazy search index {oid: token_string}
+
+        from backend.search import SearchEngine
+        from backend.filter import FilterManager
+        self.search_engine = SearchEngine()
+        self.filter_manager = FilterManager()
 
         # Row-dict caches for refresh_list() — rebuilt only when data changes
         self._cached_reg_dict: dict = None   # type: ignore[assignment]
@@ -6932,229 +6936,30 @@ class ObjectProgramUI(
                 if reg_by_id is not None:
                     history_set.update(reg_by_id.index)
 
-        def fast_has_history(oid):
-            return oid in history_set
-
-        def fast_is_problem_active(oid, prob_col):
-            obs_row = obs_dict.get(oid, {})
-            reg_row = reg_dict.get(oid, {})
-
-            if prob_col == "Other_problem":
-                return bool(obs_row.get(prob_col, False))
-
-            if prob_col == "Reviewed":
-                return bool(obs_row.get(REVIEWED_COLUMN, False))
-
-            if oid not in obs_dict:
-                return False
-
-            if prob_col == "Has_Images":
-                return not obs_row.get("Images_Missing", False)
-
-            if prob_col == "Images_Missing":
-                if self.image_mode in ("online", "offline"):
-                    return False
-                return obs_row.get("Images_Missing", False)
-
-            obs_val = bool(obs_row.get(prob_col, False))
-
-            auto_val = False
-
-            if prob_col in self.problem_to_field:
-                field = self.problem_to_field.get(prob_col)
-                if not field:
-                    return obs_val
-
-                raw_val = reg_row.get(field, "")
-
-                is_missing = (
-                    pd.isna(raw_val) or
-                    (isinstance(raw_val, str) and raw_val.strip() == "")
-                )
-
-                is_unknown = self.is_unknown(raw_val)
-
-                auto_val = is_missing and not is_unknown
-
-            return obs_val or auto_val
-
-        def fast_has_any_problem(oid, include_image_problems=True):
-            for p in self.problem_columns:
-                if p == "Images_Missing":
-                    continue
-                if not include_image_problems:
-                    if "Image" in p:
-                        continue
-                if fast_is_problem_active(oid, p):
-                    return True
-            return False
-
-        fast_problem_cache = {}
-        def fast_get_cached_problem(oid):
-            if oid not in fast_problem_cache:
-                fast_problem_cache[oid] = fast_has_any_problem(
-                    oid,
-                    include_image_problems=(self.image_mode == "folder")
-                )
-            return fast_problem_cache[oid]
-
-        def check_group(oid, items, mode):
-
-            if not items:
-                return None  # ignorer tom gruppe
-
-            results = []
-            obs_row = obs_dict.get(oid, {})
-            reg_row = reg_dict.get(oid, {})
-
-            for p in items:
-
-                if p == "Any_Problem":
-                    val = fast_has_any_problem(oid)
-
-                elif p == "Has_Images":
-                    val = not obs_row.get("Images_Missing", False)
-
-                elif p == "Images_Missing":
-                    val = obs_row.get("Images_Missing", False)
-
-                elif p == "Reviewed":
-                    val = bool(obs_row.get(REVIEWED_COLUMN, False))
-
-                elif p == "Not_Reviewed":
-                    val = not bool(obs_row.get(REVIEWED_COLUMN, False))
-
-                elif p == "Comment_Empty":
-                    val = not str(reg_row.get("Comment", "")).strip()
-
-                elif p == "Comment_Not_Empty":
-                    val = bool(str(reg_row.get("Comment", "")).strip())
-
-                elif p == "Extra_Empty":
-                    val = not str(obs_row.get("Extra", "")).strip()
-
-                elif p == "Extra_Not_Empty":
-                    val = bool(str(obs_row.get("Extra", "")).strip())
-
-                elif p == "Unknown":
-                    val = any(
-                        self.is_unknown(reg_row.get(field, ""))
-                        for field in self.unknown_fields
-                    )
-
-                elif p == "Reviewed_With_Problem":
-                    val = (bool(obs_row.get(REVIEWED_COLUMN, False))
-                           and fast_get_cached_problem(oid))
-
-                elif p == "Problem_With_History":
-                    val = fast_get_cached_problem(oid) and fast_has_history(oid)
-
-                elif p == "Has_History":
-                    val = fast_has_history(oid)
-
-                else:
-                    val = fast_is_problem_active(oid, p)
-
-                results.append(val)
-
-            return all(results) if mode == "AND" else any(results)
-
-   
         building_var = self.filter_location_vars.get("Building")
         floor_var = self.filter_location_vars.get("Floor")
         cabinet_var = self.filter_location_vars.get("Cabinet")
-
-        has_location_filter = (
-            (building_var and building_var.get()) or
-            (floor_var and floor_var.get()) or
-            (cabinet_var and cabinet_var.get().strip())
-        )
-
-        no_filters = all(len(v) == 0 for v in groups.values()) and not has_location_filter
-
-
-        if no_filters:
-            self.app.active_object_ids = list(self.app.df_reg.index)
-            self._list_dirty = True
-            return
-
-        matched = []
-
-        # PERFORMANCE OPTIMIZATION (Bolt): Retrieve all Tkinter variable values once before the loop,
-        # avoiding thousands of expensive Tcl interpreter roundtrips inside the loop.
-        group_modes = {group_name: self.filter_modes[group_name].get() for group_name in groups}
 
         building_filter = building_var.get() if building_var else ""
         floor_filter = floor_var.get() if floor_var else ""
         cabinet_filter = cabinet_var.get().strip().lower() if cabinet_var else ""
 
-        # PERFORMANCE OPTIMIZATION (Bolt): Define the helper function outside of the main loop
-        # to avoid function object creation overhead on every iteration.
-        def get_location_str(val):
-            if pd.isna(val) or val == "":
-                return ""
-            if isinstance(val, float) and val.is_integer():
-                return str(int(val))
-            return str(val)
+        group_modes = {group_name: self.filter_modes[group_name].get() for group_name in groups}
 
-        for oid in self.app.df_reg.index:
-
-         
-            if not_reviewed_only:
-                obs_row = obs_dict.get(oid, {})
-                if obs_row.get(REVIEWED_COLUMN):
-                    continue
-                matched.append(oid)
-                continue
-
-            # ---------- GROUP MATCH ----------
-            group_results = []
-
-            for group_name, items in groups.items():
-
-                mode = group_modes[group_name]
-                result = check_group(oid, items, mode)
-
-                if result is not None:
-                    group_results.append(result)
-
-            # ---------- UNKNOWN MATCH ----------
-        
-
-
-
-              
-
-            # ---------- LOCATION MATCH ----------
-            location_match = True
-
-            obs_row = obs_dict.get(oid, {})
-
-            # Building
-            if building_filter:
-                if get_location_str(obs_row.get("Building", "")) != building_filter:
-                    location_match = False
-
-            # Floor
-            if floor_filter:
-                if get_location_str(obs_row.get("Floor", "")) != floor_filter:
-                    location_match = False
-
-            # Cabinet (substring match)
-            if cabinet_filter:
-                cabinet_val = get_location_str(obs_row.get("Cabinet", "")).lower()
-                if cabinet_filter.replace(" ", "") not in cabinet_val.replace(" ", ""):
-                    location_match = False
-
-            # ---------- FINAL LOGIC (beholder din original logikk) ----------
-            
-
-            
-            ok = all(group_results) if group_results else True
-            ok = ok and location_match
-
-            if ok:
-                matched.append(oid)
+        matched = self.filter_manager.apply_filter(
+            df_reg=self.app.df_reg,
+            reg_dict=reg_dict,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups=groups,
+            group_modes=group_modes,
+            not_reviewed_only=not_reviewed_only,
+            location_filters=(building_filter, floor_filter, cabinet_filter),
+            problem_columns=self.problem_columns,
+            problem_to_field=self.problem_to_field,
+            unknown_fields=self.unknown_fields,
+            image_mode=self.image_mode
+        )
 
         if not matched:
             messagebox.showinfo("No results", "Filter returned no objects")
@@ -7290,27 +7095,10 @@ class ObjectProgramUI(
                 return
 
             index = self._get_search_index()
-            matched_with_priority = []
+            matched = self.search_engine.apply_search(query, index)
 
-            for oid, tokens_dict in index.items():
-                if query not in tokens_dict["all"]:
-                    continue
-
-                if query == tokens_dict["id"]:
-                    priority = 1
-                elif query in tokens_dict["id"]:
-                    priority = 2
-                elif query in tokens_dict["genus_species"]:
-                    priority = 3
-                elif query in tokens_dict["family"]:
-                    priority = 4
-                else:
-                    priority = 5
-
-                matched_with_priority.append((priority, oid))
-
-            matched_with_priority.sort(key=lambda x: x[0])
-            matched = [oid for priority, oid in matched_with_priority]
+            if matched is None:
+                matched = []
 
             self.app.active_object_ids = matched
             self.refresh_list()
@@ -7350,49 +7138,11 @@ class ObjectProgramUI(
         calls invalidate_search_index(), the cache is rebuilt lazily here covering
         ALL registration columns (not just Genus + Species) for maximum recall.
         """
-        if self._search_index_cache is not None:
-            return self._search_index_cache
-
-        index = {}
-        if self.app.df_reg is None:
-            return index
-
-        df = self.app.df_reg
-        # Index every column in df_reg for full-text search coverage
-        all_cols = list(df.columns)
-        reg_dict = self._get_reg_dict()
-
-        for oid in df.index:
-            reg_row = reg_dict.get(oid, {})
-            id_str = str(oid).lower()
-            parts = [id_str]
-
-            genus = str(reg_row.get("Genus", "")).strip().lower() if not pd.isna(reg_row.get("Genus", "")) else ""
-            species = str(reg_row.get("Species", "")).strip().lower() if not pd.isna(reg_row.get("Species", "")) else ""
-            genus_species_str = f"{genus} {species}".strip()
-
-            family = str(reg_row.get("Family", "")).strip().lower() if not pd.isna(reg_row.get("Family", "")) else ""
-
-            for col in all_cols:
-                val = reg_row.get(col, "")
-                if val and not pd.isna(val):
-                    val_str = str(val).strip().lower()
-                    if val_str:
-                        parts.append(val_str)
-
-            index[oid] = {
-                "id": id_str,
-                "genus_species": genus_species_str,
-                "family": family,
-                "all": " ".join(parts)
-            }
-
-        self._search_index_cache = index
-        return index
+        return self.search_engine.get_search_index(self.app.df_reg, self._get_reg_dict())
 
     def invalidate_search_index(self):
         """Call after any data change that affects Genus, Species, or ObjectID."""
-        self._search_index_cache = None
+        self.search_engine.invalidate_search_index()
 
     def _on_search_bar_enter(self, event=None):
         sel = self.object_list.curselection()
