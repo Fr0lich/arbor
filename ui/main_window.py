@@ -951,6 +951,8 @@ class ObjectProgramUI(
 
         self.reg_notebook.add(tab_container, text="General Data")
 
+        reg_fields_by_name = {f["name"]: f for f in self.app.config["ui_sections"]["registration"]}
+
         # Generate card layout inside the tab frame
         for c in card_defs:
             card_id = c["id"]
@@ -985,7 +987,7 @@ class ObjectProgramUI(
             
             current_row = 0
             for fname in fields_to_render:
-                field = next((f for f in self.app.config["ui_sections"]["registration"] if f["name"] == fname), None)
+                field = reg_fields_by_name.get(fname)
                 if not field:
                     continue
 
