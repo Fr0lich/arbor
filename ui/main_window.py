@@ -764,8 +764,10 @@ class ObjectProgramUI(
         
         field_names_order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
         
+        loc_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("location", [])}
+
         for name in field_names_order:
-            field = next((f for f in self.app.config["ui_sections"]["location"] if f["name"] == name), None)
+            field = loc_config_dict.get(name)
             if not field: continue
             
             row = self._create_loc_widget(content, name, field.get("type", "text"), field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=False)
@@ -776,7 +778,7 @@ class ObjectProgramUI(
         sep2 = tk.Frame(content, bg=bd_col, height=1)
         sep2.pack(fill="x", pady=6)
         
-        loan_field = next((f for f in self.app.config["ui_sections"]["location"] if f["name"] == "Loaned out"), None)
+        loan_field = loc_config_dict.get("Loaned out")
         if loan_field:
             row = self._create_loc_widget(content, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=False)
             if row:
@@ -801,7 +803,9 @@ class ObjectProgramUI(
         title = tk.Label(hdr, text="LOCATION", font=("JetBrains Mono", sc(10), "bold"), bg=header_bg, fg=fg_col)
         title.pack(side="left", padx=8, pady=4)
         
-        loan_field = next((f for f in self.app.config["ui_sections"]["location"] if f["name"] == "Loaned out"), None)
+        loc_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("location", [])}
+
+        loan_field = loc_config_dict.get("Loaned out")
         if loan_field:
             row = self._create_loc_widget(hdr, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 9, header_bg, fg_col, bd_col, is_horiz=True)
             if row:
@@ -821,7 +825,7 @@ class ObjectProgramUI(
             
         field_names_order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
         for idx, name in enumerate(field_names_order):
-            field = next((f for f in self.app.config["ui_sections"]["location"] if f["name"] == name), None)
+            field = loc_config_dict.get(name)
             if not field: continue
             
             cell = tk.Frame(content, bg=bg_col)
@@ -951,6 +955,9 @@ class ObjectProgramUI(
 
         self.reg_notebook.add(tab_container, text="General Data")
 
+        # Create O(1) lookup dictionary for registration config
+        reg_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("registration", [])}
+
         # Generate card layout inside the tab frame
         for c in card_defs:
             card_id = c["id"]
@@ -985,7 +992,7 @@ class ObjectProgramUI(
             
             current_row = 0
             for fname in fields_to_render:
-                field = next((f for f in self.app.config["ui_sections"]["registration"] if f["name"] == fname), None)
+                field = reg_config_dict.get(fname)
                 if not field:
                     continue
 
