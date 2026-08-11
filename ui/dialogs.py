@@ -340,11 +340,27 @@ class StartupDialog:
         self._bind_mousewheel_recursive(self.win, canvas)
 
     def _bind_mousewheel_recursive(self, widget, canvas):
+        tag = f"MouseWheelTag_{id(canvas)}"
+
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        widget.bind("<MouseWheel>", _on_mousewheel, add="+")
-        for child in widget.winfo_children():
-            self._bind_mousewheel_recursive(child, canvas)
+
+        widget.bind_class(tag, "<MouseWheel>", _on_mousewheel, add="+")
+
+        def _add_tag(w):
+            tags = w.bindtags()
+            if tag not in tags:
+                w.bindtags((tag,) + tags)
+            for child in w.winfo_children():
+                _add_tag(child)
+
+        _add_tag(widget)
+
+        def _cleanup(event):
+            if event.widget is widget:
+                widget.unbind_class(tag, "<MouseWheel>")
+
+        widget.bind("<Destroy>", _cleanup, add="+")
 
 
     def _sep(self, parent, color=None, vertical=False):

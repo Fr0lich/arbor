@@ -8146,9 +8146,23 @@ class ObjectProgramUI(
 
 
     def _bind_mousewheel_recursive(self, widget, handler):
-        widget.bind("<MouseWheel>", handler)
-        for child in widget.winfo_children():
-            self._bind_mousewheel_recursive(child, handler)
+        tag = f"MouseWheelTag_{id(widget)}"
+        widget.bind_class(tag, "<MouseWheel>", handler)
+
+        def _add_tag(w):
+            tags = w.bindtags()
+            if tag not in tags:
+                w.bindtags((tag,) + tags)
+            for child in w.winfo_children():
+                _add_tag(child)
+
+        _add_tag(widget)
+
+        def _cleanup(event):
+            if event.widget is widget:
+                widget.unbind_class(tag, "<MouseWheel>")
+
+        widget.bind("<Destroy>", _cleanup, add="+")
 
 
 
