@@ -10,7 +10,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Effort:** Small
 * **Recommended change:** In `ui/advanced_settings.py`, add an early return or skip in the loop: `if item["type"] == "button": continue`.
 
-### Optimize `_normalise_dataframes` dynamically added columns
+### [COMPLETED] Optimize `_normalise_dataframes` dynamically added columns
 * **Why it matters:** Iteratively assigning new columns (`df_obs[col] = False`) directly mutates the dataframe repeatedly, causing a `SettingWithCopyWarning` and severe memory fragmentation ("PerformanceWarning: DataFrame is highly fragmented").
 * **Impact:** High (Performance and memory bottleneck during data load)
 * **Effort:** Small
@@ -129,7 +129,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 ## 1. Top 10 Quick Wins (Low Effort, High/Medium Impact)
 
 1. **Fix `AdvancedSettingsWindow.save_settings` KeyError** (High Impact)
-2. **Optimize `_normalise_dataframes` dynamically added columns** (High Impact)
+2. **Optimize `_normalise_dataframes` dynamically added columns** (High Impact) [COMPLETED]
 3. **Remove Misleading `.empty` Checks on Columns** (High Impact) [COMPLETED]
 4. **Make `calamine` a Hard Dependency** (High Impact)
 5. **Update Deprecated Pandas `.append`** (High Impact)
