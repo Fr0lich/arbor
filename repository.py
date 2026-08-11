@@ -145,9 +145,9 @@ def _normalise_log_dataframe(df_log):
     if df_log is None or df_log.empty:
         return pd.DataFrame(columns=required_cols)
         
-    for col in required_cols:
-        if col not in df_log.columns:
-            df_log[col] = ""
+    missing_cols = [col for col in required_cols if col not in df_log.columns]
+    if missing_cols:
+        df_log[missing_cols] = pd.DataFrame({col: "" for col in missing_cols}, index=df_log.index)
             
     return df_log
 
@@ -215,9 +215,9 @@ class ExcelRepository:
                 df_photo = pd.DataFrame(columns=["ObjectID"])
 
             # Ensure mapped registration fields exist before normalisation
-            for col in mapped_fields:
-                if col not in df_reg.columns:
-                    df_reg[col] = ""
+            missing_mapped_fields = [col for col in mapped_fields if col not in df_reg.columns]
+            if missing_mapped_fields:
+                df_reg[missing_mapped_fields] = pd.DataFrame({col: "" for col in missing_mapped_fields}, index=df_reg.index)
 
             # Normalise both main dataframes
             df_reg, df_obs = _normalise_dataframes(df_reg, df_obs, config)

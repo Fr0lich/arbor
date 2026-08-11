@@ -10,9 +10,9 @@ from repository import ExcelRepository, REVIEWED_COLUMN
 class DatabaseOpsMixin:
     def _write_excel(self, path):
         """Save the current in-memory state to Excel directly."""
-        for col in self.problem_columns:
-            if col not in self.app.df_obs.columns:
-                self.app.df_obs[col] = False
+        missing_problem_cols = [col for col in self.problem_columns if col not in self.app.df_obs.columns]
+        if missing_problem_cols:
+            self.app.df_obs[missing_problem_cols] = pd.DataFrame({col: False for col in missing_problem_cols}, index=self.app.df_obs.index)
 
         from repository import SQLiteRepository
         SQLiteRepository.export_to_excel(
@@ -35,9 +35,9 @@ class DatabaseOpsMixin:
         self.set_status_badge("autosaved", "⏳ Saving…")
 
         try:
-            for col in self.problem_columns:
-                if col not in self.app.df_obs.columns:
-                    self.app.df_obs[col] = False
+            missing_problem_cols = [col for col in self.problem_columns if col not in self.app.df_obs.columns]
+            if missing_problem_cols:
+                self.app.df_obs[missing_problem_cols] = pd.DataFrame({col: False for col in missing_problem_cols}, index=self.app.df_obs.index)
 
             # Create copies of dataframes to prevent write-modification conflicts
             df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
