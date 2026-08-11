@@ -1322,11 +1322,10 @@ class ObjectProgramUI(
 
     def _get_focused_reg_index(self):
         current = self.root.focus_get()
-
-        for i, w in enumerate(self.reg_entry_list):
-            if w == current:
-                return i
-        return None
+        try:
+            return self.reg_entry_list.index(current)
+        except ValueError:
+            return None
 
     def _reg_nav_down(self, event):
         self._navigate_list(self.reg_entry_list, 1)
@@ -1364,11 +1363,10 @@ class ObjectProgramUI(
 
     def _get_focused_location_index(self):
         current = self.root.focus_get()
-
-        for i, w in enumerate(self.location_entries):
-            if w == current:
-                return i
-        return None
+        try:
+            return self.location_entries.index(current)
+        except ValueError:
+            return None
 
     def _location_nav_down(self, event):
         self._navigate_list(self.location_entries, 1)
@@ -1393,11 +1391,10 @@ class ObjectProgramUI(
 
     def _get_focused_problem_index(self):
         current = self.root.focus_get()
-
-        for i, cb in enumerate(self.problem_checkbuttons):
-            if cb == current:
-                return i
-        return None
+        try:
+            return self.problem_checkbuttons.index(current)
+        except ValueError:
+            return None
 
     def _problem_nav_down(self, event):
         self._navigate_list(self.problem_checkbuttons, 1)
