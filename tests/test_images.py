@@ -32,7 +32,7 @@ class TestImageHandler:
     def test_zoom_image(self):
         ui = DummyUI()
         ui.image_zoom_factor = 1.0
-        ui.refresh_image_view = lambda: None
+        ui._re_render_current_images = lambda: None
 
         ui.zoom_image_in()
         assert ui.image_zoom_factor == 1.25
@@ -47,7 +47,7 @@ class TestImageHandler:
     def test_rotate_image(self):
         ui = DummyUI()
         ui.image_rotation_angle = 0
-        ui.refresh_image_view = lambda: None
+        ui._re_render_current_images = lambda: None
 
         ui.rotate_image()
         assert ui.image_rotation_angle == 270
@@ -65,7 +65,7 @@ class TestImageHandler:
         ui = DummyUI()
         ui.image_zoom_factor = 2.0
         ui.image_rotation_angle = 90
-        ui.refresh_image_view = lambda: None
+        ui._re_render_current_images = lambda: None
 
         ui.reset_image_view()
         assert ui.image_zoom_factor == 1.0
