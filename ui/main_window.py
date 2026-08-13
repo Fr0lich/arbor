@@ -38,6 +38,75 @@ from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
 from models import AppState
 from utils import debug_error
 
+def is_light_color(hex_color):
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) == 3:
+        hex_color = "".join(c*2 for c in hex_color)
+    try:
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    except ValueError:
+        return True
+    brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return brightness > 127
+
+def adjust_color_brightness(hex_color, factor):
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) == 3:
+        hex_color = "".join(c*2 for c in hex_color)
+    try:
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    except ValueError:
+        return "#" + hex_color
+    
+    r = max(0, min(255, int(r * (1 + factor))))
+    g = max(0, min(255, int(g * (1 + factor))))
+    b = max(0, min(255, int(b * (1 + factor))))
+    
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+def make_tk_button_hoverable(btn, hover_bg=None, hover_fg=None):
+    orig_bg = btn.cget("bg")
+    orig_fg = btn.cget("fg")
+    
+    if not hover_bg:
+        active_bg = btn.cget("activebackground")
+        if active_bg and active_bg != orig_bg:
+            hover_bg = active_bg
+        else:
+            hover_bg = adjust_color_brightness(orig_bg, -0.1 if is_light_color(orig_bg) else 0.1)
+            
+    btn._orig_bg = orig_bg
+    btn._orig_fg = orig_fg
+    btn._hover_bg = hover_bg
+    btn._hover_fg = hover_fg
+    
+    def on_enter(e):
+        if btn.cget("state") != "disabled":
+            h_bg = getattr(btn, "_hover_bg", hover_bg)
+            h_fg = getattr(btn, "_hover_fg", hover_fg)
+            if h_bg:
+                btn.config(bg=h_bg)
+            if h_fg:
+                btn.config(fg=h_fg)
+
+    def on_leave(e):
+        if btn.cget("state") != "disabled":
+            o_bg = getattr(btn, "_orig_bg", orig_bg)
+            o_fg = getattr(btn, "_orig_fg", orig_fg)
+            btn.config(bg=o_bg, fg=o_fg)
+
+    btn.bind("<Enter>", on_enter, add="+")
+    btn.bind("<Leave>", on_leave, add="+")
+
+def _apply_hover_to_all_tk_buttons(parent, main_ui=None):
+    for child in parent.winfo_children():
+        if child.winfo_class() == "Button":
+            if main_ui and child == getattr(main_ui, "reviewed_button", None):
+                pass
+            else:
+                make_tk_button_hoverable(child)
+        _apply_hover_to_all_tk_buttons(child, main_ui)
+
 class LabelWrapper:
     def __init__(self, real_label, ui):
         self.real = real_label
@@ -277,10 +346,11 @@ class ObjectProgramUI(
         self.recent_window = None
         self.sort_directions = {"ID": True, "Genus": True, "Species": True, "Status": True}
         self.status_badge_colors = {
-            "saved": {"bg": "#d4edda", "fg": "#155724"},
+            "saved":     {"bg": "#d4edda", "fg": "#155724"},
+            "saving":    {"bg": "#e8f4fd", "fg": "#1565c0"},   # U2-F: zero-latency "Saving…" state
             "autosaved": {"bg": "#e2f0fe", "fg": "#0a58ca"},
-            "unsaved": {"bg": "#fff3cd", "fg": "#856404"},
-            "error": {"bg": "#f8d7da", "fg": "#721c24"}
+            "unsaved":   {"bg": "#fff3cd", "fg": "#856404"},
+            "error":     {"bg": "#f8d7da", "fg": "#721c24"}
         }
 
         self.filter_mode = tk.StringVar(value="AND")
@@ -473,6 +543,9 @@ class ObjectProgramUI(
         style.configure("Hover.TLabel", background="#eeeeee")
         style.configure("Hover.TFrame", background="#eeeeee")
 
+        # U2-E: Automatically apply hover to all tk.Button elements in main UI
+        _apply_hover_to_all_tk_buttons(self.root, self)
+
 
     def _get_http_session(self):
         """Return the shared requests.Session, creating it on first call.
@@ -659,20 +732,38 @@ class ObjectProgramUI(
                 else:
                     widget.pack(side="left", fill="x", expand=True, ipady=sc(3))
             else:
+                entry_container = tk.Frame(container, bg=bg_col)
                 widget = tk.Entry(
-                    container, textvariable=var,
+                    entry_container, textvariable=var,
                     state="disabled" if field_def.get("readonly") else "normal",
                     font=(font_family, sc(font_size)),
                     bg=entry_bg, fg=entry_fg,
                     insertbackground=entry_insert,
-                    highlightthickness=1, highlightbackground=bd_col, highlightcolor=entry_insert,
+                    highlightthickness=1, highlightbackground=bd_col, highlightcolor=entry_bg,
                     relief="flat"
                 )
+                widget.pack(fill="x", expand=True, ipady=sc(3))
+                
+                focus_line = tk.Frame(entry_container, height=sc(2), bg=bg_col)
+                focus_line.pack(fill="x", side="bottom")
+                
+                def make_focus_handlers(w, fl, ec, default_bg):
+                    def on_focus_in(e):
+                        is_dark = self.dark_mode_active if hasattr(self, "dark_mode_active") else False
+                        fl.configure(bg="#a6e3a1" if is_dark else "#3b6934")
+                    def on_focus_out(e):
+                        fl.configure(bg=default_bg)
+                    w.bind("<FocusIn>", on_focus_in, add="+")
+                    w.bind("<FocusOut>", on_focus_out, add="+")
+                    
+                make_focus_handlers(widget, focus_line, entry_container, bg_col)
+                
                 widget.bind("<FocusOut>", lambda e: self.commit_current_object())
+                
                 if is_horiz:
-                    widget.pack(fill="x", expand=True, ipady=sc(3))
+                    entry_container.pack(fill="x", expand=True)
                 else:
-                    widget.pack(side="left", fill="x", expand=True, ipady=sc(3))
+                    entry_container.pack(side="left", fill="x", expand=True)
         
         self.location_entries.append(widget)
         widget.bind("<Shift-Up>", self._location_nav_up)
@@ -743,6 +834,7 @@ class ObjectProgramUI(
         return presets_frame
 
     def _build_vertical_location_ui(self):
+        from config import FONT_MONO_FAMILY
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2e" if is_dark else "#f3f3f3"
         fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
@@ -780,7 +872,7 @@ class ObjectProgramUI(
         
         loan_field = loc_config_dict.get("Loaned out")
         if loan_field:
-            row = self._create_loc_widget(content, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=False)
+            row = self._create_loc_widget(content, "Loaned out", "checkbox", loan_field, FONT_MONO_FAMILY, 10, bg_col, fg_col, bd_col, is_horiz=False)
             if row:
                 children = row.winfo_children()
                 if children:
@@ -790,6 +882,7 @@ class ObjectProgramUI(
                 row.pack(fill="x", pady=4)
 
     def _build_horizontal_location_ui(self):
+        from config import FONT_MONO_FAMILY
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2e" if is_dark else "#f3f3f3"
         fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
@@ -802,14 +895,14 @@ class ObjectProgramUI(
         hdr = tk.Frame(self.loc_frame_horizontal, bg=header_bg)
         hdr.pack(fill="x", pady=(2, 4))
         
-        title = tk.Label(hdr, text="LOCATION", font=("JetBrains Mono", sc(10), "bold"), bg=header_bg, fg=fg_col)
+        title = tk.Label(hdr, text="LOCATION", font=(FONT_MONO_FAMILY, sc(10), "bold"), bg=header_bg, fg=fg_col)
         title.pack(side="left", padx=8, pady=4)
         
         loc_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("location", [])}
 
         loan_field = loc_config_dict.get("Loaned out")
         if loan_field:
-            row = self._create_loc_widget(hdr, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 9, header_bg, fg_col, bd_col, is_horiz=True)
+            row = self._create_loc_widget(hdr, "Loaned out", "checkbox", loan_field, FONT_MONO_FAMILY, 9, header_bg, fg_col, bd_col, is_horiz=True)
             if row:
                 children = row.winfo_children()
                 if children:
@@ -833,7 +926,7 @@ class ObjectProgramUI(
             cell = tk.Frame(content, bg=bg_col)
             cell.grid(row=0, column=idx, sticky="nsew", padx=4)
             
-            row = self._create_loc_widget(cell, name, field.get("type", "text"), field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=True)
+            row = self._create_loc_widget(cell, name, field.get("type", "text"), field, FONT_MONO_FAMILY, 10, bg_col, fg_col, bd_col, is_horiz=True)
             if row:
                 row.pack(fill="x")
 
@@ -1076,16 +1169,33 @@ class ObjectProgramUI(
                         w.bind("<KeyRelease>", self._on_text_change)
                     bind_text_events(widget)
                 else:
+                    entry_container = tk.Frame(frame, bg=card_bg)
                     widget = tk.Entry(
-                        frame, textvariable=var,
+                        entry_container, textvariable=var,
                         relief="flat", bd=0,
                         highlightthickness=1, highlightbackground=border_color,
-                        highlightcolor="#000000" if not is_dark else "#cdd6f4",
+                        highlightcolor="#ffffff" if is_dark else "#f3f3f3",
                         insertbackground="#000000" if not is_dark else "#cdd6f4",
                         bg="#ffffff" if not is_dark else "#181825",
                         fg="#1a1c1c" if not is_dark else "#cdd6f4",
                         font=("Hanken Grotesk", sc(10))
                     )
+                    widget.pack(fill="x", expand=True, ipady=sc(3))
+                    
+                    focus_line = tk.Frame(entry_container, height=sc(2), bg=card_bg)
+                    focus_line.pack(fill="x", side="bottom")
+                    
+                    def make_focus_handlers(w, fl, ec, default_bg):
+                        def on_focus_in(e):
+                            is_dark = self.dark_mode_active if hasattr(self, "dark_mode_active") else False
+                            fl.configure(bg="#a6e3a1" if is_dark else "#3b6934")
+                        def on_focus_out(e):
+                            fl.configure(bg=default_bg)
+                        w.bind("<FocusIn>", on_focus_in, add="+")
+                        w.bind("<FocusOut>", on_focus_out, add="+")
+                        
+                    make_focus_handlers(widget, focus_line, entry_container, card_bg)
+
                     widget.bind("<KeyRelease>", lambda e, n=name, w=widget: self._on_autocomplete_key(e, n, w), add="+")
                     widget.bind("<KeyRelease>", lambda e: self.root.after(500, self._validate_fields), add="+")
                     widget.bind("<FocusOut>", lambda e, n=name, w=widget: self._run_fuzzy_match(n, w), add="+")
@@ -1096,7 +1206,7 @@ class ObjectProgramUI(
                 self.reg_entries[name] = widget
                 self.reg_entry_list.append(widget)
 
-                widget.grid(row=0, column=2, sticky="ew")
+                entry_container.grid(row=0, column=2, sticky="ew")
 
                 # Bind general keys
                 widget.bind("<Shift-Up>", self._reg_nav_up)
@@ -1495,7 +1605,7 @@ class ObjectProgramUI(
             "obs": self.app.df_obs.loc[oid].copy(),
         }
 
-        MAX_UNDO = 30
+        from models import MAX_UNDO_PER_OBJECT  # P1-F: single constant, no scattered literals
         stack = self.app.undo_stacks.setdefault(oid, [])
 
         stack.append(state)
@@ -1504,9 +1614,9 @@ class ObjectProgramUI(
 
         if total > 500:
             for k in self.app.undo_stacks:
-                self.app.undo_stacks[k] = self.app.undo_stacks[k][-10:]
+                self.app.undo_stacks[k] = self.app.undo_stacks[k][-MAX_UNDO_PER_OBJECT:]
 
-        if len(stack) > MAX_UNDO:
+        if len(stack) > MAX_UNDO_PER_OBJECT:
             del stack[:10]
 
 
@@ -2663,12 +2773,12 @@ class ObjectProgramUI(
             "reg": self.app.df_reg.loc[oid].copy(),
             "obs": self.app.df_obs.loc[oid].copy(),
         }
-        MAX_UNDO = 30
+        from models import MAX_UNDO_PER_OBJECT  # P1-F
         ustack = self.app.undo_stacks.setdefault(oid, [])
 
         ustack.append(current)
 
-        if len(ustack) > MAX_UNDO:
+        if len(ustack) > MAX_UNDO_PER_OBJECT:
             del ustack[:10]
 
         state = stack.pop()
@@ -3291,11 +3401,13 @@ class ObjectProgramUI(
 
         # Re-add visible panes in order: images at top, location at bottom
         if self.show_images_var.get():
-            self.middle_panes.add(self.right_frame, weight=3, minsize=sc(100))
+            # U2-A: 200px minimum keeps image panel usable when sash is dragged left
+            self.middle_panes.add(self.right_frame, weight=3, minsize=sc(200))
             self.refresh_image_view()
 
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
-            self.middle_panes.add(self.loc_frame_horizontal, weight=1, minsize=sc(80))
+            # U2-A: 150px minimum keeps location rows readable
+            self.middle_panes.add(self.loc_frame_horizontal, weight=1, minsize=sc(150))
 
     def toggle_location_panel(self):
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
@@ -3445,18 +3557,27 @@ class ObjectProgramUI(
         self._status_bar_problems_lbl = _sb_label(sb_left, "problems", "PROBLEMS: —")
         _sb_sep(sb_left)
         _sb_label(sb_left, "last_save", "LAST_SAVE: —")
+        # U2-H: Filter-active badge — amber dot that appears when any filter is active.
+        # Created here; populated/cleared by update_object_count().
+        self._filter_active_badge = tk.Label(
+            sb_left, text="", bg=statusbar_bg, fg="#e07b39",
+            font=("Courier New", sc(9), "bold"), padx=4
+        )
+        self._filter_active_badge.pack(side="left")
 
         # Right links group
         sb_right = tk.Frame(sb_bottom, bg=statusbar_bg)
         sb_right.pack(side="right", fill="y")
 
         def _sb_link(parent, text, cmd):
-            lbl = tk.Label(parent, text=text, bg=statusbar_bg, fg="#aaaaaa",
+            # U2-C: #c8c8c8 on #1c1b1b achieves ~7.5:1 contrast ratio (WCAG AA+)
+            # replaces #aaaaaa which was only ~3.5:1 (fails AA)
+            lbl = tk.Label(parent, text=text, bg=statusbar_bg, fg="#c8c8c8",
                            font=("Courier New", sc(9)), padx=8, cursor="hand2")
             lbl.pack(side="right")
             lbl.bind("<Button-1>", lambda e: cmd())
             lbl.bind("<Enter>", lambda e: lbl.config(fg="#ffffff"))
-            lbl.bind("<Leave>", lambda e: lbl.config(fg="#aaaaaa"))
+            lbl.bind("<Leave>", lambda e: lbl.config(fg="#c8c8c8"))
             return lbl
 
         _sb_link(sb_right, "DB_STATUS",  lambda: None)   # placeholder — connect later
@@ -3671,11 +3792,13 @@ class ObjectProgramUI(
         self.review_progress = None
 
     
+        # U2-C: Bold weight and slightly larger font make the filter-active
+        # indicator legible at a glance under museum lighting conditions.
         self.filter_status_label = ttk.Label(
             left,
             text="",
-            foreground="#d9534f",
-            font=("Segoe UI", sc(8))
+            foreground="#c0392b",
+            font=("Segoe UI", sc(8), "bold")
         )
         self.filter_status_label.pack(fill="x", padx=6, pady=(0, 2))
 
@@ -3904,7 +4027,8 @@ class ObjectProgramUI(
 
         right = ttk.Frame(self.middle_panes, style="MiddlePane.TFrame")
         self.right_frame = right
-        self.middle_panes.add(right, weight=3, minsize=sc(100))
+        # U2-A: 200px minimum ensures image panel never collapses below usable size
+        self.middle_panes.add(right, weight=3, minsize=sc(200))
 
         header = ttk.Frame(right, style="MiddlePane.TFrame")
         header.pack(fill="x", pady=(4, 4), padx=6)
@@ -4108,6 +4232,8 @@ class ObjectProgramUI(
         self.reviewed_var.trace_add("write", lambda *args: self.update_reviewed_button_state())
         self.reviewed_button.bind("<Enter>", self._on_reviewed_btn_enter)
         self.reviewed_button.bind("<Leave>", self._on_reviewed_btn_leave)
+        self.reviewed_button.bind("<ButtonPress-1>", self._on_reviewed_btn_press)
+        self.reviewed_button.bind("<ButtonRelease-1>", self._on_reviewed_btn_release)
 
         # Row 1b: Secondary action — clear problems checkbutton + status indicators
         action_row1b = ttk.Frame(action_bar, style="RightPane.TFrame")
@@ -4129,7 +4255,8 @@ class ObjectProgramUI(
             activebackground=bg_pane, activeforeground=fg_col,
             selectcolor=bg_col,
             relief="flat", bd=0, highlightthickness=0,
-            cursor="hand2"
+            cursor="hand2",
+            padx=sc(4), pady=sc(3)  # U2-B: explicit padding for larger click target
         )
         self.clear_problems_cb.pack(side="left", padx=4)
         self.add_tooltip(
@@ -4146,7 +4273,8 @@ class ObjectProgramUI(
             activebackground=bg_pane, activeforeground=fg_col,
             selectcolor=bg_col,
             relief="flat", bd=0, highlightthickness=0,
-            cursor="hand2"
+            cursor="hand2",
+            padx=sc(4), pady=sc(3)  # U2-B: explicit padding for larger click target
         )
         self.auto_next_cb.pack(side="left", padx=4)
         self.add_tooltip(
@@ -4272,6 +4400,17 @@ class ObjectProgramUI(
                 self._status_bar_problems_lbl.config(
                     fg="#ff6b6b" if problems_count > 0 else "#e2e2e2"
                 )
+
+        # U2-H: Filter-active indicator — a small coloured dot next to the count
+        # gives an at-a-glance signal that the list is filtered, even in low light.
+        if hasattr(self, "_filter_active_badge"):
+            total = len(self.app.df_reg) if self.app.df_reg is not None else 0
+            shown = len(self.app.active_object_ids) if self.app.active_object_ids else 0
+            is_filtered = (shown < total) and total > 0
+            self._filter_active_badge.config(
+                text=" ● FILTER" if is_filtered else "",
+                fg="#e07b39"  # amber — visible in both light and dark themes
+            )
 
 
 
@@ -4915,7 +5054,7 @@ class ObjectProgramUI(
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
         dialog.resizable(True, True)
-        dialog.minsize(550, 400)
+        dialog.minsize(sc(550), sc(400))  # U2-G: scaled to DPI
         dialog.grab_set()
 
         s = getattr(self, "_scale", 1.0)
@@ -5547,7 +5686,7 @@ class ObjectProgramUI(
         win = tk.Toplevel(self.root)
         win.title(f"Error Log — {os.path.basename(log_path)}")
         win.resizable(True, True)
-        win.minsize(660, 420)
+        win.minsize(sc(660), sc(420))  # U2-G: scaled to DPI
         win.configure(bg="#1a1a2e")
 
         import utils
@@ -8262,6 +8401,33 @@ class ObjectProgramUI(
             self.reviewed_button.config(bg="#ffffff")
         else:
             self.reviewed_button.config(bg="#3b6934")
+
+    def _on_reviewed_btn_press(self, event):
+        if not self.app.current_object_id:
+            return
+        if bool(self.reviewed_var.get()):
+            self.reviewed_button.config(bg="#dcdcdc")
+        else:
+            self.reviewed_button.config(bg="#203f1b")
+
+    def _on_reviewed_btn_release(self, event):
+        if not self.app.current_object_id:
+            return
+        x = event.x
+        y = event.y
+        w = event.widget.winfo_width()
+        h = event.widget.winfo_height()
+        inside = (0 <= x <= w) and (0 <= y <= h)
+        if inside:
+            if bool(self.reviewed_var.get()):
+                self.reviewed_button.config(bg="#f3f3f3")
+            else:
+                self.reviewed_button.config(bg="#2e5228")
+        else:
+            if bool(self.reviewed_var.get()):
+                self.reviewed_button.config(bg="#ffffff")
+            else:
+                self.reviewed_button.config(bg="#3b6934")
 
     def mark_reviewed_and_next(self, event=None):
         """Mark as reviewed and automatically advance if autoAdvanceOnReview is enabled."""

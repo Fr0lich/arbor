@@ -1017,9 +1017,15 @@ class ImageHandlerMixin:
                 if token != self._image_load_token:
                     return None
                 try:
-                    r = self._get_http_session().get(url, timeout=5)
+                    # P1-H: Split connect/read timeout prevents a stalled TCP
+                    # handshake from blocking the thread for the full 5 s.
+                    # (3 s to connect, 8 s to receive the full response)
+                    r = self._get_http_session().get(url, timeout=(3, 8))
                     if r.status_code == 200:
                         return Image.open(BytesIO(r.content))
+                    # P1-H: Non-200 on first attempt almost never recovers;
+                    # stop retrying immediately to save time.
+                    return None
                 except Exception:
                     # Connection errors (e.g. RemoteDisconnected) are expected when
                     # an image URL does not exist — silently skip to the next attempt.
@@ -1374,7 +1380,20 @@ class ImageHandlerMixin:
         except Exception:
             old_y = 0.0
 
-        self.image_render_cache.clear()
+        # P1-G: Targeted cache eviction — only remove entries whose path belongs
+        # to the current object's images, preserving cached renders for all other
+        # objects.  A full .clear() was previously discarding ~40 renders every
+        # time the user zoomed or rotated, forcing an expensive full re-render.
+        if getattr(self, "_image_paths", None):
+            current_paths = set(self._image_paths)
+            stale_keys = [
+                k for k in list(self.image_render_cache)
+                if k[0] in current_paths
+            ]
+            for k in stale_keys:
+                del self.image_render_cache[k]
+        else:
+            self.image_render_cache.clear()
 
         if getattr(self, "_image_paths", None):
             if self.image_view_mode == "gallery":

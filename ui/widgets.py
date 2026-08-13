@@ -130,6 +130,9 @@ class TreeviewListboxWrapper(ttk.Frame):
         # Bind double-click and selection for Treeview click
         self.tree.bind("<Button-1>", self._on_treeview_click)
         self.tree.bind("<<TreeviewSelect>>", self._on_treeview_select)
+        self.tree.bind("<Motion>", self._on_tree_motion)
+        self.tree.bind("<Leave>", self._on_tree_leave)
+        self._last_hovered_iid = None
 
         # Create Scrollable Canvas for Detailed Mode
         self.canvas_container = ttk.Frame(self)
@@ -262,6 +265,47 @@ class TreeviewListboxWrapper(ttk.Frame):
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
         self._schedule_viewport_update()
+
+    def _on_tree_motion(self, event):
+        iid = self.tree.identify_row(event.y)
+        if iid != getattr(self, "_last_hovered_iid", None):
+            if getattr(self, "_last_hovered_iid", None):
+                try:
+                    tags = list(self.tree.item(self._last_hovered_iid, "tags"))
+                    if "hover" in tags:
+                        tags.remove("hover")
+                        self.tree.item(self._last_hovered_iid, tags=tags)
+                except Exception:
+                    pass
+            
+            if iid:
+                try:
+                    tags = list(self.tree.item(iid, "tags"))
+                    if "hover" not in tags:
+                        tags.append("hover")
+                        self.tree.item(iid, tags=tags)
+                except Exception:
+                    pass
+            
+            self._last_hovered_iid = iid
+            
+        is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
+        hover_bg = "#313244" if is_dark else "#eeeeee"
+        try:
+            self.tree.tag_configure("hover", background=hover_bg)
+        except Exception:
+            pass
+
+    def _on_tree_leave(self, event):
+        if getattr(self, "_last_hovered_iid", None):
+            try:
+                tags = list(self.tree.item(self._last_hovered_iid, "tags"))
+                if "hover" in tags:
+                    tags.remove("hover")
+                    self.tree.item(self._last_hovered_iid, tags=tags)
+            except Exception:
+                pass
+            self._last_hovered_iid = None
 
     def _on_treeview_click(self, event):
         region = self.tree.identify_region(event.x, event.y)

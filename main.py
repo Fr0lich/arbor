@@ -124,35 +124,53 @@ def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
     On startup, look for log files from previous sessions that contain errors.
     If found, show a notification banner offering to view the most recent one.
     """
-    from utils import _get_log_dir, get_session_log_path
-    import glob
+    import threading
 
-    log_dir = _get_log_dir()
-    current_log = get_session_log_path()
+    def _background_scan():
+        try:
+            from utils import _get_log_dir, get_session_log_path
+            import glob
 
-    # Find all session logs that are not the current one
-    pattern = os.path.join(log_dir, "arbor_*.log")
-    all_logs = sorted(glob.glob(pattern), reverse=True)
-    stale_logs = [p for p in all_logs if p != current_log and os.path.getsize(p) > 0]
+            log_dir = _get_log_dir()
+            current_log = get_session_log_path()
 
-    if not stale_logs:
-        return
+            # Find all session logs that are not the current one
+            pattern = os.path.join(log_dir, "arbor_*.log")
+            all_logs = sorted(glob.glob(pattern), reverse=True)
+            
+            # Clean up/check stale logs safely in thread
+            stale_logs = []
+            for p in all_logs:
+                if p != current_log:
+                    try:
+                        if os.path.getsize(p) > 0:
+                            stale_logs.append(p)
+                    except OSError:
+                        pass
 
-    most_recent = stale_logs[0]
+            if not stale_logs:
+                return
 
-    def _show_banner():
-        active_ui = ui_ref[0] if ui_ref else None
-        if active_ui is None:
-            return
-        if hasattr(active_ui, "show_banner"):
-            active_ui.show_banner(
-                f"⚠ Crash log from last session found — click to view",
-                banner_type="warning",
-                duration_ms=12000,
-                action_callback=lambda: active_ui.show_error_log_window(most_recent)
-            )
+            most_recent = stale_logs[0]
 
-    root.after(2000, _show_banner)
+            def _show_banner():
+                active_ui = ui_ref[0] if ui_ref else None
+                if active_ui is None:
+                    return
+                if hasattr(active_ui, "show_banner"):
+                    active_ui.show_banner(
+                        f"⚠ Crash log from last session found — click to view",
+                        banner_type="warning",
+                        duration_ms=12000,
+                        action_callback=lambda: active_ui.show_error_log_window(most_recent)
+                    )
+
+            root.after(2000, _show_banner)
+        except Exception:
+            pass
+
+    thread = threading.Thread(target=_background_scan, daemon=True)
+    thread.start()
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

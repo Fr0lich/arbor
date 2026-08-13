@@ -25,27 +25,41 @@ class DatabaseOpsMixin:
         )
 
 
-    def _write_excel_async(self, path, callback=None):
-        """Save the current in-memory state to Excel in a background thread."""
+    def _write_excel_async(self, path, callback=None, show_saving_badge=True):
+        """Save the current in-memory state to Excel in a background thread.
+
+        Args:
+            path: Target file path.
+            callback: Optional callable(success: bool, err: str | None) invoked
+                      on the main thread when the worker finishes.
+            show_saving_badge: If True, immediately show the "Saving…" badge
+                               before the thread starts (zero-latency feedback).
+        """
         if getattr(self, '_save_in_progress', False):
             # Skip — a background save is already running
             return
 
         self._save_in_progress = True
-        self.set_status_badge("autosaved", "⏳ Saving…")
+
+        # U2-F: Zero-latency visual feedback — update badge *before* spawning
+        # the thread so the user sees an instant response to Ctrl+S.
+        if show_saving_badge:
+            self.set_status_badge("saving", "💾 Saving…")
 
         try:
             missing_problem_cols = [col for col in self.problem_columns if col not in self.app.df_obs.columns]
             if missing_problem_cols:
                 self.app.df_obs[missing_problem_cols] = pd.DataFrame({col: False for col in missing_problem_cols}, index=self.app.df_obs.index)
 
-            # Create copies of dataframes to prevent write-modification conflicts
-            df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
-            df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
-            df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
+            # P1-B: Hold df_lock for the minimum time needed to snapshot all frames.
+            # The RLock allows the main thread to still acquire it recursively.
+            with self.app.df_lock:
+                df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
+                df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
+                df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
         except Exception as e:
             self._save_in_progress = False
-            self.set_status_badge("autosaved", "Save Error")
+            self.set_status_badge("error", "Save Error")
             if callback:
                 callback(False, str(e))
             return
@@ -199,11 +213,11 @@ class DatabaseOpsMixin:
             dupes = []
 
         if len(dupes) > 0:
-            messagebox.showwarning(
-                "Duplicate ObjectIDs",
-                f"{len(dupes)} duplicate ObjectID(s) found.\n"
-                "Only the first occurrence will be kept.\n\n"
-                + ", ".join(dupes[:10])
+            self.show_banner(
+                f"⚠ {len(dupes)} duplicate ObjectID(s) found. Only the first occurrence will be kept: "
+                + ", ".join(dupes[:10]),
+                "warning",
+                duration_ms=10000
             )
 
             df_reg = df_reg.drop_duplicates(subset="ObjectID")
@@ -471,39 +485,58 @@ class DatabaseOpsMixin:
 
 
     def save_session(self, action):
+        """Persist the current session to disk asynchronously.
 
-            self.commit_current_object()
+        P1-A: Replaced the blocking _write_excel() call with the existing
+        async path (_write_excel_async) so Ctrl+S never freezes the UI.
+        U2-F: Badge and banner feedback is wired into the completion callback
+        so the user always sees an immediate response and a clear outcome.
+        """
+        self.commit_current_object()
 
-            if not self.validate_before_save():
-                return
+        if not self.validate_before_save(action):
+            return
 
-            self.log_action(action)
+        self.log_action(action)
 
-            try:
-                self._write_excel(self.app.output_path)
-            except Exception as e:
+        output_path = self.app.output_path
+        basename = os.path.basename(output_path)
+
+        def _on_save_complete(success, err=None):
+            if success:
+                self.app.dirty = False
+                self.update_dirty_ui()  # sets badge to "✓ Saved HH:MM"
+                self.system_status.config(text=f"Saved: {basename}")
+                self.show_banner(f"Database saved: {basename}", "success")
+                # Clean up autosave file now that a real save succeeded
+                autosave_path = self._autosave_path()
+                if os.path.exists(autosave_path):
+                    try:
+                        os.remove(autosave_path)
+                    except Exception:
+                        pass
+                self.build_search_index()
+                self.invalidate_search_index()  # Genus/Species may have changed
+            else:
                 from utils import debug_error
                 import traceback
-                tb = traceback.format_exc()
-                debug_error("save_session", str(e))
-                self.show_traceback_dialog("Save Error", f"Failed to save to database: {e}", tb)
-                return
+                debug_error("save_session async", str(err))
+                self.show_traceback_dialog(
+                    "Save Error",
+                    f"Failed to save to database: {err}",
+                    ""
+                )
 
-            self.app.dirty = False
-            self.update_dirty_ui()
-            self.system_status.config(text=f"Saved: {os.path.basename(self.app.output_path)}")
-            self.show_banner(f"Database saved: {os.path.basename(self.app.output_path)}", "success")
-            autosave_path = self._autosave_path()
-            if os.path.exists(autosave_path):
-                try:
-                    os.remove(autosave_path)
-                except Exception:
-                    pass
-            self.build_search_index()
-            self.invalidate_search_index()  # Genus/Species may have changed
+        # show_saving_badge=True fires the "💾 Saving…" badge immediately
+        # (before the background thread starts) for zero-latency feedback.
+        self._write_excel_async(output_path, callback=_on_save_complete, show_saving_badge=True)
 
 
-    def validate_before_save(self):
+    def _save_anyway(self, action):
+        self._skip_validation_once = True
+        self.save_session(action)
+
+    def validate_before_save(self, action="SAVE"):
 
         if self._skip_validation_once:
             self._skip_validation_once = False
@@ -544,15 +577,10 @@ class DatabaseOpsMixin:
         if not issues:
             return True
 
-        msg = "Before saving:\n\n" + "\n".join(f"- {issue}" for issue in issues)
-        msg += "\n\nDo you want to continue?"
+        msg = "Validation warning: " + ", ".join(issues) + ". Click here to save anyway."
+        self.show_banner(msg, "warning", duration_ms=8000, action_callback=lambda: self._save_anyway(action))
 
-        result = messagebox.askyesno("Validation warning", msg)
-
-        if result:
-            self._skip_validation_once = True
-
-        return result
+        return False
 
 
     def save_as(self):
@@ -570,9 +598,10 @@ class DatabaseOpsMixin:
                 sqlite_path = self.app.excel_path
 
                 self._show_progress("Exporting to Excel...", 100)
-                df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
-                df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
-                df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
+                with self.app.df_lock:
+                    df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
+                    df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
+                    df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
 
                 def _worker():
                     try:

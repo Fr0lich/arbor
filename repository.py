@@ -321,29 +321,60 @@ class SQLiteRepository:
             df_log:   Log dataframe.
         """
         conn = sqlite3.connect(path)
+        try:
+            # Optimize transaction overhead and SQLite performance pragmas
+            conn.execute("PRAGMA journal_mode = WAL;")
+            conn.execute("PRAGMA synchronous = NORMAL;")
 
-        df_reg_save = df_reg.copy()
-        if "ObjectID" not in df_reg_save.columns:
-            df_reg_save = df_reg_save.reset_index()
+            df_reg_save = df_reg.copy()
+            if "ObjectID" not in df_reg_save.columns:
+                df_reg_save = df_reg_save.reset_index()
 
-        df_obs_save = df_obs.copy()
-        if "ObjectID" not in df_obs_save.columns:
-            df_obs_save = df_obs_save.reset_index()
+            df_obs_save = df_obs.copy()
+            if "ObjectID" not in df_obs_save.columns:
+                df_obs_save = df_obs_save.reset_index()
 
-        df_photo_save = df_photo.copy()
-        if "ObjectID" not in df_photo_save.columns:
-            df_photo_save = df_photo_save.reset_index()
+            df_photo_save = df_photo.copy()
+            if "ObjectID" not in df_photo_save.columns:
+                df_photo_save = df_photo_save.reset_index()
 
-        df_reg_save.to_sql("Registration", conn, if_exists="replace", index=False)
-        df_obs_save.to_sql("Observation", conn, if_exists="replace", index=False)
+            with conn:
+                for table_name, df_save in [("Registration", df_reg_save), ("Observation", df_obs_save)]:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+                    if cursor.fetchone():
+                        # Table exists, check if columns match (so we don't break on schema changes)
+                        cursor.execute(f"PRAGMA table_info({table_name});")
+                        db_cols = {row[1] for row in cursor.fetchall()}
+                        df_cols = set(df_save.columns)
+                        if df_cols.issubset(db_cols):
+                            cursor.execute(f"DELETE FROM {table_name};")
+                            df_save.to_sql(table_name, conn, if_exists="append", index=False)
+                        else:
+                            # Fallback if columns differ (e.g. schema migration)
+                            df_save.to_sql(table_name, conn, if_exists="replace", index=False)
+                    else:
+                        df_save.to_sql(table_name, conn, if_exists="replace", index=False)
 
-        if not df_photo_save.empty:
-            df_photo_save.to_sql("Photo", conn, if_exists="replace", index=False)
+                if not df_photo_save.empty:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Photo';")
+                    if cursor.fetchone():
+                        cursor.execute("DELETE FROM Photo;")
+                        df_photo_save.to_sql("Photo", conn, if_exists="append", index=False)
+                    else:
+                        df_photo_save.to_sql("Photo", conn, if_exists="replace", index=False)
 
-        if df_log is not None and not df_log.empty:
-            df_log.to_sql("Log", conn, if_exists="replace", index=False)
-
-        conn.close()
+                if df_log is not None and not df_log.empty:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Log';")
+                    if cursor.fetchone():
+                        cursor.execute("DELETE FROM Log;")
+                        df_log.to_sql("Log", conn, if_exists="append", index=False)
+                    else:
+                        df_log.to_sql("Log", conn, if_exists="replace", index=False)
+        finally:
+            conn.close()
 
     @staticmethod
     def import_from_excel(excel_path, sqlite_path, config):

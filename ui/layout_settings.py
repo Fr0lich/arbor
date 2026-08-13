@@ -368,6 +368,11 @@ class LayoutSettingsMixin:
                 win.after(500, lambda: TutorialManager().start_tutorial("layout_settings", win))
             except Exception:
                 pass
+        try:
+            from ui.main_window import _apply_hover_to_all_tk_buttons
+            _apply_hover_to_all_tk_buttons(win, self)
+        except Exception:
+            pass
 
     def save_layout_as_dialog(self):
         from tkinter import simpledialog
@@ -563,9 +568,50 @@ class LayoutSettingsMixin:
         self.dark_mode_active = not self.dark_mode_active
         self.apply_theme()
 
+    def _ensure_theme_widgets_registered(self):
+        if getattr(self, "_theme_widgets_registered", False):
+            return
+        
+        self._theme_sb_top_widgets = []
+        self._theme_sb_bottom_widgets = []
+        self._theme_loc_vert_widgets = []
+        self._theme_loc_horiz_widgets = []
+        self._theme_loc_labels = []
+        self._theme_loc_checkbuttons = []
+        
+        def collect_widgets(parent, lst):
+            if not parent:
+                return
+            for child in parent.winfo_children():
+                lst.append(child)
+                collect_widgets(child, lst)
+                
+        if hasattr(self, "sb_top"):
+            collect_widgets(self.sb_top, self._theme_sb_top_widgets)
+        if hasattr(self, "sb_bottom"):
+            collect_widgets(self.sb_bottom, self._theme_sb_bottom_widgets)
+            
+        if hasattr(self, "location_frame"):
+            collect_widgets(self.location_frame, self._theme_loc_vert_widgets)
+            for w in self._theme_loc_vert_widgets:
+                if isinstance(w, tk.Label):
+                    self._theme_loc_labels.append(w)
+                elif isinstance(w, tk.Checkbutton):
+                    self._theme_loc_checkbuttons.append(w)
+                    
+        if hasattr(self, "loc_frame_horizontal"):
+            collect_widgets(self.loc_frame_horizontal, self._theme_loc_horiz_widgets)
+            for w in self._theme_loc_horiz_widgets:
+                if isinstance(w, tk.Label):
+                    self._theme_loc_labels.append(w)
+                elif isinstance(w, tk.Checkbutton):
+                    self._theme_loc_checkbuttons.append(w)
+                    
+        self._theme_widgets_registered = True
 
     def apply_theme(self):
         import config
+        self._ensure_theme_widgets_registered()
         style = ttk.Style(self.root)
         theme_name = config.get_theme()
 
@@ -724,28 +770,22 @@ class LayoutSettingsMixin:
                 self._status_bar_frame.configure(bg=statusbar_bg)
             if hasattr(self, "sb_top"):
                 self.sb_top.configure(bg=bg_color)
-                def _update_row1_bg(widget):
-                    if not widget.winfo_class().startswith("T"):
+                for w in self._theme_sb_top_widgets:
+                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
-                            widget.configure(bg=bg_color)
+                            w.configure(bg=bg_color)
                         except Exception:
                             pass
-                    for child in widget.winfo_children():
-                        _update_row1_bg(child)
-                _update_row1_bg(self.sb_top)
             if hasattr(self, "sb_buttons_frame"):
                 self.sb_buttons_frame.configure(bg=bg_color)
             if hasattr(self, "sb_bottom"):
                 self.sb_bottom.configure(bg=statusbar_bg)
-                def _update_bg(widget):
-                    if not widget.winfo_class().startswith("T"):
+                for w in self._theme_sb_bottom_widgets:
+                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
-                            widget.configure(bg=statusbar_bg)
+                            w.configure(bg=statusbar_bg)
                         except Exception:
                             pass
-                    for child in widget.winfo_children():
-                        _update_bg(child)
-                _update_bg(self.sb_bottom)
                 for lbl in self._status_bar_labels.values():
                     lbl.configure(bg=statusbar_bg, fg=statusbar_fg)
 
@@ -917,28 +957,22 @@ class LayoutSettingsMixin:
                 self._status_bar_frame.configure(bg=statusbar_bg)
             if hasattr(self, "sb_top"):
                 self.sb_top.configure(bg=bg_color)
-                def _update_row1_bg(widget):
-                    if not widget.winfo_class().startswith("T"):
+                for w in self._theme_sb_top_widgets:
+                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
-                            widget.configure(bg=bg_color)
+                            w.configure(bg=bg_color)
                         except Exception:
                             pass
-                    for child in widget.winfo_children():
-                        _update_row1_bg(child)
-                _update_row1_bg(self.sb_top)
             if hasattr(self, "sb_buttons_frame"):
                 self.sb_buttons_frame.configure(bg=bg_color)
             if hasattr(self, "sb_bottom"):
                 self.sb_bottom.configure(bg=statusbar_bg)
-                def _update_bg(widget):
-                    if not widget.winfo_class().startswith("T"):
+                for w in self._theme_sb_bottom_widgets:
+                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
-                            widget.configure(bg=statusbar_bg)
+                            w.configure(bg=statusbar_bg)
                         except Exception:
                             pass
-                    for child in widget.winfo_children():
-                        _update_bg(child)
-                _update_bg(self.sb_bottom)
                 for lbl in self._status_bar_labels.values():
                     lbl.configure(bg=statusbar_bg, fg=statusbar_fg)
 
@@ -969,45 +1003,40 @@ class LayoutSettingsMixin:
         # Update vertical location background
         if hasattr(self, "location_frame") and self.location_frame.winfo_exists():
             self.location_frame.configure(bg=loc_bg)
-            def _update_loc_bg(widget):
-                if not widget.winfo_class().startswith("T"):
+            for w in self._theme_loc_vert_widgets:
+                if w.winfo_exists() and not w.winfo_class().startswith("T"):
                     try:
-                        widget.configure(bg=loc_bg)
+                        w.configure(bg=loc_bg)
                     except Exception:
                         pass
-                for child in widget.winfo_children():
-                    _update_loc_bg(child)
-            _update_loc_bg(self.location_frame)
 
         # Update horizontal location background
         if hasattr(self, "loc_frame_horizontal") and self.loc_frame_horizontal.winfo_exists():
             self.loc_frame_horizontal.configure(bg=loc_horiz_bg)
-            def _update_loc_horiz_bg(widget):
-                if not widget.winfo_class().startswith("T"):
+            for w in self._theme_loc_horiz_widgets:
+                if w.winfo_exists() and not w.winfo_class().startswith("T"):
                     try:
-                        widget.configure(bg=loc_horiz_bg)
+                        w.configure(bg=loc_horiz_bg)
                     except Exception:
                         pass
-                for child in widget.winfo_children():
-                    _update_loc_horiz_bg(child)
-            _update_loc_horiz_bg(self.loc_frame_horizontal)
 
-        # Update labels foreground recursively
-        def _update_labels_fg(widget):
-            if isinstance(widget, tk.Label):
-                if widget.cget("text") == "LOCATION":
-                    widget.configure(fg=title_fg)
-                else:
-                    widget.configure(fg=lbl_fg)
-            elif isinstance(widget, tk.Checkbutton):
-                widget.configure(fg=entry_fg, activebackground=loc_bg, activeforeground=entry_fg, selectcolor=loc_bg)
-            for child in widget.winfo_children():
-                _update_labels_fg(child)
+        # Update labels foreground
+        for w in self._theme_loc_labels:
+            if w.winfo_exists():
+                try:
+                    if w.cget("text") == "LOCATION":
+                        w.configure(fg=title_fg)
+                    else:
+                        w.configure(fg=lbl_fg)
+                except Exception:
+                    pass
 
-        if hasattr(self, "location_frame") and self.location_frame.winfo_exists():
-            _update_labels_fg(self.location_frame)
-        if hasattr(self, "loc_frame_horizontal") and self.loc_frame_horizontal.winfo_exists():
-            _update_labels_fg(self.loc_frame_horizontal)
+        for w in self._theme_loc_checkbuttons:
+            if w.winfo_exists():
+                try:
+                    w.configure(fg=entry_fg, activebackground=loc_bg, activeforeground=entry_fg, selectcolor=loc_bg)
+                except Exception:
+                    pass
 
         # Update entry widgets
         for w in getattr(self, "location_entries", []):

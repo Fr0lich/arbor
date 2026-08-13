@@ -1,4 +1,5 @@
 import pandas as pd
+import threading
 
 
 class AppState:
@@ -44,3 +45,14 @@ class AppState:
         # Per-ObjectID undo/redo stacks: {oid: [state_dict, ...]}
         self.undo_stacks: dict[str, list[dict]] = {}
         self.redo_stacks: dict[str, list[dict]] = {}
+
+        # P1-B: Protects df_reg/df_obs/df_photo/df_log during background copy.
+        # Use acquire() before .copy() in any worker thread to avoid read-during-write
+        # races when the main thread commits an edit mid-save.
+        self.df_lock: threading.RLock = threading.RLock()
+
+
+# P1-F: Single source of truth for per-object undo stack depth.
+# Keeping 20 states per object × 3000 objects worst-case = ~60k entries
+# which is negligible memory; the global 500-entry total guard is retained.
+MAX_UNDO_PER_OBJECT: int = 20
