@@ -477,7 +477,13 @@ class LayoutSettingsMixin:
 
         prefs["layouts"]["saved"][name] = layout
         config.save_prefs(prefs)
-        self._refresh_load_layout_menu()
+
+        if hasattr(self, '_refresh_load_layout_menu'):
+            self._refresh_load_layout_menu()
+        elif hasattr(self, '_refresh_load_data_preset_menu'):
+            # Fallback if _refresh_load_layout_menu doesn't exist
+            self._refresh_load_data_preset_menu()
+
         self.system_status.config(text=f"Layout '{name}' saved!")
 
 
@@ -608,7 +614,12 @@ class LayoutSettingsMixin:
         if "layouts" in prefs:
             del prefs["layouts"]
             config.save_prefs(prefs)
-            self._refresh_load_layout_menu()
+
+            if hasattr(self, '_refresh_load_layout_menu'):
+                self._refresh_load_layout_menu()
+            elif hasattr(self, '_refresh_load_data_preset_menu'):
+                self._refresh_load_data_preset_menu()
+
             self.system_status.config(text="Layout reset to factory. Restart app to see changes.")
 
 
