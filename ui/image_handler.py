@@ -551,6 +551,9 @@ class ImageHandlerMixin:
         buffer = 400
 
         for i, frame in enumerate(self._placeholder_frames):
+            if not frame.winfo_exists():
+                continue
+
             frame_y = frame.winfo_y()
             frame_h = frame.winfo_height()
 
