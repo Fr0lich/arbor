@@ -223,7 +223,7 @@ class LayoutSettingsMixin:
         def _on_mousewheel(e):
             if canvas.winfo_exists():
                 canvas.yview_scroll(int(-1*(e.delta/120)), "units")
-        win.bind_all("<MouseWheel>", _on_mousewheel)
+        self._wheel_bind_id = win.bind_all("<MouseWheel>", _on_mousewheel)
 
         self._layout_canvas = canvas
 
@@ -290,8 +290,10 @@ class LayoutSettingsMixin:
         btn_row.pack(fill="x", side="bottom")
 
         def _close_layout_win():
-            if hasattr(self, "_layout_canvas") and self._layout_canvas.winfo_exists():
+            try:
                 win.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
             win.destroy()
 
         win.protocol("WM_DELETE_WINDOW", _close_layout_win)
