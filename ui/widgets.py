@@ -739,7 +739,7 @@ class TreeviewListboxWrapper(ttk.Frame):
                 continue
             widget.bind_class(card_tag, seq, lambda e: func(e), add="+")
 
-        # MouseWheel fix: when the mouse moves from canvas background onto a card,
+        # When the mouse moves from canvas background onto a card,
         # the canvas fires <Leave> → unbind_all(<MouseWheel>).  Re-register it on
         # every card <Enter> so scrolling works while hovering over card widgets.
         widget.bind_class(

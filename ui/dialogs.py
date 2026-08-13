@@ -1026,7 +1026,7 @@ class StartupDialog:
         self._refresh_launch_state()
 
         # Check for autosave
-        # SECURITY FIX: Backward-compatible check for the new secure .autosave.json or legacy .autosave.xlsx.
+        # Backward-compatible check for the new secure .autosave.json or legacy .autosave.xlsx.
         base, _ = os.path.splitext(path)
         autosave_path = base + ".autosave.json"
         if not os.path.exists(autosave_path):
