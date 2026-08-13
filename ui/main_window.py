@@ -3402,12 +3402,12 @@ class ObjectProgramUI(
         # Re-add visible panes in order: images at top, location at bottom
         if self.show_images_var.get():
             # U2-A: 200px minimum keeps image panel usable when sash is dragged left
-            self.middle_panes.add(self.right_frame, weight=3, minsize=sc(200))
+            self.middle_panes.add(self.right_frame, weight=3)
             self.refresh_image_view()
 
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
             # U2-A: 150px minimum keeps location rows readable
-            self.middle_panes.add(self.loc_frame_horizontal, weight=1, minsize=sc(150))
+            self.middle_panes.add(self.loc_frame_horizontal, weight=1)
 
     def toggle_location_panel(self):
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
@@ -4028,7 +4028,7 @@ class ObjectProgramUI(
         right = ttk.Frame(self.middle_panes, style="MiddlePane.TFrame")
         self.right_frame = right
         # U2-A: 200px minimum ensures image panel never collapses below usable size
-        self.middle_panes.add(right, weight=3, minsize=sc(200))
+        self.middle_panes.add(right, weight=3)
 
         header = ttk.Frame(right, style="MiddlePane.TFrame")
         header.pack(fill="x", pady=(4, 4), padx=6)
