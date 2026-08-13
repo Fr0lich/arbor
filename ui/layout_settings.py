@@ -956,6 +956,65 @@ class LayoutSettingsMixin:
             if hasattr(self, "dark_mode_btn"):
                 self.dark_mode_btn.config(text="Dark Mode")
 
+        # --- Update Location Widgets Theme dynamically ---
+        loc_bg = "#1e1e2e" if self.dark_mode_active else "#f5f5f5"
+        loc_horiz_bg = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
+        lbl_fg = "#a6adc8" if self.dark_mode_active else "#444748"
+        title_fg = "#cdd6f4" if self.dark_mode_active else "#1a1c1c"
+        entry_bg = "#2a2b3c" if self.dark_mode_active else "#ffffff"
+        entry_fg = "#cdd6f4" if self.dark_mode_active else "#000000"
+        entry_insert = "#cdd6f4" if self.dark_mode_active else "#000000"
+        border_col = "#313244" if self.dark_mode_active else "#c4c7c7"
+
+        # Update vertical location background
+        if hasattr(self, "location_frame") and self.location_frame.winfo_exists():
+            self.location_frame.configure(bg=loc_bg)
+            def _update_loc_bg(widget):
+                if not widget.winfo_class().startswith("T"):
+                    try:
+                        widget.configure(bg=loc_bg)
+                    except Exception:
+                        pass
+                for child in widget.winfo_children():
+                    _update_loc_bg(child)
+            _update_loc_bg(self.location_frame)
+
+        # Update horizontal location background
+        if hasattr(self, "loc_frame_horizontal") and self.loc_frame_horizontal.winfo_exists():
+            self.loc_frame_horizontal.configure(bg=loc_horiz_bg)
+            def _update_loc_horiz_bg(widget):
+                if not widget.winfo_class().startswith("T"):
+                    try:
+                        widget.configure(bg=loc_horiz_bg)
+                    except Exception:
+                        pass
+                for child in widget.winfo_children():
+                    _update_loc_horiz_bg(child)
+            _update_loc_horiz_bg(self.loc_frame_horizontal)
+
+        # Update labels foreground recursively
+        def _update_labels_fg(widget):
+            if isinstance(widget, tk.Label):
+                if widget.cget("text") == "LOCATION":
+                    widget.configure(fg=title_fg)
+                else:
+                    widget.configure(fg=lbl_fg)
+            elif isinstance(widget, tk.Checkbutton):
+                widget.configure(fg=entry_fg, activebackground=loc_bg, activeforeground=entry_fg, selectcolor=loc_bg)
+            for child in widget.winfo_children():
+                _update_labels_fg(child)
+
+        if hasattr(self, "location_frame") and self.location_frame.winfo_exists():
+            _update_labels_fg(self.location_frame)
+        if hasattr(self, "loc_frame_horizontal") and self.loc_frame_horizontal.winfo_exists():
+            _update_labels_fg(self.loc_frame_horizontal)
+
+        # Update entry widgets
+        for w in getattr(self, "location_entries", []):
+            if isinstance(w, tk.Entry) and w.winfo_exists():
+                w.configure(background=entry_bg, foreground=entry_fg,
+                            insertbackground=entry_insert, highlightbackground=border_col)
+
         if hasattr(self, "title_problem_count_label") and self.title_problem_count_label is not None:
             try:
                 if self.title_problem_count_label.winfo_exists():

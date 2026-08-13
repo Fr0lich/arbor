@@ -655,9 +655,9 @@ class ObjectProgramUI(
                 )
                 widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
                 if is_horiz:
-                    widget.pack(fill="x", expand=True)
+                    widget.pack(fill="x", expand=True, ipady=sc(3))
                 else:
-                    widget.pack(side="left", fill="x", expand=True)
+                    widget.pack(side="left", fill="x", expand=True, ipady=sc(3))
             else:
                 widget = tk.Entry(
                     container, textvariable=var,
@@ -670,9 +670,9 @@ class ObjectProgramUI(
                 )
                 widget.bind("<FocusOut>", lambda e: self.commit_current_object())
                 if is_horiz:
-                    widget.pack(fill="x", expand=True)
+                    widget.pack(fill="x", expand=True, ipady=sc(3))
                 else:
-                    widget.pack(side="left", fill="x", expand=True)
+                    widget.pack(side="left", fill="x", expand=True, ipady=sc(3))
         
         self.location_entries.append(widget)
         widget.bind("<Shift-Up>", self._location_nav_up)
@@ -795,6 +795,8 @@ class ObjectProgramUI(
         fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
         bd_col = "#313244" if is_dark else "#d1d1d1"
         header_bg = "#11111b" if is_dark else "#eaeaea"
+        
+        self.loc_frame_horizontal.config(bg=bg_col)
         
         # No main_box wrapper frame. Pack directly into self.loc_frame_horizontal
         hdr = tk.Frame(self.loc_frame_horizontal, bg=header_bg)
@@ -3275,24 +3277,37 @@ class ObjectProgramUI(
                 self.search_bar_frame.pack_forget()
                 
 
+    def _sync_middle_panes(self):
+        if not hasattr(self, 'middle_panes'):
+            return
+            
+        # Temporarily forget panes to manage ordering and visibility safely
+        if hasattr(self, 'right_frame') and str(self.right_frame) in self.middle_panes.panes():
+            self.middle_panes.forget(self.right_frame)
+        if hasattr(self, 'loc_frame_horizontal') and str(self.loc_frame_horizontal) in self.middle_panes.panes():
+            self.middle_panes.forget(self.loc_frame_horizontal)
+
+        # Re-add visible panes in order: images at top, location at bottom
+        if self.show_images_var.get():
+            self.middle_panes.add(self.right_frame, weight=3, minsize=sc(100))
+            self.refresh_image_view()
+
+        if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
+            self.middle_panes.add(self.loc_frame_horizontal, weight=1, minsize=sc(80))
+
     def toggle_location_panel(self):
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
             if hasattr(self, 'loc_container'):
                 self.loc_container.pack_forget()
-            if hasattr(self, 'loc_frame_horizontal'):
-                self.loc_frame_horizontal.pack(fill="x", pady=(8, 0), side="bottom")
+            self._sync_middle_panes()
         else:
-            if hasattr(self, 'loc_frame_horizontal'):
-                self.loc_frame_horizontal.pack_forget()
+            if hasattr(self, 'loc_frame_horizontal') and str(self.loc_frame_horizontal) in self.middle_panes.panes():
+                self.middle_panes.forget(self.loc_frame_horizontal)
             if hasattr(self, 'loc_container'):
                 self.loc_container.pack(side="top", fill="x")
 
     def toggle_images_panel(self):
-        if self.show_images_var.get():
-            self.right_frame.pack(fill="both", expand=True)
-            self.refresh_image_view()
-        else:
-            self.right_frame.pack_forget()
+        self._sync_middle_panes()
             
     def toggle_image_tools(self):
         self.image_toolbar.pack_forget()
@@ -3877,13 +3892,17 @@ class ObjectProgramUI(
 
         # Middle Top (images) - packed directly in middle column since Problem Flags is relocated
 
-        # --- Horizontal Location Container ---
-        self.loc_frame_horizontal = tk.Frame(middle, bg="#f5f5f5")
-        # will be packed in toggle_location_panel()
+        # --- Middle Panedwindow for resizable Location panel ---
+        self.middle_panes = ttk.Panedwindow(middle, orient="vertical")
+        self.middle_panes.pack(fill="both", expand=True)
 
-        right = ttk.Frame(middle, style="MiddlePane.TFrame")
+        # --- Horizontal Location Container ---
+        self.loc_frame_horizontal = tk.Frame(self.middle_panes, bg="#f5f5f5")
+        # will be added in toggle_location_panel()
+
+        right = ttk.Frame(self.middle_panes, style="MiddlePane.TFrame")
         self.right_frame = right
-        right.pack(fill="both", expand=True)
+        self.middle_panes.add(right, weight=3, minsize=sc(100))
 
         header = ttk.Frame(right, style="MiddlePane.TFrame")
         header.pack(fill="x", pady=(4, 4), padx=6)
