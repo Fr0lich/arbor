@@ -3144,7 +3144,8 @@ class ObjectProgramUI(
 
     def toggle_reg_panel(self):
         if self.show_reg_var.get():
-            self.panes.add(self.reg_outer, weight=3)
+            if str(self.reg_outer) not in self.panes.panes():
+                self.panes.add(self.reg_outer, weight=3)
         else:
             self.panes.forget(self.reg_outer)
 
@@ -3263,7 +3264,8 @@ class ObjectProgramUI(
 
     def toggle_list_panel(self):
         if self.show_list_var.get():
-            self.panes.insert(0, self.left_frame, weight=1)
+            if str(self.left_frame) not in self.panes.panes():
+                self.panes.insert(0, self.left_frame, weight=1)
         else:
             self.panes.forget(self.left_frame)
             
