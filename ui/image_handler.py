@@ -1344,25 +1344,52 @@ class ImageHandlerMixin:
 
     def zoom_image_in(self):
         self.image_zoom_factor *= 1.25
-        self.refresh_image_view()
+        self._re_render_current_images()
 
 
     def zoom_image_out(self):
         self.image_zoom_factor /= 1.25
         if self.image_zoom_factor < 0.1:
             self.image_zoom_factor = 0.1
-        self.refresh_image_view()
+        self._re_render_current_images()
 
 
     def rotate_image(self):
         self.image_rotation_angle = (self.image_rotation_angle - 90) % 360
-        self.refresh_image_view()
+        self._re_render_current_images()
 
 
     def reset_image_view(self):
         self.image_zoom_factor = 1.0
         self.image_rotation_angle = 0
-        self.refresh_image_view()
+        self._re_render_current_images()
+
+
+    def _re_render_current_images(self):
+        if not getattr(self.app, "current_object_id", None):
+            return
+
+        try:
+            old_y = self.image_canvas.yview()[0]
+        except Exception:
+            old_y = 0.0
+
+        self.image_render_cache.clear()
+
+        if getattr(self, "_image_paths", None):
+            if self.image_view_mode == "gallery":
+                self._render_image_gallery()
+            else:
+                self._render_image_stack()
+
+            def restore_scroll():
+                try:
+                    self.image_canvas.yview_moveto(old_y)
+                except Exception:
+                    pass
+            self.root.after(50, restore_scroll)
+        else:
+            self.load_images(self.app.current_object_id)
 
 
     def refresh_image_view(self):
