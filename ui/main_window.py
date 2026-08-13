@@ -3504,7 +3504,7 @@ class ObjectProgramUI(
 
 
         # DATA — opens data menu
-        btn_dat = _nav_btn(nav_links_frame, "DATA ▾",   self.show_data_dropdown)
+        btn_dat = _nav_btn(nav_links_frame, "DATA",   self.open_load_data_menu)
         self.add_tooltip(btn_dat, "Load historical databases")
 
         # IMAGES — jump to next problem
@@ -3516,7 +3516,7 @@ class ObjectProgramUI(
         self.add_tooltip(btn_create, "Create a new object or database")
 
         # HISTORY — recent objects popup
-        btn_hist = _nav_btn(nav_links_frame, "HISTORY",  self.open_recent_popup)
+        btn_hist = _nav_btn(nav_links_frame, "RECENT",  self.open_recent_popup)
         self.add_tooltip(btn_hist, "View recently visited objects")
 
         # 1px separator before secondary controls
@@ -4319,7 +4319,7 @@ class ObjectProgramUI(
 
 
 
-    def open_advanced_menu(self):
+    def open_load_data_menu(self):
         if (
             hasattr(self, "advanced_win")
             and self.advanced_win

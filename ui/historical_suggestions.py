@@ -183,7 +183,7 @@ class HistoricalSuggestionsMixin:
             if not refresh:
                 from tkinter import messagebox
                 messagebox.showinfo("No data loaded", "No historical data is loaded.\n\nPlease load books or earlier databases first.")
-                self.open_advanced_menu()
+                self.open_load_data_menu()
             return
         oid = self.app.current_object_id
         if not oid: return
