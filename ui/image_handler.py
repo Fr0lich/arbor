@@ -461,7 +461,9 @@ class ImageHandlerMixin:
 
                 # Load original PIL image
                 if path not in self.original_pil_cache:
-                    self.original_pil_cache[path] = Image.open(path)
+                    new_img = Image.open(path)
+                    new_img.load()
+                    self.original_pil_cache[path] = new_img
                     if len(self.original_pil_cache) > 40:
                         self.original_pil_cache.popitem(last=False)
 
@@ -930,7 +932,9 @@ class ImageHandlerMixin:
 
         # Cache original PIL image
         if path not in self.original_pil_cache:
-            self.original_pil_cache[path] = Image.open(path)
+            new_img = Image.open(path)
+            new_img.load()
+            self.original_pil_cache[path] = new_img
             if len(self.original_pil_cache) > 40:
                 self.original_pil_cache.popitem(last=False)
 
@@ -1142,7 +1146,7 @@ class ImageHandlerMixin:
 
                 else:
                     img = Image.open(path)
-
+                    img.load()
 
                     self.root.update_idletasks()
                     available_width = self.image_canvas.winfo_width()
@@ -1322,6 +1326,7 @@ class ImageHandlerMixin:
             for path in paths_to_load:
                 try:
                     img = Image.open(path)
+                    img.load()
                     img.thumbnail((max_width, max_height), Image.LANCZOS)
                     self.root.after(0, lambda p=path, im=img: self._cache_preloaded_image(p, im))
                 except Exception:
