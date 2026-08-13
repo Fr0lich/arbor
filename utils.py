@@ -14,6 +14,19 @@ def fmt_pandas_val(val):
     return str(val)
 
 
+def parse_bool(val) -> bool:
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return bool(val)
+    if isinstance(val, str):
+        v = val.strip().lower()
+        if v in ("true", "1", "yes", "y", "t", "on"):
+            return True
+        return False
+    return False
+
+
 # -- Canonical log directory --------------------------------------------------
 # Always sits in a "logs/" folder next to the .exe (frozen) or main.py (dev).
 def _get_log_dir() -> str:
@@ -90,7 +103,7 @@ def _read_log_level_from_disk() -> str:
             with open(prefs_path, "r", encoding="utf-8") as f:
                 prefs = json.load(f)
                 return prefs.get("advanced", {}).get("log_verbosity", "ERROR")
-    except Exception:
+    except Exception as e:  # Fix: Replace bare except
         pass
     return "ERROR"
 
@@ -137,7 +150,7 @@ def _flush_log_queue() -> None:
         log_path = get_session_log_path()
         with open(log_path, "a", encoding="utf-8") as f:
             f.write("\n".join(entries) + "\n")
-    except Exception:
+    except Exception as e:  # Fix: Replace bare except
         pass
 
 
@@ -164,7 +177,7 @@ def debug_error(context: str, extra: str = "", is_crash: bool = False) -> None:
     try:
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(msg + "\n" + ("-" * 80) + "\n")
-    except Exception:
+    except Exception as e:  # Fix: Replace bare except
         pass
 
 

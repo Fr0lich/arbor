@@ -4,6 +4,7 @@ from tkinter import messagebox
 import config
 from config import sc
 from ui.widgets import ToggleSwitch
+import utils
 
 # Central registry of advanced features.
 # Add new items here to dynamically expose them in the UI.
@@ -284,8 +285,7 @@ class AdvancedSettingsWindow:
             
             if item["type"] == "toggle":
                 # Ensure it resolves to a boolean
-                if isinstance(current_val, str):
-                    current_val = (current_val.lower() == "true")
+                current_val = utils.parse_bool(current_val)
                 self.vars[item["id"]] = tk.BooleanVar(value=bool(current_val))
             elif item["type"] in ("choice", "text"):
                 self.vars[item["id"]] = tk.StringVar(value=str(current_val))
@@ -427,7 +427,7 @@ class AdvancedSettingsWindow:
                                                self.vars[item["id"]], item.get("choices", []))
                     elif item["type"] == "text":
                         self.create_text_row(group_content, item["label"], item.get("description", ""), self.vars[item["id"]])
-                    elif item["type"] == "button":
+                    elif item.get("type") == "button":  # Fix: skip button types
                         # Support trigger buttons
                         callback_name = item.get("callback")
                         cmd = lambda cb=callback_name: self.execute_button_callback(cb)
@@ -544,7 +544,7 @@ class AdvancedSettingsWindow:
         immediate_callbacks = []
 
         for item in ADVANCED_SETTINGS_SCHEMA:
-            if item["type"] == "button":
+            if item.get("type") == "button":  # Fix: skip button types
                 continue
 
             item_id = item["id"]
@@ -552,9 +552,7 @@ class AdvancedSettingsWindow:
             
             # Resolve old val types to prevent unnecessary string vs boolean changes
             if item["type"] == "toggle":
-                if isinstance(old_val, str):
-                    old_val = (old_val.lower() == "true")
-                old_val = bool(old_val)
+                old_val = utils.parse_bool(old_val)
                 new_val = bool(self.vars[item_id].get())
             else:
                 old_val = str(old_val)

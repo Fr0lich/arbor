@@ -18,7 +18,7 @@ _PREFS_PATH = os.path.join(_BASE_DIR, "user_prefs.json")
 # ── Enable DPI awareness BEFORE creating the Tk window ───────────────────────
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
-except Exception:
+except Exception as e:  # Fix: Replace bare except
     pass  # Non-Windows or already set — safe to ignore
 
 
@@ -45,7 +45,7 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
         try:
             from utils import debug_error
             debug_error("Unhandled callback exception", short_msg, is_crash=True)
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass
 
         # Show the dialog via after() so we never block the event loop
@@ -64,7 +64,7 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
                 try:
                     from utils import get_session_log_path
                     log_path = get_session_log_path()
-                except Exception:
+                except Exception as e:  # Fix: Replace bare except
                     log_path = "logs folder"
                 messagebox.showerror(
                     "Unhandled Error",
@@ -73,7 +73,7 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
 
         try:
             root.after(0, _open_dialog)
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass  # root may already be destroyed
 
     # 1. Tkinter callback exceptions
@@ -113,7 +113,7 @@ def _install_atexit_crash_reporter() -> None:
                     f"SESSION ENDED — {datetime.now():%Y-%m-%d %H:%M:%S}\n"
                     f"{'═' * 80}\n"
                 )
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass
 
     atexit.register(_on_exit)
@@ -166,7 +166,7 @@ def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
                     )
 
             root.after(2000, _show_banner)
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass
 
     thread = threading.Thread(target=_background_scan, daemon=True)
@@ -189,7 +189,7 @@ if __name__ == "__main__":
         root = tk.Tk()
         try:
             root.attributes("-alpha", 0.0)
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass
 
         # ── Detect DPI scale factor (stored for info display only) ──────────────
@@ -204,7 +204,7 @@ if __name__ == "__main__":
         if "autosave_interval" in prefs:
             try:
                 config.AUTOSAVE_INTERVAL_MS = int(prefs["autosave_interval"]) * 60 * 1000
-            except Exception:
+            except Exception as e:  # Fix: Replace bare except
                 pass
 
         if "custom_databases" in prefs:
@@ -269,7 +269,7 @@ if __name__ == "__main__":
             ui.open_excel_from_path(dialog.db_path_var.get().strip())
             try:
                 root.attributes("-alpha", 1.0)
-            except Exception:
+            except Exception as e:  # Fix: Replace bare except
                 pass
             root.deiconify()
             root.state("zoomed")
@@ -278,7 +278,7 @@ if __name__ == "__main__":
         else:
             try:
                 root.attributes("-alpha", 1.0)
-            except Exception:
+            except Exception as e:  # Fix: Replace bare except
                 pass
             root.deiconify()
             root.state("zoomed")
@@ -315,5 +315,5 @@ if __name__ == "__main__":
                 "Application Startup Error",
                 f"A critical error occurred during startup or execution:\n\n{e}\n\nTraceback:\n{tb_text}"
             )
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass

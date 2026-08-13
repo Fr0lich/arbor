@@ -5005,10 +5005,7 @@ class ObjectProgramUI(
 
 
         loaned_raw = obs.get("Loaned out", False)
-        if isinstance(loaned_raw, str):
-            loaned = loaned_raw.strip().lower() == "true"
-        else:
-            loaned = bool(loaned_raw)
+        loaned = utils.parse_bool(loaned_raw)
 
 
   
@@ -8314,9 +8311,24 @@ class ObjectProgramUI(
 
 
     def _bind_mousewheel_recursive(self, widget, handler):
-        widget.bind("<MouseWheel>", handler)
-        for child in widget.winfo_children():
-            self._bind_mousewheel_recursive(child, handler)
+        tag = f"MW_Tag_{id(widget)}"
+
+        def _apply_tag(w):
+            w.bindtags((tag,) + w.bindtags())
+            for child in w.winfo_children():
+                _apply_tag(child)
+
+        _apply_tag(widget)
+        widget.bind_class(tag, "<MouseWheel>", handler)
+
+        def _on_destroy(event):
+            if event.widget is widget:
+                try:
+                    widget.unbind_class(tag, "<MouseWheel>")
+                except Exception:
+                    pass
+
+        widget.bind("<Destroy>", _on_destroy, add="+")
 
 
 
