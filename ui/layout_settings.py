@@ -1050,7 +1050,11 @@ class LayoutSettingsMixin:
 
         # Update vertical location background
         if hasattr(self, "location_frame") and self.location_frame.winfo_exists():
-            self.location_frame.configure(bg=loc_bg)
+            if not self.location_frame.winfo_class().startswith("T"):
+                try:
+                    self.location_frame.configure(bg=loc_bg)
+                except Exception:
+                    pass
             for w in self._theme_loc_vert_widgets:
                 if w.winfo_exists() and not w.winfo_class().startswith("T"):
                     try:
@@ -1060,7 +1064,11 @@ class LayoutSettingsMixin:
 
         # Update horizontal location background
         if hasattr(self, "loc_frame_horizontal") and self.loc_frame_horizontal.winfo_exists():
-            self.loc_frame_horizontal.configure(bg=loc_horiz_bg)
+            if not self.loc_frame_horizontal.winfo_class().startswith("T"):
+                try:
+                    self.loc_frame_horizontal.configure(bg=loc_horiz_bg)
+                except Exception:
+                    pass
             for w in self._theme_loc_horiz_widgets:
                 if w.winfo_exists() and not w.winfo_class().startswith("T"):
                     try:
