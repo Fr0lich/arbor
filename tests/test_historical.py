@@ -176,3 +176,76 @@ def test_collect_historical_suggestions_ignored_words():
     assert "ignored_word" not in suggestions["Genus"]
     assert "valid_word" in suggestions["Genus"]
     assert suggestions["Genus"]["valid_word"] == ["DB2"]
+
+def test_historical_resolver_logging():
+    import tkinter as tk
+    from unittest.mock import MagicMock, patch
+    from ui.historical_resolver import HistoricalConflictResolverWindow
+
+    root = tk.Tk()
+    try:
+        main_app = MagicMock()
+        main_app.root = root
+        
+        # Setup mock dataframes
+        df_reg = pd.DataFrame({"Genus": ["CurrentGenus"]}, index=["1"])
+        df_obs = pd.DataFrame({"Genus_Problem": [True]}, index=["1"])
+        df_log = pd.DataFrame(columns=["Timestamp", "Action", "ObjectID", "ChangedFields", "ChangedValues", "ProblemsChanged", "ProblemsChangedValues"])
+        
+        main_app.app.df_reg = df_reg
+        main_app.app.df_obs = df_obs
+        main_app.app.df_log = df_log
+        
+        # Setup variables
+        genus_var = tk.StringVar(value="CurrentGenus")
+        genus_prob_var = tk.BooleanVar(value=True)
+        main_app.reg_vars = {"Genus": genus_var}
+        main_app.problem_vars = {"Genus_Problem": genus_prob_var}
+        main_app.problem_to_field = {"Genus_Problem": "Genus"}
+        main_app.current_object_id = "1"
+        
+        def mock_log_action(action, changed_fields=None, changed_values=None, prob_fields=None, prob_values=None, **kwargs):
+            main_app.app.df_log.loc[len(main_app.app.df_log)] = {
+                "Timestamp": "2026-08-13T09:00:00",
+                "Action": action,
+                "ObjectID": "1",
+                "ChangedFields": ", ".join(changed_fields) if changed_fields else "",
+                "ChangedValues": " | ".join(changed_values) if changed_values else "",
+                "ProblemsChanged": ", ".join(prob_fields) if prob_fields else "",
+                "ProblemsChangedValues": " | ".join(prob_values) if prob_values else ""
+            }
+        main_app.log_action = mock_log_action
+        
+        main_app.is_unknown = lambda val: False
+        
+        suggestions = {
+            "Genus": {
+                "OldGenus1": ["DB1"]
+            }
+        }
+        
+        # Instantiate window (this will build UI)
+        with patch("config.load_prefs", return_value={"completed_tutorials": ["historical_resolver"]}):
+            resolver_win = HistoricalConflictResolverWindow(main_app, "1", suggestions)
+            
+            # Change value manually in resolution var
+            resolver_win.res_vars["Genus"].set("OldGenus1")
+            
+            # Call apply_all
+            resolver_win.apply_all()
+            
+            # Check dataframe updates
+            assert main_app.app.df_reg.loc["1", "Genus"] == "OldGenus1"
+            assert main_app.app.df_obs.loc["1", "Genus_Problem"] == False
+            
+            # Check log action was recorded in mock log
+            assert len(main_app.app.df_log) == 1
+            log_row = main_app.app.df_log.iloc[0]
+            assert log_row["Action"] == "RESOLVE_HISTORICAL_CONFLICT"
+            assert log_row["ChangedFields"] == "Genus"
+            assert log_row["ChangedValues"] == 'Genus: "CurrentGenus"  "OldGenus1"'
+            assert log_row["ProblemsChanged"] == "Genus_Problem"
+            assert log_row["ProblemsChangedValues"] == 'Genus_Problem: "True"  "False"'
+    finally:
+        root.destroy()
+

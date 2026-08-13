@@ -361,15 +361,32 @@ class HistoricalConflictResolverWindow:
         def _apply(f=field, rv=res_var, cv=current_val, c=card, h=header):
             new_val = rv.get().strip()
             if new_val and new_val != cv:
+                reg_changed_fields = [f]
+                reg_changed_values = [f'{f}: "{cv}"  "{new_val}"']
+                prob_changed_fields = []
+                prob_changed_values = []
+
                 self.main_app.app.df_reg.loc[self.oid, f] = new_val
                 if f in self.main_app.reg_vars:
                     self.main_app.reg_vars[f].set(new_val)
                     
                 for pc, mf in self.main_app.problem_to_field.items():
                     if mf == f and pc in self.main_app.problem_vars:
+                        old_prob = bool(self.main_app.app.df_obs.loc[self.oid].get(pc, False))
+                        if old_prob:
+                            prob_changed_fields.append(pc)
+                            prob_changed_values.append(f'{pc}: "True"  "False"')
                         self.main_app.problem_vars[pc].set(False)
                         self.main_app.app.df_obs.loc[self.oid, pc] = False
                 
+                self.main_app.log_action(
+                    "RESOLVE_HISTORICAL_CONFLICT",
+                    changed_fields=reg_changed_fields,
+                    changed_values=reg_changed_values,
+                    prob_fields=prob_changed_fields,
+                    prob_values=prob_changed_values
+                )
+
                 self.main_app.update_dirty_ui()
                 self.update_stats()
                 
@@ -422,6 +439,11 @@ class HistoricalConflictResolverWindow:
         self.stats_label.configure(text=f"RESOLVED: {resolved}/{len(self.fields)}    ERR: {err}    CFCT: {cfct}")
         
     def apply_all(self):
+        reg_changed_fields = []
+        reg_changed_values = []
+        prob_changed_fields = []
+        prob_changed_values = []
+
         # We simulate clicking apply on all fields that have a value different from current
         for field in self.fields:
             current_val = str(self.main_app.app.df_reg.loc[self.oid].get(field, "")).strip()
@@ -432,9 +454,16 @@ class HistoricalConflictResolverWindow:
                 self.main_app.app.df_reg.loc[self.oid, field] = new_val
                 if field in self.main_app.reg_vars:
                     self.main_app.reg_vars[field].set(new_val)
+                
+                reg_changed_fields.append(field)
+                reg_changed_values.append(f'{field}: "{current_val}"  "{new_val}"')
                     
                 for pc, mf in self.main_app.problem_to_field.items():
                     if mf == field and pc in self.main_app.problem_vars:
+                        old_prob = bool(self.main_app.app.df_obs.loc[self.oid].get(pc, False))
+                        if old_prob:
+                            prob_changed_fields.append(pc)
+                            prob_changed_values.append(f'{pc}: "True"  "False"')
                         self.main_app.problem_vars[pc].set(False)
                         self.main_app.app.df_obs.loc[self.oid, pc] = False
                         
@@ -447,6 +476,15 @@ class HistoricalConflictResolverWindow:
                     for w in header.winfo_children():
                         w.configure(bg=COLORS["success"])
                         
+        if reg_changed_fields or prob_changed_fields:
+            self.main_app.log_action(
+                "RESOLVE_HISTORICAL_CONFLICT",
+                changed_fields=reg_changed_fields,
+                changed_values=reg_changed_values,
+                prob_fields=prob_changed_fields,
+                prob_values=prob_changed_values
+            )
+
         self.main_app.update_dirty_ui()
         self.update_stats()
         self.win.destroy()

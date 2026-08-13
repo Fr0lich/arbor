@@ -50,6 +50,19 @@ def _normalise_dataframes(df_reg, df_obs, config):
     if "ObjectID" in df_obs.columns:
         df_obs["ObjectID"] = df_obs["ObjectID"].astype(str).str.strip()
 
+    # Ensure df_obs has ObjectID column if df_reg does
+    if "ObjectID" in df_reg.columns and "ObjectID" not in df_obs.columns:
+        df_obs["ObjectID"] = pd.Series(dtype=str)
+
+    # Ensure all ObjectIDs in df_reg exist in df_obs
+    if "ObjectID" in df_reg.columns and "ObjectID" in df_obs.columns:
+        reg_ids = df_reg["ObjectID"].dropna().unique()
+        obs_ids = set(df_obs["ObjectID"].dropna().unique())
+        missing_obs_ids = [rid for rid in reg_ids if rid not in obs_ids]
+        if missing_obs_ids:
+            missing_df = pd.DataFrame({"ObjectID": missing_obs_ids})
+            df_obs = pd.concat([df_obs, missing_df], ignore_index=True)
+
     # --- Registration: ensure all defined registration columns exist ---
     new_reg_cols = [col for col in registration_columns if col not in df_reg.columns]
     if new_reg_cols:
@@ -205,7 +218,7 @@ class ExcelRepository:
             if sheet_obs in sheet_names:
                 df_obs = pd.read_excel(xls, sheet_name=sheet_obs)
             else:
-                df_obs = pd.read_excel(xls, sheet_name=sheet_obs) # Let it raise if missing
+                df_obs = pd.DataFrame(columns=["ObjectID"])
 
             # Read Photo sheet (optional)
             sheet_photo = sheets.get("photo", "Photo")
