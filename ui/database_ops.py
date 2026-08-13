@@ -126,7 +126,6 @@ class DatabaseOpsMixin:
 
             self.root.after(0, lambda: self.image_scan_progress.configure(value=10))
 
-            # SECURITY FIX: Read via standard library json to safely restore autosave file.
             if path.endswith(".json"):
                 import json
                 import pandas as pd

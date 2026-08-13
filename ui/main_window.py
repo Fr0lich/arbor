@@ -6167,7 +6167,7 @@ class ObjectProgramUI(
         # Esc binding to close
         win.bind("<Escape>", lambda e: win.destroy())
         
-        # When closing, restore self.location_entries to prevent navigation bugs
+        # When closing, restore self.location_entries.
         def restore_locations(e):
             if e.widget == win:
                 self.location_entries = orig_location_entries
@@ -6388,7 +6388,7 @@ class ObjectProgramUI(
 
         win.bind("<Escape>", lambda e: win.destroy())
         
-        # When closing, restore self.problem_checkbuttons to prevent navigation bugs
+        # When closing, restore self.problem_checkbuttons.
         def restore_problems(e):
             if e.widget == win:
                 self.problem_checkbuttons = orig_problem_checkbuttons

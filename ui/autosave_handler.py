@@ -39,7 +39,6 @@ class AutosaveMixin:
                     "df_photo": df_photo_copy,
                     "df_log": df_log_copy
                 }
-                # SECURITY FIX: use JSON instead of unsafe pickle
                 json_data = {
                     k: v.to_json(orient="table") if v is not None else None
                     for k, v in data.items()
@@ -101,7 +100,6 @@ class AutosaveMixin:
                         self.set_status_badge("autosaved", "Autosave failed")
                         self.set_status_badge("error", f"Autosave Error")
 
-                # SECURITY FIX: Use JSON for autosave to prevent arbitrary code execution
                 if autosave_path.endswith(".json"):
                     self._write_pickle_async(autosave_path, on_autosave_complete)
                 else:
@@ -147,7 +145,7 @@ class AutosaveMixin:
         if not self.app.excel_path:
             return
         autosave_path = self._autosave_path()
-        # SECURITY FIX: Backward-compatible fallback check for legacy excel autosave
+        # Backward-compatible fallback check for legacy excel autosave
         if not os.path.exists(autosave_path):
             alt_path = autosave_path.replace(".json", ".xlsx")
             if os.path.exists(alt_path):
@@ -187,7 +185,7 @@ class AutosaveMixin:
     def _restore_autosave(self, autosave_path, original_path):
         """Load data from the autosave file into the current session."""
         try:
-            # SECURITY FIX: Support restoring both the secure json autosave and legacy Excel autosave.
+            # Support restoring both the secure json autosave and legacy Excel autosave.
             if autosave_path.endswith(".json"):
                 import json
                 import pandas as pd
