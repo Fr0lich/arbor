@@ -765,16 +765,51 @@ class StartupDialog:
         row.pack(fill="x")
         row.pack_propagate(False)
 
-        # Truncate path display from the left if too long
-        display = path if len(path) < 60 else "…" + path[-57:]
-
         path_lbl = tk.Label(
-            row, text=display,
+            row, text=path,
             bg=self.C_CARD, fg=self.C_ON_SURFACE,
             font=("Courier New", sc(9)),
             anchor="w", cursor="hand2"
         )
         path_lbl.pack(side="left", padx=int(8*s), fill="x", expand=True)
+
+        path_lbl._last_width = -1
+        import tkinter.font as tkfont
+
+        # Cache font so it's not recreated on every resize event
+        lbl_font = tkfont.Font(font=("Courier New", sc(9)))
+
+        def _on_configure(e):
+            width = e.width
+            if width <= 10 or width == getattr(path_lbl, "_last_width", -1):
+                return
+            path_lbl._last_width = width
+
+            if lbl_font.measure(path) <= width:
+                path_lbl.config(text=path)
+                return
+
+            ellipsis = "…"
+            low = 0
+            high = len(path)
+            best_trunc = ""
+
+            while low <= high:
+                mid = (low + high) // 2
+                trunc = path[-mid:] if mid > 0 else ""
+                test_str = ellipsis + trunc
+
+                if lbl_font.measure(test_str) <= width:
+                    best_trunc = test_str
+                    low = mid + 1
+                else:
+                    high = mid - 1
+
+            if not best_trunc:
+                best_trunc = ellipsis
+            path_lbl.config(text=best_trunc)
+
+        path_lbl.bind("<Configure>", _on_configure)
 
         date_lbl = tk.Label(
             row, text=modified,
