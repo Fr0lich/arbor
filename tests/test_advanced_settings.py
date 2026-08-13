@@ -103,16 +103,19 @@ def test_advanced_settings_save(root, mock_main_window):
 
 def test_logger_verbosity_logic():
     """Test get_log_level and debug_log filtering logic."""
+    import utils
+    utils._log_queue.clear()
+
     with patch("utils.get_log_level", return_value="WARNING"), \
-         patch("builtins.open") as mock_open_file:
+         patch("utils._ensure_flush_thread"):
          
         # Under WARNING level:
-        # DEBUG and INFO should be ignored (no file writes)
+        # DEBUG and INFO should be ignored (no queue writes)
         debug_log("DEBUG", "This should be ignored")
         debug_log("INFO", "This should also be ignored")
-        mock_open_file.assert_not_called()
+        assert len(utils._log_queue) == 0
         
-        # WARNING and ERROR should be logged
+        # WARNING and ERROR should be queued
         debug_log("WARNING", "This is a warning")
         debug_log("ERROR", "This is an error")
-        assert mock_open_file.call_count == 2
+        assert len(utils._log_queue) == 2
