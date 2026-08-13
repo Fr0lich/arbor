@@ -131,13 +131,12 @@ def _normalise_dataframes(df_reg, df_obs, config):
 
     df_reg["ProblemDescription"] = df_reg["ProblemDescription"].astype(object)
 
-    if not df_reg.empty:
-        # Generate short UIDs for any row that is missing one
-        missing_uid = df_reg["UID"].isna() | (df_reg["UID"].astype(str).str.strip() == "")
-        if missing_uid.any():
-            df_reg.loc[missing_uid, "UID"] = [
-                uuid.uuid4().hex[:8] for _ in range(missing_uid.sum())
-            ]
+    # Generate short UIDs for any row that is missing one
+    missing_uid = df_reg["UID"].isna() | (df_reg["UID"].astype(str).str.strip() == "")
+    if missing_uid.any():
+        df_reg.loc[missing_uid, "UID"] = [
+            uuid.uuid4().hex[:8] for _ in range(missing_uid.sum())
+        ]
 
     return df_reg, df_obs
 
