@@ -685,7 +685,7 @@ class StartupDialog:
                         )
                     else:
                         sub.configure(state=state)
-                except:
+                except Exception:
                     pass
 
 

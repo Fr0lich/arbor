@@ -1339,7 +1339,7 @@ class ObjectProgramUI(
                 if not val:
                     widget.focus_set()
                     return
-            except:
+            except Exception:
                 continue
 #----
 
@@ -2446,7 +2446,7 @@ class ObjectProgramUI(
                 if getattr(self, "_autosave_job", None):
                     try:
                         self.root.after_cancel(self._autosave_job)
-                    except:
+                    except Exception:
                         pass
                     self._autosave_job = None
                 if hasattr(self, "_schedule_autosave"):
@@ -2458,7 +2458,7 @@ class ObjectProgramUI(
                     from ui.tutorial import TutorialManager
                     try:
                         TutorialManager().close_tutorial()
-                    except:
+                    except Exception:
                         pass
 
             if scale_changed:
@@ -2580,7 +2580,7 @@ class ObjectProgramUI(
                 value = widget.get("1.0", tk.END)
             else:
                 value = widget.get()
-        except:
+        except Exception:
             return
 
         now = time.time()
@@ -6838,7 +6838,7 @@ class ObjectProgramUI(
                 frame.config(bg=bg_color)
                 for child in getattr(frame, "_cached_children", []):
                     try: child.config(bg=bg_color)
-                    except: pass
+                    except Exception: pass
                         
         search_var.trace("w", on_search)
 
