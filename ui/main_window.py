@@ -2007,10 +2007,11 @@ class ObjectProgramUI(
         if name == "Loaned out":
             from datetime import datetime
             val = str(var.get()).strip().lower()
-            if val in ("true", "1"):
-                self.location_vars["Loaned out date"].set(datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
-            else:
-                self.location_vars["Loaned out date"].set("")
+            if "Loaned out date" in self.reg_vars:
+                if val in ("true", "1"):
+                    self.reg_vars["Loaned out date"].set(datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
+                else:
+                    self.reg_vars["Loaned out date"].set("")
         self.commit_current_object()
 
 
