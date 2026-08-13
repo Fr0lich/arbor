@@ -1,12 +1,7 @@
 import tkinter as tk
-from models import AppState
-from ui.main_window import ObjectProgramUI
-from ui.dialogs import StartupDialog
 import sys
 import os
 import ctypes
-import config
-from utils import debug_error, get_session_log_path, session_had_errors
 
 # ── User preferences file ────────────────────────────────────────────────────
 # When frozen as a PyInstaller exe, __file__ points to a temp extraction folder
@@ -47,7 +42,11 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
         import traceback as _tb
         tb_text = "".join(_tb.format_exception(exc_type, exc_value, exc_tb))
         short_msg = f"{exc_type.__name__}: {exc_value}"
-        debug_error("Unhandled callback exception", short_msg, is_crash=True)
+        try:
+            from utils import debug_error
+            debug_error("Unhandled callback exception", short_msg, is_crash=True)
+        except Exception:
+            pass
 
         # Show the dialog via after() so we never block the event loop
         def _open_dialog():
@@ -62,9 +61,14 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
             else:
                 # Fallback: plain messagebox before UI is ready
                 from tkinter import messagebox
+                try:
+                    from utils import get_session_log_path
+                    log_path = get_session_log_path()
+                except Exception:
+                    log_path = "logs folder"
                 messagebox.showerror(
                     "Unhandled Error",
-                    f"{short_msg}\n\nThe full traceback has been saved to:\n{get_session_log_path()}"
+                    f"{short_msg}\n\nThe full traceback has been saved to:\n{log_path}\n\nTraceback:\n{tb_text}"
                 )
 
         try:
@@ -97,9 +101,11 @@ def _install_atexit_crash_reporter() -> None:
     import atexit
 
     def _on_exit():
-        if not session_had_errors():
-            return
         try:
+            from utils import session_had_errors, get_session_log_path
+            from datetime import datetime
+            if not session_had_errors():
+                return
             log_path = get_session_log_path()
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(
@@ -155,6 +161,12 @@ from datetime import datetime   # needed by _on_exit above
 
 if __name__ == "__main__":
     try:
+        # Import heavy/third-party modules inside the try block to prevent silent startup/import crashes
+        from models import AppState
+        from ui.main_window import ObjectProgramUI
+        from ui.dialogs import StartupDialog
+        import config
+
         app = AppState()
         root = tk.Tk()
         try:
@@ -269,4 +281,21 @@ if __name__ == "__main__":
 
         root.mainloop()
     except Exception as e:
-        debug_error("Application Error", str(e))
+        # Log the error if possible
+        try:
+            from utils import debug_error
+            debug_error("Application Error", str(e))
+        except Exception as import_err:
+            print(f"Could not import utils to log crash: {import_err}")
+
+        # Guarantee that a GUI message box is shown for startup/runtime crashes so they are never silent
+        try:
+            import traceback as _tb
+            tb_text = _tb.format_exc()
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Application Startup Error",
+                f"A critical error occurred during startup or execution:\n\n{e}\n\nTraceback:\n{tb_text}"
+            )
+        except Exception:
+            pass
