@@ -194,15 +194,8 @@ class ExcelRepository:
         # PERFORMANCE OPTIMIZATION (Bolt): Use pd.ExcelFile as a context manager to open the Excel
         # archive once, then read sheets from it. This prevents reopening/reparsing the zip and shared
         # string tables 4 times, leading to a massive speedup (~60-70% faster loads).
-        # We try importing 'calamine' for a further 5-10x parsing speedup.
-        engine = "openpyxl"
-        try:
-            import calamine  # noqa: F401
-            engine = "calamine"
-        except ImportError:
-            pass
-
-        with pd.ExcelFile(path, engine=engine) as xls:
+        # We use 'calamine' for a further 5-10x parsing speedup.
+        with pd.ExcelFile(path, engine="calamine") as xls:
             sheet_names = xls.sheet_names
 
             # Read Registration sheet

@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+import utils
 
 def create_toggle_row(parent, label_text, var, command=None, ui_ref=None):
     from config import sc
@@ -590,12 +591,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         has_history = self.main_window._has_history(oid) if hasattr(self.main_window, "_has_history") else False
         reviewed    = self.item_data[oid].get("reviewed", False)
 
-        loaned = False
         loaned_raw = obs_row.get("Loaned out", False)
-        if isinstance(loaned_raw, str):
-            loaned = loaned_raw.strip().lower() == "true"
-        else:
-            loaned = bool(loaned_raw)
+        loaned = utils.parse_bool(loaned_raw)
 
         # Accent strip color (left 4px border)
 

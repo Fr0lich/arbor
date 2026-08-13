@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import config
+import utils
 
 REVIEWED_AT_COLUMN = "ReviewedAt"
 
@@ -343,13 +344,13 @@ class BulkEditWindow:
                     self.app.df_reg.at[oid, key] = val
                     if key == "Loaned out":
                         from datetime import datetime
-                        if str(val).lower() == "true":
+                        if utils.parse_bool(val):
                             self.app.df_reg.at[oid, "Loaned out date"] = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
                         else:
                             self.app.df_reg.at[oid, "Loaned out date"] = ""
                 elif key in self.app.df_obs.columns:
                     if key in problem_keys:
-                        val = str(val).lower() == "true"
+                        val = utils.parse_bool(val)
                     self.app.df_obs.at[oid, key] = val
                     if key == "Reviewed" and val:
                         from datetime import datetime
