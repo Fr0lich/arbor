@@ -461,7 +461,9 @@ class ImageHandlerMixin:
 
                 # Load original PIL image
                 if path not in self.original_pil_cache:
-                    self.original_pil_cache[path] = Image.open(path)
+                    pil_img = Image.open(path)
+                    pil_img.load()  # Force eager load to avoid assertion/truncation errors
+                    self.original_pil_cache[path] = pil_img
                     if len(self.original_pil_cache) > 40:
                         self.original_pil_cache.popitem(last=False)
 
@@ -553,7 +555,6 @@ class ImageHandlerMixin:
         for i, frame in enumerate(self._placeholder_frames):
             if not frame.winfo_exists():
                 continue
-
             frame_y = frame.winfo_y()
             frame_h = frame.winfo_height()
 
@@ -933,7 +934,9 @@ class ImageHandlerMixin:
 
         # Cache original PIL image
         if path not in self.original_pil_cache:
-            self.original_pil_cache[path] = Image.open(path)
+            pil_img = Image.open(path)
+            pil_img.load()  # Force eager load to avoid assertion/truncation errors
+            self.original_pil_cache[path] = pil_img
             if len(self.original_pil_cache) > 40:
                 self.original_pil_cache.popitem(last=False)
 
