@@ -245,28 +245,65 @@ class LayoutSettingsMixin:
             sw.pack(side="right")
             return row
 
-        panels_lf = ttk.LabelFrame(scrollable_frame, text="Show/Hide Panels", padding=sc(8))
-        panels_lf.pack(fill="x", pady=(0, 10))
-        create_toggle_row(panels_lf, "Object ID List (Left)", self.draft_show_list_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Searchbar", self.draft_show_search_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Registration Panel (Right)", self.draft_show_reg_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Images Panel (Middle Top)", self.draft_show_images_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Location Window Position: Left / Center", self.draft_location_in_center_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Image Zoom Tools", self.draft_show_image_tools_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Bulk Edit Button", self.draft_show_bulk_edit_var, command=on_switch_toggle, ui_ref=self)
+        def create_section(title, parent, key):
+            import config
+            prefs = config.load_prefs()
+            expanded_sections = prefs.get("layout_settings_expanded_section", {})
+            is_expanded = expanded_sections.get(key, False)
 
-        behaviors_lf = ttk.LabelFrame(scrollable_frame, text="Persistent Behaviors", padding=sc(8))
-        behaviors_lf.pack(fill="x", pady=(0, 10))
-        create_toggle_row(behaviors_lf, "Focus Mode by default", self.draft_layout_focus_mode_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behaviors_lf, "Snap lock when focusing problems", self.draft_snap_lock_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behaviors_lf, "View images as stack by default", self.draft_image_stack_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behaviors_lf, "Embedded Session Dashboard", self.draft_dashboard_embedded_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behaviors_lf, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var, command=on_switch_toggle, ui_ref=self)
+            section_frame = ttk.Frame(parent)
+            section_frame.pack(fill="x", pady=(0, sc(10)))
 
-        toolbar_lf = ttk.LabelFrame(scrollable_frame, text="Show Toolbar Buttons", padding=sc(8))
-        toolbar_lf.pack(fill="x", pady=(0, 10))
+            header_frame = ttk.Frame(section_frame)
+            header_frame.pack(fill="x")
 
-        tb_grid = ttk.Frame(toolbar_lf)
+            content_frame = ttk.Frame(section_frame, padding=(sc(16), 0, 0, 0))
+            if is_expanded:
+                content_frame.pack(fill="x")
+
+            arrow_var = tk.StringVar(value="▾" if is_expanded else "▸")
+            arrow_lbl = tk.Label(header_frame, textvariable=arrow_var, font=("Segoe UI", sc(10)), bg=bg_color, fg="#444748" if not getattr(self, "dark_mode_active", False) else "#cdd6f4")
+            arrow_lbl.pack(side="left", padx=(0, sc(4)))
+
+            title_lbl = tk.Label(header_frame, text=title, font=("Hanken Grotesk", sc(10), "bold"), bg=bg_color, fg="#444748" if not getattr(self, "dark_mode_active", False) else "#cdd6f4")
+            title_lbl.pack(side="left")
+
+            def toggle_section(event=None):
+                import config
+                current_prefs = config.load_prefs()
+                current_expanded = current_prefs.get("layout_settings_expanded_section", {})
+
+                currently_expanded = (arrow_var.get() == "▾")
+                new_expanded = not currently_expanded
+
+                if new_expanded:
+                    arrow_var.set("▾")
+                    content_frame.pack(fill="x")
+                else:
+                    arrow_var.set("▸")
+                    content_frame.pack_forget()
+
+                current_expanded[key] = new_expanded
+                current_prefs["layout_settings_expanded_section"] = current_expanded
+                config.save_prefs(current_prefs)
+
+            arrow_lbl.bind("<Button-1>", toggle_section)
+            title_lbl.bind("<Button-1>", toggle_section)
+            header_frame.bind("<Button-1>", toggle_section)
+
+            return content_frame
+
+        panels_content = create_section("Panels & Layout", scrollable_frame, "panels_and_layout")
+        create_toggle_row(panels_content, "Object ID List (Left)", self.draft_show_list_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Searchbar", self.draft_show_search_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Registration Panel (Right)", self.draft_show_reg_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Images Panel (Middle Top)", self.draft_show_images_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Location Window Position: Left / Center", self.draft_location_in_center_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Image Zoom Tools", self.draft_show_image_tools_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Bulk Edit Button", self.draft_show_bulk_edit_var, command=on_switch_toggle, ui_ref=self)
+
+        toolbar_content = create_section("Toolbar & Buttons", scrollable_frame, "toolbar_and_buttons")
+        tb_grid = ttk.Frame(toolbar_content)
         tb_grid.pack(fill="x")
         tb_grid.columnconfigure(0, weight=1)
         tb_grid.columnconfigure(1, weight=1)
@@ -281,6 +318,15 @@ class LayoutSettingsMixin:
             lbl.pack(side="left", anchor="w")
             sw = ToggleSwitch(cell, var, command=on_switch_toggle, ui_ref=self)
             sw.pack(side="right")
+
+        behavior_content = create_section("Behavior", scrollable_frame, "behavior")
+        create_toggle_row(behavior_content, "Focus Mode by default", self.draft_layout_focus_mode_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behavior_content, "Snap lock when focusing problems", self.draft_snap_lock_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behavior_content, "View images as stack by default", self.draft_image_stack_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behavior_content, "Embedded Session Dashboard", self.draft_dashboard_embedded_var, command=on_switch_toggle, ui_ref=self)
+
+        appearance_content = create_section("Appearance", scrollable_frame, "appearance")
+        create_toggle_row(appearance_content, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var, command=on_switch_toggle, ui_ref=self)
 
         return scroll_container
 
