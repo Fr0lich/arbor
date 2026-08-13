@@ -157,6 +157,14 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.bind("<Down>", self._on_keypress_down)
         self.bind("<Return>", self._on_keypress_return)
 
+        # Also bind to the inner widgets that actually get the focus
+        self.canvas.bind("<Up>", self._on_keypress_up)
+        self.canvas.bind("<Down>", self._on_keypress_down)
+        self.canvas.bind("<Return>", self._on_keypress_return)
+        self.tree.bind("<Up>", self._on_keypress_up)
+        self.tree.bind("<Down>", self._on_keypress_down)
+        self.tree.bind("<Return>", self._on_keypress_return)
+
         # Initial active view check
         self._trace_id = None
         if hasattr(self.main_window, "focus_mode_var"):
@@ -169,8 +177,6 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.update_view_visibility()
 
     def _on_keypress_up(self, event):
-        if self.active_view == "compact":
-            return
         if not self.items_list:
             return "break"
         if not self.selected_iids:
@@ -188,8 +194,6 @@ class TreeviewListboxWrapper(ttk.Frame):
         return "break"
 
     def _on_keypress_down(self, event):
-        if self.active_view == "compact":
-            return
         if not self.items_list:
             return "break"
         if not self.selected_iids:
@@ -207,8 +211,6 @@ class TreeviewListboxWrapper(ttk.Frame):
         return "break"
 
     def _on_keypress_return(self, event):
-        if self.active_view == "compact":
-            return
         if hasattr(self.main_window, "_on_list_return"):
             self.main_window._on_list_return(event)
         return "break"
