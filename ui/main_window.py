@@ -261,6 +261,19 @@ class ObjectProgramUI(
     LogViewerMixin
 ):
 # ---------- UI helpers ----------
+
+    def _has_history(self, oid) -> bool:
+        presence = getattr(self, "_history_presence_set", None)
+        if presence is not None:
+            return oid in presence or str(oid) in presence
+        return False
+
+    def _problems_have_history(self, oid) -> bool:
+        sug = getattr(self, "_has_suggestions_set", None)
+        if sug is None:
+            return False   # scan not complete yet
+        return oid in sug or str(oid) in sug
+
     @property
     def autoAdvanceOnReview(self):
         return self.auto_advance_var.get()
@@ -6701,7 +6714,7 @@ class ObjectProgramUI(
         make_chk(p_status, "Not Reviewed (Pending)", self.filter_vars["Not_Reviewed"], COLORS["surface_tint"])
         make_chk(p_status, "Reviewed + Has Problem", self.filter_vars["Reviewed_With_Problem"], COLORS["error"])
         make_chk(p_status, "Problem + Has History", self.filter_vars["Problem_With_History"], COLORS["error"])
-        make_chk(p_status, "Has earlier database entry", self.filter_vars["Has_History"], COLORS["outline_variant"])
+        make_chk(p_status, "Has Suggestions from Books", self.filter_vars["Has_History"], COLORS["outline_variant"])
 
         m_pres = create_group(status_right, "Metadata Presence")
         tk.Label(m_pres, text="Comments", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w")
@@ -7129,12 +7142,9 @@ class ObjectProgramUI(
         obs_dict = self._get_obs_dict()
 
         # Pre-populate a set of IDs that exist in historical databases to make fast_has_history O(1) set lookup
-        history_set = set()
-        if self.app.historical_dbs:
-            for db in self.app.historical_dbs:
-                reg_by_id = db.get("reg_by_id")
-                if reg_by_id is not None:
-                    history_set.update(reg_by_id.index)
+        history_set = getattr(self, "_has_suggestions_set", set())
+        if history_set is None:
+            history_set = set()
 
         building_var = self.filter_location_vars.get("Building")
         floor_var = self.filter_location_vars.get("Floor")
@@ -7636,12 +7646,9 @@ class ObjectProgramUI(
 
         # PERFORMANCE OPTIMIZATION (Bolt): Precompute a Python set of historical object IDs
         # to perform fast O(1) membership checks instead of index scans inside the loop.
-        history_set = set()
-        if self.app.historical_dbs:
-            for db in self.app.historical_dbs:
-                reg_by_id = db.get("reg_by_id")
-                if reg_by_id is not None:
-                    history_set.update(reg_by_id.index)
+        history_set = getattr(self, "_has_suggestions_set", set())
+        if history_set is None:
+            history_set = set()
 
         for i, oid in enumerate(self.app.active_object_ids):
             genus = str(genus_dict.get(oid, "")).strip()

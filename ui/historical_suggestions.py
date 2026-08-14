@@ -215,7 +215,7 @@ class HistoricalSuggestionsMixin:
             return
         __import__("config").set_last_dir("last_book_dir", path)
 
-        self._show_progress("Loading Books...", 100)
+        self._show_progress("Loading Books (Reading sheets)...", 100)
 
         threading.Thread(
             target=self._load_books_file_worker,
@@ -284,54 +284,89 @@ class HistoricalSuggestionsMixin:
         self._history_cache = OrderedDict()
         self._cached_dbs_id = None
 
-        if hasattr(self, "image_scan_progress"):
-            try:
-                self._hide_progress("Books loaded")
-                self.image_scan_progress.configure(mode="determinate")
-            except Exception:
-                pass
-
-
         if not loaded:
+            if hasattr(self, "image_scan_progress"):
+                try:
+                    self._hide_progress("Books load failed")
+                    self.image_scan_progress.configure(mode="determinate")
+                except Exception:
+                    pass
             messagebox.showwarning(
                 "No valid sheets",
                 "No usable sheets were found in the Books file."
             )
             if hasattr(self, "status"):
                 self.system_status.config(text="Books load failed")
-
             return
 
+        self._history_presence_set = set()
         for db in loaded:
             if db["reg_by_id"] is None:
                 db["reg_by_id"] = db["df_reg"].set_index("ObjectID")
+            self._history_presence_set.update(db["reg_by_id"].index)
 
         self.app.historical_dbs = loaded
 
-
+        self._has_suggestions_set = None
         self._problem_cache.clear()
-
-
         if hasattr(self, "_history_cache"):
             self._history_cache.clear()
 
         self.refresh_list()
 
+        if hasattr(self, "image_scan_progress"):
+            try:
+                self.system_status.config(text=f"Loaded Books file ({len(loaded)} sheets) — scanning suggestions...")
+                self._show_progress("Scanning suggestions... 0/N", len(self.app.active_object_ids))
+            except Exception:
+                pass
+
+        threading.Thread(
+            target=self._prescan_suggestions_worker,
+            daemon=True
+        ).start()
+
+    def _prescan_suggestions_worker(self):
+        suggestions_set = set()
+        total = len(self.app.active_object_ids)
+
+        for i, oid in enumerate(self.app.active_object_ids):
+            # Update progress bar
+            self.root.after(0, lambda current=i, max_val=total: (
+                getattr(self, "image_scan_progress", None) and self.image_scan_progress.configure(value=current, maximum=max_val),
+                getattr(self, "progress_label", None) and self.progress_label.config(text=f"Scanning suggestions... {current}/{max_val}")
+            ))
+
+            suggs = self.collect_historical_suggestions(oid, show_all_override=False)
+            has_valid = False
+            if suggs:
+                for field, values in suggs.items():
+                    if list(values.keys()) != ["(No data found)"]:
+                        has_valid = True
+                        break
+            if has_valid:
+                suggestions_set.add(oid)
+                suggestions_set.add(str(oid))
+
+        self.root.after(0, lambda: self._finish_prescan(suggestions_set))
+
+    def _finish_prescan(self, suggestions_set):
+        self._has_suggestions_set = suggestions_set
         self._list_dirty = True
+        self.refresh_list()
 
         oid = self.app.current_object_id
         if oid:
             self.load_object(oid)
 
-
-        self.system_status.config(
-            text=f"Loaded Books file ({len(loaded)} sheets) — pre-scanning historical data..."
-        )
-
-        self._hide_progress("Books loaded")
+        if hasattr(self, "image_scan_progress"):
+            try:
+                self._hide_progress("Books loaded and scanned")
+                self.image_scan_progress.configure(mode="determinate")
+            except Exception:
+                pass
 
         self.update_history_button_state()
-
         if hasattr(self, "_history_cache"):
             self._history_cache.clear()
 
