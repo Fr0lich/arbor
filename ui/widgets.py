@@ -613,15 +613,15 @@ class TreeviewListboxWrapper(ttk.Frame):
 
 
         if reviewed:
-            accent_color = "#4CAF50" if is_dark else "#2E7D32" # green
+            accent_color = "#4CAF50" if is_dark else "#2E7D32"  # green
         elif has_history and has_problem:
-            accent_color = "#BB86FC" if is_dark else "#7B1FA2" # purple
+            accent_color = "#BB86FC" if is_dark else "#7B1FA2"  # purple
         elif has_problem:
-            accent_color = "#f28b82" if is_dark else "#C62828" # red
+            accent_color = "#f28b82" if is_dark else "#C62828"  # red
         elif has_history:
-            accent_color = "#5ab0e8" if is_dark else "#0284C7" # blue
+            accent_color = "#5ab0e8" if is_dark else "#0284C7"  # blue
         else:
-            accent_color = canvas_bg # visually transparent
+            accent_color = canvas_bg  # visually transparent
 
 
         # Status badge
