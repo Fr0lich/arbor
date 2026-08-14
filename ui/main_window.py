@@ -5008,6 +5008,22 @@ class ObjectProgramUI(
             if {"Genus", "Species"} & set(reg_changed_fields):
                 self.invalidate_search_index()
 
+            if prob_changed_fields:
+                self.update_list_item_color(oid)
+
+            if reg_changed_fields and getattr(self.app, 'historical_dbs', None) and getattr(self, '_has_suggestions_set', None) is not None:
+                sug = self.collect_historical_suggestions(oid, show_all_override=False)
+                has_real = any(k != "(No data found)" for vals in sug.values() for k in vals)
+                if has_real:
+                    self._has_suggestions_set.add(oid)
+                else:
+                    self._has_suggestions_set.discard(oid)
+
+                if hasattr(self, "_history_cache"):
+                    keys_to_remove = [k for k in self._history_cache if k[0] == oid]
+                    for k in keys_to_remove:
+                        self._history_cache.pop(k, None)
+
         
 
 
@@ -8372,7 +8388,7 @@ class ObjectProgramUI(
                 except Exception:
                     reviewed = False
                 has_problem = self._get_cached_problem(oid)
-                has_history = self._has_history(oid)
+                has_history = self._problems_have_history(oid)
                 
                 if reviewed and has_problem:
                     return 1
@@ -8693,7 +8709,7 @@ class ObjectProgramUI(
             reviewed = False
             
         has_problem = self._get_cached_problem(oid)
-        has_history = self._has_history(oid)
+        has_history = self._problems_have_history(oid)
         
         if reviewed and has_problem:
             color = "#f0ad4e"
@@ -8719,6 +8735,9 @@ class ObjectProgramUI(
         if current_vals:
             current_vals[0] = "☑" if reviewed else "☐"
             self.object_list.item(oid, values=current_vals)
+
+        if hasattr(self.object_list, "_refresh_card_accent"):
+            self.object_list._refresh_card_accent(oid)
 
     def mark_current_as_reviewed(self):
         oid = self.app.current_object_id
