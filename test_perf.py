@@ -1,3 +1,4 @@
+import utils
 import time
 import os
 
@@ -54,5 +55,5 @@ class DummyApp:
 
 
 app = DummyApp()
-print(f"Baseline Time: {app.config_lookup_test_baseline():.6f} seconds")
-print(f"Optimized Time: {app.config_lookup_test_optimized():.6f} seconds")
+utils.debug_log("INFO", f"Baseline Time: {app.config_lookup_test_baseline():.6f} seconds")
+utils.debug_log("INFO", f"Optimized Time: {app.config_lookup_test_optimized():.6f} seconds")

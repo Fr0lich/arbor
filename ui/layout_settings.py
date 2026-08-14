@@ -1,3 +1,4 @@
+import utils
 import tkinter as tk
 from tkinter import ttk
 from config import sc
@@ -141,12 +142,14 @@ class LayoutSettingsMixin:
 
             try:
                 mid_sash = self.middle_panes.sashpos(0)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                 mid_sash = 400
 
             try:
                 main_sashes = [self.panes.sashpos(0), self.panes.sashpos(1)]
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                 main_sashes = [300, 800]
 
             tb_states = {k: v.get() for k, v in self.draft_toolbar_vars.items()}
@@ -338,7 +341,8 @@ class LayoutSettingsMixin:
         def _close_layout_win():
             try:
                 win.unbind_all("<MouseWheel>")
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                 pass
             win.destroy()
 
@@ -414,12 +418,14 @@ class LayoutSettingsMixin:
             try:
                 from ui.tutorial import TutorialManager
                 win.after(500, lambda: TutorialManager().start_tutorial("layout_settings", win))
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                 pass
         try:
             from ui.main_window import _apply_hover_to_all_tk_buttons
             _apply_hover_to_all_tk_buttons(win, self)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in layout_settings.py", str(e))
             pass
 
     def save_layout_as_dialog(self):
@@ -442,12 +448,14 @@ class LayoutSettingsMixin:
             mid_sash = self.middle_panes.sashpos(0)
             if self.focus_mode_var.get() and hasattr(self, "_last_manual_middle_sash"):
                 mid_sash = self._last_manual_middle_sash
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in layout_settings.py", str(e))
             mid_sash = 400
 
         try:
             main_sashes = [self.panes.sashpos(0), self.panes.sashpos(1)]
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in layout_settings.py", str(e))
             main_sashes = [300, 800]
 
         # Save toolbar button visibility
@@ -520,7 +528,8 @@ class LayoutSettingsMixin:
                         right_w = screen_w - sc(360)
                     self.panes.sashpos(0, left_w)
                     self.panes.sashpos(1, right_w)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                     pass
             self.root.after(100, _set_default_sashes)
             return
@@ -595,13 +604,15 @@ class LayoutSettingsMixin:
                 if len(sashes) == 2:
                     self.panes.sashpos(0, sashes[0])
                     self.panes.sashpos(1, sashes[1])
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                 pass
             try:
                 mid_sash = layout.get("middle_sash")
                 if mid_sash:
                     self.middle_panes.sashpos(0, mid_sash)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                 pass
 
         self.root.after(50, _set_sashes)
@@ -833,7 +844,8 @@ class LayoutSettingsMixin:
                     if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
                             w.configure(bg=bg_color)
-                        except Exception:
+                        except Exception as e:
+                            utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                             pass
             if hasattr(self, "sb_buttons_frame"):
                 self.sb_buttons_frame.configure(bg=bg_color)
@@ -843,7 +855,8 @@ class LayoutSettingsMixin:
                     if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
                             w.configure(bg=statusbar_bg)
-                        except Exception:
+                        except Exception as e:
+                            utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                             pass
                 for lbl in self._status_bar_labels.values():
                     lbl.configure(bg=statusbar_bg, fg=statusbar_fg)
@@ -1020,7 +1033,8 @@ class LayoutSettingsMixin:
                     if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
                             w.configure(bg=bg_color)
-                        except Exception:
+                        except Exception as e:
+                            utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                             pass
             if hasattr(self, "sb_buttons_frame"):
                 self.sb_buttons_frame.configure(bg=bg_color)
@@ -1030,7 +1044,8 @@ class LayoutSettingsMixin:
                     if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
                             w.configure(bg=statusbar_bg)
-                        except Exception:
+                        except Exception as e:
+                            utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                             pass
                 for lbl in self._status_bar_labels.values():
                     lbl.configure(bg=statusbar_bg, fg=statusbar_fg)
@@ -1064,13 +1079,15 @@ class LayoutSettingsMixin:
             if not self.location_frame.winfo_class().startswith("T"):
                 try:
                     self.location_frame.configure(bg=loc_bg)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                     pass
             for w in self._theme_loc_vert_widgets:
                 if w.winfo_exists() and not w.winfo_class().startswith("T"):
                     try:
                         w.configure(bg=loc_bg)
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                         pass
 
         # Update horizontal location background
@@ -1078,13 +1095,15 @@ class LayoutSettingsMixin:
             if not self.loc_frame_horizontal.winfo_class().startswith("T"):
                 try:
                     self.loc_frame_horizontal.configure(bg=loc_horiz_bg)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                     pass
             for w in self._theme_loc_horiz_widgets:
                 if w.winfo_exists() and not w.winfo_class().startswith("T"):
                     try:
                         w.configure(bg=loc_horiz_bg)
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                         pass
 
         # Update labels foreground
@@ -1095,14 +1114,16 @@ class LayoutSettingsMixin:
                         w.configure(fg=title_fg)
                     else:
                         w.configure(fg=lbl_fg)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                     pass
 
         for w in self._theme_loc_checkbuttons:
             if w.winfo_exists():
                 try:
                     w.configure(fg=entry_fg, activebackground=loc_bg, activeforeground=entry_fg, selectcolor=loc_bg)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                     pass
 
         # Update entry widgets
@@ -1115,7 +1136,8 @@ class LayoutSettingsMixin:
             try:
                 if self.title_problem_count_label.winfo_exists():
                     self.title_problem_count_label.configure(bg=bg_color)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in layout_settings.py", str(e))
                 pass
 
         self.update_dirty_ui()

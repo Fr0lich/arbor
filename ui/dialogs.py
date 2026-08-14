@@ -1,3 +1,4 @@
+import utils
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
@@ -56,12 +57,14 @@ class ZoomableImagePopup:
         if hasattr(self, "_zoom_job") and self._zoom_job:
             try:
                 self.top.after_cancel(self._zoom_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in dialogs.py", str(e))
                 pass
         if hasattr(self, "_resize_job") and self._resize_job:
             try:
                 self.top.after_cancel(self._resize_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in dialogs.py", str(e))
                 pass
         if hasattr(self, "_stop_event"):
             self._stop_event.set()
@@ -113,7 +116,8 @@ class ZoomableImagePopup:
         if hasattr(self, "_resize_job") and self._resize_job:
             try:
                 self.top.after_cancel(self._resize_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in dialogs.py", str(e))
                 pass
             self._resize_job = None
 
@@ -160,7 +164,8 @@ class ZoomableImagePopup:
         if hasattr(self, "_zoom_job") and self._zoom_job:
             try:
                 self.top.after_cancel(self._zoom_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in dialogs.py", str(e))
                 pass
             self._zoom_job = None
 
@@ -357,7 +362,8 @@ class StartupDialog:
             if event.widget is widget:
                 try:
                     widget.unbind_class(tag, "<MouseWheel>")
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in dialogs.py", str(e))
                     pass
 
         widget.bind("<Destroy>", _on_destroy, add="+")
@@ -701,7 +707,8 @@ class StartupDialog:
                         )
                     else:
                         sub.configure(state=state)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in dialogs.py", str(e))
                     pass
 
 
@@ -723,7 +730,8 @@ class StartupDialog:
                     if m:
                         w, h, x, y = m.groups()
                         self.win.geometry(f"{w}x{target_win_h}{x}{y}")
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in dialogs.py", str(e))
             pass
 
     # ------------------------------------------------------------------
@@ -1024,7 +1032,8 @@ class StartupDialog:
                 self._card.pack_configure(padx=pad, pady=pad)
             else:
                 self._outer.pack_configure(padx=pad, pady=pad)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in dialogs.py", str(e))
             pass
 
         # Update ALL widgets recursively
@@ -1049,7 +1058,9 @@ class StartupDialog:
                 elif isinstance(widget, tk.Entry):
                     widget.config(font=("Courier New", font_base))
 
-            except Exception:
+            except Exception as e:
+
+                utils.debug_error("Caught generic exception in dialogs.py", str(e))
                 pass
 
             for child in widget.winfo_children():
@@ -1094,7 +1105,8 @@ class StartupDialog:
                 )
                 if res:
                     self.db_path_var.set(autosave_path)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in dialogs.py", str(e))
                 pass
 
     def browse_import(self):
@@ -1214,7 +1226,8 @@ class StartupDialog:
             root = self.parent.winfo_toplevel()
             if root.winfo_exists():
                 root.after(0, func)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in dialogs.py", str(e))
             pass
 
     def load_books_startup(self):
@@ -1277,7 +1290,7 @@ class StartupDialog:
                             "df_reg": df, "reg_by_id": None,
                         })
                     except Exception as sheet_err:
-                        print(f"Error loading sheet {sheet_name}: {sheet_err}")
+                        utils.debug_log("INFO", f"Error loading sheet {sheet_name}: {sheet_err}")
             self.safe_ui_call(lambda: self._finish_books_load(loaded))
         except Exception as e:
             debug_error("Load Books Failed", str(e))
@@ -1364,7 +1377,8 @@ class StartupDialog:
         if oid:
             try:
                 self.ui.update_history_indicator(oid)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in dialogs.py", str(e))
                 pass
 
     def _finish_books_load(self, loaded):
@@ -1456,12 +1470,14 @@ class StartupDialog:
                 x = 100
                 y = 100
             menu.tk_popup(x, y)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in dialogs.py", str(e))
             pass
         finally:
             try:
                 menu.grab_release()
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in dialogs.py", str(e))
                 pass
 
     def _toggle_disable_tutorials(self):
@@ -1600,13 +1616,15 @@ class LoadingWindow:
         self.ui._loading_window = None
         try:
             self.win.destroy()
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in dialogs.py", str(e))
             pass
         
         # Show main window
         try:
             self.parent.attributes("-alpha", 1.0)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in dialogs.py", str(e))
             pass
         self.parent.deiconify()
         self.parent.state("zoomed")

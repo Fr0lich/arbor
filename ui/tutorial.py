@@ -1,3 +1,4 @@
+import utils
 import tkinter as tk
 import json
 import os
@@ -86,13 +87,15 @@ class TutorialManager:
         if self.popup:
             try:
                 self.popup.destroy()
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in tutorial.py", str(e))
                 pass
             self.popup = None
         if self.highlight:
             try:
                 self.highlight.destroy()
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in tutorial.py", str(e))
                 pass
             self.highlight = None
 
@@ -111,7 +114,8 @@ class TutorialManager:
             if self.on_complete:
                 try:
                     self.on_complete()
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in tutorial.py", str(e))
                     pass
 
     def prev_step(self):
@@ -133,12 +137,13 @@ class TutorialManager:
             target_widget = self._find_widget(self.active_root, step["target"])
 
         if step.get("target") and not target_widget:
-            print(f"Target {step['target']} not found for step {step['id']}")
+            utils.debug_log("INFO", f"Target {step['target']} not found for step {step['id']}")
             
         if target_widget:
             try:
                 self.highlight = TutorialHighlight(self.active_root, target_widget)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in tutorial.py", str(e))
                 self.highlight = None
             
         try:
@@ -167,7 +172,8 @@ class TutorialManager:
                 res = self._find_widget(child, target_id)
                 if res:
                     return res
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in tutorial.py", str(e))
             pass
         return None
 
@@ -179,14 +185,16 @@ class TutorialHighlight:
         if parent:
             try:
                 self.win.transient(parent)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in tutorial.py", str(e))
                 pass
         self.win.overrideredirect(True)
         
         # Windows transparent color trick
         try:
             self.win.attributes("-transparentcolor", "black")
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in tutorial.py", str(e))
             pass
         self.win.config(bg="black")
 
@@ -217,11 +225,13 @@ class TutorialHighlight:
                 self.win.deiconify()
                 self.win.geometry(f"{w + pad*2}x{h + pad*2}+{x - pad}+{y - pad}")
                 self.canvas.coords(self.rect, pad, pad, w + pad, h + pad)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in tutorial.py", str(e))
             try:
                 if self.win.winfo_exists():
                     self.win.withdraw()
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in tutorial.py", str(e))
                 pass
 
     def animate(self):
@@ -232,21 +242,24 @@ class TutorialHighlight:
         current = getattr(self, "_anim_idx", 0)
         try:
             self.canvas.itemconfig(self.rect, outline=colors[current])
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in tutorial.py", str(e))
             pass
         self._anim_idx = (current + 1) % len(colors)
         
         self.update_position()
         try:
             self.win.after(200, self.animate)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in tutorial.py", str(e))
             pass
 
     def destroy(self):
         if self.win.winfo_exists():
             try:
                 self.win.destroy()
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in tutorial.py", str(e))
                 pass
 
 class TutorialPopup:
@@ -262,7 +275,8 @@ class TutorialPopup:
         if parent:
             try:
                 self.win.transient(parent)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in tutorial.py", str(e))
                 pass
         self.win.overrideredirect(True)
         self.win.config(bg="#333333")
@@ -307,7 +321,8 @@ class TutorialPopup:
         if parent:
             try:
                 self.bind_id = parent.bind("<Configure>", lambda e, p=parent: self.position_popup(e, p), add="+")
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in tutorial.py", str(e))
                 pass
 
     def save_skip_pref(self):
@@ -326,7 +341,8 @@ class TutorialPopup:
             if self.manager.current_tutorial == "startup_tutorial":
                 prefs["tutorial_skipped"] = self.skip_var.get()
             config.save_prefs(prefs)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in tutorial.py", str(e))
             pass
 
     def close(self):
@@ -365,7 +381,8 @@ class TutorialPopup:
                         tw = self.target_widget.winfo_width()
                         th = self.target_widget.winfo_height()
                         target_coords_found = True
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in tutorial.py", str(e))
                     pass
 
             if target_coords_found:
@@ -400,7 +417,8 @@ class TutorialPopup:
                             x = px + (pw // 2) - (w // 2)
                             y = py + (ph // 2) - (h // 2)
                             centered_on_parent = True
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in tutorial.py", str(e))
                         pass
 
                 if not centered_on_parent:
@@ -417,7 +435,8 @@ class TutorialPopup:
             self.win.deiconify()
             self.win.lift()
             self.win.focus_force()
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in tutorial.py", str(e))
             pass
 
     def destroy(self):
@@ -426,12 +445,15 @@ class TutorialPopup:
                 try:
                     if self.parent_widget.winfo_exists():
                         self.parent_widget.unbind("<Configure>", self.bind_id)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in tutorial.py", str(e))
                     pass
             if self.win.winfo_exists():
                 try:
                     self.win.destroy()
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in tutorial.py", str(e))
                     pass
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in tutorial.py", str(e))
             pass
