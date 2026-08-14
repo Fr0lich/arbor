@@ -1,3 +1,4 @@
+import utils
 import time
 import os
 
@@ -53,6 +54,6 @@ class MockWindow:
 win = MockWindow()
 baseline_time = win.baseline()
 optimized_time = win.optimized()
-print(f"Baseline: {baseline_time:.6f}s")
-print(f"Optimized: {optimized_time:.6f}s")
-print(f"Improvement: {baseline_time / optimized_time:.2f}x faster")
+utils.debug_log("INFO", f"Baseline: {baseline_time:.6f}s")
+utils.debug_log("INFO", f"Optimized: {optimized_time:.6f}s")
+utils.debug_log("INFO", f"Improvement: {baseline_time / optimized_time:.2f}x faster")

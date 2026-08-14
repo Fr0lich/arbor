@@ -1,3 +1,4 @@
+import utils
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -68,7 +69,8 @@ class ImageHandlerMixin:
         if hasattr(self, "_image_resize_job") and self._image_resize_job:
             try:
                 self.root.after_cancel(self._image_resize_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in image_handler.py", str(e))
                 pass
         self._image_resize_job = self.root.after(150, self._refresh_images_on_resize)
 
@@ -80,7 +82,8 @@ class ImageHandlerMixin:
         width = getattr(self, "_last_canvas_width", self.image_canvas.winfo_width())
         try:
             self.image_canvas.itemconfig(self.image_window, width=width)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in image_handler.py", str(e))
             pass
         if self.object_loaded and getattr(self, "_image_paths", None):
             self.image_render_cache.clear()
@@ -242,7 +245,8 @@ class ImageHandlerMixin:
                 try:
                     num = int(oid)
                     url = pattern.format(num=num, suffix=s)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in image_handler.py", str(e))
                     url = f"{pattern.rstrip('/')}/{oid}{s}"
             else:
                 url = f"{pattern}{oid}{s}"
@@ -442,7 +446,9 @@ class ImageHandlerMixin:
         try:
             width = self.image_canvas.winfo_width()
             height = self.image_canvas.winfo_height()
-        except Exception:
+        except Exception as e:
+            from exceptions import ImageLoadError
+            raise ImageLoadError(f"Failed to process image: {str(e)}") from e
             width, height = 800, 350
         
         if width < 300:
@@ -606,7 +612,8 @@ class ImageHandlerMixin:
             available_width = self.image_canvas.winfo_width()
             if available_width < 300:
                 available_width = 800
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in image_handler.py", str(e))
             available_width = 800
 
         # Estimate a height for the placeholder frame to reserve space for the image
@@ -1032,7 +1039,8 @@ class ImageHandlerMixin:
                     # P1-H: Non-200 on first attempt almost never recovers;
                     # stop retrying immediately to save time.
                     return None
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in image_handler.py", str(e))
                     # Connection errors (e.g. RemoteDisconnected) are expected when
                     # an image URL does not exist — silently skip to the next attempt.
                     pass
@@ -1328,7 +1336,8 @@ class ImageHandlerMixin:
                     available_width = 800
                 max_width = int((available_width / 2) * 0.95)
                 max_height = int(self.root.winfo_height() * 0.85)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in image_handler.py", str(e))
                 max_width, max_height = 400, 400
 
             for path in paths_to_load:
@@ -1336,7 +1345,8 @@ class ImageHandlerMixin:
                     img = Image.open(path)
                     img.thumbnail((max_width, max_height), Image.LANCZOS)
                     self.root.after(0, lambda p=path, im=img: self._cache_preloaded_image(p, im))
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in image_handler.py", str(e))
                     pass
 
         threading.Thread(target=preload_worker, daemon=True).start()
@@ -1350,7 +1360,8 @@ class ImageHandlerMixin:
             self.image_cache[path] = tk_img
             if len(self.image_cache) > MAX_IMAGE_CACHE:
                 self.image_cache.popitem(last=False)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in image_handler.py", str(e))
             pass
 
 
@@ -1383,7 +1394,8 @@ class ImageHandlerMixin:
 
         try:
             old_y = self.image_canvas.yview()[0]
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in image_handler.py", str(e))
             old_y = 0.0
 
         # P1-G: Targeted cache eviction — only remove entries whose path belongs
@@ -1410,7 +1422,8 @@ class ImageHandlerMixin:
             def restore_scroll():
                 try:
                     self.image_canvas.yview_moveto(old_y)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in image_handler.py", str(e))
                     pass
             self.root.after(50, restore_scroll)
         else:

@@ -10,7 +10,8 @@ def start_tut():
     t.overrideredirect(True)
     t.geometry('200x100+100+100')
     t.config(bg='gray')
-    b2 = tk.Button(t, text='Close Tut', command=lambda: print('CLICKED'))
+    import utils
+    b2 = tk.Button(t, text='Close Tut', command=lambda: utils.debug_log('INFO', 'CLICKED'))
     b2.pack(pady=20)
 d.after(1000, start_tut)
 root.wait_window(d)

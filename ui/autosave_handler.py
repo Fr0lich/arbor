@@ -1,3 +1,4 @@
+import utils
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -76,7 +77,8 @@ class AutosaveMixin:
         if self._autosave_job is not None:
             try:
                 self.root.after_cancel(self._autosave_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in autosave_handler.py", str(e))
                 pass
             self._autosave_job = None
         self._autosave_job = self.root.after(
@@ -162,13 +164,15 @@ class AutosaveMixin:
         try:
             orig_mtime = os.path.getmtime(original_path)
             auto_mtime = os.path.getmtime(autosave_path)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in autosave_handler.py", str(e))
             return
         if auto_mtime <= orig_mtime:
             # Autosave is not newer — clean it up silently
             try:
                 os.remove(autosave_path)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in autosave_handler.py", str(e))
                 pass
             self._check_archive_clutter()
             return
@@ -235,7 +239,8 @@ class AutosaveMixin:
             # Remove the autosave after successful restore
             try:
                 os.remove(autosave_path)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in autosave_handler.py", str(e))
                 pass
             self.show_banner("Autosave restored. Remember to save.", "warning")
         except Exception as e:
@@ -343,7 +348,8 @@ class AutosaveMixin:
                 for fname in list(archives):
                     try:
                         os.remove(os.path.join(archive_dir, fname))
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in autosave_handler.py", str(e))
                         pass
                 win.destroy()
 

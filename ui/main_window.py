@@ -7,6 +7,7 @@ dynamic database visualizer window using Tkinter.
 """
 
 from ui.widgets import ToggleSwitch, TreeviewListboxWrapper
+from ui.wrappers import LabelWrapper, ProgressbarWrapper
 from ui.autosave_handler import AutosaveMixin
 from ui.image_handler import ImageHandlerMixin
 from ui.historical_suggestions import HistoricalSuggestionsMixin
@@ -50,7 +51,8 @@ def is_light_color(color, widget=None):
             if len(hex_color) == 3:
                 hex_color = "".join(c*2 for c in hex_color)
             r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-    except Exception:
+    except Exception as e:
+        utils.debug_error("Caught generic exception in main_window.py", str(e))
         return True
     brightness = (r * 299 + g * 587 + b * 114) / 1000
     return brightness > 127
@@ -67,7 +69,8 @@ def adjust_color_brightness(color, factor, widget=None):
             if len(hex_color) == 3:
                 hex_color = "".join(c*2 for c in hex_color)
             r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-    except Exception:
+    except Exception as e:
+        utils.debug_error("Caught generic exception in main_window.py", str(e))
         return color
     
     r = max(0, min(255, int(r * (1 + factor))))
@@ -119,40 +122,6 @@ def _apply_hover_to_all_tk_buttons(parent, main_ui=None):
                 make_tk_button_hoverable(child)
         _apply_hover_to_all_tk_buttons(child, main_ui)
 
-class LabelWrapper:
-    def __init__(self, real_label, ui):
-        self.real = real_label
-        self.ui = ui
-        
-    def config(self, cnf=None, **kw):
-        if cnf is not None:
-            kw.update(cnf)
-        text = kw.get("text")
-        if text is not None:
-            if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
-                self.ui._loading_window.update_status_text(text)
-        try:
-            return self.real.config(**kw)
-        except Exception:
-            pass
-            
-    def configure(self, cnf=None, **kw):
-        return self.config(cnf, **kw)
-        
-    def cget(self, option):
-        return self.real.cget(option)
-        
-    def __getitem__(self, key):
-        return self.real[key]
-        
-    def __setitem__(self, key, value):
-        self.real[key] = value
-        if key == "text":
-            if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
-                self.ui._loading_window.update_status_text(value)
-                
-    def __getattr__(self, name):
-        return getattr(self.real, name)
 
 
 class ProgressbarWrapper:
@@ -170,7 +139,8 @@ class ProgressbarWrapper:
             self.ui._loading_window.update_progress_bar(value, maximum)
         try:
             return self.real.configure(**kw)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             pass
             
     def config(self, cnf=None, **kw):
@@ -1374,7 +1344,8 @@ class ObjectProgramUI(
                 if not val:
                     widget.focus_set()
                     return
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 continue
 #----
 
@@ -1512,7 +1483,8 @@ class ObjectProgramUI(
                 self.object_list.selection_set(idx)
                 self.object_list.see(idx)
                 self.object_list.activate(idx)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
         return "break"
 
@@ -1715,7 +1687,8 @@ class ObjectProgramUI(
         if db.get("reg_by_id") is None:
             try:
                 db["reg_by_id"] = db["df_reg"].set_index("ObjectID")
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 return None
 
         # PERFORMANCE OPTIMIZATION (Bolt):
@@ -2167,19 +2140,19 @@ class ObjectProgramUI(
             try:
                 self.refresh_image_view()
             except Exception as e:
-                print(f"Error refreshing image view: {e}")
+                utils.debug_log("INFO", f"Error refreshing image view: {e}")
 
     def refresh_styles_and_highlights(self):
         if hasattr(self, "apply_theme"):
             try:
                 self.apply_theme()
             except Exception as e:
-                print(f"Error applying theme: {e}")
+                utils.debug_log("INFO", f"Error applying theme: {e}")
         if hasattr(self, "_update_all_problem_row_styles"):
             try:
                 self._update_all_problem_row_styles()
             except Exception as e:
-                print(f"Error updating problem styles: {e}")
+                utils.debug_log("INFO", f"Error updating problem styles: {e}")
 
     def show_load_data_preset_popup(self):
         popup = tk.Menu(self.root, tearoff=0)
@@ -2481,7 +2454,8 @@ class ObjectProgramUI(
                 if getattr(self, "_autosave_job", None):
                     try:
                         self.root.after_cancel(self._autosave_job)
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in main_window.py", str(e))
                         pass
                     self._autosave_job = None
                 if hasattr(self, "_schedule_autosave"):
@@ -2493,7 +2467,8 @@ class ObjectProgramUI(
                     from ui.tutorial import TutorialManager
                     try:
                         TutorialManager().close_tutorial()
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in main_window.py", str(e))
                         pass
 
             if scale_changed:
@@ -2615,7 +2590,8 @@ class ObjectProgramUI(
                 value = widget.get("1.0", tk.END)
             else:
                 value = widget.get()
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             return
 
         now = time.time()
@@ -3512,7 +3488,8 @@ class ObjectProgramUI(
                     # For pack-managed buttons, use pack_info to restore position
                     try:
                         btn.pack()
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in main_window.py", str(e))
                         pass
             else:
                 if manager == "grid":
@@ -4411,7 +4388,8 @@ class ObjectProgramUI(
                     self.search_count_label.config(
                         text=f"Objects: {count} / {total}"
                     )
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
         # Update status bar labels if they exist
@@ -4440,7 +4418,8 @@ class ObjectProgramUI(
                             and str(df_obs[c].dtype) == "bool"
                         ]
                         self._cached_problems_count = int((df_obs[prob_cols].any(axis=1)).sum()) if prob_cols else 0
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in main_window.py", str(e))
                         self._cached_problems_count = 0
 
                 problems_count = self._cached_problems_count
@@ -4499,7 +4478,8 @@ class ObjectProgramUI(
                 if self.review_progress.winfo_exists():
                     self.review_progress["value"] = percent
                     self.review_progress["maximum"] = 100
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
         if hasattr(self, "review_progress_label") and self.review_progress_label is not None:
@@ -4508,7 +4488,8 @@ class ObjectProgramUI(
                     self.review_progress_label.config(
                         text=f"Reviewed: {percent}% ({reviewed}/{total})"
                     )
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
 
@@ -5379,7 +5360,8 @@ class ObjectProgramUI(
             if self._nav_idle_job:
                 try:
                     self.root.after_cancel(self._nav_idle_job)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
             self._nav_idle_job = self.root.after(150, self._navigation_finished)
             
@@ -5387,7 +5369,8 @@ class ObjectProgramUI(
             if hasattr(self, '_list_select_job') and self._list_select_job:
                 try:
                     self.root.after_cancel(self._list_select_job)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
                 
             self._list_select_job = self.root.after(150, lambda: self._deferred_list_select(oid))
@@ -5401,7 +5384,8 @@ class ObjectProgramUI(
         if self._nav_idle_job:
             try:
                 self.root.after_cancel(self._nav_idle_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
             self._nav_idle_job = None
             
@@ -5425,7 +5409,8 @@ class ObjectProgramUI(
                     int_oid = int(oid)
                     if int_oid in self.reg_by_id.index:
                         oid = int_oid
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
         if hasattr(self, "clear_problems_var"):
@@ -5435,7 +5420,8 @@ class ObjectProgramUI(
         if hasattr(self, '_list_select_job') and self._list_select_job:
             try:
                 self.root.after_cancel(self._list_select_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
             self._list_select_job = None
 
@@ -5713,7 +5699,8 @@ class ObjectProgramUI(
             if os.path.exists(autosave_path):
                 try:
                     os.remove(autosave_path)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
 
         # If errors were logged this session, offer to view the log before exit
@@ -5729,7 +5716,8 @@ class ObjectProgramUI(
                 if show_log:
                     self.show_error_log_window(get_session_log_path())
                     return   # Let user close the log window; they can exit from there
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             pass
 
         self.root.destroy()
@@ -5855,7 +5843,8 @@ class ObjectProgramUI(
                     parent_dir = os.path.dirname(path)
                     if os.path.exists(parent_dir):
                         subprocess.Popen(["explorer", parent_dir])
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
         def _close_log_and_exit():
@@ -6165,7 +6154,8 @@ class ObjectProgramUI(
         if self._nav_idle_job:
             try:
                 self.root.after_cancel(self._nav_idle_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
         self._nav_idle_job = self.root.after(150, self._navigation_finished)
 
@@ -6190,7 +6180,8 @@ class ObjectProgramUI(
         if hasattr(self, '_list_select_job') and self._list_select_job:
             try:
                 self.root.after_cancel(self._list_select_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
                 
         self._list_select_job = self.root.after(150, lambda: self._deferred_list_select(oid))
@@ -6382,7 +6373,8 @@ class ObjectProgramUI(
                         self.title_problem_count_label.config(text=f"({count} problems)")
                     else:
                         self.title_problem_count_label.config(text="")
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
         if not active_problems:
@@ -6870,7 +6862,8 @@ class ObjectProgramUI(
                 frame.config(bg=bg_color)
                 for child in getattr(frame, "_cached_children", []):
                     try: child.config(bg=bg_color)
-                    except Exception: pass
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in main_window.py", str(e))
                         
         search_var.trace("w", on_search)
 
@@ -7288,7 +7281,8 @@ class ObjectProgramUI(
             lookup_key = int(oid) if str(oid).isdigit() else oid
             if lookup_key in self._problem_cache:
                 return self._problem_cache[lookup_key]
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             lookup_key = oid
 
         # If not cached, calculate and store under lookup_key
@@ -7297,7 +7291,8 @@ class ObjectProgramUI(
                 lookup_key,
                 include_image_problems=(self.image_mode == "folder")
             )
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             self._problem_cache[lookup_key] = False
         return self._problem_cache[lookup_key]
 
@@ -7308,7 +7303,8 @@ class ObjectProgramUI(
             
         try:
             lookup_key = int(oid) if str(oid).isdigit() else oid
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             lookup_key = oid
 
         for db in self.app.historical_dbs:
@@ -7503,7 +7499,8 @@ class ObjectProgramUI(
         if self._nav_idle_job:
             try:
                 self.root.after_cancel(self._nav_idle_job)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
         self._nav_idle_job = self.root.after(150, self._navigation_finished)
         
@@ -7894,7 +7891,8 @@ class ObjectProgramUI(
                     self._copied_field_value = value
                     preview = (value[:40] + "...") if len(value) > 40 else value
                     self.system_status.config(text=f"Copied [{name}]: {preview}")
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
                 break
 
@@ -7918,7 +7916,8 @@ class ObjectProgramUI(
             else:
                 self.reg_vars[name].set(self._copied_field_value)
             self.system_status.config(text=f"Pasted to [{name}]")
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             pass
 
         return "break"
@@ -8015,7 +8014,8 @@ class ObjectProgramUI(
                     try:
                         self.root.update_idletasks()
                         self.middle_panes.sashpos(0, sc(120))
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in main_window.py", str(e))
                         pass
                 self.root.after(10, _do_shrink)
             else:
@@ -8023,10 +8023,12 @@ class ObjectProgramUI(
                     try:
                         if hasattr(self, "_last_manual_middle_sash"):
                             self.middle_panes.sashpos(0, self._last_manual_middle_sash)
-                    except Exception:
+                    except Exception as e:
+                        utils.debug_error("Caught generic exception in main_window.py", str(e))
                         pass
                 self.root.after(50, _do_restore)
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             pass
 
     def update_reg_fields_visibility(self, skip_snap=False):
@@ -8071,12 +8073,14 @@ class ObjectProgramUI(
             if show_prob:
                 try:
                     self.reg_notebook.add(self._reg_tabs["Problems"]["container"])
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
             else:
                 try:
                     self.reg_notebook.hide(self._reg_tabs["Problems"]["container"])
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
                 
         visible_count = 0
@@ -8194,7 +8198,8 @@ class ObjectProgramUI(
                 advanced_prefs = config.load_prefs().get("advanced", {})
                 if advanced_prefs.get("enable_problem_highlights", True):
                     hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
             
             if "Yellow" in hl_color_name:
@@ -8303,7 +8308,8 @@ class ObjectProgramUI(
             if hasattr(widget, "fuzzy_label"):
                 try:
                     widget.fuzzy_label.destroy()
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
                 delattr(widget, "fuzzy_label")
 
@@ -8385,7 +8391,8 @@ class ObjectProgramUI(
                         reviewed = bool(val.iloc[0])
                     else:
                         reviewed = bool(val)
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     reviewed = False
                 has_problem = self._get_cached_problem(oid)
                 has_history = self._problems_have_history(oid)
@@ -8432,7 +8439,8 @@ class ObjectProgramUI(
             if event.widget is widget:
                 try:
                     widget.unbind_class(tag, "<MouseWheel>")
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
 
         widget.bind("<Destroy>", _on_destroy, add="+")
@@ -8474,7 +8482,8 @@ class ObjectProgramUI(
             if self.app.df_obs is not None and oid in self.app.df_obs.index:
                 try:
                     reviewed_at = str(self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN])
-                except Exception:
+                except Exception as e:
+                    utils.debug_error("Caught generic exception in main_window.py", str(e))
                     pass
             
             time_str = ""
@@ -8571,7 +8580,8 @@ class ObjectProgramUI(
         for col, var in self.problem_vars.items():
             try:
                 var.set(False)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
         # 2. Commit the cleared problems to the dataframe
@@ -8582,7 +8592,8 @@ class ObjectProgramUI(
         if self.app.df_obs is not None and oid in self.app.df_obs.index:
             try:
                 is_reviewed = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
         if not is_reviewed:
             self._toggle_reviewed_for_id(oid)
@@ -8642,7 +8653,8 @@ class ObjectProgramUI(
         if bar:
             try:
                 bar.config(bg=bar_active if is_active else bar_normal)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
         # 2. Label
@@ -8650,7 +8662,8 @@ class ObjectProgramUI(
         if lbl:
             try:
                 lbl.config(foreground=err_fg if is_active else norm_fg)
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
 
         # 3. Entry / Combobox style
@@ -8705,7 +8718,8 @@ class ObjectProgramUI(
         color = None
         try:
             reviewed = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
-        except Exception:
+        except Exception as e:
+            utils.debug_error("Caught generic exception in main_window.py", str(e))
             reviewed = False
             
         has_problem = self._get_cached_problem(oid)
@@ -8780,7 +8794,8 @@ class ObjectProgramUI(
         if self.app.df_obs is not None and oid in self.app.df_obs.index:
             try:
                 current = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
-            except Exception:
+            except Exception as e:
+                utils.debug_error("Caught generic exception in main_window.py", str(e))
                 pass
         new_val = not current
         

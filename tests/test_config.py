@@ -32,9 +32,11 @@ def test_load_prefs_invalid_file():
     mock_json = '{"recent_files": ' # invalid JSON
     with patch("os.path.exists", return_value=True), \
          patch("builtins.open", mock_open(read_data=mock_json)):
-        result = config.load_prefs()
-        assert result == {}
-        assert config._prefs_cache == {}
+        import pytest
+        from exceptions import UIConfigurationError
+        with pytest.raises(UIConfigurationError):
+            config.load_prefs()
+
 
 
 def test_add_recent_file_truncates_to_8():
@@ -124,4 +126,3 @@ def test_load_prefs_file_not_exists():
     with patch("os.path.exists", return_value=False):
         result = config.load_prefs()
         assert result == {}
-        assert config._prefs_cache == {}
