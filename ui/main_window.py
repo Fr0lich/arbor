@@ -3419,7 +3419,10 @@ class ObjectProgramUI(
             self.middle_panes.add(self.right_frame, weight=3)
             self.refresh_image_view()
 
-        if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
+        focus_active = hasattr(self, "focus_mode_var") and self.focus_mode_var.get()
+        show_loc = not (focus_active and not self.focus_visibility_vars.get("Location", tk.BooleanVar(value=True)).get())
+
+        if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get() and show_loc:
             # U2-A: 150px minimum keeps location rows readable
             self.middle_panes.add(self.loc_frame_horizontal, weight=1)
 
@@ -3427,11 +3430,17 @@ class ObjectProgramUI(
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
             if hasattr(self, 'loc_container'):
                 self.loc_container.pack_forget()
+                if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
+                    if str(self.left_bottom_container) in self.left_panes.panes():
+                        self.left_panes.forget(self.left_bottom_container)
             self._sync_middle_panes()
         else:
             if hasattr(self, 'loc_frame_horizontal') and str(self.loc_frame_horizontal) in self.middle_panes.panes():
                 self.middle_panes.forget(self.loc_frame_horizontal)
             if hasattr(self, 'loc_container'):
+                if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
+                    if str(self.left_bottom_container) not in self.left_panes.panes():
+                        self.left_panes.add(self.left_bottom_container, weight=0)
                 self.loc_container.pack(side="top", fill="x")
 
     def toggle_images_panel(self):
@@ -7962,11 +7971,18 @@ class ObjectProgramUI(
             
             # Repack location components safely
             self.loc_container.pack_forget()
-            if show_loc:
+
+            # Check if location should be in the left column or center column
+            loc_in_center = hasattr(self, 'location_in_center_var') and self.location_in_center_var.get()
+
+            if show_loc and not loc_in_center:
                 if str(self.left_bottom_container) not in self.left_panes.panes():
                     self.left_panes.add(self.left_bottom_container, weight=0)
                 self.loc_container.pack(side="top", fill="x")
             else:
+                # Either we're hiding location entirely (due to focus mode) OR it's centered
+                # If it's centered, it's managed by `_sync_middle_panes` instead.
+                # So we just ensure it's not in the left pane.
                 if str(self.left_bottom_container) in self.left_panes.panes():
                     self.left_panes.forget(self.left_bottom_container)
                 
