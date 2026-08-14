@@ -5871,52 +5871,8 @@ class ObjectProgramUI(
 
 
     def highlight_fields_with_suggestions(self, oid):
-        # Track the last background color set per field to skip redundant Tcl calls.
-        if not hasattr(self, "_field_bg_state"):
-            self._field_bg_state = {}
-
-        suggestions = self.collect_historical_suggestions(oid)
-
-        # Use cached reg row if available
-        if (not getattr(self, "_row_cache_dirty", True)
-                and self._cached_reg_dict is not None
-                and oid in self._cached_reg_dict):
-            reg_row = self._cached_reg_dict[oid]
-            def _get(field): return reg_row.get(field, "")
-        else:
-            reg = self.reg_by_id.loc[oid]
-            if isinstance(reg, pd.DataFrame):
-                reg = reg.iloc[0]
-            def _get(field): return reg.get(field, "")
-
-        def _set_bg(widget, field, color):
-            if self._field_bg_state.get(field) == color:
-                return  # already this color — skip Tcl call
-            try:
-                if isinstance(widget, tk.Text):
-                    widget.configure(bg=color)
-                else:
-                    widget.configure(background=color)
-                self._field_bg_state[field] = color
-            except Exception as e:
-                debug_error("Suppressed Error", str(e))
-
-        for field, widget in self.reg_entries.items():
-            if not widget:
-                continue
-            try:
-                raw_val = _get(field)
-                if isinstance(raw_val, pd.Series):
-                    raw_val = raw_val.iloc[0]
-
-                if self.is_unknown(raw_val):
-                    _set_bg(widget, field, "#ffe4b3")
-                elif field in suggestions:
-                    _set_bg(widget, field, "#fff3a3")
-                else:
-                    _set_bg(widget, field, "white")
-            except Exception as e:
-                debug_error("Suppressed Error", str(e))
+        for field in self.reg_entries:
+            self._refresh_field_background(field)
 
 
 
@@ -8169,54 +8125,104 @@ class ObjectProgramUI(
 
 
 
+    def _refresh_field_background(self, field_name):
+        widget = self.reg_entries.get(field_name)
+        if not widget:
+            return
+
+        is_dark = getattr(self, "dark_mode_active", self.app.config.get("theme", "dark") == "dark")
+        norm_bg = "#181825" if is_dark else "#ffffff"
+        warn_bg = "#5c4d00" if is_dark else "#fff3cd"
+        err_bg = "#5c1e1e" if is_dark else "#f8d7da"
+        unknown_bg = "#5c461a" if is_dark else "#ffe4b3"
+        suggest_bg = "#5c571a" if is_dark else "#fff3a3"
+
+        # Determine if there's an active problem flag mapping to this field
+        is_active_problem = False
+        prob_col = None
+        for p_col, f_name in self.problem_to_field.items():
+            if f_name == field_name:
+                prob_col = p_col
+                break
+        if prob_col and self.problem_vars.get(prob_col) and self.problem_vars[prob_col].get():
+            is_active_problem = True
+
+        # Validation rules
+        genus = self.reg_vars.get("Genus", tk.StringVar()).get().strip()
+        species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
+        building = self.reg_vars.get("Building", tk.StringVar()).get().strip()
+        loc_prob = self.problem_vars.get("Loc_Problem", tk.BooleanVar()).get()
+
+        color = norm_bg
+
+        if is_active_problem:
+            # Active problem tint highlight
+            hl_color_name = "Default (Red)"
+            try:
+                import config
+                advanced_prefs = config.load_prefs().get("advanced", {})
+                if advanced_prefs.get("enable_problem_highlights", True):
+                    hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+            except Exception:
+                pass
+            
+            if "Yellow" in hl_color_name:
+                tint = "#5f5b2e" if is_dark else "#fff9c4"
+            elif "Orange" in hl_color_name:
+                tint = "#5f4520" if is_dark else "#ffe0b2"
+            elif "Blue" in hl_color_name:
+                tint = "#203a5f" if is_dark else "#e3f2fd"
+            else:  # Default (Red)
+                tint = "#5c1e1e" if is_dark else "#ffdad6"
+            color = tint
+        elif field_name == "Species" and genus and not species:
+            color = warn_bg
+        elif field_name == "Building" and not building and not loc_prob:
+            color = err_bg
+        else:
+            # Unknown or Historical Suggestions
+            raw_val = self.reg_vars.get(field_name, tk.StringVar()).get()
+            if isinstance(raw_val, pd.Series):
+                raw_val = raw_val.iloc[0]
+            raw_val = str(raw_val)
+
+            if self.is_unknown(raw_val):
+                color = unknown_bg
+            elif self.current_object_suggestions and field_name in self.collect_historical_suggestions(self.app.current_object_id):
+                color = suggest_bg
+
+        # Set background/style on widget
+        try:
+            if isinstance(widget, (tk.Text, tk.Entry)):
+                widget.config(background=color)
+            elif isinstance(widget, ttk.Combobox):
+                if color == warn_bg:
+                    widget.configure(style="Warning.TCombobox")
+                elif color == err_bg:
+                    widget.configure(style="Error.TCombobox")
+                elif is_active_problem:
+                    widget.configure(style="Problem.TCombobox")
+                else:
+                    widget.configure(style="TCombobox")
+            elif isinstance(widget, ttk.Entry):
+                if color == warn_bg:
+                    widget.configure(style="Warning.TEntry")
+                elif color == err_bg:
+                    widget.configure(style="Error.TEntry")
+                elif is_active_problem:
+                    widget.configure(style="Problem.TEntry")
+                else:
+                    widget.configure(style="TEntry")
+        except Exception as e:
+            debug_error("Suppressed Error in _refresh_field_background", str(e))
+
+
     def _validate_fields(self, event=None):
         if self._is_navigating or self.loading_object:
             return
 
-        is_dark = getattr(self, "dark_mode_active", self.app.config.get("theme", "dark") == "dark")
-        warn_bg = "#5c4d00" if is_dark else "#fff3cd"
-        err_bg = "#5c1e1e" if is_dark else "#f8d7da"
-        norm_bg = "#181825" if is_dark else "white"
-
-        # Initialize styles if they don't exist
-        style = ttk.Style()
-        if not hasattr(self, "_validation_styles_created"):
-            style.map("Warning.TEntry", fieldbackground=[("!disabled", warn_bg)])
-            style.map("Error.TEntry", fieldbackground=[("!disabled", err_bg)])
-            style.map("Normal.TEntry", fieldbackground=[("!disabled", norm_bg)])
-            self._validation_styles_created = True
-        else:
-            style.map("Warning.TEntry", fieldbackground=[("!disabled", warn_bg)])
-            style.map("Error.TEntry", fieldbackground=[("!disabled", err_bg)])
-            style.map("Normal.TEntry", fieldbackground=[("!disabled", norm_bg)])
-
-        def apply_validation_style(widget, style_name, bg_color):
-            try:
-                widget.configure(style=style_name)
-            except tk.TclError:
-                # Fallback for standard tk.Entry or tk.Text
-                try:
-                    widget.configure(bg=bg_color)
-                except tk.TclError:
-                    pass
-
-        # Rule 1: Genus but no Species (Warning)
-        genus = self.reg_vars.get("Genus", tk.StringVar()).get().strip()
-        species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
-        
-        if genus and not species and "Species" in self.reg_entries:
-            apply_validation_style(self.reg_entries["Species"], "Warning.TEntry", warn_bg)
-        elif "Species" in self.reg_entries:
-            apply_validation_style(self.reg_entries["Species"], "Normal.TEntry", norm_bg)
-
-        # Rule 2: Building/Location empty but no Loc Problem (Error)
-        building = self.reg_vars.get("Building", tk.StringVar()).get().strip()
-        loc_prob = self.problem_vars.get("Loc_Problem", tk.BooleanVar()).get()
-        
-        if not building and not loc_prob and "Building" in self.reg_entries:
-            apply_validation_style(self.reg_entries["Building"], "Error.TEntry", err_bg)
-        elif "Building" in self.reg_entries:
-            apply_validation_style(self.reg_entries["Building"], "Normal.TEntry", norm_bg)
+        self._refresh_field_background("Species")
+        self._refresh_field_background("Building")
 
 
     def _run_fuzzy_match(self, field_name, widget):
@@ -8617,19 +8623,7 @@ class ObjectProgramUI(
                 pass
 
         # 3. Entry / Combobox style
-        widget = self.reg_entries.get(field_name)
-        if widget:
-            try:
-                if isinstance(widget, (tk.Text, tk.Entry)):
-                    # Classic Text/Entry widgets — set background directly
-                    norm_bg = "#181825" if is_dark else "#ffffff"
-                    widget.config(background=tint if is_active else norm_bg)
-                elif isinstance(widget, ttk.Combobox):
-                    widget.configure(style="Problem.TCombobox" if is_active else "TCombobox")
-                elif isinstance(widget, ttk.Entry):
-                    widget.configure(style="Problem.TEntry" if is_active else "TEntry")
-            except Exception:
-                pass
+        self._refresh_field_background(field_name)
                 
         # Update accordion badges if any
         self._update_accordion_badges()
