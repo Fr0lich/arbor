@@ -7681,63 +7681,8 @@ class ObjectProgramUI(
 # ---- Recent objects
 
     def open_recent_popup(self):
-        if not self.history_stack:
-            self.system_status.config(text="No recently visited objects")
-            return
+        self.open_recent_activity_window(default_tab=0)
 
-        if hasattr(self, "recent_window") and self.recent_window and self.recent_window.winfo_exists():
-            self.recent_window.lift()
-            self.recent_window.focus_force()
-            return
-
-        win = tk.Toplevel(self.root)
-        self.recent_window = win
-        win.bind("<Destroy>", lambda e: setattr(self, "recent_window", None) if e.widget == win else None)
-        win.title("Recently visited")
-        import utils
-        utils.center_and_fit_toplevel(win, 320, 320)
-        win.bind("<Escape>", lambda e: win.destroy())
-
-        ttk.Label(
-            win,
-            text="Recently visited",
-            font=("Segoe UI", sc(10), "bold")
-        ).pack(anchor="w", padx=10, pady=(10, 4))
-
-        frame = ttk.Frame(win)
-        frame.pack(fill="both", expand=True, padx=6, pady=4)
-
-        listbox = tk.Listbox(frame, exportselection=False)
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=listbox.yview)
-        listbox.configure(yscrollcommand=scrollbar.set)
-        listbox.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        recent = list(reversed(self.history_stack[-20:]))
-        for oid in recent:
-            title = self.object_title(oid)
-            listbox.insert(tk.END, title)
-
-        def go_to(event=None):
-            if not listbox.curselection():
-                return
-            idx = listbox.curselection()[0]
-            oid = recent[idx]
-            self.object_list.selection_clear(0, tk.END)
-            if oid in self.app.active_object_ids:
-                list_idx = self.app.active_object_ids.index(oid)
-                self.object_list.selection_set(list_idx)
-                self.object_list.see(list_idx)
-            self.load_object(oid)
-            win.destroy()
-
-        listbox.bind("<Double-Button-1>", go_to)
-        listbox.bind("<Return>", go_to)
-
-        btns = ttk.Frame(win)
-        btns.pack(fill="x", padx=6, pady=6)
-        ttk.Button(btns, text="Go to", command=go_to).pack(side="right")
-        ttk.Button(btns, text="Close", command=win.destroy).pack(side="left")
 
 
 # ---- Export filtered list
