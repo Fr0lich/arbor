@@ -456,7 +456,7 @@ class ObjectProgramUI(
         self.root.bind("<Control-l>", self._focus_first_location)
         self.root.bind("<Control-p>", self._focus_first_problem)
         self.root.bind("<Control-i>", self._focus_first_reg)
-        self.root.bind("<Control-o>", self._focus_object_list)
+        self.root.bind("<Control-o>", self.focus_search)
         self.root.bind("<Control-Shift-P>", self._focus_first_problem)
         self.root.bind("<F3>", self._focus_first_problem)
         self.root.bind("<Control-Shift-L>", self._focus_first_location)
@@ -497,6 +497,7 @@ class ObjectProgramUI(
 
 
         self.field_undo_stack = []
+        self.loaded_problem_states = {}
 
         if self.app.redo_stacks is None:
             self.app.redo_stacks = {}
@@ -3913,6 +3914,8 @@ class ObjectProgramUI(
         self._inline_search_entry.bind("<FocusOut>",    self._search_focus_out)
         self._inline_search_entry.bind("<Button-1>",    self._search_focus_in)
         self._inline_search_entry.bind("<Return>",      self._on_search_bar_enter)
+        self._inline_search_entry.bind("<Down>",        self._on_search_arrow_down)
+        self._inline_search_entry.bind("<Up>",          self._on_search_arrow_up)
         
         def _focus_list(event):
             self.object_list.focus_set()
@@ -4894,28 +4897,23 @@ class ObjectProgramUI(
         # -------- PROBLEMS --------
         for col, var in self.problem_vars.items():
 
- 
             new = bool(var.get())
 
- 
-            old = bool(self.app.df_obs.loc[oid].get(col, False))
+            # Only check for edits if the state has actually been edited since loading
+            loaded_val = self.loaded_problem_states.get(col, False)
 
-  
             if col not in self.app.df_obs.columns:
                 self.app.df_obs[col] = False
 
-
-            if old != new:
+            if loaded_val != new:
                 ensure_undo()
                 self.app.df_obs.loc[oid, col] = new
 
                 prob_changed_fields.append(col)
-                prob_changed_values.append(f'{col}: "{old}"  "{new}"')
-
+                prob_changed_values.append(f'{col}: "{loaded_val}"  "{new}"')
                 
                 self._list_dirty = True
-
-
+                self.loaded_problem_states[col] = new
 
 
 
@@ -5325,7 +5323,7 @@ class ObjectProgramUI(
             idx = sel[0]
             oid = self.app.active_object_ids[idx]
             
-            if self._is_searching():
+            if self._is_searching() or self.root.focus_get() == self._inline_search_entry:
                 return
                 
             if oid == self.app.current_object_id:
@@ -5377,6 +5375,16 @@ class ObjectProgramUI(
         return str(value)
 
     def load_object(self, oid, is_history_nav=False):
+        # Convert oid type for pandas index compatibility (checks string first, then integer if needed)
+        if oid not in self.reg_by_id.index:
+            try:
+                if str(oid).isdigit():
+                    int_oid = int(oid)
+                    if int_oid in self.reg_by_id.index:
+                        oid = int_oid
+            except Exception:
+                pass
+
         if hasattr(self, "clear_problems_var"):
             self.clear_problems_var.set(False)
         self.image_zoom_factor = 1.0
@@ -5498,7 +5506,8 @@ class ObjectProgramUI(
             
 
             for col, widget in self.reg_entries.items():
-                value = reg.get(col, "")
+                value = utils.fmt_pandas_val(reg.get(col, ""))
+
 
                 if isinstance(widget, tk.Text):
                     if not skip_heavy:
@@ -5536,6 +5545,11 @@ class ObjectProgramUI(
             # Apply problem row styles after all vars are set (traces fire via after_idle,
             # but we also call explicitly here to guarantee correct state on load)
             self._update_all_problem_row_styles()
+
+            # Save the loaded state of all problem checkbuttons so we can detect real edits later
+            self.loaded_problem_states = {
+                col: bool(v.get()) for col, v in self.problem_vars.items()
+            }
 
             self.reviewed_var.set(bool(obs.get(REVIEWED_COLUMN, False)))
 
@@ -7270,24 +7284,42 @@ class ObjectProgramUI(
 
     def _get_cached_problem(self, oid):
         """Returns True if the object has any checked problem checkbox. Result is cached."""
-        if oid not in self._problem_cache:
-            try:
-                self._problem_cache[oid] = self.has_any_problem(
-                    oid,
-                    include_image_problems=(self.image_mode == "folder")
-                )
-            except Exception:
-                self._problem_cache[oid] = False
-        return self._problem_cache[oid]
+        # Check direct key first
+        if oid in self._problem_cache:
+            return self._problem_cache[oid]
+            
+        try:
+            lookup_key = int(oid) if str(oid).isdigit() else oid
+            if lookup_key in self._problem_cache:
+                return self._problem_cache[lookup_key]
+        except Exception:
+            lookup_key = oid
+
+        # If not cached, calculate and store under lookup_key
+        try:
+            self._problem_cache[lookup_key] = self.has_any_problem(
+                lookup_key,
+                include_image_problems=(self.image_mode == "folder")
+            )
+        except Exception:
+            self._problem_cache[lookup_key] = False
+        return self._problem_cache[lookup_key]
 
     def _has_history(self, oid):
         """Returns True if object appears in any loaded historical database."""
         if not self.app.historical_dbs:
             return False
+            
+        try:
+            lookup_key = int(oid) if str(oid).isdigit() else oid
+        except Exception:
+            lookup_key = oid
+
         for db in self.app.historical_dbs:
             reg_by_id = db.get("reg_by_id")
-            if reg_by_id is not None and oid in reg_by_id.index:
-                return True
+            if reg_by_id is not None:
+                if lookup_key in reg_by_id.index or str(oid) in reg_by_id.index:
+                    return True
         return False
 
     # ---- Live Search methods ----
@@ -7345,6 +7377,36 @@ class ObjectProgramUI(
             self._inline_search_entry.delete(0, tk.END)
             self._inline_search_entry.insert(0, self._inline_search_placeholder)
             self._inline_search_entry.config(foreground="gray")
+
+    def _on_search_arrow_down(self, event=None):
+        if not self.app.active_object_ids:
+            return "break"
+        sel = self.object_list.curselection()
+        if sel:
+            curr_idx = sel[0]
+            new_idx = min(curr_idx + 1, len(self.app.active_object_ids) - 1)
+        else:
+            new_idx = 0
+            
+        self.object_list.selection_clear(0, tk.END)
+        self.object_list.selection_set(new_idx)
+        self.object_list.see(new_idx)
+        return "break"
+
+    def _on_search_arrow_up(self, event=None):
+        if not self.app.active_object_ids:
+            return "break"
+        sel = self.object_list.curselection()
+        if sel:
+            curr_idx = sel[0]
+            new_idx = max(curr_idx - 1, 0)
+        else:
+            new_idx = 0
+            
+        self.object_list.selection_clear(0, tk.END)
+        self.object_list.selection_set(new_idx)
+        self.object_list.see(new_idx)
+        return "break"
 
     def _get_search_index(self):
         """
@@ -7422,6 +7484,19 @@ class ObjectProgramUI(
             return
         
         oid = self.app.active_object_ids[idx]
+        
+        # Commit current changes before loading the new object
+        if not self._is_navigating:
+            self._is_navigating = True
+            self.commit_current_object()
+            
+        if self._nav_idle_job:
+            try:
+                self.root.after_cancel(self._nav_idle_job)
+            except Exception:
+                pass
+        self._nav_idle_job = self.root.after(150, self._navigation_finished)
+        
         self.load_object(oid)
 
     def _is_searching(self):

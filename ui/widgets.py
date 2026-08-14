@@ -584,8 +584,23 @@ class TreeviewListboxWrapper(ttk.Frame):
         # Data
         obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else {}
         reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else {}
-        obs_row  = obs_dict.get(oid, {})
-        reg_row  = reg_dict.get(oid, {})
+        
+        # Safe fallback lookups (tries exact string first, then integer if numeric)
+        obs_row = obs_dict.get(oid)
+        if obs_row is None:
+            try:
+                lookup_key = int(oid) if str(oid).isdigit() else oid
+                obs_row = obs_dict.get(lookup_key, {})
+            except Exception:
+                obs_row = {}
+
+        reg_row = reg_dict.get(oid)
+        if reg_row is None:
+            try:
+                lookup_key = int(oid) if str(oid).isdigit() else oid
+                reg_row = reg_dict.get(lookup_key, {})
+            except Exception:
+                reg_row = {}
 
         has_problem = self.main_window._get_cached_problem(oid) if hasattr(self.main_window, "_get_cached_problem") else False
         has_history = self.main_window._has_history(oid) if hasattr(self.main_window, "_has_history") else False
@@ -702,9 +717,24 @@ class TreeviewListboxWrapper(ttk.Frame):
                     self.main_window._cached_photo_counts = photo_df.index.value_counts().to_dict()
                 else:
                     self.main_window._cached_photo_counts = {}
-            photo_count = self.main_window._cached_photo_counts.get(oid, 0)
+            # Safe fallback photo count lookup
+            photo_count = self.main_window._cached_photo_counts.get(oid)
+            if photo_count is None:
+                try:
+                    lookup_key = int(oid) if str(oid).isdigit() else oid
+                    photo_count = self.main_window._cached_photo_counts.get(lookup_key, 0)
+                except Exception:
+                    photo_count = 0
         if hasattr(self.main_window, "image_index"):
-            photo_count = max(photo_count, len(self.main_window.image_index.get(oid, [])))
+            # Try both string and integer lookup keys
+            paths = self.main_window.image_index.get(oid)
+            if paths is None:
+                try:
+                    lookup_key = int(oid) if str(oid).isdigit() else oid
+                    paths = self.main_window.image_index.get(lookup_key, [])
+                except Exception:
+                    paths = []
+            photo_count = max(photo_count, len(paths or []))
 
         photo_lbl = tk.Label(row2, text=f"\U0001f4f7 {photo_count}", bg=card_bg, fg=text_secondary,
                              font=("Segoe UI", sc(8)))

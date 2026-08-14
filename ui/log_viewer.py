@@ -156,16 +156,16 @@ class LogViewerMixin:
         scroll_y_e = ttk.Scrollbar(tree_frame_e, orient="vertical")
         scroll_y_e.pack(side="right", fill="y")
 
-        tree_e = ttk.Treeview(tree_frame_e, columns=("Time", "Action", "ObjectID", "Changes"), show="headings", yscrollcommand=scroll_y_e.set)
+        tree_e = ttk.Treeview(tree_frame_e, columns=("ObjectID", "Time", "Action", "Changes"), show="headings", yscrollcommand=scroll_y_e.set)
+        tree_e.heading("ObjectID", text="Object ID")
         tree_e.heading("Time", text="Time")
         tree_e.heading("Action", text="Action")
-        tree_e.heading("ObjectID", text="Object ID")
         tree_e.heading("Changes", text="Changes")
 
-        tree_e.column("Time", width=sc(150), minwidth=sc(100))
-        tree_e.column("Action", width=sc(80), minwidth=sc(60))
         tree_e.column("ObjectID", width=sc(100), minwidth=sc(60))
-        tree_e.column("Changes", width=sc(450), minwidth=sc(200), stretch=True)
+        tree_e.column("Time", width=sc(140), minwidth=sc(100))
+        tree_e.column("Action", width=sc(130), minwidth=sc(60))
+        tree_e.column("Changes", width=sc(410), minwidth=sc(200), stretch=True)
 
         tree_e.pack(side="left", fill="both", expand=True)
         scroll_y_e.config(command=tree_e.yview)
@@ -191,24 +191,69 @@ class LogViewerMixin:
                     except Exception:
                         pass
                 action = row_dict.get("Action", "")
+                
+                # Map technical action names to user-friendly display labels
+                display_action = action
+                if action == "EDIT":
+                    display_action = "Manual Edit"
+                elif action == "RESOLVE_HISTORICAL_CONFLICT":
+                    display_action = "Conflict Resolver"
+                elif action == "CREATE_OBJECT_FAST":
+                    display_action = "Created Object"
+
                 obj_id = row_dict.get("ObjectID", "")
                 c_fields = row_dict.get("ChangedFields", "")
+                c_vals = row_dict.get("ChangedValues", "")
                 p_fields = row_dict.get("ProblemsChanged", "")
+                p_vals = row_dict.get("ProblemsChangedValues", "")
                 l_fields = row_dict.get("LocationChanged", "")
+                l_vals = row_dict.get("LocationChangedValues", "")
 
                 changes_parts = []
                 if c_fields and str(c_fields).strip() and str(c_fields) != "(no changes)":
-                    changes_parts.append(f"Data: {c_fields}")
+                    val_str = str(c_vals).strip()
+                    if val_str:
+                        parts = []
+                        for p in val_str.split(" | "):
+                            if "  " in p:
+                                p = p.replace("  ", " → ")
+                            parts.append(p)
+                        val_str = ", ".join(parts)
+                        changes_parts.append(f"Data: {val_str}")
+                    else:
+                        changes_parts.append(f"Data: {c_fields}")
+
                 if p_fields and str(p_fields).strip():
-                    changes_parts.append(f"Problems: {p_fields}")
+                    val_str = str(p_vals).strip()
+                    if val_str:
+                        parts = []
+                        for p in val_str.split(" | "):
+                            if "  " in p:
+                                p = p.replace("  ", " → ")
+                            parts.append(p)
+                        val_str = ", ".join(parts)
+                        changes_parts.append(f"Problems: {val_str}")
+                    else:
+                        changes_parts.append(f"Problems: {p_fields}")
+
                 if l_fields and str(l_fields).strip():
-                    changes_parts.append(f"Location: {l_fields}")
+                    val_str = str(l_vals).strip()
+                    if val_str:
+                        parts = []
+                        for p in val_str.split(" | "):
+                            if "  " in p:
+                                p = p.replace("  ", " → ")
+                            parts.append(p)
+                        val_str = ", ".join(parts)
+                        changes_parts.append(f"Location: {val_str}")
+                    else:
+                        changes_parts.append(f"Location: {l_fields}")
 
                 changes = " | ".join(changes_parts)
                 if not changes and c_fields == "(no changes)":
                     changes = "(no changes)"
 
-                tree_e.insert("", "end", values=(tstamp, action, obj_id, changes))
+                tree_e.insert("", "end", values=(obj_id, tstamp, display_action, changes))
 
         # Helper functions to fetch selected ObjectID across tabs
         def get_selected_oid():
@@ -225,7 +270,7 @@ class LogViewerMixin:
             elif active_tab == "edits":
                 sel = tree_e.selection()
                 if sel:
-                    return tree_e.item(sel[0])["values"][2]
+                    return tree_e.item(sel[0])["values"][0]
             return None
 
         def update_btn_state(event=None):
