@@ -200,6 +200,9 @@ class DatabaseOpsMixin:
 
 
     def _finish_open_excel(self, path, output_path, df_reg, df_obs, df_photo, df_log):
+        self._history_presence_set = set()
+        self._has_suggestions_set = set()
+
         # PERFORMANCE OPTIMIZATION (Bolt): Reconstruct the original Excel path as active path if loaded from an autosave
         if ".autosave" in path:
             orig_path = path.replace(".autosave.json", ".xlsx").replace(".autosave.xlsx", ".xlsx")
