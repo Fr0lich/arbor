@@ -427,6 +427,34 @@ class TreeviewListboxWrapper(ttk.Frame):
             if cb_lbl and cb_lbl.winfo_exists():
                 cb_lbl.configure(text=rev_char, fg=cb_color)
 
+    def _refresh_card_accent(self, oid):
+        if oid not in self.item_data:
+            return
+        accent_strip = self.item_data[oid].get("accent_strip")
+        if not accent_strip or not accent_strip.winfo_exists():
+            return
+
+        is_dark = getattr(self.main_window, "dark_mode_active", False)
+        canvas_bg = "#1e1e2e" if is_dark else "#f9f9f9"
+
+        reviewed = self.item_data[oid].get("reviewed", False)
+        has_problem = getattr(self.main_window, "_problem_cache", {}).get(oid, False)
+        problems_have_history = self.main_window._problems_have_history(oid) if hasattr(self.main_window, "_problems_have_history") else False
+
+        if reviewed:
+            new_color = "#4CAF50" if is_dark else "#2E7D32"
+        elif has_problem and problems_have_history:
+            new_color = "#BB86FC" if is_dark else "#7B1FA2"
+        elif has_problem:
+            new_color = "#f28b82" if is_dark else "#C62828"
+        elif problems_have_history:
+            new_color = "#5ab0e8" if is_dark else "#0284C7"
+        else:
+            new_color = canvas_bg
+
+        accent_strip.configure(bg=new_color)
+        self.item_data[oid]["accent_color_normal"] = new_color
+
     def _create_badge(self, parent, text, bg, fg, border_color):
         from config import sc
         badge = tk.Label(
@@ -602,8 +630,9 @@ class TreeviewListboxWrapper(ttk.Frame):
             except Exception:
                 reg_row = {}
 
-        has_problem = self.main_window._get_cached_problem(oid) if hasattr(self.main_window, "_get_cached_problem") else False
+        has_problem = self.main_window._problem_cache.get(oid, False) if hasattr(self.main_window, "_problem_cache") else False
         has_history = self.main_window._has_history(oid) if hasattr(self.main_window, "_has_history") else False
+        problems_have_history = self.main_window._problems_have_history(oid) if hasattr(self.main_window, "_problems_have_history") else False
         reviewed    = self.item_data[oid].get("reviewed", False)
 
         loaned_raw = obs_row.get("Loaned out", False)
@@ -614,11 +643,11 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         if reviewed:
             accent_color = "#4CAF50" if is_dark else "#2E7D32"  # green
-        elif has_history and has_problem:
+        elif has_problem and problems_have_history:
             accent_color = "#BB86FC" if is_dark else "#7B1FA2"  # purple
         elif has_problem:
             accent_color = "#f28b82" if is_dark else "#C62828"  # red
-        elif has_history:
+        elif problems_have_history:
             accent_color = "#5ab0e8" if is_dark else "#0284C7"  # blue
         else:
             accent_color = canvas_bg  # visually transparent
@@ -629,7 +658,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             badge_label, badge_bg, badge_fg = "OK",   "#2E7D32", "#ffffff"
         elif has_problem:
             badge_label, badge_bg, badge_fg = "ERR",  "#C62828", "#ffffff"
-        elif has_history:
+        elif problems_have_history:
             badge_label, badge_bg, badge_fg = "CFCT", "#0284C7", "#ffffff"
         else:
             badge_label, badge_bg, badge_fg = "UKN",  "#FBC02D", "#1a1c1c"
