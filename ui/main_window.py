@@ -1159,6 +1159,7 @@ class ObjectProgramUI(
                     if "" not in choices:
                         choices = [""] + choices
                     widget = ttk.Combobox(frame, textvariable=var, values=choices)
+                    widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
                 elif ftype == "checkbox":
                     widget = ttk.Checkbutton(
                         frame,
@@ -1168,7 +1169,7 @@ class ObjectProgramUI(
                         offvalue="False",
                         command=lambda n=name, v=var: self._on_checkbox_change(n, v)
                     )
-                elif ftype == "multiline" or name == "Conservation Status":
+                elif ftype == "multiline" or name in ("Conservation Status", "Observation", "Comment", "ProblemDescription", "Problem Description"):
                     widget = tk.Text(
                         frame, height=3,
                         relief="flat", bd=0,
@@ -1181,6 +1182,7 @@ class ObjectProgramUI(
                     )
                     def bind_text_events(w):
                         w.bind("<KeyRelease>", self._on_text_change)
+                        w.bind("<FocusOut>", lambda e: self.commit_current_object(), add="+")
                     bind_text_events(widget)
                 else:
                     entry_container = tk.Frame(frame, bg=card_bg)
@@ -1201,7 +1203,7 @@ class ObjectProgramUI(
                     
                     def make_focus_handlers(w, fl, ec, default_bg):
                         def on_focus_in(e):
-                            is_dark = self.dark_mode_active if hasattr(self, "dark_mode_active") else False
+                            is_dark = getattr(self, "dark_mode_active", False)
                             fl.configure(bg="#a6e3a1" if is_dark else "#3b6934")
                         def on_focus_out(e):
                             fl.configure(bg=default_bg)
@@ -1220,7 +1222,13 @@ class ObjectProgramUI(
                 self.reg_entries[name] = widget
                 self.reg_entry_list.append(widget)
 
-                entry_container.grid(row=0, column=2, sticky="ew")
+                # Correctly place the widget or its container based on the type
+                if ftype == "multiline" or name in ("Conservation Status", "Observation", "Comment", "ProblemDescription", "Problem Description"):
+                    widget.grid(row=0, column=2, sticky="ew", pady=sc(2))
+                elif ftype in ("choice", "checkbox"):
+                    widget.grid(row=0, column=2, sticky="ew")
+                else:
+                    entry_container.grid(row=0, column=2, sticky="ew")
 
                 # Bind general keys
                 widget.bind("<Shift-Up>", self._reg_nav_up)
