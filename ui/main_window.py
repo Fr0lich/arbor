@@ -5004,12 +5004,14 @@ class ObjectProgramUI(
             self._list_dirty = True
             self._problem_cache.pop(oid, None)
 
+            # Invalidate row caches so dynamic badges pull fresh data
+            self._invalidate_row_cache()
             
             if {"Genus", "Species"} & set(reg_changed_fields):
                 self.invalidate_search_index()
 
-            if prob_changed_fields:
-                self.update_list_item_color(oid)
+            # Always update list item color so badges and text colors refresh instantly
+            self.update_list_item_color(oid)
 
             if reg_changed_fields and getattr(self.app, 'historical_dbs', None) and getattr(self, '_has_suggestions_set', None) is not None:
                 sug = self.collect_historical_suggestions(oid, show_all_override=False)
@@ -8711,14 +8713,14 @@ class ObjectProgramUI(
         has_problem = self._get_cached_problem(oid)
         has_history = self._problems_have_history(oid)
         
-        if reviewed and has_problem:
-            color = "#f0ad4e"
-        elif reviewed:
-            color = "#0bd45b"
+        if reviewed:
+            color = "#4CAF50" if self.dark_mode_active else "#2E7D32"
         elif has_problem and has_history:
-            color = "#bb6bd9"
+            color = "#BB86FC" if self.dark_mode_active else "#7B1FA2"
         elif has_problem:
-            color = "#d9534f"
+            color = "#f28b82" if self.dark_mode_active else "#C62828"
+        elif has_history:
+            color = "#5ab0e8" if self.dark_mode_active else "#0284C7"
             
         current_tags = list(self.object_list.item(oid, "tags") or [])
         current_tags = [t for t in current_tags if not t.startswith("color_")]
