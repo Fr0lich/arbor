@@ -3899,6 +3899,7 @@ class ObjectProgramUI(
 
         self._inline_search_var = tk.StringVar()
         self._inline_search_placeholder = "Search ID, Genus, Species..."
+        self._last_search_query = self._inline_search_placeholder
         self._inline_search_entry = tk.Entry(
             search_container,
             textvariable=self._inline_search_var,
@@ -4900,7 +4901,12 @@ class ObjectProgramUI(
             new = bool(var.get())
 
             # Only check for edits if the state has actually been edited since loading
-            loaded_val = self.loaded_problem_states.get(col, False)
+            db_val = False
+            if col in self.app.df_obs.columns:
+                val = self.app.df_obs.loc[oid, col]
+                db_val = bool(val) if not pd.isna(val) else False
+
+            loaded_val = self.loaded_problem_states.get(col, db_val)
 
             if col not in self.app.df_obs.columns:
                 self.app.df_obs[col] = False
@@ -5521,14 +5527,13 @@ class ObjectProgramUI(
                         widget.configure(values=vals)
 
             for prob_col, v in self.problem_vars.items():
-                obs_val = bool(obs.get(prob_col, False))
-
+                val = obs.get(prob_col, False)
+                obs_val = bool(val) if not pd.isna(val) else False
 
                 if prob_col in self.problem_to_field:
                     field = self.problem_to_field[prob_col]
                     raw_val = reg.get(field)
-
-                
+                    
                     if prob_col == "Other_problem":
                         auto_val = False
                     else:
@@ -5580,6 +5585,7 @@ class ObjectProgramUI(
 
         self.app.redo_stacks.setdefault(oid, [])
 
+        self._validate_fields()
 
         self.highlight_fields_with_suggestions(oid)
 
@@ -7325,6 +7331,19 @@ class ObjectProgramUI(
     # ---- Live Search methods ----
     def _on_inline_search_key(self, event=None):
         """Debounce: wait 250ms after last keystroke before filtering."""
+        # Ignore non-text navigation/modifier keys
+        if event and event.keysym in (
+            "Up", "Down", "Return", "Escape", "Tab", 
+            "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R",
+            "Left", "Right", "Home", "End"
+        ):
+            return
+
+        query = self._inline_search_var.get()
+        if hasattr(self, "_last_search_query") and query == self._last_search_query:
+            return
+        self._last_search_query = query
+
         if self._inline_search_job:
             self.root.after_cancel(self._inline_search_job)
         self._inline_search_job = self.root.after(250, self._apply_inline_search)
@@ -7359,6 +7378,7 @@ class ObjectProgramUI(
 
     def _clear_inline_search(self, event=None):
         self._inline_search_var.set("")
+        self._last_search_query = self._inline_search_placeholder
         self._search_count_label.config(text="")
         self._inline_search_entry.delete(0, tk.END)
         self._inline_search_entry.insert(0, self._inline_search_placeholder)
@@ -8600,9 +8620,9 @@ class ObjectProgramUI(
         widget = self.reg_entries.get(field_name)
         if widget:
             try:
-                if isinstance(widget, tk.Text):
-                    # Classic Text widget — set background directly
-                    norm_bg = "#1e1e2e" if is_dark else "#ffffff"
+                if isinstance(widget, (tk.Text, tk.Entry)):
+                    # Classic Text/Entry widgets — set background directly
+                    norm_bg = "#181825" if is_dark else "#ffffff"
                     widget.config(background=tint if is_active else norm_bg)
                 elif isinstance(widget, ttk.Combobox):
                     widget.configure(style="Problem.TCombobox" if is_active else "TCombobox")

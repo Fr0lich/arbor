@@ -273,16 +273,30 @@ class SQLiteRepository:
             debug_error("load_sqlite: Observation table missing or unreadable", str(e))
             df_obs = pd.DataFrame()
 
-        try:
-            df_photo = pd.read_sql("SELECT * FROM Photo", conn)
-        except Exception as e:
-            debug_error("load_sqlite: Photo table missing or unreadable", str(e))
+        # Check optional tables using sqlite_master
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Photo'")
+        photo_exists = cursor.fetchone() is not None
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Log'")
+        log_exists = cursor.fetchone() is not None
+
+        if photo_exists:
+            try:
+                df_photo = pd.read_sql("SELECT * FROM Photo", conn)
+            except Exception as e:
+                debug_error("load_sqlite: Photo table unreadable", str(e))
+                df_photo = pd.DataFrame(columns=["ObjectID"])
+        else:
             df_photo = pd.DataFrame(columns=["ObjectID"])
 
-        try:
-            df_log = pd.read_sql("SELECT * FROM Log", conn)
-        except Exception as e:
-            debug_error("load_sqlite: Log table missing or unreadable", str(e))
+        if log_exists:
+            try:
+                df_log = pd.read_sql("SELECT * FROM Log", conn)
+            except Exception as e:
+                debug_error("load_sqlite: Log table unreadable", str(e))
+                df_log = pd.DataFrame()
+        else:
             df_log = pd.DataFrame()
             
         df_log = _normalise_log_dataframe(df_log)

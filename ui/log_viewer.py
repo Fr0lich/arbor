@@ -83,6 +83,16 @@ class LogViewerMixin:
 
         tk.Label(left_header, text="Recent Activity", font=FONT_HEADLINE, fg=COLORS["primary"], bg=COLORS["surface_container_low"]).pack(side="left")
 
+        btn_refresh = tk.Button(
+            left_header, text="↻ Refresh", font=FONT_TEXT,
+            bg=COLORS["surface_container_low"], fg=COLORS["primary"],
+            activebackground=COLORS["surface_container_highest"],
+            activeforeground=COLORS["primary"],
+            bd=0, cursor="hand2", padx=sc(8), pady=sc(2),
+            command=lambda: populate_activity_data()
+        )
+        btn_refresh.pack(side="left", padx=(sc(16), 0))
+
         lbl_desc = tk.Label(header, text="Track recently visited or edited objects", font=FONT_TEXT, fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_low"])
         lbl_desc.pack(side="right", padx=sc(16), pady=sc(16))
 
@@ -170,90 +180,104 @@ class LogViewerMixin:
         tree_e.pack(side="left", fill="both", expand=True)
         scroll_y_e.config(command=tree_e.yview)
 
-        # Populate Visited
-        recent_visited = []
-        if hasattr(self, "history_stack") and self.history_stack:
-            recent_visited = list(reversed(self.history_stack[-20:]))
-            for oid in recent_visited:
-                title = self.object_title(oid)
-                tree_v.insert("", "end", values=(oid, title))
+        def populate_activity_data():
+            # Clear existing items
+            tree_v.delete(*tree_v.get_children())
+            tree_e.delete(*tree_e.get_children())
 
-        # Populate Edits
-        df_log = getattr(self.app, "df_log", None)
-        if df_log is not None and not df_log.empty:
-            cols = df_log.columns
-            for row in reversed(list(df_log.itertuples(index=False, name=None))):
-                row_dict = dict(zip(cols, row))
-                tstamp = row_dict.get("Timestamp", "")
-                if "T" in str(tstamp):
-                    try:
-                        tstamp = str(tstamp).split('.')[0].replace("T", " ")
-                    except Exception:
-                        pass
-                action = row_dict.get("Action", "")
-                
-                # Map technical action names to user-friendly display labels
-                display_action = action
-                if action == "EDIT":
-                    display_action = "Manual Edit"
-                elif action == "RESOLVE_HISTORICAL_CONFLICT":
-                    display_action = "Conflict Resolver"
-                elif action == "CREATE_OBJECT_FAST":
-                    display_action = "Created Object"
+            # Populate Visited
+            recent_visited = []
+            if hasattr(self, "history_stack") and self.history_stack:
+                recent_visited = list(reversed(self.history_stack[-20:]))
+                for oid in recent_visited:
+                    title = self.object_title(oid)
+                    tree_v.insert("", "end", values=(oid, title))
 
-                obj_id = row_dict.get("ObjectID", "")
-                c_fields = row_dict.get("ChangedFields", "")
-                c_vals = row_dict.get("ChangedValues", "")
-                p_fields = row_dict.get("ProblemsChanged", "")
-                p_vals = row_dict.get("ProblemsChangedValues", "")
-                l_fields = row_dict.get("LocationChanged", "")
-                l_vals = row_dict.get("LocationChangedValues", "")
+            # Populate Edits
+            df_log = getattr(self.app, "df_log", None)
+            if df_log is not None and not df_log.empty:
+                cols = df_log.columns
+                for row in reversed(list(df_log.itertuples(index=False, name=None))):
+                    row_dict = dict(zip(cols, row))
+                    tstamp = row_dict.get("Timestamp", "")
+                    if "T" in str(tstamp):
+                        try:
+                            tstamp = str(tstamp).split('.')[0].replace("T", " ")
+                        except Exception:
+                            pass
+                    action = row_dict.get("Action", "")
+                    
+                    # Map technical action names to user-friendly display labels
+                    display_action = action
+                    if action == "EDIT":
+                        display_action = "Manual Edit"
+                    elif action == "RESOLVE_HISTORICAL_CONFLICT":
+                        display_action = "Conflict Resolver"
+                    elif action == "CREATE_OBJECT_FAST":
+                        display_action = "Created Object"
 
-                changes_parts = []
-                if c_fields and str(c_fields).strip() and str(c_fields) != "(no changes)":
-                    val_str = str(c_vals).strip()
-                    if val_str:
-                        parts = []
-                        for p in val_str.split(" | "):
-                            if "  " in p:
-                                p = p.replace("  ", " → ")
-                            parts.append(p)
-                        val_str = ", ".join(parts)
-                        changes_parts.append(f"Data: {val_str}")
-                    else:
-                        changes_parts.append(f"Data: {c_fields}")
+                    obj_id = row_dict.get("ObjectID", "")
+                    c_fields = row_dict.get("ChangedFields", "")
+                    c_vals = row_dict.get("ChangedValues", "")
+                    p_fields = row_dict.get("ProblemsChanged", "")
+                    p_vals = row_dict.get("ProblemsChangedValues", "")
+                    l_fields = row_dict.get("LocationChanged", "")
+                    l_vals = row_dict.get("LocationChangedValues", "")
 
-                if p_fields and str(p_fields).strip():
-                    val_str = str(p_vals).strip()
-                    if val_str:
-                        parts = []
-                        for p in val_str.split(" | "):
-                            if "  " in p:
-                                p = p.replace("  ", " → ")
-                            parts.append(p)
-                        val_str = ", ".join(parts)
-                        changes_parts.append(f"Problems: {val_str}")
-                    else:
-                        changes_parts.append(f"Problems: {p_fields}")
+                    changes_parts = []
+                    if c_fields and str(c_fields).strip() and str(c_fields) != "(no changes)":
+                        val_str = str(c_vals).strip()
+                        if val_str:
+                            parts = []
+                            for p in val_str.split(" | "):
+                                if "  " in p:
+                                    p = p.replace("  ", " → ")
+                                parts.append(p)
+                            val_str = ", ".join(parts)
+                            changes_parts.append(f"Data: {val_str}")
+                        else:
+                            changes_parts.append(f"Data: {c_fields}")
 
-                if l_fields and str(l_fields).strip():
-                    val_str = str(l_vals).strip()
-                    if val_str:
-                        parts = []
-                        for p in val_str.split(" | "):
-                            if "  " in p:
-                                p = p.replace("  ", " → ")
-                            parts.append(p)
-                        val_str = ", ".join(parts)
-                        changes_parts.append(f"Location: {val_str}")
-                    else:
-                        changes_parts.append(f"Location: {l_fields}")
+                    if p_fields and str(p_fields).strip():
+                        val_str = str(p_vals).strip()
+                        if val_str:
+                            parts = []
+                            for p in val_str.split(" | "):
+                                if "  " in p:
+                                    p = p.replace("  ", " → ")
+                                parts.append(p)
+                            val_str = ", ".join(parts)
+                            changes_parts.append(f"Problems: {val_str}")
+                        else:
+                            changes_parts.append(f"Problems: {p_fields}")
 
-                changes = " | ".join(changes_parts)
-                if not changes and c_fields == "(no changes)":
-                    changes = "(no changes)"
+                    if l_fields and str(l_fields).strip():
+                        val_str = str(l_vals).strip()
+                        if val_str:
+                            parts = []
+                            for p in val_str.split(" | "):
+                                if "  " in p:
+                                    p = p.replace("  ", " → ")
+                                parts.append(p)
+                            val_str = ", ".join(parts)
+                            changes_parts.append(f"Location: {val_str}")
+                        else:
+                            changes_parts.append(f"Location: {l_fields}")
 
-                tree_e.insert("", "end", values=(obj_id, tstamp, display_action, changes))
+                    changes = " | ".join(changes_parts)
+                    if not changes and c_fields == "(no changes)":
+                        changes = "(no changes)"
+
+                    tree_e.insert("", "end", values=(obj_id, tstamp, display_action, changes))
+            
+            # Reset button state
+            try:
+                update_btn_state()
+            except Exception:
+                pass
+
+        # Populate initially on show
+        populate_activity_data()
 
         # Helper functions to fetch selected ObjectID across tabs
         def get_selected_oid():
