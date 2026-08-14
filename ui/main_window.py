@@ -38,25 +38,37 @@ from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
 from models import AppState
 from utils import debug_error
 
-def is_light_color(hex_color):
-    hex_color = hex_color.lstrip('#')
-    if len(hex_color) == 3:
-        hex_color = "".join(c*2 for c in hex_color)
+def is_light_color(color, widget=None):
+    if not color:
+        return True
     try:
-        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-    except ValueError:
+        if widget:
+            r_16, g_16, b_16 = widget.winfo_rgb(color)
+            r, g, b = r_16 // 256, g_16 // 256, b_16 // 256
+        else:
+            hex_color = color.lstrip('#')
+            if len(hex_color) == 3:
+                hex_color = "".join(c*2 for c in hex_color)
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    except Exception:
         return True
     brightness = (r * 299 + g * 587 + b * 114) / 1000
     return brightness > 127
 
-def adjust_color_brightness(hex_color, factor):
-    hex_color = hex_color.lstrip('#')
-    if len(hex_color) == 3:
-        hex_color = "".join(c*2 for c in hex_color)
+def adjust_color_brightness(color, factor, widget=None):
+    if not color:
+        return "#ffffff"
     try:
-        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-    except ValueError:
-        return "#" + hex_color
+        if widget:
+            r_16, g_16, b_16 = widget.winfo_rgb(color)
+            r, g, b = r_16 // 256, g_16 // 256, b_16 // 256
+        else:
+            hex_color = color.lstrip('#')
+            if len(hex_color) == 3:
+                hex_color = "".join(c*2 for c in hex_color)
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    except Exception:
+        return color
     
     r = max(0, min(255, int(r * (1 + factor))))
     g = max(0, min(255, int(g * (1 + factor))))
@@ -73,7 +85,7 @@ def make_tk_button_hoverable(btn, hover_bg=None, hover_fg=None):
         if active_bg and active_bg != orig_bg:
             hover_bg = active_bg
         else:
-            hover_bg = adjust_color_brightness(orig_bg, -0.1 if is_light_color(orig_bg) else 0.1)
+            hover_bg = adjust_color_brightness(orig_bg, -0.1 if is_light_color(orig_bg, btn) else 0.1, btn)
             
     btn._orig_bg = orig_bg
     btn._orig_fg = orig_fg
@@ -376,6 +388,7 @@ class ObjectProgramUI(
         self._list_dirty = False
         self._inline_search_job = None       # debounce timer for live search
         self._banner_timer_id = None
+        self._search_index_cache = None
 
         from backend.search import SearchEngine
         from backend.filter import FilterManager
@@ -7384,6 +7397,7 @@ class ObjectProgramUI(
 
     def invalidate_search_index(self):
         """Call after any data change that affects Genus, Species, or ObjectID."""
+        self._search_index_cache = None
         self.search_engine.invalidate_search_index()
 
     def _on_search_bar_enter(self, event=None):

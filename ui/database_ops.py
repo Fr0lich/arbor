@@ -482,6 +482,7 @@ class DatabaseOpsMixin:
         self._row_cache_dirty = False
         self._problem_cache = problem_cache
         self._cached_photo_counts = photo_counts
+        self._search_index_cache = search_index
 
 
     def save_session(self, action):
