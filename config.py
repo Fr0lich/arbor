@@ -40,7 +40,7 @@ def load_prefs():
             with open(_PREFS_PATH, "r", encoding="utf-8") as f:
                 _prefs_cache = json.load(f)
                 return _prefs_cache
-        except Exception as e:  # Fix: Replace bare except
+        except Exception as e:
             pass
     _prefs_cache = {}
     return _prefs_cache
@@ -60,18 +60,18 @@ def save_prefs(prefs):
         try:
             with open(_PREFS_PATH, "w", encoding="utf-8") as f:
                 json.dump(_prefs_cache, f, indent=2)
-        except Exception as e:  # Fix: Replace bare except
+        except Exception as e:
             pass
 
     if root:
         if _save_job_id is not None:
             try:
                 root.after_cancel(_save_job_id)
-            except Exception as e:  # Fix: Replace bare except
+            except Exception as e:
                 pass
         try:
             _save_job_id = root.after(100, _do_write)
-        except Exception as e:  # Fix: Replace bare except
+        except Exception as e:
             # Fallback if scheduler fails
             _do_write()
     else:
@@ -99,7 +99,7 @@ def add_recent_file(path):
     try:
         mtime = os.path.getmtime(path)
         modified = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
-    except Exception as e:  # Fix: Replace bare except
+    except Exception as e:
         modified = ""
     prefs = load_prefs()
     recent = [r for r in prefs.get("recent_files", []) if r.get("path") != path]

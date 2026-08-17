@@ -103,7 +103,7 @@ def _read_log_level_from_disk() -> str:
             with open(prefs_path, "r", encoding="utf-8") as f:
                 prefs = json.load(f)
                 return prefs.get("advanced", {}).get("log_verbosity", "ERROR")
-    except Exception as e:  # Fix: Replace bare except
+    except Exception as e:
         pass
     return "ERROR"
 
@@ -150,7 +150,7 @@ def _flush_log_queue() -> None:
         log_path = get_session_log_path()
         with open(log_path, "a", encoding="utf-8") as f:
             f.write("\n".join(entries) + "\n")
-    except Exception as e:  # Fix: Replace bare except
+    except Exception as e:
         pass
 
 
@@ -177,7 +177,7 @@ def debug_error(context: str, extra: str = "", is_crash: bool = False) -> None:
     try:
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(msg + "\n" + ("-" * 80) + "\n")
-    except Exception as e:  # Fix: Replace bare except
+    except Exception as e:
         pass
 
 
