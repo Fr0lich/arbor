@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import pandas as pd
 from config import sc
 from repository import REVIEWED_COLUMN
 
@@ -26,7 +27,6 @@ class DashboardMixin:
                 self.dash_embedded_frame.pack(side="bottom", fill="x", pady=(10, 0))
 
             self.update_dashboard()
-
 
     def _build_dashboard_ui(self, parent, is_embedded=False):
         container = ttk.Frame(parent)
@@ -61,40 +61,116 @@ class DashboardMixin:
 
         self.update_dashboard()
 
-
     def show_statistics(self):
         if self.app.df_reg is None or self.app.df_obs is None:
             messagebox.showinfo("No data", "Load an Excel file first")
             return
 
         win = tk.Toplevel(self.root)
-        win.title("Statistics")
+        win.title("Database Statistics")
         import utils
-        utils.center_and_fit_toplevel(win, 520, 720)
+        try:
+            utils.center_and_fit_toplevel(win, 650, 800)
+        except Exception:
+            win.geometry("650x800")
         win.bind("<Escape>", lambda e: win.destroy())
 
-        canvas = tk.Canvas(win)
-        scrollbar = ttk.Scrollbar(win, orient="vertical", command=canvas.yview)
-        frame = ttk.Frame(canvas, padding=16)
+        # Initialize Fonts
+        import tkinter.font as tkFont
+        families = tkFont.families()
+        ui_family = "Hanken Grotesk" if "Hanken Grotesk" in families else "Helvetica" if "Helvetica" in families else "Segoe UI" if "Segoe UI" in families else "sans-serif"
+        mono_family = "JetBrains Mono" if "JetBrains Mono" in families else "Consolas" if "Consolas" in families else "Courier New"
 
-        frame.bind(
+        FONT_UI = (ui_family, sc(10))
+        FONT_UI_BOLD = (ui_family, sc(10), "bold")
+        FONT_UI_LG = (ui_family, sc(12), "bold")
+        FONT_MONO_SM = (mono_family, sc(8))
+
+        COLORS = {
+            "bg": "#f9f9f9",
+            "surface": "#ffffff",
+            "surface_dim": "#e8e8e8",
+            "border": "#d1d1d1",
+            "text": "#1a1c1c",
+            "text_muted": "#444748",
+            "primary": "#000000",
+            "on_primary": "#ffffff",
+            "success": "#3b6934",
+            "warning": "#f59e0b",
+            "error": "#ba1a1a",
+        }
+
+        win.configure(bg=COLORS["bg"])
+
+        # Header
+        header = tk.Frame(win, bg=COLORS["surface"], height=sc(60))
+        header.pack(fill="x", side="top")
+        header.pack_propagate(False)
+        tk.Frame(header, bg=COLORS["border"], height=1).pack(fill="x", side="bottom")
+
+        tk.Label(header, text="DATABASE STATISTICS", font=FONT_UI_LG, fg=COLORS["primary"], bg=COLORS["surface"]).pack(side="left", padx=sc(24), pady=sc(16))
+
+        # Footer
+        footer = tk.Frame(win, bg=COLORS["surface_dim"], height=sc(60))
+        footer.pack(fill="x", side="bottom")
+        footer.pack_propagate(False)
+        tk.Frame(footer, bg=COLORS["border"], height=1).pack(side="top", fill="x")
+
+        btn_close = tk.Button(footer, text="CLOSE", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(16), pady=sc(8), command=win.destroy)
+        btn_close.pack(side="right", padx=sc(16), pady=sc(12))
+
+        btn_save = tk.Button(footer, text="SAVE SESSION STATS", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), pady=sc(8), command=self.save_session_stats)
+        btn_save.pack(side="right", padx=sc(8), pady=sc(12))
+
+        # Main Scrollable Area
+        main_area = tk.Frame(win, bg=COLORS["bg"])
+        main_area.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(main_area, bg=COLORS["bg"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_area, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=COLORS["bg"])
+
+        scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        canvas.create_window((0, 0), window=frame, anchor="nw")
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=win.winfo_width())
+
+        def _on_canvas_configure(e):
+            canvas.itemconfig(canvas.find_withtag("all")[0], width=e.width)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
+        # Mousewheel
+        def _on_mousewheel(event):
+            try:
+                if canvas.winfo_exists():
+                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            except Exception:
+                pass
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _cleanup(event=None):
+            if event and event.widget != win:
+                return
+            try:
+                canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+        win.bind("<Destroy>", _cleanup, add="+")
+
+        # Stats calculations
         total = len(self.app.df_reg)
         if total == 0:
-            ttk.Label(frame, text="No data loaded").pack()
+            tk.Label(scrollable_frame, text="No data loaded", font=FONT_UI, bg=COLORS["bg"], fg=COLORS["text_muted"]).pack(pady=sc(20))
             return
 
-        reviewed_count = int(self.app.df_obs[REVIEWED_COLUMN].sum())
+        reviewed_count = int(self.app.df_obs[REVIEWED_COLUMN].sum()) if REVIEWED_COLUMN in self.app.df_obs.columns else 0
         not_reviewed = total - reviewed_count
 
-        # Fast vectorized problem series helper
         def _get_prob_series(prob_col, subset_idx=None):
             idx = self.app.df_reg.index if subset_idx is None else subset_idx
             obs_s = pd.Series(False, index=idx)
@@ -114,7 +190,7 @@ class DashboardMixin:
         if hasattr(self, "_problem_cache") and len(self._problem_cache) >= total:
             with_problems = sum(1 for oid in self.app.df_reg.index if self._problem_cache.get(oid, False))
         else:
-            cols = [p for p in self.problem_columns if p in self.app.df_obs.columns]
+            cols = [p for p in getattr(self, "problem_columns", []) if p in self.app.df_obs.columns]
             if cols:
                 with_problems = int(self.app.df_obs[cols].any(axis=1).sum())
             else:
@@ -123,35 +199,50 @@ class DashboardMixin:
         def pct(n):
             return f"{int(n / total * 100)}%" if total else "0%"
 
-        def add_section(title, row_start):
-            ttk.Label(
-                frame, text=title, font=("Segoe UI", 11, "bold")
-            ).grid(row=row_start, column=0, columnspan=2, sticky="w", pady=(16, 6))
-            return row_start + 1
+        # UI Builders
+        def create_card(title, parent=scrollable_frame):
+            card = tk.Frame(parent, bg=COLORS["surface"], highlightbackground=COLORS["border"], highlightthickness=1)
+            card.pack(fill="x", padx=sc(24), pady=(sc(24), 0))
 
-        def add_row(label, value, row, bold=False):
-            font = ("Segoe UI", 9, "bold") if bold else ("Segoe UI", 9)
-            ttk.Label(frame, text=label, foreground="gray").grid(
-                row=row, column=0, sticky="w", padx=(12, 20), pady=1
-            )
-            ttk.Label(frame, text=value, font=font).grid(
-                row=row, column=1, sticky="w", pady=1
-            )
+            card_header = tk.Frame(card, bg=COLORS["surface_dim"])
+            card_header.pack(fill="x")
+            tk.Label(card_header, text=title.upper(), font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface_dim"]).pack(side="left", padx=sc(16), pady=sc(10))
+            tk.Frame(card, bg=COLORS["border"], height=1).pack(fill="x")
 
-        r = 0
+            content = tk.Frame(card, bg=COLORS["surface"])
+            content.pack(fill="x", padx=sc(16), pady=sc(16))
+            return content
 
-        # --- Oversikt ---
-        r = add_section("Overall Statistics", r)
-        add_row("Total objects", str(total), r); r += 1
-        add_row("Reviewed", f"{reviewed_count}  ({pct(reviewed_count)})", r, bold=reviewed_count > 0); r += 1
-        add_row("Not reviewed", f"{not_reviewed}  ({pct(not_reviewed)})", r); r += 1
-        add_row("With problems", f"{with_problems}  ({pct(with_problems)})", r, bold=with_problems > 0); r += 1
-        add_row("Currently filtered", f"{len(self.app.active_object_ids)} of {total}", r); r += 1
+        def add_row(parent, label, value, bold=False, value_color=COLORS["text"]):
+            row = tk.Frame(parent, bg=COLORS["surface"])
+            row.pack(fill="x", pady=sc(4))
+            tk.Label(row, text=label, font=FONT_UI, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(side="left")
+            font = FONT_UI_BOLD if bold else FONT_UI
+            tk.Label(row, text=str(value), font=font, fg=value_color, bg=COLORS["surface"]).pack(side="right")
+            return row
 
-        # --- Session Statistics ---
-        ttk.Separator(frame, orient="horizontal").grid(row=r, column=0, columnspan=2, sticky="ew", pady=8); r += 1
-        r = add_section("Session Statistics", r)
+        # Card 1: Overall
+        c_overall = create_card("OVERALL STATISTICS")
+        add_row(c_overall, "Total objects", total, bold=True)
+        add_row(c_overall, "Reviewed", f"{reviewed_count}  ({pct(reviewed_count)})", bold=reviewed_count > 0, value_color=COLORS["success"] if reviewed_count > 0 else COLORS["text"])
+        add_row(c_overall, "Not reviewed", f"{not_reviewed}  ({pct(not_reviewed)})")
+        add_row(c_overall, "With problems", f"{with_problems}  ({pct(with_problems)})", bold=with_problems > 0, value_color=COLORS["error"] if with_problems > 0 else COLORS["text"])
+        active_count = len(self.app.active_object_ids) if hasattr(self.app, "active_object_ids") else 0
+        add_row(c_overall, "Currently filtered", f"{active_count} of {total}")
 
+        # Progress bar
+        tk.Frame(c_overall, bg=COLORS["border"], height=1).pack(fill="x", pady=sc(12))
+        tk.Label(c_overall, text="REVIEW PROGRESS", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", pady=(0,sc(4)))
+
+        prog_frame = tk.Frame(c_overall, bg=COLORS["surface_dim"], height=sc(12), highlightbackground=COLORS["border"], highlightthickness=1)
+        prog_frame.pack(fill="x")
+        prog_frame.pack_propagate(False)
+        pct_val = reviewed_count / total if total > 0 else 0
+        if pct_val > 0:
+            tk.Frame(prog_frame, bg=COLORS["success"]).place(relwidth=pct_val, relheight=1.0)
+
+        # Card 2: Session Statistics
+        c_session = create_card("SESSION STATISTICS")
         session_reviewed = 0
         problems_solved_total = 0
         problems_solved_breakdown = {}
@@ -167,7 +258,7 @@ class DashboardMixin:
                     newly_reviewed = (initial_obs[REVIEWED_COLUMN] == False) & (current_obs[REVIEWED_COLUMN] == True)
                     session_reviewed = int(newly_reviewed.sum())
 
-                for prob_col in self.problem_columns:
+                for prob_col in getattr(self, "problem_columns", []):
                     if prob_col in current_obs.columns and prob_col in initial_obs.columns:
                         solved = (initial_obs[prob_col] == True) & (current_obs[prob_col] == False)
                         solved_count = int(solved.sum())
@@ -178,47 +269,42 @@ class DashboardMixin:
                         new_prob = (initial_obs[prob_col] == False) & (current_obs[prob_col] == True)
                         new_problems_total += int(new_prob.sum())
 
-        add_row("Newly reviewed today", str(session_reviewed), r, bold=session_reviewed > 0); r += 1
-        add_row("Total problems solved", str(problems_solved_total), r, bold=problems_solved_total > 0); r += 1
+        add_row(c_session, "Newly reviewed today", session_reviewed, bold=session_reviewed > 0, value_color=COLORS["success"] if session_reviewed > 0 else COLORS["text"])
+        add_row(c_session, "Total problems solved", problems_solved_total, bold=problems_solved_total > 0, value_color=COLORS["success"] if problems_solved_total > 0 else COLORS["text"])
 
         if problems_solved_total > 0:
             for prob_name, cnt in problems_solved_breakdown.items():
-                add_row(f"  - {prob_name}", f"{cnt} solved", r); r += 1
+                add_row(c_session, f"  └ {prob_name}", f"{cnt} solved", value_color=COLORS["text_muted"])
 
-        add_row("Problems Observed Today", str(new_problems_total), r); r += 1
+        add_row(c_session, "Problems Observed Today", new_problems_total, bold=new_problems_total > 0, value_color=COLORS["warning"] if new_problems_total > 0 else COLORS["text"])
 
-        # --- Problemer ---
-        ttk.Separator(frame, orient="horizontal").grid(row=r, column=0, columnspan=2, sticky="ew", pady=8); r += 1
-        r = add_section("Total Problems", r)
-
-        for prob_col in self.problem_columns:
+        # Card 3: Total Problems
+        probs_content = None
+        for prob_col in getattr(self, "problem_columns", []):
             if prob_col in self.app.df_obs.columns:
                 count = int(_get_prob_series(prob_col).sum())
-                label = prob_col.replace("_", " ")
-                add_row(label, f"{count}  ({pct(count)})", r, bold=count > 0)
-                r += 1
+                if count > 0:
+                    if probs_content is None:
+                        probs_content = create_card("TOTAL PROBLEMS BREAKDOWN")
+                    label = prob_col.replace("_", " ")
+                    add_row(probs_content, label, f"{count}  ({pct(count)})", bold=True, value_color=COLORS["error"])
 
-        ttk.Separator(frame, orient="horizontal").grid(row=r, column=0, columnspan=2, sticky="ew", pady=8); r += 1
-        r = add_section("Problems in filtered", r)
-
-        for prob_col in self.problem_columns:
-            if prob_col in self.app.df_obs.columns:
-                if self.app.active_object_ids:
+        # Card 4: Problems in filtered
+        if hasattr(self.app, "active_object_ids") and self.app.active_object_ids:
+            filtered_total = len(self.app.active_object_ids)
+            filtered_content = None
+            for prob_col in getattr(self, "problem_columns", []):
+                if prob_col in self.app.df_obs.columns:
                     count = int(_get_prob_series(prob_col, self.app.active_object_ids).sum())
-                else:
-                    count = 0
-                label = prob_col.replace("_", " ")
-                # Percentage of filtered objects
-                filtered_total = len(self.app.active_object_ids)
-                pct_filtered = f"{int(count / filtered_total * 100)}%" if filtered_total else "0%"
-                add_row(label, f"{count}  ({pct_filtered})", r, bold=count > 0)
-                r += 1
+                    if count > 0:
+                        if filtered_content is None:
+                            filtered_content = create_card("PROBLEMS IN CURRENT FILTER")
+                        label = prob_col.replace("_", " ")
+                        pct_filtered = f"{int(count / filtered_total * 100)}%" if filtered_total else "0%"
+                        add_row(filtered_content, label, f"{count}  ({pct_filtered})", bold=True, value_color=COLORS["error"])
 
-        # --- Per etasje ---
+        # Card 5: Per floor
         if "Floor" in self.app.df_obs.columns:
-            ttk.Separator(frame, orient="horizontal").grid(row=r, column=0, columnspan=2, sticky="ew", pady=8); r += 1
-            r = add_section("Objects per floor", r)
-
             floor_counts = (
                 self.app.df_obs["Floor"]
                 .replace("", float("nan"))
@@ -226,21 +312,16 @@ class DashboardMixin:
                 .value_counts()
                 .sort_index()
             )
-            for floor_val, count in floor_counts.items():
-                add_row(f"Floor {floor_val}", str(count), r)
-                r += 1
-
             no_floor = int((self.app.df_obs["Floor"].astype(str).str.strip() == "").sum())
-            if no_floor:
-                add_row("No floor set", str(no_floor), r)
-                r += 1
+            if not floor_counts.empty or no_floor > 0:
+                c_floor = create_card("OBJECTS PER FLOOR")
+                for floor_val, count in floor_counts.items():
+                    add_row(c_floor, f"Floor {floor_val}", count)
+                if no_floor:
+                    add_row(c_floor, "No floor set", no_floor, value_color=COLORS["text_muted"])
 
-        btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=r, column=0, columnspan=2, sticky="ew", pady=20)
-
-        ttk.Button(btn_frame, text="Close", command=win.destroy).pack(side="right", padx=5)
-        ttk.Button(btn_frame, text="Save Session Stats", command=self.save_session_stats).pack(side="left", padx=5)
-
+        # Add bottom padding
+        tk.Frame(scrollable_frame, bg=COLORS["bg"], height=sc(24)).pack(fill="x")
 
     def save_session_stats(self):
         import os, csv
@@ -257,10 +338,9 @@ class DashboardMixin:
         if hasattr(self, "_problem_cache") and len(self._problem_cache) >= total:
             problems = sum(1 for oid in self.app.df_reg.index if self._problem_cache.get(oid, False))
         else:
-            cols = [p for p in self.problem_columns if p in self.app.df_obs.columns]
+            cols = [p for p in getattr(self, "problem_columns", []) if p in self.app.df_obs.columns]
             problems = int(self.app.df_obs[cols].any(axis=1).sum()) if cols else 0
 
-        # In a real app we'd track session duration, here we mock it or track from startup
         duration_mins = (datetime.now() - getattr(self.app, "session_start_time", datetime.now())).total_seconds() / 60
 
         file_exists = os.path.isfile(stats_file)
@@ -274,7 +354,6 @@ class DashboardMixin:
             messagebox.showinfo("Saved", f"Session statistics saved to:\n{stats_file}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save stats:\n{e}")
-
 
     def update_dashboard(self):
         if self.app.df_obs is None or self.app.df_reg is None:
@@ -290,30 +369,25 @@ class DashboardMixin:
         current_oid = self.app.current_object_id
         problems_count = 0
         if self.app.df_obs is not None and not self.app.df_obs.empty:
-            cols = [p for p in self.problem_columns if p in self.app.df_obs.columns]
+            cols = [p for p in getattr(self, "problem_columns", []) if p in self.app.df_obs.columns]
             if cols:
-                # PERFORMANCE OPTIMIZATION (Bolt): Vectorized check across df_obs to avoid slow Python loop with loc queries.
-                # Runs in pure C, accelerating dashboard updates and list operations by ~1000x.
                 has_prob_series = self.app.df_obs[cols].any(axis=1)
-                if current_oid is not None and self.object_loaded:
-                    # Exclude the currently loaded object to check it via problem_vars (live UI state)
+                if current_oid is not None and getattr(self, "object_loaded", False):
                     other_sum = has_prob_series.drop(current_oid, errors="ignore").sum()
                     current_has_prob = any(
                         self.problem_vars.get(p).get()
-                        for p in self.problem_columns
+                        for p in getattr(self, "problem_columns", [])
                         if self.problem_vars.get(p)
                     )
                     problems_count = int(other_sum) + (1 if current_has_prob else 0)
                 else:
                     problems_count = int(has_prob_series.sum())
 
-        # Update Window mode dashboard
         if hasattr(self, "dash_reviewed_lbl") and self.dash_reviewed_lbl.winfo_exists():
             self.dash_reviewed_lbl.config(text=f"Reviewed: {reviewed} / {total} ({pct}%)")
             self.dash_problems_lbl.config(text=f"Objects with Problems: {problems_count}")
             self.dash_progress["value"] = pct
 
-        # Update Embedded mode dashboard
         if hasattr(self, "dash_embedded_reviewed_lbl") and self.dash_embedded_reviewed_lbl.winfo_exists():
             self.dash_embedded_reviewed_lbl.config(text=f"Reviewed: {reviewed} / {total} ({pct}%)")
             self.dash_embedded_problems_lbl.config(text=f"Objects with Problems: {problems_count}")
