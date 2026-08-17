@@ -17,12 +17,15 @@ class AutosaveMixin:
         self._save_in_progress = True
         self.set_status_badge("autosaved", "⏳ Saving…")
 
+        # P1-B: Hold the data lock for the minimum time needed to snapshot
+        # all four DataFrames.  The lock is an RLock so the main thread can
+        # still acquire it recursively (e.g. during commit_current_object).
         try:
-            # Create thread-safe copies of dataframes to prevent write-modification conflicts
-            df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
-            df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
-            df_photo_copy = self.app.df_photo.copy() if self.app.df_photo is not None else None
-            df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
+            with self.app.df_lock:
+                df_reg_copy   = self.app.df_reg.copy()   if self.app.df_reg   is not None else None
+                df_obs_copy   = self.app.df_obs.copy()   if self.app.df_obs   is not None else None
+                df_photo_copy = self.app.df_photo.copy() if self.app.df_photo is not None else None
+                df_log_copy   = self.app.df_log.copy()   if getattr(self.app, 'df_log', None) is not None else None
         except Exception as e:
             self._save_in_progress = False
             self.set_status_badge("autosaved", "Save Error")
@@ -96,9 +99,12 @@ class AutosaveMixin:
                     if success:
                         ts = datetime.now().strftime("%H:%M:%S")
                         self.set_status_badge("autosaved", f"Autosaved ({ts})")
+                        # U2-F: Brief non-blocking banner so the user has clear
+                        # confirmation their work is safe, even in low-light conditions.
+                        self.show_banner("💾 Autosaved", "info", duration_ms=2000)
                     else:
                         self.set_status_badge("autosaved", "Autosave failed")
-                        self.set_status_badge("error", f"Autosave Error")
+                        self.show_banner("⚠ Autosave failed — check disk space", "error", duration_ms=6000)
 
                 if autosave_path.endswith(".json"):
                     self._write_pickle_async(autosave_path, on_autosave_complete)

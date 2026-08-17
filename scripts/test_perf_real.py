@@ -50,9 +50,10 @@ class MockWindow:
                 field = reg_dict.get(fname)
         return time.perf_counter() - start_time
 
-win = MockWindow()
-baseline_time = win.baseline()
-optimized_time = win.optimized()
-print(f"Baseline: {baseline_time:.6f}s")
-print(f"Optimized: {optimized_time:.6f}s")
-print(f"Improvement: {baseline_time / optimized_time:.2f}x faster")
+if __name__ == "__main__":
+    win = MockWindow()
+    baseline_time = win.baseline()
+    optimized_time = win.optimized()
+    print(f"Baseline: {baseline_time:.6f}s")
+    print(f"Optimized: {optimized_time:.6f}s")
+    print(f"Improvement: {baseline_time / optimized_time:.2f}x faster")

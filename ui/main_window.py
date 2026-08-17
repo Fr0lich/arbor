@@ -38,6 +38,87 @@ from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
 from models import AppState
 from utils import debug_error
 
+def is_light_color(color, widget=None):
+    if not color:
+        return True
+    try:
+        if widget:
+            r_16, g_16, b_16 = widget.winfo_rgb(color)
+            r, g, b = r_16 // 256, g_16 // 256, b_16 // 256
+        else:
+            hex_color = color.lstrip('#')
+            if len(hex_color) == 3:
+                hex_color = "".join(c*2 for c in hex_color)
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    except Exception:
+        return True
+    brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return brightness > 127
+
+def adjust_color_brightness(color, factor, widget=None):
+    if not color:
+        return "#ffffff"
+    try:
+        if widget:
+            r_16, g_16, b_16 = widget.winfo_rgb(color)
+            r, g, b = r_16 // 256, g_16 // 256, b_16 // 256
+        else:
+            hex_color = color.lstrip('#')
+            if len(hex_color) == 3:
+                hex_color = "".join(c*2 for c in hex_color)
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    except Exception:
+        return color
+    
+    r = max(0, min(255, int(r * (1 + factor))))
+    g = max(0, min(255, int(g * (1 + factor))))
+    b = max(0, min(255, int(b * (1 + factor))))
+    
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+def make_tk_button_hoverable(btn, hover_bg=None, hover_fg=None):
+    orig_bg = btn.cget("bg")
+    orig_fg = btn.cget("fg")
+    
+    if not hover_bg:
+        active_bg = btn.cget("activebackground")
+        if active_bg and active_bg != orig_bg:
+            hover_bg = active_bg
+        else:
+            hover_bg = adjust_color_brightness(orig_bg, -0.1 if is_light_color(orig_bg, btn) else 0.1, btn)
+            
+    btn._orig_bg = orig_bg
+    btn._orig_fg = orig_fg
+    btn._hover_bg = hover_bg
+    btn._hover_fg = hover_fg
+    
+    def on_enter(e):
+        if btn.cget("state") != "disabled":
+            h_bg = getattr(btn, "_hover_bg", hover_bg)
+            h_fg = getattr(btn, "_hover_fg", hover_fg)
+            if h_bg:
+                btn.config(bg=h_bg)
+            if h_fg:
+                btn.config(fg=h_fg)
+
+    def on_leave(e):
+        if btn.cget("state") != "disabled":
+            o_bg = getattr(btn, "_orig_bg", orig_bg)
+            o_fg = getattr(btn, "_orig_fg", orig_fg)
+            btn.config(bg=o_bg, fg=o_fg)
+
+    btn.bind("<Enter>", on_enter, add="+")
+    btn.bind("<Leave>", on_leave, add="+")
+
+def _apply_hover_to_all_tk_buttons(parent, main_ui=None):
+    for child in parent.winfo_children():
+        if child.winfo_class() == "Button":
+            if main_ui and child == getattr(main_ui, "reviewed_button", None):
+                pass
+            else:
+                make_tk_button_hoverable(child)
+        _apply_hover_to_all_tk_buttons(child, main_ui)
+
 class LabelWrapper:
     def __init__(self, real_label, ui):
         self.real = real_label
@@ -180,6 +261,19 @@ class ObjectProgramUI(
     LogViewerMixin
 ):
 # ---------- UI helpers ----------
+
+    def _has_history(self, oid) -> bool:
+        presence = getattr(self, "_history_presence_set", None)
+        if presence is not None:
+            return oid in presence or str(oid) in presence
+        return False
+
+    def _problems_have_history(self, oid) -> bool:
+        sug = getattr(self, "_has_suggestions_set", None)
+        if sug is None:
+            return False   # scan not complete yet
+        return oid in sug or str(oid) in sug
+
     @property
     def autoAdvanceOnReview(self):
         return self.auto_advance_var.get()
@@ -260,6 +354,18 @@ class ObjectProgramUI(
         self.layout_dynamic_update_var = tk.BooleanVar(value=True)
         self.large_reviewed_button_var = tk.BooleanVar(value=True)
         self.auto_advance_var = tk.BooleanVar(value=True)
+        self.auto_advance_history_var = tk.BooleanVar(value=False)
+
+        def _on_auto_advance_changed(*args):
+            if self.auto_advance_var.get() and self.auto_advance_history_var.get():
+                self.auto_advance_history_var.set(False)
+
+        def _on_auto_advance_history_changed(*args):
+            if self.auto_advance_history_var.get() and self.auto_advance_var.get():
+                self.auto_advance_var.set(False)
+
+        self.auto_advance_var.trace_add("write", _on_auto_advance_changed)
+        self.auto_advance_history_var.trace_add("write", _on_auto_advance_history_changed)
 
 
 
@@ -277,10 +383,11 @@ class ObjectProgramUI(
         self.recent_window = None
         self.sort_directions = {"ID": True, "Genus": True, "Species": True, "Status": True}
         self.status_badge_colors = {
-            "saved": {"bg": "#d4edda", "fg": "#155724"},
+            "saved":     {"bg": "#d4edda", "fg": "#155724"},
+            "saving":    {"bg": "#e8f4fd", "fg": "#1565c0"},   # U2-F: zero-latency "Saving…" state
             "autosaved": {"bg": "#e2f0fe", "fg": "#0a58ca"},
-            "unsaved": {"bg": "#fff3cd", "fg": "#856404"},
-            "error": {"bg": "#f8d7da", "fg": "#721c24"}
+            "unsaved":   {"bg": "#fff3cd", "fg": "#856404"},
+            "error":     {"bg": "#f8d7da", "fg": "#721c24"}
         }
 
         self.filter_mode = tk.StringVar(value="AND")
@@ -306,6 +413,7 @@ class ObjectProgramUI(
         self._list_dirty = False
         self._inline_search_job = None       # debounce timer for live search
         self._banner_timer_id = None
+        self._search_index_cache = None
 
         from backend.search import SearchEngine
         from backend.filter import FilterManager
@@ -373,7 +481,7 @@ class ObjectProgramUI(
         self.root.bind("<Control-l>", self._focus_first_location)
         self.root.bind("<Control-p>", self._focus_first_problem)
         self.root.bind("<Control-i>", self._focus_first_reg)
-        self.root.bind("<Control-o>", self._focus_object_list)
+        self.root.bind("<Control-o>", self.focus_search)
         self.root.bind("<Control-Shift-P>", self._focus_first_problem)
         self.root.bind("<F3>", self._focus_first_problem)
         self.root.bind("<Control-Shift-L>", self._focus_first_location)
@@ -414,6 +522,7 @@ class ObjectProgramUI(
 
 
         self.field_undo_stack = []
+        self.loaded_problem_states = {}
 
         if self.app.redo_stacks is None:
             self.app.redo_stacks = {}
@@ -472,6 +581,9 @@ class ObjectProgramUI(
 
         style.configure("Hover.TLabel", background="#eeeeee")
         style.configure("Hover.TFrame", background="#eeeeee")
+
+        # U2-E: Automatically apply hover to all tk.Button elements in main UI
+        _apply_hover_to_all_tk_buttons(self.root, self)
 
 
     def _get_http_session(self):
@@ -659,20 +771,38 @@ class ObjectProgramUI(
                 else:
                     widget.pack(side="left", fill="x", expand=True, ipady=sc(3))
             else:
+                entry_container = tk.Frame(container, bg=bg_col)
                 widget = tk.Entry(
-                    container, textvariable=var,
+                    entry_container, textvariable=var,
                     state="disabled" if field_def.get("readonly") else "normal",
                     font=(font_family, sc(font_size)),
                     bg=entry_bg, fg=entry_fg,
                     insertbackground=entry_insert,
-                    highlightthickness=1, highlightbackground=bd_col, highlightcolor=entry_insert,
+                    highlightthickness=1, highlightbackground=bd_col, highlightcolor=entry_bg,
                     relief="flat"
                 )
+                widget.pack(fill="x", expand=True, ipady=sc(3))
+                
+                focus_line = tk.Frame(entry_container, height=sc(2), bg=bg_col)
+                focus_line.pack(fill="x", side="bottom")
+                
+                def make_focus_handlers(w, fl, ec, default_bg):
+                    def on_focus_in(e):
+                        is_dark = self.dark_mode_active if hasattr(self, "dark_mode_active") else False
+                        fl.configure(bg="#a6e3a1" if is_dark else "#3b6934")
+                    def on_focus_out(e):
+                        fl.configure(bg=default_bg)
+                    w.bind("<FocusIn>", on_focus_in, add="+")
+                    w.bind("<FocusOut>", on_focus_out, add="+")
+                    
+                make_focus_handlers(widget, focus_line, entry_container, bg_col)
+                
                 widget.bind("<FocusOut>", lambda e: self.commit_current_object())
+                
                 if is_horiz:
-                    widget.pack(fill="x", expand=True, ipady=sc(3))
+                    entry_container.pack(fill="x", expand=True)
                 else:
-                    widget.pack(side="left", fill="x", expand=True, ipady=sc(3))
+                    entry_container.pack(side="left", fill="x", expand=True)
         
         self.location_entries.append(widget)
         widget.bind("<Shift-Up>", self._location_nav_up)
@@ -743,6 +873,7 @@ class ObjectProgramUI(
         return presets_frame
 
     def _build_vertical_location_ui(self):
+        from config import FONT_MONO_FAMILY
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2e" if is_dark else "#f3f3f3"
         fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
@@ -780,7 +911,7 @@ class ObjectProgramUI(
         
         loan_field = loc_config_dict.get("Loaned out")
         if loan_field:
-            row = self._create_loc_widget(content, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=False)
+            row = self._create_loc_widget(content, "Loaned out", "checkbox", loan_field, FONT_MONO_FAMILY, 10, bg_col, fg_col, bd_col, is_horiz=False)
             if row:
                 children = row.winfo_children()
                 if children:
@@ -790,6 +921,7 @@ class ObjectProgramUI(
                 row.pack(fill="x", pady=4)
 
     def _build_horizontal_location_ui(self):
+        from config import FONT_MONO_FAMILY
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2e" if is_dark else "#f3f3f3"
         fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
@@ -802,14 +934,14 @@ class ObjectProgramUI(
         hdr = tk.Frame(self.loc_frame_horizontal, bg=header_bg)
         hdr.pack(fill="x", pady=(2, 4))
         
-        title = tk.Label(hdr, text="LOCATION", font=("JetBrains Mono", sc(10), "bold"), bg=header_bg, fg=fg_col)
+        title = tk.Label(hdr, text="LOCATION", font=(FONT_MONO_FAMILY, sc(10), "bold"), bg=header_bg, fg=fg_col)
         title.pack(side="left", padx=8, pady=4)
         
         loc_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("location", [])}
 
         loan_field = loc_config_dict.get("Loaned out")
         if loan_field:
-            row = self._create_loc_widget(hdr, "Loaned out", "checkbox", loan_field, "JetBrains Mono", 9, header_bg, fg_col, bd_col, is_horiz=True)
+            row = self._create_loc_widget(hdr, "Loaned out", "checkbox", loan_field, FONT_MONO_FAMILY, 9, header_bg, fg_col, bd_col, is_horiz=True)
             if row:
                 children = row.winfo_children()
                 if children:
@@ -833,7 +965,7 @@ class ObjectProgramUI(
             cell = tk.Frame(content, bg=bg_col)
             cell.grid(row=0, column=idx, sticky="nsew", padx=4)
             
-            row = self._create_loc_widget(cell, name, field.get("type", "text"), field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=True)
+            row = self._create_loc_widget(cell, name, field.get("type", "text"), field, FONT_MONO_FAMILY, 10, bg_col, fg_col, bd_col, is_horiz=True)
             if row:
                 row.pack(fill="x")
 
@@ -1052,6 +1184,7 @@ class ObjectProgramUI(
                     if "" not in choices:
                         choices = [""] + choices
                     widget = ttk.Combobox(frame, textvariable=var, values=choices)
+                    widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
                 elif ftype == "checkbox":
                     widget = ttk.Checkbutton(
                         frame,
@@ -1061,7 +1194,7 @@ class ObjectProgramUI(
                         offvalue="False",
                         command=lambda n=name, v=var: self._on_checkbox_change(n, v)
                     )
-                elif ftype == "multiline" or name == "Conservation Status":
+                elif ftype == "multiline" or name in ("Conservation Status", "Observation", "Comment", "ProblemDescription", "Problem Description"):
                     widget = tk.Text(
                         frame, height=3,
                         relief="flat", bd=0,
@@ -1074,18 +1207,36 @@ class ObjectProgramUI(
                     )
                     def bind_text_events(w):
                         w.bind("<KeyRelease>", self._on_text_change)
+                        w.bind("<FocusOut>", lambda e: self.commit_current_object(), add="+")
                     bind_text_events(widget)
                 else:
+                    entry_container = tk.Frame(frame, bg=card_bg)
                     widget = tk.Entry(
-                        frame, textvariable=var,
+                        entry_container, textvariable=var,
                         relief="flat", bd=0,
                         highlightthickness=1, highlightbackground=border_color,
-                        highlightcolor="#000000" if not is_dark else "#cdd6f4",
+                        highlightcolor="#ffffff" if is_dark else "#f3f3f3",
                         insertbackground="#000000" if not is_dark else "#cdd6f4",
                         bg="#ffffff" if not is_dark else "#181825",
                         fg="#1a1c1c" if not is_dark else "#cdd6f4",
                         font=("Hanken Grotesk", sc(10))
                     )
+                    widget.pack(fill="x", expand=True, ipady=sc(3))
+                    
+                    focus_line = tk.Frame(entry_container, height=sc(2), bg=card_bg)
+                    focus_line.pack(fill="x", side="bottom")
+                    
+                    def make_focus_handlers(w, fl, ec, default_bg):
+                        def on_focus_in(e):
+                            is_dark = getattr(self, "dark_mode_active", False)
+                            fl.configure(bg="#a6e3a1" if is_dark else "#3b6934")
+                        def on_focus_out(e):
+                            fl.configure(bg=default_bg)
+                        w.bind("<FocusIn>", on_focus_in, add="+")
+                        w.bind("<FocusOut>", on_focus_out, add="+")
+                        
+                    make_focus_handlers(widget, focus_line, entry_container, card_bg)
+
                     widget.bind("<KeyRelease>", lambda e, n=name, w=widget: self._on_autocomplete_key(e, n, w), add="+")
                     widget.bind("<KeyRelease>", lambda e: self.root.after(500, self._validate_fields), add="+")
                     widget.bind("<FocusOut>", lambda e, n=name, w=widget: self._run_fuzzy_match(n, w), add="+")
@@ -1096,7 +1247,13 @@ class ObjectProgramUI(
                 self.reg_entries[name] = widget
                 self.reg_entry_list.append(widget)
 
-                widget.grid(row=0, column=2, sticky="ew")
+                # Correctly place the widget or its container based on the type
+                if ftype == "multiline" or name in ("Conservation Status", "Observation", "Comment", "ProblemDescription", "Problem Description"):
+                    widget.grid(row=0, column=2, sticky="ew", pady=sc(2))
+                elif ftype in ("choice", "checkbox"):
+                    widget.grid(row=0, column=2, sticky="ew")
+                else:
+                    entry_container.grid(row=0, column=2, sticky="ew")
 
                 # Bind general keys
                 widget.bind("<Shift-Up>", self._reg_nav_up)
@@ -1158,7 +1315,10 @@ class ObjectProgramUI(
                 edit_frame,
                 text=name.replace("_", " "),
                 variable=var,
-                command=lambda: self.update_reg_fields_visibility(skip_snap=True)
+                command=lambda: (
+                    self.update_reg_fields_visibility(skip_snap=True),
+                    self.commit_current_object()
+                )
             )
             row = i // 2
             col = i % 2
@@ -1229,7 +1389,7 @@ class ObjectProgramUI(
                 if not val:
                     widget.focus_set()
                     return
-            except:
+            except Exception:
                 continue
 #----
 
@@ -1495,7 +1655,7 @@ class ObjectProgramUI(
             "obs": self.app.df_obs.loc[oid].copy(),
         }
 
-        MAX_UNDO = 30
+        from models import MAX_UNDO_PER_OBJECT  # P1-F: single constant, no scattered literals
         stack = self.app.undo_stacks.setdefault(oid, [])
 
         stack.append(state)
@@ -1504,9 +1664,9 @@ class ObjectProgramUI(
 
         if total > 500:
             for k in self.app.undo_stacks:
-                self.app.undo_stacks[k] = self.app.undo_stacks[k][-10:]
+                self.app.undo_stacks[k] = self.app.undo_stacks[k][-MAX_UNDO_PER_OBJECT:]
 
-        if len(stack) > MAX_UNDO:
+        if len(stack) > MAX_UNDO_PER_OBJECT:
             del stack[:10]
 
 
@@ -1897,10 +2057,11 @@ class ObjectProgramUI(
         if name == "Loaned out":
             from datetime import datetime
             val = str(var.get()).strip().lower()
-            if val in ("true", "1"):
-                self.reg_vars["Loaned out date"].set(datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
-            else:
-                self.reg_vars["Loaned out date"].set("")
+            if "Loaned out date" in self.reg_vars:
+                if val in ("true", "1"):
+                    self.reg_vars["Loaned out date"].set(datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
+                else:
+                    self.reg_vars["Loaned out date"].set("")
         self.commit_current_object()
 
 
@@ -2335,7 +2496,7 @@ class ObjectProgramUI(
                 if getattr(self, "_autosave_job", None):
                     try:
                         self.root.after_cancel(self._autosave_job)
-                    except:
+                    except Exception:
                         pass
                     self._autosave_job = None
                 if hasattr(self, "_schedule_autosave"):
@@ -2347,7 +2508,7 @@ class ObjectProgramUI(
                     from ui.tutorial import TutorialManager
                     try:
                         TutorialManager().close_tutorial()
-                    except:
+                    except Exception:
                         pass
 
             if scale_changed:
@@ -2469,7 +2630,7 @@ class ObjectProgramUI(
                 value = widget.get("1.0", tk.END)
             else:
                 value = widget.get()
-        except:
+        except Exception:
             return
 
         now = time.time()
@@ -2663,12 +2824,12 @@ class ObjectProgramUI(
             "reg": self.app.df_reg.loc[oid].copy(),
             "obs": self.app.df_obs.loc[oid].copy(),
         }
-        MAX_UNDO = 30
+        from models import MAX_UNDO_PER_OBJECT  # P1-F
         ustack = self.app.undo_stacks.setdefault(oid, [])
 
         ustack.append(current)
 
-        if len(ustack) > MAX_UNDO:
+        if len(ustack) > MAX_UNDO_PER_OBJECT:
             del ustack[:10]
 
         state = stack.pop()
@@ -3291,21 +3452,32 @@ class ObjectProgramUI(
 
         # Re-add visible panes in order: images at top, location at bottom
         if self.show_images_var.get():
-            self.middle_panes.add(self.right_frame, weight=3, minsize=sc(100))
+            # U2-A: 200px minimum keeps image panel usable when sash is dragged left
+            self.middle_panes.add(self.right_frame, weight=3)
             self.refresh_image_view()
 
-        if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
-            self.middle_panes.add(self.loc_frame_horizontal, weight=1, minsize=sc(80))
+        focus_active = hasattr(self, "focus_mode_var") and self.focus_mode_var.get()
+        show_loc = not (focus_active and not self.focus_visibility_vars.get("Location", tk.BooleanVar(value=True)).get())
+
+        if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get() and show_loc:
+            # U2-A: 150px minimum keeps location rows readable
+            self.middle_panes.add(self.loc_frame_horizontal, weight=1)
 
     def toggle_location_panel(self):
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
             if hasattr(self, 'loc_container'):
                 self.loc_container.pack_forget()
+                if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
+                    if str(self.left_bottom_container) in self.left_panes.panes():
+                        self.left_panes.forget(self.left_bottom_container)
             self._sync_middle_panes()
         else:
             if hasattr(self, 'loc_frame_horizontal') and str(self.loc_frame_horizontal) in self.middle_panes.panes():
                 self.middle_panes.forget(self.loc_frame_horizontal)
             if hasattr(self, 'loc_container'):
+                if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
+                    if str(self.left_bottom_container) not in self.left_panes.panes():
+                        self.left_panes.add(self.left_bottom_container, weight=0)
                 self.loc_container.pack(side="top", fill="x")
 
     def toggle_images_panel(self):
@@ -3445,18 +3617,27 @@ class ObjectProgramUI(
         self._status_bar_problems_lbl = _sb_label(sb_left, "problems", "PROBLEMS: —")
         _sb_sep(sb_left)
         _sb_label(sb_left, "last_save", "LAST_SAVE: —")
+        # U2-H: Filter-active badge — amber dot that appears when any filter is active.
+        # Created here; populated/cleared by update_object_count().
+        self._filter_active_badge = tk.Label(
+            sb_left, text="", bg=statusbar_bg, fg="#e07b39",
+            font=("Courier New", sc(9), "bold"), padx=4
+        )
+        self._filter_active_badge.pack(side="left")
 
         # Right links group
         sb_right = tk.Frame(sb_bottom, bg=statusbar_bg)
         sb_right.pack(side="right", fill="y")
 
         def _sb_link(parent, text, cmd):
-            lbl = tk.Label(parent, text=text, bg=statusbar_bg, fg="#aaaaaa",
+            # U2-C: #c8c8c8 on #1c1b1b achieves ~7.5:1 contrast ratio (WCAG AA+)
+            # replaces #aaaaaa which was only ~3.5:1 (fails AA)
+            lbl = tk.Label(parent, text=text, bg=statusbar_bg, fg="#c8c8c8",
                            font=("Courier New", sc(9)), padx=8, cursor="hand2")
             lbl.pack(side="right")
             lbl.bind("<Button-1>", lambda e: cmd())
             lbl.bind("<Enter>", lambda e: lbl.config(fg="#ffffff"))
-            lbl.bind("<Leave>", lambda e: lbl.config(fg="#aaaaaa"))
+            lbl.bind("<Leave>", lambda e: lbl.config(fg="#c8c8c8"))
             return lbl
 
         _sb_link(sb_right, "DB_STATUS",  lambda: None)   # placeholder — connect later
@@ -3671,11 +3852,13 @@ class ObjectProgramUI(
         self.review_progress = None
 
     
+        # U2-C: Bold weight and slightly larger font make the filter-active
+        # indicator legible at a glance under museum lighting conditions.
         self.filter_status_label = ttk.Label(
             left,
             text="",
-            foreground="#d9534f",
-            font=("Segoe UI", sc(8))
+            foreground="#c0392b",
+            font=("Segoe UI", sc(8), "bold")
         )
         self.filter_status_label.pack(fill="x", padx=6, pady=(0, 2))
 
@@ -3752,6 +3935,7 @@ class ObjectProgramUI(
 
         self._inline_search_var = tk.StringVar()
         self._inline_search_placeholder = "Search ID, Genus, Species..."
+        self._last_search_query = self._inline_search_placeholder
         self._inline_search_entry = tk.Entry(
             search_container,
             textvariable=self._inline_search_var,
@@ -3767,6 +3951,8 @@ class ObjectProgramUI(
         self._inline_search_entry.bind("<FocusOut>",    self._search_focus_out)
         self._inline_search_entry.bind("<Button-1>",    self._search_focus_in)
         self._inline_search_entry.bind("<Return>",      self._on_search_bar_enter)
+        self._inline_search_entry.bind("<Down>",        self._on_search_arrow_down)
+        self._inline_search_entry.bind("<Up>",          self._on_search_arrow_up)
         
         def _focus_list(event):
             self.object_list.focus_set()
@@ -3904,7 +4090,8 @@ class ObjectProgramUI(
 
         right = ttk.Frame(self.middle_panes, style="MiddlePane.TFrame")
         self.right_frame = right
-        self.middle_panes.add(right, weight=3, minsize=sc(100))
+        # U2-A: 200px minimum ensures image panel never collapses below usable size
+        self.middle_panes.add(right, weight=3)
 
         header = ttk.Frame(right, style="MiddlePane.TFrame")
         header.pack(fill="x", pady=(4, 4), padx=6)
@@ -4108,6 +4295,8 @@ class ObjectProgramUI(
         self.reviewed_var.trace_add("write", lambda *args: self.update_reviewed_button_state())
         self.reviewed_button.bind("<Enter>", self._on_reviewed_btn_enter)
         self.reviewed_button.bind("<Leave>", self._on_reviewed_btn_leave)
+        self.reviewed_button.bind("<ButtonPress-1>", self._on_reviewed_btn_press)
+        self.reviewed_button.bind("<ButtonRelease-1>", self._on_reviewed_btn_release)
 
         # Row 1b: Secondary action — clear problems checkbutton + status indicators
         action_row1b = ttk.Frame(action_bar, style="RightPane.TFrame")
@@ -4129,7 +4318,8 @@ class ObjectProgramUI(
             activebackground=bg_pane, activeforeground=fg_col,
             selectcolor=bg_col,
             relief="flat", bd=0, highlightthickness=0,
-            cursor="hand2"
+            cursor="hand2",
+            padx=sc(4), pady=sc(3)  # U2-B: explicit padding for larger click target
         )
         self.clear_problems_cb.pack(side="left", padx=4)
         self.add_tooltip(
@@ -4146,12 +4336,31 @@ class ObjectProgramUI(
             activebackground=bg_pane, activeforeground=fg_col,
             selectcolor=bg_col,
             relief="flat", bd=0, highlightthickness=0,
-            cursor="hand2"
+            cursor="hand2",
+            padx=sc(4), pady=sc(3)  # U2-B: explicit padding for larger click target
         )
         self.auto_next_cb.pack(side="left", padx=4)
         self.add_tooltip(
             self.auto_next_cb,
             "Automatically advance to the next item when marked as reviewed"
+        )
+
+        self.auto_next_history_cb = tk.Checkbutton(
+            action_row1b,
+            text="Auto-next with Historical Suggestion",
+            variable=self.auto_advance_history_var,
+            font=("Segoe UI", sc(9.5)),
+            bg=bg_pane, fg=fg_col,
+            activebackground=bg_pane, activeforeground=fg_col,
+            selectcolor=bg_col,
+            relief="flat", bd=0, highlightthickness=0,
+            cursor="hand2",
+            padx=sc(4), pady=sc(3)
+        )
+        self.auto_next_history_cb.pack(side="left", padx=4)
+        self.add_tooltip(
+            self.auto_next_history_cb,
+            "Automatically advance to the next unreviewed item with historical suggestions when marked as reviewed"
         )
 
         self.reviewed_time_label = ttk.Label(
@@ -4272,6 +4481,17 @@ class ObjectProgramUI(
                 self._status_bar_problems_lbl.config(
                     fg="#ff6b6b" if problems_count > 0 else "#e2e2e2"
                 )
+
+        # U2-H: Filter-active indicator — a small coloured dot next to the count
+        # gives an at-a-glance signal that the list is filtered, even in low light.
+        if hasattr(self, "_filter_active_badge"):
+            total = len(self.app.df_reg) if self.app.df_reg is not None else 0
+            shown = len(self.app.active_object_ids) if self.app.active_object_ids else 0
+            is_filtered = (shown < total) and total > 0
+            self._filter_active_badge.config(
+                text=" ● FILTER" if is_filtered else "",
+                fg="#e07b39"  # amber — visible in both light and dark themes
+            )
 
 
 
@@ -4732,28 +4952,28 @@ class ObjectProgramUI(
         # -------- PROBLEMS --------
         for col, var in self.problem_vars.items():
 
- 
             new = bool(var.get())
 
- 
-            old = bool(self.app.df_obs.loc[oid].get(col, False))
+            # Only check for edits if the state has actually been edited since loading
+            db_val = False
+            if col in self.app.df_obs.columns:
+                val = self.app.df_obs.loc[oid, col]
+                db_val = bool(val) if not pd.isna(val) else False
 
-  
+            loaded_val = self.loaded_problem_states.get(col, db_val)
+
             if col not in self.app.df_obs.columns:
                 self.app.df_obs[col] = False
 
-
-            if old != new:
+            if loaded_val != new:
                 ensure_undo()
                 self.app.df_obs.loc[oid, col] = new
 
                 prob_changed_fields.append(col)
-                prob_changed_values.append(f'{col}: "{old}"  "{new}"')
-
+                prob_changed_values.append(f'{col}: "{loaded_val}"  "{new}"')
                 
                 self._list_dirty = True
-
-
+                self.loaded_problem_states[col] = new
 
 
 
@@ -4816,10 +5036,32 @@ class ObjectProgramUI(
 
             self._list_dirty = True
             self._problem_cache.pop(oid, None)
+            s_oid = str(oid)
+            self._problem_cache.pop(s_oid, None)
+            if s_oid.isdigit():
+                self._problem_cache.pop(int(s_oid), None)
 
+            # Invalidate row caches so dynamic badges pull fresh data
+            self._invalidate_row_cache()
             
             if {"Genus", "Species"} & set(reg_changed_fields):
                 self.invalidate_search_index()
+
+            # Always update list item color so badges and text colors refresh instantly
+            self.update_list_item_color(oid)
+
+            if reg_changed_fields and getattr(self.app, 'historical_dbs', None) and getattr(self, '_has_suggestions_set', None) is not None:
+                sug = self.collect_historical_suggestions(oid, show_all_override=False)
+                has_real = any(k != "(No data found)" for vals in sug.values() for k in vals)
+                if has_real:
+                    self._has_suggestions_set.add(oid)
+                else:
+                    self._has_suggestions_set.discard(oid)
+
+                if hasattr(self, "_history_cache"):
+                    keys_to_remove = [k for k in self._history_cache if k[0] == oid]
+                    for k in keys_to_remove:
+                        self._history_cache.pop(k, None)
 
         
 
@@ -4865,10 +5107,7 @@ class ObjectProgramUI(
 
 
         loaned_raw = obs.get("Loaned out", False)
-        if isinstance(loaned_raw, str):
-            loaned = loaned_raw.strip().lower() == "true"
-        else:
-            loaned = bool(loaned_raw)
+        loaned = utils.parse_bool(loaned_raw)
 
 
   
@@ -4915,7 +5154,7 @@ class ObjectProgramUI(
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
         dialog.resizable(True, True)
-        dialog.minsize(550, 400)
+        dialog.minsize(sc(550), sc(400))  # U2-G: scaled to DPI
         dialog.grab_set()
 
         s = getattr(self, "_scale", 1.0)
@@ -5166,7 +5405,7 @@ class ObjectProgramUI(
             idx = sel[0]
             oid = self.app.active_object_ids[idx]
             
-            if self._is_searching():
+            if self._is_searching() or self.root.focus_get() == self._inline_search_entry:
                 return
                 
             if oid == self.app.current_object_id:
@@ -5218,6 +5457,16 @@ class ObjectProgramUI(
         return str(value)
 
     def load_object(self, oid, is_history_nav=False):
+        # Convert oid type for pandas index compatibility (checks string first, then integer if needed)
+        if oid not in self.reg_by_id.index:
+            try:
+                if str(oid).isdigit():
+                    int_oid = int(oid)
+                    if int_oid in self.reg_by_id.index:
+                        oid = int_oid
+            except Exception:
+                pass
+
         if hasattr(self, "clear_problems_var"):
             self.clear_problems_var.set(False)
         self.image_zoom_factor = 1.0
@@ -5339,7 +5588,8 @@ class ObjectProgramUI(
             
 
             for col, widget in self.reg_entries.items():
-                value = reg.get(col, "")
+                value = utils.fmt_pandas_val(reg.get(col, ""))
+
 
                 if isinstance(widget, tk.Text):
                     if not skip_heavy:
@@ -5353,14 +5603,13 @@ class ObjectProgramUI(
                         widget.configure(values=vals)
 
             for prob_col, v in self.problem_vars.items():
-                obs_val = bool(obs.get(prob_col, False))
-
+                val = obs.get(prob_col, False)
+                obs_val = bool(val) if not pd.isna(val) else False
 
                 if prob_col in self.problem_to_field:
                     field = self.problem_to_field[prob_col]
                     raw_val = reg.get(field)
-
-                
+                    
                     if prob_col == "Other_problem":
                         auto_val = False
                     else:
@@ -5377,6 +5626,11 @@ class ObjectProgramUI(
             # Apply problem row styles after all vars are set (traces fire via after_idle,
             # but we also call explicitly here to guarantee correct state on load)
             self._update_all_problem_row_styles()
+
+            # Save the loaded state of all problem checkbuttons so we can detect real edits later
+            self.loaded_problem_states = {
+                col: bool(v.get()) for col, v in self.problem_vars.items()
+            }
 
             self.reviewed_var.set(bool(obs.get(REVIEWED_COLUMN, False)))
 
@@ -5407,6 +5661,7 @@ class ObjectProgramUI(
 
         self.app.redo_stacks.setdefault(oid, [])
 
+        self._validate_fields()
 
         self.highlight_fields_with_suggestions(oid)
 
@@ -5547,7 +5802,7 @@ class ObjectProgramUI(
         win = tk.Toplevel(self.root)
         win.title(f"Error Log — {os.path.basename(log_path)}")
         win.resizable(True, True)
-        win.minsize(660, 420)
+        win.minsize(sc(660), sc(420))  # U2-G: scaled to DPI
         win.configure(bg="#1a1a2e")
 
         import utils
@@ -5692,52 +5947,8 @@ class ObjectProgramUI(
 
 
     def highlight_fields_with_suggestions(self, oid):
-        # Track the last background color set per field to skip redundant Tcl calls.
-        if not hasattr(self, "_field_bg_state"):
-            self._field_bg_state = {}
-
-        suggestions = self.collect_historical_suggestions(oid)
-
-        # Use cached reg row if available
-        if (not getattr(self, "_row_cache_dirty", True)
-                and self._cached_reg_dict is not None
-                and oid in self._cached_reg_dict):
-            reg_row = self._cached_reg_dict[oid]
-            def _get(field): return reg_row.get(field, "")
-        else:
-            reg = self.reg_by_id.loc[oid]
-            if isinstance(reg, pd.DataFrame):
-                reg = reg.iloc[0]
-            def _get(field): return reg.get(field, "")
-
-        def _set_bg(widget, field, color):
-            if self._field_bg_state.get(field) == color:
-                return  # already this color — skip Tcl call
-            try:
-                if isinstance(widget, tk.Text):
-                    widget.configure(bg=color)
-                else:
-                    widget.configure(background=color)
-                self._field_bg_state[field] = color
-            except Exception as e:
-                debug_error("Suppressed Error", str(e))
-
-        for field, widget in self.reg_entries.items():
-            if not widget:
-                continue
-            try:
-                raw_val = _get(field)
-                if isinstance(raw_val, pd.Series):
-                    raw_val = raw_val.iloc[0]
-
-                if self.is_unknown(raw_val):
-                    _set_bg(widget, field, "#ffe4b3")
-                elif field in suggestions:
-                    _set_bg(widget, field, "#fff3a3")
-                else:
-                    _set_bg(widget, field, "white")
-            except Exception as e:
-                debug_error("Suppressed Error", str(e))
+        for field in self.reg_entries:
+            self._refresh_field_background(field)
 
 
 
@@ -6323,7 +6534,10 @@ class ObjectProgramUI(
                 grid_frame,
                 text=name.replace("_", " "),
                 variable=var,
-                command=lambda: self.update_reg_fields_visibility(skip_snap=True)
+                command=lambda: (
+                    self.update_reg_fields_visibility(skip_snap=True),
+                    self.commit_current_object()
+                )
             )
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=8)
             self.problem_checkbuttons.append(cb)
@@ -6558,7 +6772,7 @@ class ObjectProgramUI(
         make_chk(p_status, "Not Reviewed (Pending)", self.filter_vars["Not_Reviewed"], COLORS["surface_tint"])
         make_chk(p_status, "Reviewed + Has Problem", self.filter_vars["Reviewed_With_Problem"], COLORS["error"])
         make_chk(p_status, "Problem + Has History", self.filter_vars["Problem_With_History"], COLORS["error"])
-        make_chk(p_status, "Has earlier database entry", self.filter_vars["Has_History"], COLORS["outline_variant"])
+        make_chk(p_status, "Has Suggestions from Books", self.filter_vars["Has_History"], COLORS["outline_variant"])
 
         m_pres = create_group(status_right, "Metadata Presence")
         tk.Label(m_pres, text="Comments", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w")
@@ -6698,7 +6912,7 @@ class ObjectProgramUI(
                 frame.config(bg=bg_color)
                 for child in getattr(frame, "_cached_children", []):
                     try: child.config(bg=bg_color)
-                    except: pass
+                    except Exception: pass
                         
         search_var.trace("w", on_search)
 
@@ -6902,7 +7116,7 @@ class ObjectProgramUI(
    
         if prob_col in self.problem_to_field:
             field = self.problem_to_field.get(prob_col)
-            if not field:
+            if not field or field not in reg.index:
                 return obs_val
 
             raw_val = reg.get(field, "")
@@ -6986,12 +7200,9 @@ class ObjectProgramUI(
         obs_dict = self._get_obs_dict()
 
         # Pre-populate a set of IDs that exist in historical databases to make fast_has_history O(1) set lookup
-        history_set = set()
-        if self.app.historical_dbs:
-            for db in self.app.historical_dbs:
-                reg_by_id = db.get("reg_by_id")
-                if reg_by_id is not None:
-                    history_set.update(reg_by_id.index)
+        history_set = getattr(self, "_has_suggestions_set", set())
+        if history_set is None:
+            history_set = set()
 
         building_var = self.filter_location_vars.get("Building")
         floor_var = self.filter_location_vars.get("Floor")
@@ -7111,29 +7322,62 @@ class ObjectProgramUI(
 
     def _get_cached_problem(self, oid):
         """Returns True if the object has any checked problem checkbox. Result is cached."""
-        if oid not in self._problem_cache:
-            try:
-                self._problem_cache[oid] = self.has_any_problem(
-                    oid,
-                    include_image_problems=(self.image_mode == "folder")
-                )
-            except Exception:
-                self._problem_cache[oid] = False
-        return self._problem_cache[oid]
+        if oid in self._problem_cache:
+            return self._problem_cache[oid]
+        s_oid = str(oid)
+        if s_oid in self._problem_cache:
+            return self._problem_cache[s_oid]
+        if s_oid.isdigit():
+            i_oid = int(s_oid)
+            if i_oid in self._problem_cache:
+                return self._problem_cache[i_oid]
+
+        # If not cached, calculate and store
+        try:
+            val = self.has_any_problem(
+                oid,
+                include_image_problems=(self.image_mode == "folder")
+            )
+            self._problem_cache[oid] = val
+            self._problem_cache[s_oid] = val
+            return val
+        except Exception:
+            self._problem_cache[oid] = False
+            return False
 
     def _has_history(self, oid):
         """Returns True if object appears in any loaded historical database."""
         if not self.app.historical_dbs:
             return False
+            
+        try:
+            lookup_key = int(oid) if str(oid).isdigit() else oid
+        except Exception:
+            lookup_key = oid
+
         for db in self.app.historical_dbs:
             reg_by_id = db.get("reg_by_id")
-            if reg_by_id is not None and oid in reg_by_id.index:
-                return True
+            if reg_by_id is not None:
+                if lookup_key in reg_by_id.index or str(oid) in reg_by_id.index:
+                    return True
         return False
 
     # ---- Live Search methods ----
     def _on_inline_search_key(self, event=None):
         """Debounce: wait 250ms after last keystroke before filtering."""
+        # Ignore non-text navigation/modifier keys
+        if event and event.keysym in (
+            "Up", "Down", "Return", "Escape", "Tab", 
+            "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R",
+            "Left", "Right", "Home", "End"
+        ):
+            return
+
+        query = self._inline_search_var.get()
+        if hasattr(self, "_last_search_query") and query == self._last_search_query:
+            return
+        self._last_search_query = query
+
         if self._inline_search_job:
             self.root.after_cancel(self._inline_search_job)
         self._inline_search_job = self.root.after(250, self._apply_inline_search)
@@ -7168,6 +7412,7 @@ class ObjectProgramUI(
 
     def _clear_inline_search(self, event=None):
         self._inline_search_var.set("")
+        self._last_search_query = self._inline_search_placeholder
         self._search_count_label.config(text="")
         self._inline_search_entry.delete(0, tk.END)
         self._inline_search_entry.insert(0, self._inline_search_placeholder)
@@ -7186,6 +7431,36 @@ class ObjectProgramUI(
             self._inline_search_entry.delete(0, tk.END)
             self._inline_search_entry.insert(0, self._inline_search_placeholder)
             self._inline_search_entry.config(foreground="gray")
+
+    def _on_search_arrow_down(self, event=None):
+        if not self.app.active_object_ids:
+            return "break"
+        sel = self.object_list.curselection()
+        if sel:
+            curr_idx = sel[0]
+            new_idx = min(curr_idx + 1, len(self.app.active_object_ids) - 1)
+        else:
+            new_idx = 0
+            
+        self.object_list.selection_clear(0, tk.END)
+        self.object_list.selection_set(new_idx)
+        self.object_list.see(new_idx)
+        return "break"
+
+    def _on_search_arrow_up(self, event=None):
+        if not self.app.active_object_ids:
+            return "break"
+        sel = self.object_list.curselection()
+        if sel:
+            curr_idx = sel[0]
+            new_idx = max(curr_idx - 1, 0)
+        else:
+            new_idx = 0
+            
+        self.object_list.selection_clear(0, tk.END)
+        self.object_list.selection_set(new_idx)
+        self.object_list.see(new_idx)
+        return "break"
 
     def _get_search_index(self):
         """
@@ -7247,6 +7522,7 @@ class ObjectProgramUI(
 
     def invalidate_search_index(self):
         """Call after any data change that affects Genus, Species, or ObjectID."""
+        self._search_index_cache = None
         self.search_engine.invalidate_search_index()
 
     def _on_search_bar_enter(self, event=None):
@@ -7262,6 +7538,19 @@ class ObjectProgramUI(
             return
         
         oid = self.app.active_object_ids[idx]
+        
+        # Commit current changes before loading the new object
+        if not self._is_navigating:
+            self._is_navigating = True
+            self.commit_current_object()
+            
+        if self._nav_idle_job:
+            try:
+                self.root.after_cancel(self._nav_idle_job)
+            except Exception:
+                pass
+        self._nav_idle_job = self.root.after(150, self._navigation_finished)
+        
         self.load_object(oid)
 
     def _is_searching(self):
@@ -7301,20 +7590,39 @@ class ObjectProgramUI(
         
         self.push_undo_state()
         
-        now = datetime.now().strftime("%d.%m.%Y %H:%M") if value else ""
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if value else ""
         
         for oid in selection:
-            self.app.redo_stacks.setdefault(oid, []).clear()
-            self.app.df_obs.loc[oid, REVIEWED_COLUMN] = value
-            self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = now
+            try:
+                lookup_key = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_obs.index else oid
+            except Exception:
+                lookup_key = oid
+
+            self.app.redo_stacks.setdefault(lookup_key, []).clear()
+            self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN] = value
+            self.app.df_obs.loc[lookup_key, REVIEWED_AT_COLUMN] = now
+
+            s_oid = str(oid)
+            self._problem_cache.pop(oid, None)
+            self._problem_cache.pop(s_oid, None)
+            if s_oid.isdigit():
+                self._problem_cache.pop(int(s_oid), None)
+
+            # Update item values so CardView item_data is synchronized
+            current_vals = list(self.object_list.item(oid, "values") or [])
+            if current_vals:
+                current_vals[0] = "☑" if value else "☐"
+                self.object_list.item(oid, values=current_vals)
+
             self.update_list_item_color(oid)
             
+        self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'])
         self.app.dirty = True
         self.update_dirty_ui()
-        self._problem_cache.clear()
         self._invalidate_row_cache()
         self.update_review_progress()
         self.update_dashboard()
+        self.update_reviewed_button_state()
         
         current_oid = self.app.current_object_id
         if current_oid in selection:
@@ -7399,7 +7707,7 @@ class ObjectProgramUI(
                         auto_val = False
                         if p in problem_mapping:
                             field = problem_mapping.get(p)
-                            if field:
+                            if field and field in reg_row:
                                 raw_val = reg_row.get(field, "")
                                 is_missing = (
                                     pd.isna(raw_val) or
@@ -7417,12 +7725,9 @@ class ObjectProgramUI(
 
         # PERFORMANCE OPTIMIZATION (Bolt): Precompute a Python set of historical object IDs
         # to perform fast O(1) membership checks instead of index scans inside the loop.
-        history_set = set()
-        if self.app.historical_dbs:
-            for db in self.app.historical_dbs:
-                reg_by_id = db.get("reg_by_id")
-                if reg_by_id is not None:
-                    history_set.update(reg_by_id.index)
+        history_set = getattr(self, "_has_suggestions_set", set())
+        if history_set is None:
+            history_set = set()
 
         for i, oid in enumerate(self.app.active_object_ids):
             genus = str(genus_dict.get(oid, "")).strip()
@@ -7530,63 +7835,8 @@ class ObjectProgramUI(
 # ---- Recent objects
 
     def open_recent_popup(self):
-        if not self.history_stack:
-            self.system_status.config(text="No recently visited objects")
-            return
+        self.open_recent_activity_window(default_tab=0)
 
-        if hasattr(self, "recent_window") and self.recent_window and self.recent_window.winfo_exists():
-            self.recent_window.lift()
-            self.recent_window.focus_force()
-            return
-
-        win = tk.Toplevel(self.root)
-        self.recent_window = win
-        win.bind("<Destroy>", lambda e: setattr(self, "recent_window", None) if e.widget == win else None)
-        win.title("Recently visited")
-        import utils
-        utils.center_and_fit_toplevel(win, 320, 320)
-        win.bind("<Escape>", lambda e: win.destroy())
-
-        ttk.Label(
-            win,
-            text="Recently visited",
-            font=("Segoe UI", sc(10), "bold")
-        ).pack(anchor="w", padx=10, pady=(10, 4))
-
-        frame = ttk.Frame(win)
-        frame.pack(fill="both", expand=True, padx=6, pady=4)
-
-        listbox = tk.Listbox(frame, exportselection=False)
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=listbox.yview)
-        listbox.configure(yscrollcommand=scrollbar.set)
-        listbox.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        recent = list(reversed(self.history_stack[-20:]))
-        for oid in recent:
-            title = self.object_title(oid)
-            listbox.insert(tk.END, title)
-
-        def go_to(event=None):
-            if not listbox.curselection():
-                return
-            idx = listbox.curselection()[0]
-            oid = recent[idx]
-            self.object_list.selection_clear(0, tk.END)
-            if oid in self.app.active_object_ids:
-                list_idx = self.app.active_object_ids.index(oid)
-                self.object_list.selection_set(list_idx)
-                self.object_list.see(list_idx)
-            self.load_object(oid)
-            win.destroy()
-
-        listbox.bind("<Double-Button-1>", go_to)
-        listbox.bind("<Return>", go_to)
-
-        btns = ttk.Frame(win)
-        btns.pack(fill="x", padx=6, pady=6)
-        ttk.Button(btns, text="Go to", command=go_to).pack(side="right")
-        ttk.Button(btns, text="Close", command=win.destroy).pack(side="left")
 
 
 # ---- Export filtered list
@@ -7866,11 +8116,18 @@ class ObjectProgramUI(
             
             # Repack location components safely
             self.loc_container.pack_forget()
-            if show_loc:
+
+            # Check if location should be in the left column or center column
+            loc_in_center = hasattr(self, 'location_in_center_var') and self.location_in_center_var.get()
+
+            if show_loc and not loc_in_center:
                 if str(self.left_bottom_container) not in self.left_panes.panes():
                     self.left_panes.add(self.left_bottom_container, weight=0)
                 self.loc_container.pack(side="top", fill="x")
             else:
+                # Either we're hiding location entirely (due to focus mode) OR it's centered
+                # If it's centered, it's managed by `_sync_middle_panes` instead.
+                # So we just ensure it's not in the left pane.
                 if str(self.left_bottom_container) in self.left_panes.panes():
                     self.left_panes.forget(self.left_bottom_container)
                 
@@ -7962,54 +8219,104 @@ class ObjectProgramUI(
 
 
 
+    def _refresh_field_background(self, field_name):
+        widget = self.reg_entries.get(field_name)
+        if not widget:
+            return
+
+        is_dark = getattr(self, "dark_mode_active", self.app.config.get("theme", "dark") == "dark")
+        norm_bg = "#181825" if is_dark else "#ffffff"
+        warn_bg = "#5c4d00" if is_dark else "#fff3cd"
+        err_bg = "#5c1e1e" if is_dark else "#f8d7da"
+        unknown_bg = "#5c461a" if is_dark else "#ffe4b3"
+        suggest_bg = "#5c571a" if is_dark else "#fff3a3"
+
+        # Determine if there's an active problem flag mapping to this field
+        is_active_problem = False
+        prob_col = None
+        for p_col, f_name in self.problem_to_field.items():
+            if f_name == field_name:
+                prob_col = p_col
+                break
+        if prob_col and self.problem_vars.get(prob_col) and self.problem_vars[prob_col].get():
+            is_active_problem = True
+
+        # Validation rules
+        genus = self.reg_vars.get("Genus", tk.StringVar()).get().strip()
+        species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
+        building = self.reg_vars.get("Building", tk.StringVar()).get().strip()
+        loc_prob = self.problem_vars.get("Loc_Problem", tk.BooleanVar()).get()
+
+        color = norm_bg
+
+        if is_active_problem:
+            # Active problem tint highlight
+            hl_color_name = "Default (Red)"
+            try:
+                import config
+                advanced_prefs = config.load_prefs().get("advanced", {})
+                if advanced_prefs.get("enable_problem_highlights", True):
+                    hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+            except Exception:
+                pass
+            
+            if "Yellow" in hl_color_name:
+                tint = "#5f5b2e" if is_dark else "#fff9c4"
+            elif "Orange" in hl_color_name:
+                tint = "#5f4520" if is_dark else "#ffe0b2"
+            elif "Blue" in hl_color_name:
+                tint = "#203a5f" if is_dark else "#e3f2fd"
+            else:  # Default (Red)
+                tint = "#5c1e1e" if is_dark else "#ffdad6"
+            color = tint
+        elif field_name == "Species" and genus and not species:
+            color = warn_bg
+        elif field_name == "Building" and not building and not loc_prob:
+            color = err_bg
+        else:
+            # Unknown or Historical Suggestions
+            raw_val = self.reg_vars.get(field_name, tk.StringVar()).get()
+            if isinstance(raw_val, pd.Series):
+                raw_val = raw_val.iloc[0]
+            raw_val = str(raw_val)
+
+            if self.is_unknown(raw_val):
+                color = unknown_bg
+            elif self.current_object_suggestions and field_name in self.collect_historical_suggestions(self.app.current_object_id):
+                color = suggest_bg
+
+        # Set background/style on widget
+        try:
+            if isinstance(widget, (tk.Text, tk.Entry)):
+                widget.config(background=color)
+            elif isinstance(widget, ttk.Combobox):
+                if color == warn_bg:
+                    widget.configure(style="Warning.TCombobox")
+                elif color == err_bg:
+                    widget.configure(style="Error.TCombobox")
+                elif is_active_problem:
+                    widget.configure(style="Problem.TCombobox")
+                else:
+                    widget.configure(style="TCombobox")
+            elif isinstance(widget, ttk.Entry):
+                if color == warn_bg:
+                    widget.configure(style="Warning.TEntry")
+                elif color == err_bg:
+                    widget.configure(style="Error.TEntry")
+                elif is_active_problem:
+                    widget.configure(style="Problem.TEntry")
+                else:
+                    widget.configure(style="TEntry")
+        except Exception as e:
+            debug_error("Suppressed Error in _refresh_field_background", str(e))
+
+
     def _validate_fields(self, event=None):
         if self._is_navigating or self.loading_object:
             return
 
-        is_dark = getattr(self, "dark_mode_active", self.app.config.get("theme", "dark") == "dark")
-        warn_bg = "#5c4d00" if is_dark else "#fff3cd"
-        err_bg = "#5c1e1e" if is_dark else "#f8d7da"
-        norm_bg = "#181825" if is_dark else "white"
-
-        # Initialize styles if they don't exist
-        style = ttk.Style()
-        if not hasattr(self, "_validation_styles_created"):
-            style.map("Warning.TEntry", fieldbackground=[("!disabled", warn_bg)])
-            style.map("Error.TEntry", fieldbackground=[("!disabled", err_bg)])
-            style.map("Normal.TEntry", fieldbackground=[("!disabled", norm_bg)])
-            self._validation_styles_created = True
-        else:
-            style.map("Warning.TEntry", fieldbackground=[("!disabled", warn_bg)])
-            style.map("Error.TEntry", fieldbackground=[("!disabled", err_bg)])
-            style.map("Normal.TEntry", fieldbackground=[("!disabled", norm_bg)])
-
-        def apply_validation_style(widget, style_name, bg_color):
-            try:
-                widget.configure(style=style_name)
-            except tk.TclError:
-                # Fallback for standard tk.Entry or tk.Text
-                try:
-                    widget.configure(bg=bg_color)
-                except tk.TclError:
-                    pass
-
-        # Rule 1: Genus but no Species (Warning)
-        genus = self.reg_vars.get("Genus", tk.StringVar()).get().strip()
-        species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
-        
-        if genus and not species and "Species" in self.reg_entries:
-            apply_validation_style(self.reg_entries["Species"], "Warning.TEntry", warn_bg)
-        elif "Species" in self.reg_entries:
-            apply_validation_style(self.reg_entries["Species"], "Normal.TEntry", norm_bg)
-
-        # Rule 2: Building/Location empty but no Loc Problem (Error)
-        building = self.reg_vars.get("Building", tk.StringVar()).get().strip()
-        loc_prob = self.problem_vars.get("Loc_Problem", tk.BooleanVar()).get()
-        
-        if not building and not loc_prob and "Building" in self.reg_entries:
-            apply_validation_style(self.reg_entries["Building"], "Error.TEntry", err_bg)
-        elif "Building" in self.reg_entries:
-            apply_validation_style(self.reg_entries["Building"], "Normal.TEntry", norm_bg)
+        self._refresh_field_background("Species")
+        self._refresh_field_background("Building")
 
 
     def _run_fuzzy_match(self, field_name, widget):
@@ -8144,7 +8451,7 @@ class ObjectProgramUI(
                 except Exception:
                     reviewed = False
                 has_problem = self._get_cached_problem(oid)
-                has_history = self._has_history(oid)
+                has_history = self._problems_have_history(oid)
                 
                 if reviewed and has_problem:
                     return 1
@@ -8174,9 +8481,24 @@ class ObjectProgramUI(
 
 
     def _bind_mousewheel_recursive(self, widget, handler):
-        widget.bind("<MouseWheel>", handler)
-        for child in widget.winfo_children():
-            self._bind_mousewheel_recursive(child, handler)
+        tag = f"MW_Tag_{id(widget)}"
+
+        def _apply_tag(w):
+            w.bindtags((tag,) + w.bindtags())
+            for child in w.winfo_children():
+                _apply_tag(child)
+
+        _apply_tag(widget)
+        widget.bind_class(tag, "<MouseWheel>", handler)
+
+        def _on_destroy(event):
+            if event.widget is widget:
+                try:
+                    widget.unbind_class(tag, "<MouseWheel>")
+                except Exception:
+                    pass
+
+        widget.bind("<Destroy>", _on_destroy, add="+")
 
 
 
@@ -8262,6 +8584,33 @@ class ObjectProgramUI(
             self.reviewed_button.config(bg="#ffffff")
         else:
             self.reviewed_button.config(bg="#3b6934")
+
+    def _on_reviewed_btn_press(self, event):
+        if not self.app.current_object_id:
+            return
+        if bool(self.reviewed_var.get()):
+            self.reviewed_button.config(bg="#dcdcdc")
+        else:
+            self.reviewed_button.config(bg="#203f1b")
+
+    def _on_reviewed_btn_release(self, event):
+        if not self.app.current_object_id:
+            return
+        x = event.x
+        y = event.y
+        w = event.widget.winfo_width()
+        h = event.widget.winfo_height()
+        inside = (0 <= x <= w) and (0 <= y <= h)
+        if inside:
+            if bool(self.reviewed_var.get()):
+                self.reviewed_button.config(bg="#f3f3f3")
+            else:
+                self.reviewed_button.config(bg="#2e5228")
+        else:
+            if bool(self.reviewed_var.get()):
+                self.reviewed_button.config(bg="#ffffff")
+            else:
+                self.reviewed_button.config(bg="#3b6934")
 
     def mark_reviewed_and_next(self, event=None):
         """Mark as reviewed and automatically advance if autoAdvanceOnReview is enabled."""
@@ -8368,19 +8717,7 @@ class ObjectProgramUI(
                 pass
 
         # 3. Entry / Combobox style
-        widget = self.reg_entries.get(field_name)
-        if widget:
-            try:
-                if isinstance(widget, tk.Text):
-                    # Classic Text widget — set background directly
-                    norm_bg = "#1e1e2e" if is_dark else "#ffffff"
-                    widget.config(background=tint if is_active else norm_bg)
-                elif isinstance(widget, ttk.Combobox):
-                    widget.configure(style="Problem.TCombobox" if is_active else "TCombobox")
-                elif isinstance(widget, ttk.Entry):
-                    widget.configure(style="Problem.TEntry" if is_active else "TEntry")
-            except Exception:
-                pass
+        self._refresh_field_background(field_name)
                 
         # Update accordion badges if any
         self._update_accordion_badges()
@@ -8435,16 +8772,16 @@ class ObjectProgramUI(
             reviewed = False
             
         has_problem = self._get_cached_problem(oid)
-        has_history = self._has_history(oid)
+        has_history = self._problems_have_history(oid)
         
-        if reviewed and has_problem:
-            color = "#f0ad4e"
-        elif reviewed:
-            color = "#0bd45b"
+        if reviewed:
+            color = "#4CAF50" if self.dark_mode_active else "#2E7D32"
         elif has_problem and has_history:
-            color = "#bb6bd9"
+            color = "#BB86FC" if self.dark_mode_active else "#7B1FA2"
         elif has_problem:
-            color = "#d9534f"
+            color = "#f28b82" if self.dark_mode_active else "#C62828"
+        elif has_history:
+            color = "#5ab0e8" if self.dark_mode_active else "#0284C7"
             
         current_tags = list(self.object_list.item(oid, "tags") or [])
         current_tags = [t for t in current_tags if not t.startswith("color_")]
@@ -8462,36 +8799,25 @@ class ObjectProgramUI(
             current_vals[0] = "☑" if reviewed else "☐"
             self.object_list.item(oid, values=current_vals)
 
+        if hasattr(self.object_list, "_refresh_card_accent"):
+            self.object_list._refresh_card_accent(oid)
+
     def mark_current_as_reviewed(self):
         oid = self.app.current_object_id
         if not oid:
             return
-
-        # Ensure the current item is marked as reviewed (set to True)
-        self.push_undo_state()
-
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.app.df_obs.loc[oid, REVIEWED_COLUMN] = True
-        self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = now
-
-        # If this is the currently active object, also update the checkbox variable and display
-        self.reviewed_var.set(True)
-        self.reviewed_time_label.config(text=now)
-
-        self.app.dirty = True
-        self.update_dirty_ui()
-        self.update_dashboard()
-        self.update_list_item_color(oid)
-        self.update_review_progress()
-        self._list_dirty = True
-        self.update_reviewed_button_state()
-
-        # If autoAdvanceOnReview is True and a next item exists, advance
-        if self.autoAdvanceOnReview:
-            if oid in self.app.active_object_ids:
-                idx = self.app.active_object_ids.index(oid)
-                if idx + 1 < len(self.app.active_object_ids):
-                    self.navigate_object(1)
+        was_reviewed = bool(self.reviewed_var.get())
+        self._toggle_reviewed_for_id(oid)
+        
+        # If toggled ON to Reviewed:
+        if not was_reviewed:
+            if self.autoAdvanceOnReview:
+                if oid in self.app.active_object_ids:
+                    idx = self.app.active_object_ids.index(oid)
+                    if idx + 1 < len(self.app.active_object_ids):
+                        self.navigate_object(1)
+            elif getattr(self, "auto_advance_history_var", None) and self.auto_advance_history_var.get():
+                self.goto_next_problem_with_history()
 
     def _toggle_reviewed_for_id(self, oid):
         if not oid:
@@ -8499,22 +8825,41 @@ class ObjectProgramUI(
         self.push_undo_state()
         
         # Toggle in df_obs
+        try:
+            lookup_key = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_obs.index else oid
+        except Exception:
+            lookup_key = oid
+
         current = False
-        if self.app.df_obs is not None and oid in self.app.df_obs.index:
+        if self.app.df_obs is not None and lookup_key in self.app.df_obs.index:
             try:
-                current = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
+                current = bool(self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN])
             except Exception:
                 pass
         new_val = not current
         
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.app.df_obs.loc[oid, REVIEWED_COLUMN] = new_val
-        self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = now
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if new_val else ""
+        self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN] = new_val
+        self.app.df_obs.loc[lookup_key, REVIEWED_AT_COLUMN] = now
+
+        s_oid = str(oid)
+        self._problem_cache.pop(oid, None)
+        self._problem_cache.pop(s_oid, None)
+        if s_oid.isdigit():
+            self._problem_cache.pop(int(s_oid), None)
+
+        # Synchronize CardView item_data
+        current_vals = list(self.object_list.item(oid, "values") or [])
+        if current_vals:
+            current_vals[0] = "☑" if new_val else "☐"
+            self.object_list.item(oid, values=current_vals)
         
         # If this is the currently active object, also update the checkbox variable
         if oid == self.app.current_object_id:
             self.reviewed_var.set(new_val)
             self.reviewed_time_label.config(text=now if new_val else "")
+
+        self.log_action("REVIEWED" if new_val else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{new_val}"'])
             
         self.app.dirty = True
         self.update_dirty_ui()
@@ -8522,6 +8867,7 @@ class ObjectProgramUI(
         self.update_list_item_color(oid)
         self.update_review_progress()
         self._list_dirty = True
+        self.update_reviewed_button_state()
 
 
 

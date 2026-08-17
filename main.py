@@ -18,7 +18,7 @@ _PREFS_PATH = os.path.join(_BASE_DIR, "user_prefs.json")
 # ── Enable DPI awareness BEFORE creating the Tk window ───────────────────────
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
-except Exception:
+except Exception as e:  # Fix: Replace bare except
     pass  # Non-Windows or already set — safe to ignore
 
 
@@ -45,7 +45,7 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
         try:
             from utils import debug_error
             debug_error("Unhandled callback exception", short_msg, is_crash=True)
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass
 
         # Show the dialog via after() so we never block the event loop
@@ -64,7 +64,7 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
                 try:
                     from utils import get_session_log_path
                     log_path = get_session_log_path()
-                except Exception:
+                except Exception as e:  # Fix: Replace bare except
                     log_path = "logs folder"
                 messagebox.showerror(
                     "Unhandled Error",
@@ -73,7 +73,7 @@ def _install_exception_hooks(root: tk.Tk, ui_ref: list) -> None:
 
         try:
             root.after(0, _open_dialog)
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass  # root may already be destroyed
 
     # 1. Tkinter callback exceptions
@@ -113,7 +113,7 @@ def _install_atexit_crash_reporter() -> None:
                     f"SESSION ENDED — {datetime.now():%Y-%m-%d %H:%M:%S}\n"
                     f"{'═' * 80}\n"
                 )
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass
 
     atexit.register(_on_exit)
@@ -124,35 +124,53 @@ def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
     On startup, look for log files from previous sessions that contain errors.
     If found, show a notification banner offering to view the most recent one.
     """
-    from utils import _get_log_dir, get_session_log_path
-    import glob
+    import threading
 
-    log_dir = _get_log_dir()
-    current_log = get_session_log_path()
+    def _background_scan():
+        try:
+            from utils import _get_log_dir, get_session_log_path
+            import glob
 
-    # Find all session logs that are not the current one
-    pattern = os.path.join(log_dir, "arbor_*.log")
-    all_logs = sorted(glob.glob(pattern), reverse=True)
-    stale_logs = [p for p in all_logs if p != current_log and os.path.getsize(p) > 0]
+            log_dir = _get_log_dir()
+            current_log = get_session_log_path()
 
-    if not stale_logs:
-        return
+            # Find all session logs that are not the current one
+            pattern = os.path.join(log_dir, "arbor_*.log")
+            all_logs = sorted(glob.glob(pattern), reverse=True)
+            
+            # Clean up/check stale logs safely in thread
+            stale_logs = []
+            for p in all_logs:
+                if p != current_log:
+                    try:
+                        if os.path.getsize(p) > 0:
+                            stale_logs.append(p)
+                    except OSError:
+                        pass
 
-    most_recent = stale_logs[0]
+            if not stale_logs:
+                return
 
-    def _show_banner():
-        active_ui = ui_ref[0] if ui_ref else None
-        if active_ui is None:
-            return
-        if hasattr(active_ui, "show_banner"):
-            active_ui.show_banner(
-                f"⚠ Crash log from last session found — click to view",
-                banner_type="warning",
-                duration_ms=12000,
-                action_callback=lambda: active_ui.show_error_log_window(most_recent)
-            )
+            most_recent = stale_logs[0]
 
-    root.after(2000, _show_banner)
+            def _show_banner():
+                active_ui = ui_ref[0] if ui_ref else None
+                if active_ui is None:
+                    return
+                if hasattr(active_ui, "show_banner"):
+                    active_ui.show_banner(
+                        f"⚠ Crash log from last session found — click to view",
+                        banner_type="warning",
+                        duration_ms=12000,
+                        action_callback=lambda: active_ui.show_error_log_window(most_recent)
+                    )
+
+            root.after(2000, _show_banner)
+        except Exception as e:  # Fix: Replace bare except
+            pass
+
+    thread = threading.Thread(target=_background_scan, daemon=True)
+    thread.start()
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -171,7 +189,7 @@ if __name__ == "__main__":
         root = tk.Tk()
         try:
             root.attributes("-alpha", 0.0)
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass
 
         # ── Detect DPI scale factor (stored for info display only) ──────────────
@@ -186,7 +204,7 @@ if __name__ == "__main__":
         if "autosave_interval" in prefs:
             try:
                 config.AUTOSAVE_INTERVAL_MS = int(prefs["autosave_interval"]) * 60 * 1000
-            except Exception:
+            except Exception as e:  # Fix: Replace bare except
                 pass
 
         if "custom_databases" in prefs:
@@ -251,7 +269,7 @@ if __name__ == "__main__":
             ui.open_excel_from_path(dialog.db_path_var.get().strip())
             try:
                 root.attributes("-alpha", 1.0)
-            except Exception:
+            except Exception as e:  # Fix: Replace bare except
                 pass
             root.deiconify()
             root.state("zoomed")
@@ -260,7 +278,7 @@ if __name__ == "__main__":
         else:
             try:
                 root.attributes("-alpha", 1.0)
-            except Exception:
+            except Exception as e:  # Fix: Replace bare except
                 pass
             root.deiconify()
             root.state("zoomed")
@@ -297,5 +315,5 @@ if __name__ == "__main__":
                 "Application Startup Error",
                 f"A critical error occurred during startup or execution:\n\n{e}\n\nTraceback:\n{tb_text}"
             )
-        except Exception:
+        except Exception as e:  # Fix: Replace bare except
             pass

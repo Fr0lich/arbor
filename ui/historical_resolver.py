@@ -378,6 +378,8 @@ class HistoricalConflictResolverWindow:
                             prob_changed_values.append(f'{pc}: "True"  "False"')
                         self.main_app.problem_vars[pc].set(False)
                         self.main_app.app.df_obs.loc[self.oid, pc] = False
+                        if hasattr(self.main_app, "loaded_problem_states"):
+                            self.main_app.loaded_problem_states[pc] = False
                 
                 self.main_app.log_action(
                     "RESOLVE_HISTORICAL_CONFLICT",
@@ -466,6 +468,8 @@ class HistoricalConflictResolverWindow:
                             prob_changed_values.append(f'{pc}: "True"  "False"')
                         self.main_app.problem_vars[pc].set(False)
                         self.main_app.app.df_obs.loc[self.oid, pc] = False
+                        if hasattr(self.main_app, "loaded_problem_states"):
+                            self.main_app.loaded_problem_states[pc] = False
                         
                 # Update card visually
                 if field in self.card_frames:

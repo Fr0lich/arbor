@@ -131,13 +131,12 @@ def _normalise_dataframes(df_reg, df_obs, config):
 
     df_reg["ProblemDescription"] = df_reg["ProblemDescription"].astype(object)
 
-    if not df_reg.empty:
-        # Generate short UIDs for any row that is missing one
-        missing_uid = df_reg["UID"].isna() | (df_reg["UID"].astype(str).str.strip() == "")
-        if missing_uid.any():
-            df_reg.loc[missing_uid, "UID"] = [
-                uuid.uuid4().hex[:8] for _ in range(missing_uid.sum())
-            ]
+    # Generate short UIDs for any row that is missing one
+    missing_uid = df_reg["UID"].isna() | (df_reg["UID"].astype(str).str.strip() == "")
+    if missing_uid.any():
+        df_reg.loc[missing_uid, "UID"] = [
+            uuid.uuid4().hex[:8] for _ in range(missing_uid.sum())
+        ]
 
     return df_reg, df_obs
 
@@ -195,15 +194,8 @@ class ExcelRepository:
         # PERFORMANCE OPTIMIZATION (Bolt): Use pd.ExcelFile as a context manager to open the Excel
         # archive once, then read sheets from it. This prevents reopening/reparsing the zip and shared
         # string tables 4 times, leading to a massive speedup (~60-70% faster loads).
-        # We try importing 'calamine' for a further 5-10x parsing speedup.
-        engine = "openpyxl"
-        try:
-            import calamine  # noqa: F401
-            engine = "calamine"
-        except ImportError:
-            pass
-
-        with pd.ExcelFile(path, engine=engine) as xls:
+        # We use 'calamine' for a further 5-10x parsing speedup.
+        with pd.ExcelFile(path, engine="calamine") as xls:
             sheet_names = xls.sheet_names
 
             # Read Registration sheet
@@ -281,16 +273,30 @@ class SQLiteRepository:
             debug_error("load_sqlite: Observation table missing or unreadable", str(e))
             df_obs = pd.DataFrame()
 
-        try:
-            df_photo = pd.read_sql("SELECT * FROM Photo", conn)
-        except Exception as e:
-            debug_error("load_sqlite: Photo table missing or unreadable", str(e))
+        # Check optional tables using sqlite_master
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Photo'")
+        photo_exists = cursor.fetchone() is not None
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Log'")
+        log_exists = cursor.fetchone() is not None
+
+        if photo_exists:
+            try:
+                df_photo = pd.read_sql("SELECT * FROM Photo", conn)
+            except Exception as e:
+                debug_error("load_sqlite: Photo table unreadable", str(e))
+                df_photo = pd.DataFrame(columns=["ObjectID"])
+        else:
             df_photo = pd.DataFrame(columns=["ObjectID"])
 
-        try:
-            df_log = pd.read_sql("SELECT * FROM Log", conn)
-        except Exception as e:
-            debug_error("load_sqlite: Log table missing or unreadable", str(e))
+        if log_exists:
+            try:
+                df_log = pd.read_sql("SELECT * FROM Log", conn)
+            except Exception as e:
+                debug_error("load_sqlite: Log table unreadable", str(e))
+                df_log = pd.DataFrame()
+        else:
             df_log = pd.DataFrame()
             
         df_log = _normalise_log_dataframe(df_log)
@@ -321,29 +327,60 @@ class SQLiteRepository:
             df_log:   Log dataframe.
         """
         conn = sqlite3.connect(path)
+        try:
+            # Optimize transaction overhead and SQLite performance pragmas
+            conn.execute("PRAGMA journal_mode = WAL;")
+            conn.execute("PRAGMA synchronous = NORMAL;")
 
-        df_reg_save = df_reg.copy()
-        if "ObjectID" not in df_reg_save.columns:
-            df_reg_save = df_reg_save.reset_index()
+            df_reg_save = df_reg.copy()
+            if "ObjectID" not in df_reg_save.columns:
+                df_reg_save = df_reg_save.reset_index()
 
-        df_obs_save = df_obs.copy()
-        if "ObjectID" not in df_obs_save.columns:
-            df_obs_save = df_obs_save.reset_index()
+            df_obs_save = df_obs.copy()
+            if "ObjectID" not in df_obs_save.columns:
+                df_obs_save = df_obs_save.reset_index()
 
-        df_photo_save = df_photo.copy()
-        if "ObjectID" not in df_photo_save.columns:
-            df_photo_save = df_photo_save.reset_index()
+            df_photo_save = df_photo.copy()
+            if "ObjectID" not in df_photo_save.columns:
+                df_photo_save = df_photo_save.reset_index()
 
-        df_reg_save.to_sql("Registration", conn, if_exists="replace", index=False)
-        df_obs_save.to_sql("Observation", conn, if_exists="replace", index=False)
+            with conn:
+                for table_name, df_save in [("Registration", df_reg_save), ("Observation", df_obs_save)]:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+                    if cursor.fetchone():
+                        # Table exists, check if columns match (so we don't break on schema changes)
+                        cursor.execute(f"PRAGMA table_info({table_name});")
+                        db_cols = {row[1] for row in cursor.fetchall()}
+                        df_cols = set(df_save.columns)
+                        if df_cols.issubset(db_cols):
+                            cursor.execute(f"DELETE FROM {table_name};")
+                            df_save.to_sql(table_name, conn, if_exists="append", index=False)
+                        else:
+                            # Fallback if columns differ (e.g. schema migration)
+                            df_save.to_sql(table_name, conn, if_exists="replace", index=False)
+                    else:
+                        df_save.to_sql(table_name, conn, if_exists="replace", index=False)
 
-        if not df_photo_save.empty:
-            df_photo_save.to_sql("Photo", conn, if_exists="replace", index=False)
+                if not df_photo_save.empty:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Photo';")
+                    if cursor.fetchone():
+                        cursor.execute("DELETE FROM Photo;")
+                        df_photo_save.to_sql("Photo", conn, if_exists="append", index=False)
+                    else:
+                        df_photo_save.to_sql("Photo", conn, if_exists="replace", index=False)
 
-        if df_log is not None and not df_log.empty:
-            df_log.to_sql("Log", conn, if_exists="replace", index=False)
-
-        conn.close()
+                if df_log is not None and not df_log.empty:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Log';")
+                    if cursor.fetchone():
+                        cursor.execute("DELETE FROM Log;")
+                        df_log.to_sql("Log", conn, if_exists="append", index=False)
+                    else:
+                        df_log.to_sql("Log", conn, if_exists="replace", index=False)
+        finally:
+            conn.close()
 
     @staticmethod
     def import_from_excel(excel_path, sqlite_path, config):

@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import config
+import utils
 
 REVIEWED_AT_COLUMN = "ReviewedAt"
 
@@ -231,19 +232,44 @@ class BulkEditWindow:
         action_frame = tk.Frame(main_frame, bg="#f9f9f9")
         action_frame.pack(fill="x", pady=sc(10))
 
+        # Target list actions
+        target_frame = tk.Frame(action_frame, bg="#f9f9f9")
+        target_frame.pack(fill="x", pady=(0, sc(10)))
+
         tk.Button(
-            action_frame, text="Apply to Target List", font=("Hanken Grotesk", sc(10), "bold"),
+            target_frame, text="Apply to Target List", font=("Hanken Grotesk", sc(10), "bold"),
             bg="#1a1c1c", fg="#ffffff", relief="flat", bd=0, cursor="hand2",
             padx=sc(16), pady=sc(6),
             command=self.apply_to_targets
         ).pack(side="left", padx=sc(5))
         
-        tk.Button(
-            action_frame, text="Apply to ALL Filtered Objects", font=("Hanken Grotesk", sc(10), "bold"),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2",
+        ttk.Separator(action_frame, orient="horizontal").pack(fill="x", pady=sc(10))
+
+        # Destructive action frame
+        destructive_frame = tk.Frame(action_frame, bg="#f9f9f9")
+        destructive_frame.pack(fill="x", pady=(0, sc(5)))
+
+        self.understand_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            destructive_frame, text="I understand this is a destructive action",
+            variable=self.understand_var, command=self._toggle_destructive_button
+        ).pack(side="right", padx=sc(5), pady=(0, sc(5)))
+
+        count = len(self.app.active_object_ids) if hasattr(self.app, 'active_object_ids') else 0
+        self.destructive_btn = tk.Button(
+            destructive_frame, text=f"⚠ Apply to ALL {count} filtered objects", font=("Hanken Grotesk", sc(10), "bold"),
+            bg="#ffbf00", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2",
             padx=sc(16), pady=sc(6),
-            command=self.apply_to_all_filtered
-        ).pack(side="right", padx=sc(5))
+            command=self.apply_to_all_filtered,
+            state="disabled"
+        )
+        self.destructive_btn.pack(side="right", padx=sc(5))
+
+    def _toggle_destructive_button(self):
+        if self.understand_var.get():
+            self.destructive_btn.config(state="normal")
+        else:
+            self.destructive_btn.config(state="disabled")
 
     def _refresh_target_list(self):
         self.target_listbox.delete(0, tk.END)
@@ -318,13 +344,13 @@ class BulkEditWindow:
                     self.app.df_reg.at[oid, key] = val
                     if key == "Loaned out":
                         from datetime import datetime
-                        if str(val).lower() == "true":
+                        if utils.parse_bool(val):
                             self.app.df_reg.at[oid, "Loaned out date"] = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
                         else:
                             self.app.df_reg.at[oid, "Loaned out date"] = ""
                 elif key in self.app.df_obs.columns:
                     if key in problem_keys:
-                        val = str(val).lower() == "true"
+                        val = utils.parse_bool(val)
                     self.app.df_obs.at[oid, key] = val
                     if key == "Reviewed" and val:
                         from datetime import datetime

@@ -223,7 +223,7 @@ class LayoutSettingsMixin:
         def _on_mousewheel(e):
             if canvas.winfo_exists():
                 canvas.yview_scroll(int(-1*(e.delta/120)), "units")
-        win.bind_all("<MouseWheel>", _on_mousewheel)
+        self._wheel_bind_id = win.bind_all("<MouseWheel>", _on_mousewheel)
 
         self._layout_canvas = canvas
 
@@ -245,28 +245,65 @@ class LayoutSettingsMixin:
             sw.pack(side="right")
             return row
 
-        panels_lf = ttk.LabelFrame(scrollable_frame, text="Show/Hide Panels", padding=sc(8))
-        panels_lf.pack(fill="x", pady=(0, 10))
-        create_toggle_row(panels_lf, "Object ID List (Left)", self.draft_show_list_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Searchbar", self.draft_show_search_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Registration Panel (Right)", self.draft_show_reg_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Images Panel (Middle Top)", self.draft_show_images_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Location Window Position: Left / Center", self.draft_location_in_center_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Image Zoom Tools", self.draft_show_image_tools_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(panels_lf, "Bulk Edit Button", self.draft_show_bulk_edit_var, command=on_switch_toggle, ui_ref=self)
+        def create_section(title, parent, key):
+            import config
+            prefs = config.load_prefs()
+            expanded_sections = prefs.get("layout_settings_expanded_section", {})
+            is_expanded = expanded_sections.get(key, False)
 
-        behaviors_lf = ttk.LabelFrame(scrollable_frame, text="Persistent Behaviors", padding=sc(8))
-        behaviors_lf.pack(fill="x", pady=(0, 10))
-        create_toggle_row(behaviors_lf, "Focus Mode by default", self.draft_layout_focus_mode_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behaviors_lf, "Snap lock when focusing problems", self.draft_snap_lock_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behaviors_lf, "View images as stack by default", self.draft_image_stack_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behaviors_lf, "Embedded Session Dashboard", self.draft_dashboard_embedded_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behaviors_lf, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var, command=on_switch_toggle, ui_ref=self)
+            section_frame = ttk.Frame(parent)
+            section_frame.pack(fill="x", pady=(0, sc(10)))
 
-        toolbar_lf = ttk.LabelFrame(scrollable_frame, text="Show Toolbar Buttons", padding=sc(8))
-        toolbar_lf.pack(fill="x", pady=(0, 10))
+            header_frame = ttk.Frame(section_frame)
+            header_frame.pack(fill="x")
 
-        tb_grid = ttk.Frame(toolbar_lf)
+            content_frame = ttk.Frame(section_frame, padding=(sc(16), 0, 0, 0))
+            if is_expanded:
+                content_frame.pack(fill="x")
+
+            arrow_var = tk.StringVar(value="▾" if is_expanded else "▸")
+            arrow_lbl = tk.Label(header_frame, textvariable=arrow_var, font=("Segoe UI", sc(10)), bg=bg_color, fg="#444748" if not getattr(self, "dark_mode_active", False) else "#cdd6f4")
+            arrow_lbl.pack(side="left", padx=(0, sc(4)))
+
+            title_lbl = tk.Label(header_frame, text=title, font=("Hanken Grotesk", sc(10), "bold"), bg=bg_color, fg="#444748" if not getattr(self, "dark_mode_active", False) else "#cdd6f4")
+            title_lbl.pack(side="left")
+
+            def toggle_section(event=None):
+                import config
+                current_prefs = config.load_prefs()
+                current_expanded = current_prefs.get("layout_settings_expanded_section", {})
+
+                currently_expanded = (arrow_var.get() == "▾")
+                new_expanded = not currently_expanded
+
+                if new_expanded:
+                    arrow_var.set("▾")
+                    content_frame.pack(fill="x")
+                else:
+                    arrow_var.set("▸")
+                    content_frame.pack_forget()
+
+                current_expanded[key] = new_expanded
+                current_prefs["layout_settings_expanded_section"] = current_expanded
+                config.save_prefs(current_prefs)
+
+            arrow_lbl.bind("<Button-1>", toggle_section)
+            title_lbl.bind("<Button-1>", toggle_section)
+            header_frame.bind("<Button-1>", toggle_section)
+
+            return content_frame
+
+        panels_content = create_section("Panels & Layout", scrollable_frame, "panels_and_layout")
+        create_toggle_row(panels_content, "Object ID List (Left)", self.draft_show_list_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Searchbar", self.draft_show_search_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Registration Panel (Right)", self.draft_show_reg_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Images Panel (Middle Top)", self.draft_show_images_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Location Window Position: Left / Center", self.draft_location_in_center_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Image Zoom Tools", self.draft_show_image_tools_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(panels_content, "Bulk Edit Button", self.draft_show_bulk_edit_var, command=on_switch_toggle, ui_ref=self)
+
+        toolbar_content = create_section("Toolbar & Buttons", scrollable_frame, "toolbar_and_buttons")
+        tb_grid = ttk.Frame(toolbar_content)
         tb_grid.pack(fill="x")
         tb_grid.columnconfigure(0, weight=1)
         tb_grid.columnconfigure(1, weight=1)
@@ -282,6 +319,15 @@ class LayoutSettingsMixin:
             sw = ToggleSwitch(cell, var, command=on_switch_toggle, ui_ref=self)
             sw.pack(side="right")
 
+        behavior_content = create_section("Behavior", scrollable_frame, "behavior")
+        create_toggle_row(behavior_content, "Focus Mode by default", self.draft_layout_focus_mode_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behavior_content, "Snap lock when focusing problems", self.draft_snap_lock_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behavior_content, "View images as stack by default", self.draft_image_stack_var, command=on_switch_toggle, ui_ref=self)
+        create_toggle_row(behavior_content, "Embedded Session Dashboard", self.draft_dashboard_embedded_var, command=on_switch_toggle, ui_ref=self)
+
+        appearance_content = create_section("Appearance", scrollable_frame, "appearance")
+        create_toggle_row(appearance_content, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var, command=on_switch_toggle, ui_ref=self)
+
         return scroll_container
 
 
@@ -290,8 +336,10 @@ class LayoutSettingsMixin:
         btn_row.pack(fill="x", side="bottom")
 
         def _close_layout_win():
-            if hasattr(self, "_layout_canvas") and self._layout_canvas.winfo_exists():
+            try:
                 win.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
             win.destroy()
 
         win.protocol("WM_DELETE_WINDOW", _close_layout_win)
@@ -368,6 +416,11 @@ class LayoutSettingsMixin:
                 win.after(500, lambda: TutorialManager().start_tutorial("layout_settings", win))
             except Exception:
                 pass
+        try:
+            from ui.main_window import _apply_hover_to_all_tk_buttons
+            _apply_hover_to_all_tk_buttons(win, self)
+        except Exception:
+            pass
 
     def save_layout_as_dialog(self):
         from tkinter import simpledialog
@@ -424,7 +477,13 @@ class LayoutSettingsMixin:
 
         prefs["layouts"]["saved"][name] = layout
         config.save_prefs(prefs)
-        self._refresh_load_layout_menu()
+
+        if hasattr(self, '_refresh_load_layout_menu'):
+            self._refresh_load_layout_menu()
+        elif hasattr(self, '_refresh_load_data_preset_menu'):
+            # Fallback if _refresh_load_layout_menu doesn't exist
+            self._refresh_load_data_preset_menu()
+
         self.system_status.config(text=f"Layout '{name}' saved!")
 
 
@@ -555,7 +614,12 @@ class LayoutSettingsMixin:
         if "layouts" in prefs:
             del prefs["layouts"]
             config.save_prefs(prefs)
-            self._refresh_load_layout_menu()
+
+            if hasattr(self, '_refresh_load_layout_menu'):
+                self._refresh_load_layout_menu()
+            elif hasattr(self, '_refresh_load_data_preset_menu'):
+                self._refresh_load_data_preset_menu()
+
             self.system_status.config(text="Layout reset to factory. Restart app to see changes.")
 
 
@@ -563,9 +627,50 @@ class LayoutSettingsMixin:
         self.dark_mode_active = not self.dark_mode_active
         self.apply_theme()
 
+    def _ensure_theme_widgets_registered(self):
+        if getattr(self, "_theme_widgets_registered", False):
+            return
+        
+        self._theme_sb_top_widgets = []
+        self._theme_sb_bottom_widgets = []
+        self._theme_loc_vert_widgets = []
+        self._theme_loc_horiz_widgets = []
+        self._theme_loc_labels = []
+        self._theme_loc_checkbuttons = []
+        
+        def collect_widgets(parent, lst):
+            if not parent:
+                return
+            for child in parent.winfo_children():
+                lst.append(child)
+                collect_widgets(child, lst)
+                
+        if hasattr(self, "sb_top"):
+            collect_widgets(self.sb_top, self._theme_sb_top_widgets)
+        if hasattr(self, "sb_bottom"):
+            collect_widgets(self.sb_bottom, self._theme_sb_bottom_widgets)
+            
+        if hasattr(self, "location_frame"):
+            collect_widgets(self.location_frame, self._theme_loc_vert_widgets)
+            for w in self._theme_loc_vert_widgets:
+                if isinstance(w, tk.Label):
+                    self._theme_loc_labels.append(w)
+                elif isinstance(w, tk.Checkbutton):
+                    self._theme_loc_checkbuttons.append(w)
+                    
+        if hasattr(self, "loc_frame_horizontal"):
+            collect_widgets(self.loc_frame_horizontal, self._theme_loc_horiz_widgets)
+            for w in self._theme_loc_horiz_widgets:
+                if isinstance(w, tk.Label):
+                    self._theme_loc_labels.append(w)
+                elif isinstance(w, tk.Checkbutton):
+                    self._theme_loc_checkbuttons.append(w)
+                    
+        self._theme_widgets_registered = True
 
     def apply_theme(self):
         import config
+        self._ensure_theme_widgets_registered()
         style = ttk.Style(self.root)
         theme_name = config.get_theme()
 
@@ -724,28 +829,22 @@ class LayoutSettingsMixin:
                 self._status_bar_frame.configure(bg=statusbar_bg)
             if hasattr(self, "sb_top"):
                 self.sb_top.configure(bg=bg_color)
-                def _update_row1_bg(widget):
-                    if not widget.winfo_class().startswith("T"):
+                for w in self._theme_sb_top_widgets:
+                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
-                            widget.configure(bg=bg_color)
+                            w.configure(bg=bg_color)
                         except Exception:
                             pass
-                    for child in widget.winfo_children():
-                        _update_row1_bg(child)
-                _update_row1_bg(self.sb_top)
             if hasattr(self, "sb_buttons_frame"):
                 self.sb_buttons_frame.configure(bg=bg_color)
             if hasattr(self, "sb_bottom"):
                 self.sb_bottom.configure(bg=statusbar_bg)
-                def _update_bg(widget):
-                    if not widget.winfo_class().startswith("T"):
+                for w in self._theme_sb_bottom_widgets:
+                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
-                            widget.configure(bg=statusbar_bg)
+                            w.configure(bg=statusbar_bg)
                         except Exception:
                             pass
-                    for child in widget.winfo_children():
-                        _update_bg(child)
-                _update_bg(self.sb_bottom)
                 for lbl in self._status_bar_labels.values():
                     lbl.configure(bg=statusbar_bg, fg=statusbar_fg)
 
@@ -917,28 +1016,22 @@ class LayoutSettingsMixin:
                 self._status_bar_frame.configure(bg=statusbar_bg)
             if hasattr(self, "sb_top"):
                 self.sb_top.configure(bg=bg_color)
-                def _update_row1_bg(widget):
-                    if not widget.winfo_class().startswith("T"):
+                for w in self._theme_sb_top_widgets:
+                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
-                            widget.configure(bg=bg_color)
+                            w.configure(bg=bg_color)
                         except Exception:
                             pass
-                    for child in widget.winfo_children():
-                        _update_row1_bg(child)
-                _update_row1_bg(self.sb_top)
             if hasattr(self, "sb_buttons_frame"):
                 self.sb_buttons_frame.configure(bg=bg_color)
             if hasattr(self, "sb_bottom"):
                 self.sb_bottom.configure(bg=statusbar_bg)
-                def _update_bg(widget):
-                    if not widget.winfo_class().startswith("T"):
+                for w in self._theme_sb_bottom_widgets:
+                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
                         try:
-                            widget.configure(bg=statusbar_bg)
+                            w.configure(bg=statusbar_bg)
                         except Exception:
                             pass
-                    for child in widget.winfo_children():
-                        _update_bg(child)
-                _update_bg(self.sb_bottom)
                 for lbl in self._status_bar_labels.values():
                     lbl.configure(bg=statusbar_bg, fg=statusbar_fg)
 
@@ -968,46 +1061,49 @@ class LayoutSettingsMixin:
 
         # Update vertical location background
         if hasattr(self, "location_frame") and self.location_frame.winfo_exists():
-            self.location_frame.configure(bg=loc_bg)
-            def _update_loc_bg(widget):
-                if not widget.winfo_class().startswith("T"):
+            if not self.location_frame.winfo_class().startswith("T"):
+                try:
+                    self.location_frame.configure(bg=loc_bg)
+                except Exception:
+                    pass
+            for w in self._theme_loc_vert_widgets:
+                if w.winfo_exists() and not w.winfo_class().startswith("T"):
                     try:
-                        widget.configure(bg=loc_bg)
+                        w.configure(bg=loc_bg)
                     except Exception:
                         pass
-                for child in widget.winfo_children():
-                    _update_loc_bg(child)
-            _update_loc_bg(self.location_frame)
 
         # Update horizontal location background
         if hasattr(self, "loc_frame_horizontal") and self.loc_frame_horizontal.winfo_exists():
-            self.loc_frame_horizontal.configure(bg=loc_horiz_bg)
-            def _update_loc_horiz_bg(widget):
-                if not widget.winfo_class().startswith("T"):
+            if not self.loc_frame_horizontal.winfo_class().startswith("T"):
+                try:
+                    self.loc_frame_horizontal.configure(bg=loc_horiz_bg)
+                except Exception:
+                    pass
+            for w in self._theme_loc_horiz_widgets:
+                if w.winfo_exists() and not w.winfo_class().startswith("T"):
                     try:
-                        widget.configure(bg=loc_horiz_bg)
+                        w.configure(bg=loc_horiz_bg)
                     except Exception:
                         pass
-                for child in widget.winfo_children():
-                    _update_loc_horiz_bg(child)
-            _update_loc_horiz_bg(self.loc_frame_horizontal)
 
-        # Update labels foreground recursively
-        def _update_labels_fg(widget):
-            if isinstance(widget, tk.Label):
-                if widget.cget("text") == "LOCATION":
-                    widget.configure(fg=title_fg)
-                else:
-                    widget.configure(fg=lbl_fg)
-            elif isinstance(widget, tk.Checkbutton):
-                widget.configure(fg=entry_fg, activebackground=loc_bg, activeforeground=entry_fg, selectcolor=loc_bg)
-            for child in widget.winfo_children():
-                _update_labels_fg(child)
+        # Update labels foreground
+        for w in self._theme_loc_labels:
+            if w.winfo_exists():
+                try:
+                    if w.cget("text") == "LOCATION":
+                        w.configure(fg=title_fg)
+                    else:
+                        w.configure(fg=lbl_fg)
+                except Exception:
+                    pass
 
-        if hasattr(self, "location_frame") and self.location_frame.winfo_exists():
-            _update_labels_fg(self.location_frame)
-        if hasattr(self, "loc_frame_horizontal") and self.loc_frame_horizontal.winfo_exists():
-            _update_labels_fg(self.loc_frame_horizontal)
+        for w in self._theme_loc_checkbuttons:
+            if w.winfo_exists():
+                try:
+                    w.configure(fg=entry_fg, activebackground=loc_bg, activeforeground=entry_fg, selectcolor=loc_bg)
+                except Exception:
+                    pass
 
         # Update entry widgets
         for w in getattr(self, "location_entries", []):
