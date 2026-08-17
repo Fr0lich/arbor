@@ -553,8 +553,12 @@ class DatabaseOpsMixin:
 
         issues = []
 
-        reg = self.app.df_reg.loc[oid]
-        obs = self.app.df_obs.loc[oid]
+        if hasattr(self, "_get_reg_dict") and hasattr(self, "_get_obs_dict"):
+            reg = self._get_reg_dict().get(oid, {})
+            obs = self._get_obs_dict().get(oid, {})
+        else:
+            reg = self.app.df_reg.loc[oid]
+            obs = self.app.df_obs.loc[oid]
 
         required_fields = [
             f for f in self.problem_to_field.values()
