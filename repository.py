@@ -106,8 +106,10 @@ def _normalise_dataframes(df_reg, df_obs, config):
         if field.get("type") == "checkbox":
             col = field["name"]
             if col in df_obs.columns:
-                df_obs[col] = df_obs[col].replace({"": "False", None: "False"}).fillna("False")
-                df_obs[col] = df_obs[col].replace({True: "True", False: "False"}).astype(str)
+                df_obs.loc[df_obs[col].isna() | (df_obs[col] == ""), col] = "False"
+                df_obs.loc[df_obs[col] == True, col] = "True"
+                df_obs.loc[df_obs[col] == False, col] = "False"
+                df_obs[col] = df_obs[col].astype(str)
 
     df_obs["Images_Missing"] = df_obs["Images_Missing"].fillna(True).astype(bool)
     df_obs["Images_Problem"] = df_obs["Images_Problem"].fillna(False).astype(bool)
