@@ -4205,34 +4205,46 @@ class ObjectProgramUI(
         win.title("Keyboard Shortcuts HUD")
         import utils
         utils.center_and_fit_toplevel(win, 800, 650)
-        win.configure(background="#1e1e2e") # Dark theme for heads-up display look!
+
+        is_dark = getattr(self, "dark_mode_active", False)
+        bg_color = "#1e1e2e" if is_dark else "#f3f3f3"
+        fg_title = "#cdd6f4" if is_dark else "#1a1c1c"
+        fg_label = "#a6adc8" if is_dark else "#444748"
+        fg_nomatch = "#f38ba8" if is_dark else "#d32f2f"
+        fg_cat = "#89b4fa" if is_dark else "#1976d2"
+        bg_key = "#11111b" if is_dark else "#e0e0e0"
+        fg_key = "#f9e2af" if is_dark else "#000000"
+        fg_desc = "#a6adc8" if is_dark else "#444748"
+        fg_footer = "#585b70" if is_dark else "#757575"
+
+        win.configure(background=bg_color)
         win.transient(self.root)
         
         # Close on Escape
         win.bind("<Escape>", lambda e: win.destroy())
         
         # Title
-        title_frame = tk.Frame(win, bg="#1e1e2e")
+        title_frame = tk.Frame(win, bg=bg_color)
         title_frame.pack(fill="x", padx=20, pady=(15, 10))
         
         tk.Label(
             title_frame,
             text="Keyboard Shortcuts Cheat Sheet",
             font=("Segoe UI", sc(16), "bold"),
-            fg="#cdd6f4",
-            bg="#1e1e2e"
+            fg=fg_title,
+            bg=bg_color
         ).pack(side="left")
         
         # Search Box
-        search_frame = tk.Frame(win, bg="#1e1e2e")
+        search_frame = tk.Frame(win, bg=bg_color)
         search_frame.pack(fill="x", padx=20, pady=(0, 15))
         
         tk.Label(
             search_frame,
             text="Search: ",
             font=("Segoe UI", sc(10), "bold"),
-            fg="#a6adc8",
-            bg="#1e1e2e"
+            fg=fg_label,
+            bg=bg_color
         ).pack(side="left")
         
         search_var = tk.StringVar()
@@ -4241,12 +4253,12 @@ class ObjectProgramUI(
         search_ent.focus_set()
         
         # Content frame (Canvas + Scrollbar)
-        content_outer = tk.Frame(win, bg="#1e1e2e")
+        content_outer = tk.Frame(win, bg=bg_color)
         content_outer.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         
-        canvas = tk.Canvas(content_outer, bg="#1e1e2e", highlightthickness=0)
+        canvas = tk.Canvas(content_outer, bg=bg_color, highlightthickness=0)
         scrollbar = ttk.Scrollbar(content_outer, orient="vertical", command=canvas.yview)
-        scroll_content = tk.Frame(canvas, bg="#1e1e2e")
+        scroll_content = tk.Frame(canvas, bg=bg_color)
         
         scroll_content.bind(
             "<Configure>",
@@ -4322,13 +4334,13 @@ class ObjectProgramUI(
                     scroll_content,
                     text="No shortcuts matched your search.",
                     font=("Segoe UI", sc(11), "italic"),
-                    fg="#f38ba8",
-                    bg="#1e1e2e"
+                    fg=fg_nomatch,
+                    bg=bg_color
                 ).pack(pady=20)
                 return
                 
             for cat, items in categories.items():
-                cat_frame = tk.Frame(scroll_content, bg="#1e1e2e")
+                cat_frame = tk.Frame(scroll_content, bg=bg_color)
                 cat_frame.pack(fill="x", pady=(10, 5), anchor="w")
                 
                 # Category Header
@@ -4336,19 +4348,19 @@ class ObjectProgramUI(
                     cat_frame,
                     text=cat,
                     font=("Segoe UI", sc(11), "bold"),
-                    fg="#89b4fa",
-                    bg="#1e1e2e"
+                    fg=fg_cat,
+                    bg=bg_color
                 ).pack(anchor="w", padx=5)
                 
                 # Grid of shortcuts
-                grid_frame = tk.Frame(scroll_content, bg="#1e1e2e")
+                grid_frame = tk.Frame(scroll_content, bg=bg_color)
                 grid_frame.pack(fill="x", padx=15, pady=2, anchor="w")
                 grid_frame.columnconfigure(0, minsize=220)
                 grid_frame.columnconfigure(1, weight=1)
                 
                 for r, (keys, desc) in enumerate(items):
                     # Key label (capsule look)
-                    key_container = tk.Frame(grid_frame, bg="#11111b", bd=1, relief="ridge", padx=6, pady=3)
+                    key_container = tk.Frame(grid_frame, bg=bg_key, bd=1, relief="ridge", padx=6, pady=3)
                     key_container.grid(row=r, column=0, sticky="w", pady=3, padx=(0, 10))
                     
                     # Split keys by '+' or '/' or ',' to draw individual keycaps if desired, or just show text
@@ -4356,8 +4368,8 @@ class ObjectProgramUI(
                         key_container,
                         text=keys,
                         font=("Consolas", sc(10), "bold"),
-                        fg="#f9e2af",
-                        bg="#11111b"
+                        fg=fg_key,
+                        bg=bg_key
                     ).pack()
                     
                     # Description
@@ -4365,8 +4377,8 @@ class ObjectProgramUI(
                         grid_frame,
                         text=desc,
                         font=("Segoe UI", sc(10)),
-                        fg="#a6adc8",
-                        bg="#1e1e2e",
+                        fg=fg_desc,
+                        bg=bg_color,
                         wraplength=550,
                         justify="left"
                     ).grid(row=r, column=1, sticky="w", pady=3)
@@ -4378,15 +4390,15 @@ class ObjectProgramUI(
         search_var.trace_add("write", lambda *args: draw_shortcuts(search_var.get()))
         
         # Footer
-        footer = tk.Frame(win, bg="#1e1e2e")
+        footer = tk.Frame(win, bg=bg_color)
         footer.pack(fill="x", side="bottom", pady=10, padx=20)
         
         tk.Label(
             footer,
             text="Press Escape to close this window.",
             font=("Segoe UI", sc(9), "italic"),
-            fg="#585b70",
-            bg="#1e1e2e"
+            fg=fg_footer,
+            bg=bg_color
         ).pack(side="left")
         
         ttk.Button(
