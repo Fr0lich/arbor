@@ -357,70 +357,8 @@ class LayoutSettingsMixin:
         return btn_row, apply_btn, _close_layout_win
 
     def open_layout_settings(self):
-        if hasattr(self, "layout_win") and getattr(self.layout_win, "winfo_exists", lambda: False)():
-            self.layout_win.lift()
-            return
-
-        win = tk.Toplevel(self.root)
-        win.title("Layout Settings")
-        win.transient(self.root)
-        win.geometry(f"{sc(460)}x{sc(600)}")
-        self.layout_win = win
-
-        bg_color = "#1e1e2e" if getattr(self, "dark_mode_active", False) else "#f3f3f3"
-        win.configure(background=bg_color)
-
-        main_frame = ttk.Frame(win, padding=sc(12))
-        main_frame.pack(fill="both", expand=True)
-
-        self._init_layout_draft_vars()
-
-        preset_lf = self._build_layout_presets_section(main_frame)
-
-        dyn_frame = ttk.Frame(main_frame)
-        dyn_frame.pack(fill="x", pady=(0, 6))
-
-        def toggle_dynamic_update():
-            if self.layout_dynamic_update_var.get():
-                apply_btn.config(state="disabled")
-                self._on_apply_layout_settings()
-            else:
-                apply_btn.config(state="normal")
-
-        dyn_cb = ttk.Checkbutton(
-            dyn_frame,
-            text="Update dynamically",
-            variable=self.layout_dynamic_update_var,
-            command=toggle_dynamic_update
-        )
-        dyn_cb.pack(side="left")
-
-        scroll_container = self._build_layout_options_section(main_frame, win, bg_color)
-
-        btn_row, apply_btn, close_win = self._build_layout_bottom_buttons(main_frame, win)
-
-        if self.layout_dynamic_update_var.get():
-            apply_btn.config(state="disabled")
-        else:
-            apply_btn.config(state="normal")
-
-        # Tutorial bindings
-        preset_lf.tutorial_id = "layout_presets"
-        scroll_container.tutorial_id = "layout_toggles"
-
-        import config
-        prefs = config.load_prefs()
-        if "layout_settings" not in prefs.get("completed_tutorials", []):
-            try:
-                from ui.tutorial import TutorialManager
-                win.after(500, lambda: TutorialManager().start_tutorial("layout_settings", win))
-            except Exception:
-                pass
-        try:
-            from ui.main_window import _apply_hover_to_all_tk_buttons
-            _apply_hover_to_all_tk_buttons(win, self)
-        except Exception:
-            pass
+        """Shim: opens the unified settings window on the Layout tab."""
+        self._open_unified("layout")
 
     def save_layout_as_dialog(self):
         from tkinter import simpledialog
