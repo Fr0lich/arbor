@@ -48,7 +48,7 @@ class AutosaveMixin:
                 }
                 # Write to tmp first then replace for atomic safety
                 tmp_path = path + ".tmp"
-                with open(tmp_path, "w") as f:
+                with open(tmp_path, "w", encoding="utf-8") as f:
                     json.dump(json_data, f)
                 os.replace(tmp_path, path)
                 self.root.after(0, lambda: callback(True, None) if callback else None)

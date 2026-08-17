@@ -171,6 +171,7 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         # Initial active view check
         self._trace_id = None
+        self._tree_dirty = False
         if hasattr(self.main_window, "focus_mode_var"):
             self.focus_mode_var = self.main_window.focus_mode_var
             self._trace_id = self.focus_mode_var.trace_add("write", self._on_focus_mode_changed)
@@ -179,6 +180,17 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         self.active_view = "compact"
         self.update_view_visibility()
+
+    def _ensure_tree_synced(self):
+        if getattr(self, "_tree_dirty", False):
+            self._tree_dirty = False
+            children = self.tree.get_children()
+            if children:
+                self.tree.delete(*children)
+            for oid in self.items_list:
+                data = self.item_data.get(oid)
+                if data:
+                    self.tree.insert("", "end", iid=oid, values=tuple(data.get("values", ())), tags=tuple(data.get("tags", ())))
 
     def _on_keypress_up(self, event):
         if not self.items_list:
@@ -232,6 +244,7 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         if focus_active:
             # Compact view (Treeview)
+            self._ensure_tree_synced()
             self.canvas_container.pack_forget()
             self.tree.pack(fill="both", expand=True)
             self.active_view = "compact"
@@ -327,12 +340,12 @@ class TreeviewListboxWrapper(ttk.Frame):
             self.focused_iid = tree_sel[0]
 
     def _sync_view_selections(self):
-        # Sync Treeview selection
-        tree_sel = self.tree.selection()
-        if set(tree_sel) != set(self.selected_iids):
-            self.tree.selection_set(self.selected_iids)
-        # Sync cards highlight in detailed mode
-        if self.active_view == "detailed":
+        if self.active_view == "compact":
+            self._ensure_tree_synced()
+            tree_sel = self.tree.selection()
+            if set(tree_sel) != set(self.selected_iids):
+                self.tree.selection_set(self.selected_iids)
+        elif self.active_view == "detailed":
             self.redraw_cards_highlights()
 
     def redraw_cards_highlights(self):
@@ -341,18 +354,21 @@ class TreeviewListboxWrapper(ttk.Frame):
         accent_selected = "#2e6b30" if not is_dark else "#a6e3a1"
         bg_normal = "#f3f3f3" if not is_dark else "#24273a"
 
-        for oid in self.items_list:
-            if oid in self.item_data:
-                card_body = self.item_data[oid].get("card_body")
-                accent_strip = self.item_data[oid].get("accent_strip")
-                accent_normal = self.item_data[oid].get("accent_color_normal", bg_normal)
-                if card_body and card_body.winfo_exists():
-                    is_sel = oid in self.selected_iids
-                    bg = bg_selected if is_sel else bg_normal
-                    self._set_bg_recursive(card_body, bg)
-                if accent_strip and accent_strip.winfo_exists():
-                    is_sel = oid in self.selected_iids
-                    accent_strip.configure(bg=accent_selected if is_sel else accent_normal)
+        # Only update active virtual cards on screen for instant O(1) response
+        for idx in list(self._active_card_windows.keys()):
+            if 0 <= idx < len(self.items_list):
+                oid = self.items_list[idx]
+                if oid in self.item_data:
+                    card_body = self.item_data[oid].get("card_body")
+                    accent_strip = self.item_data[oid].get("accent_strip")
+                    accent_normal = self.item_data[oid].get("accent_color_normal", bg_normal)
+                    if card_body and card_body.winfo_exists():
+                        is_sel = oid in self.selected_iids
+                        bg = bg_selected if is_sel else bg_normal
+                        self._set_bg_recursive(card_body, bg)
+                    if accent_strip and accent_strip.winfo_exists():
+                        is_sel = oid in self.selected_iids
+                        accent_strip.configure(bg=accent_selected if is_sel else accent_normal)
 
     def _set_bg_recursive(self, widget, bg_color):
         if getattr(widget, "is_badge", False):
@@ -1024,11 +1040,12 @@ class TreeviewListboxWrapper(ttk.Frame):
         else:
             self.focused_iid = str(index_or_iid)
 
-    def delete(self, first, last=None):
+    def delete(self, first=0, last=None):
         self.items_list.clear()
         self.items_set.clear()
         self.selected_iids.clear()
         self.focused_iid = None
+        self._tree_dirty = False
         children = self.tree.get_children()
         if children:
             self.tree.delete(*children)
@@ -1052,12 +1069,6 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         self.items_list.append(oid)
 
-        if not bulk and self.tree.exists(oid):
-            try:
-                self.tree.delete(oid)
-            except Exception:
-                pass
-
         rev_char = "☑" if reviewed else "☐"
         row_tags = ["even" if len(self.items_list) % 2 == 0 else "odd"]
         
@@ -1070,7 +1081,15 @@ class TreeviewListboxWrapper(ttk.Frame):
                 self._configured_tags.add(tag_name)
             row_tags.append(tag_name)
 
-        self.tree.insert("", "end", iid=oid, values=(rev_char, oid, genus or "", species or ""), tags=tuple(row_tags))
+        if self.active_view == "compact":
+            if not bulk and self.tree.exists(oid):
+                try:
+                    self.tree.delete(oid)
+                except Exception:
+                    pass
+            self.tree.insert("", "end", iid=oid, values=(rev_char, oid, genus or "", species or ""), tags=tuple(row_tags))
+        else:
+            self._tree_dirty = True
 
         self.item_data[oid] = {
             "title": title,
@@ -1123,19 +1142,21 @@ class TreeviewListboxWrapper(ttk.Frame):
     def focus(self, item=None):
         if item is None:
             if self.active_view == "compact":
+                self._ensure_tree_synced()
                 return self.tree.focus()
             else:
                 return self.focused_iid or ""
         else:
             oid = str(item)
             if self.active_view == "compact":
+                self._ensure_tree_synced()
                 self.tree.focus(oid)
             else:
                 self.focused_iid = oid
 
     def item(self, item, option=None, **kwargs):
         oid = str(item)
-        if self.active_view == "compact":
+        if self.active_view == "compact" and not getattr(self, "_tree_dirty", False):
             return self.tree.item(oid, option, **kwargs)
 
         if oid not in self.item_data:
@@ -1144,11 +1165,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         if option == "tags":
             return self.item_data[oid].get("tags", [])
         if option == "values":
-            reviewed = self.item_data[oid].get("reviewed", False)
-            rev_char = "☑" if reviewed else "☐"
-            genus = self.item_data[oid].get("genus", "")
-            species = self.item_data[oid].get("species", "")
-            return [rev_char, oid, genus, species]
+            return self.item_data[oid].get("values", [])
 
         if "tags" in kwargs:
             self.item_data[oid]["tags"] = kwargs["tags"]
@@ -1159,6 +1176,10 @@ class TreeviewListboxWrapper(ttk.Frame):
             if vals:
                 self.item_data[oid]["reviewed"] = (vals[0] == "☑")
                 self._update_card_checkbox(oid)
+
+        if self.active_view == "compact" and getattr(self, "_tree_dirty", False):
+            self._ensure_tree_synced()
+            return self.tree.item(oid, option, **kwargs)
 
         if option is None and not kwargs:
             reviewed = self.item_data[oid].get("reviewed", False)

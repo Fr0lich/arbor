@@ -4463,19 +4463,24 @@ class ObjectProgramUI(
 
 
         for col, widget in self.reg_entries.items():
-
-            old = utils.fmt_pandas_val(self.app.df_reg.loc[oid, col])
+            old = utils.fmt_pandas_val(self.app.df_reg.at[oid, col] if oid in self.app.df_reg.index and col in self.app.df_reg.columns else "")
 
             if isinstance(widget, tk.Text):
                 new = widget.get("1.0", tk.END).strip()
             else:
                 new = self.reg_vars[col].get()
 
-
             if old != new:
                 ensure_undo()
 
-                self.app.df_reg.loc[oid, col] = new
+                self.app.df_reg.at[oid, col] = new
+                if getattr(self, "_cached_reg_dict", None) is not None and oid in self._cached_reg_dict:
+                    self._cached_reg_dict[oid][col] = new
+                if col == "Genus" and getattr(self, "_cached_genus_dict", None) is not None:
+                    self._cached_genus_dict[oid] = new
+                elif col == "Species" and getattr(self, "_cached_species_dict", None) is not None:
+                    self._cached_species_dict[oid] = new
+
                 reg_changed_fields.append(col)
                 reg_changed_values.append(f'{col}: "{old}"  "{new}"')
 
@@ -4488,7 +4493,7 @@ class ObjectProgramUI(
             # Only check for edits if the state has actually been edited since loading
             db_val = False
             if col in self.app.df_obs.columns:
-                val = self.app.df_obs.loc[oid, col]
+                val = self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index else False
                 db_val = bool(val) if not pd.isna(val) else False
 
             loaded_val = self.loaded_problem_states.get(col, db_val)
@@ -4498,7 +4503,9 @@ class ObjectProgramUI(
 
             if loaded_val != new:
                 ensure_undo()
-                self.app.df_obs.loc[oid, col] = new
+                self.app.df_obs.at[oid, col] = new
+                if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                    self._cached_obs_dict[oid][col] = new
 
                 prob_changed_fields.append(col)
                 prob_changed_values.append(f'{col}: "{loaded_val}"  "{new}"')
@@ -4506,37 +4513,43 @@ class ObjectProgramUI(
                 self._list_dirty = True
                 self.loaded_problem_states[col] = new
 
-
-
-        # -------- TEXT --------
-        
-
         # -------- LOCATION --------
         if not skip_heavy:
             for col, var in self.location_vars.items():
-                old = utils.fmt_pandas_val(self.app.df_obs.loc[oid, col])
+                old = utils.fmt_pandas_val(self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
                 new = var.get()
 
                 if old != new:
                     ensure_undo()
-                    self.app.df_obs.loc[oid, col] = new
+                    self.app.df_obs.at[oid, col] = new
+                    if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                        self._cached_obs_dict[oid][col] = new
                     loc_changed_fields.append(col)
                     loc_changed_values.append(f'{col}: "{old}"  "{new}"')
 
         # -------- REVIEWED --------
-        old = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
+        old = bool(self.app.df_obs.at[oid, REVIEWED_COLUMN]) if oid in self.app.df_obs.index and REVIEWED_COLUMN in self.app.df_obs.columns else False
         new = bool(self.reviewed_var.get())
 
         if old != new:
             ensure_undo()
-            self.app.df_obs.loc[oid, REVIEWED_COLUMN] = new
+            self.app.df_obs.at[oid, REVIEWED_COLUMN] = new
+            if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                self._cached_obs_dict[oid][REVIEWED_COLUMN] = new
+            if getattr(self, "_cached_reviewed_dict", None) is not None:
+                self._cached_reviewed_dict[oid] = new
+
             if new:
                 now = datetime.now().strftime("%d.%m.%Y %H:%M")
-                self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = now
+                self.app.df_obs.at[oid, REVIEWED_AT_COLUMN] = now
+                if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                    self._cached_obs_dict[oid][REVIEWED_AT_COLUMN] = now
                 self.reviewed_time_label.config(text=f"( {now} )")
                 reg_changed_values.append(f"Reviewed set at {now}")
             else:
-                self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = ""
+                self.app.df_obs.at[oid, REVIEWED_AT_COLUMN] = ""
+                if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                    self._cached_obs_dict[oid][REVIEWED_AT_COLUMN] = ""
                 self.reviewed_time_label.config(text="")
                 reg_changed_values.append("Reviewed removed")
 
@@ -4554,7 +4567,6 @@ class ObjectProgramUI(
             self.app.dirty = True
             self.update_dirty_ui()
             self._list_dirty = True
-            self._invalidate_row_cache()
             
             # Log the edit immediately so it's captured in the continuous session
             self.log_action("EDIT", 
@@ -4564,16 +4576,11 @@ class ObjectProgramUI(
 
             self.update_history_indicator(oid)   
 
-
-            self._list_dirty = True
             self._problem_cache.pop(oid, None)
             s_oid = str(oid)
             self._problem_cache.pop(s_oid, None)
             if s_oid.isdigit():
                 self._problem_cache.pop(int(s_oid), None)
-
-            # Invalidate row caches so dynamic badges pull fresh data
-            self._invalidate_row_cache()
             
             if {"Genus", "Species"} & set(reg_changed_fields):
                 self.invalidate_search_index()
@@ -5069,13 +5076,28 @@ class ObjectProgramUI(
 
             self.title_label.config(text=self.object_title(oid))
 
-            reg = self.reg_by_id.loc[oid]
-            if isinstance(reg, pd.DataFrame):
-                reg = reg.iloc[0]
-
-            obs = self.obs_by_id.loc[oid]
-            if isinstance(obs, pd.DataFrame):
-                obs = obs.iloc[0]
+            reg_dict = self._get_reg_dict()
+            obs_dict = self._get_obs_dict()
+            reg = reg_dict.get(oid)
+            if reg is None:
+                try:
+                    reg = self.reg_by_id.loc[oid]
+                    if isinstance(reg, pd.DataFrame):
+                        reg = reg.iloc[0].to_dict()
+                    elif isinstance(reg, pd.Series):
+                        reg = reg.to_dict()
+                except Exception:
+                    reg = {}
+            obs = obs_dict.get(oid)
+            if obs is None:
+                try:
+                    obs = self.obs_by_id.loc[oid]
+                    if isinstance(obs, pd.DataFrame):
+                        obs = obs.iloc[0].to_dict()
+                    elif isinstance(obs, pd.Series):
+                        obs = obs.to_dict()
+                except Exception:
+                    obs = {}
 
 
             if self.image_mode == "online":
@@ -6997,59 +7019,18 @@ class ObjectProgramUI(
         """
         Return the search index {oid: token_dict}.
         During startup the index is pre-built by _precompute_startup_caches() so this
-        method just returns the cached result.  After a data-changing operation that
+        method just returns the cached result. After a data-changing operation that
         calls invalidate_search_index(), the cache is rebuilt lazily here covering
-        ALL registration columns (not just Genus + Species) for maximum recall.
+        ALL registration columns for maximum recall.
         """
         if self._search_index_cache is not None:
             return self._search_index_cache
 
-        index = {}
-        if self.app.df_reg is None:
-            return index
-
-        df = self.app.df_reg
-        # Index every column in df_reg for full-text search coverage
-        df_str = df.fillna("").astype(str)
-        for col in df_str.columns:
-            df_str[col] = df_str[col].str.strip().str.lower()
-
-        all_cols = list(df.columns)
-        genus_idx = all_cols.index('Genus') if 'Genus' in all_cols else -1
-        species_idx = all_cols.index('Species') if 'Species' in all_cols else -1
-        family_idx = all_cols.index('Family') if 'Family' in all_cols else -1
-
-        for row in df_str.itertuples(index=True, name=None):
-            oid = row[0]
-            oid_str = str(oid).lower()
-
-            genus = row[genus_idx + 1] if genus_idx != -1 else ""
-            species = row[species_idx + 1] if species_idx != -1 else ""
-            family = row[family_idx + 1] if family_idx != -1 else ""
-
-            if genus and species:
-                genus_species_str = f"{genus} {species}"
-            elif genus:
-                genus_species_str = genus
-            elif species:
-                genus_species_str = species
-            else:
-                genus_species_str = ""
-
-            parts = [oid_str]
-            for val in row[1:]:
-                if val:
-                    parts.append(val)
-
-            index[oid] = {
-                "id": oid_str,
-                "genus_species": genus_species_str,
-                "family": family,
-                "all": " ".join(parts)
-            }
-
-        self._search_index_cache = index
-        return index
+        self._search_index_cache = self.search_engine.get_search_index(
+            self.app.df_reg,
+            self._get_reg_dict()
+        )
+        return self._search_index_cache
 
     def invalidate_search_index(self):
         """Call after any data change that affects Genus, Species, or ObjectID."""
@@ -7130,8 +7111,15 @@ class ObjectProgramUI(
                 lookup_key = oid
 
             self.app.redo_stacks.setdefault(lookup_key, []).clear()
-            self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN] = value
-            self.app.df_obs.loc[lookup_key, REVIEWED_AT_COLUMN] = now
+            self.app.df_obs.at[lookup_key, REVIEWED_COLUMN] = value
+            self.app.df_obs.at[lookup_key, REVIEWED_AT_COLUMN] = now
+
+            if getattr(self, "_cached_obs_dict", None) is not None and lookup_key in self._cached_obs_dict:
+                self._cached_obs_dict[lookup_key][REVIEWED_COLUMN] = value
+                self._cached_obs_dict[lookup_key][REVIEWED_AT_COLUMN] = now
+            if getattr(self, "_cached_reviewed_dict", None) is not None:
+                self._cached_reviewed_dict[lookup_key] = value
+                self._cached_reviewed_dict[oid] = value
 
             s_oid = str(oid)
             self._problem_cache.pop(oid, None)
@@ -7150,7 +7138,6 @@ class ObjectProgramUI(
         self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'])
         self.app.dirty = True
         self.update_dirty_ui()
-        self._invalidate_row_cache()
         self.update_review_progress()
         self.update_dashboard()
         self.update_reviewed_button_state()
@@ -8370,8 +8357,15 @@ class ObjectProgramUI(
         new_val = not current
         
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if new_val else ""
-        self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN] = new_val
-        self.app.df_obs.loc[lookup_key, REVIEWED_AT_COLUMN] = now
+        self.app.df_obs.at[lookup_key, REVIEWED_COLUMN] = new_val
+        self.app.df_obs.at[lookup_key, REVIEWED_AT_COLUMN] = now
+
+        if getattr(self, "_cached_obs_dict", None) is not None and lookup_key in self._cached_obs_dict:
+            self._cached_obs_dict[lookup_key][REVIEWED_COLUMN] = new_val
+            self._cached_obs_dict[lookup_key][REVIEWED_AT_COLUMN] = now
+        if getattr(self, "_cached_reviewed_dict", None) is not None:
+            self._cached_reviewed_dict[lookup_key] = new_val
+            self._cached_reviewed_dict[oid] = new_val
 
         s_oid = str(oid)
         self._problem_cache.pop(oid, None)

@@ -20,12 +20,14 @@ class SearchEngine:
             return self._search_index_cache
 
         index = {}
-        if df_reg is None:
+        if reg_dict:
+            items_iter = reg_dict.items()
+        elif df_reg is not None and not df_reg.empty:
+            items_iter = df_reg.to_dict(orient="index").items()
+        else:
             return index
 
-        # Index every column in df_reg for full-text search coverage
-        for oid in df_reg.index:
-            reg_row = reg_dict.get(oid, {})
+        for oid, reg_row in items_iter:
             id_str = str(oid).lower()
 
             genus = reg_row.get("Genus", "")
@@ -33,7 +35,7 @@ class SearchEngine:
 
             genus_str = str(genus).strip().lower() if genus and not pd.isna(genus) else ""
             species_str = str(species).strip().lower() if species and not pd.isna(species) else ""
-            genus_species_str = f"{genus_str} {species_str}".strip()
+            genus_species_str = f"{genus_str} {species_str}".strip() if (genus_str or species_str) else ""
 
             family_val = reg_row.get("Family", "")
             family = str(family_val).strip().lower() if family_val and not pd.isna(family_val) else ""
@@ -42,7 +44,7 @@ class SearchEngine:
             for col_name, val in reg_row.items():
                 if val and not pd.isna(val):
                     val_str = str(val).strip().lower()
-                    if val_str:
+                    if val_str and val_str not in ("nan", "none"):
                         parts.append(val_str)
 
             index[oid] = {

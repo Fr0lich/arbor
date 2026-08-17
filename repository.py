@@ -63,23 +63,41 @@ def _normalise_dataframes(df_reg, df_obs, config):
             missing_df = pd.DataFrame({"ObjectID": missing_obs_ids})
             df_obs = pd.concat([df_obs, missing_df], ignore_index=True)
 
-    # --- Registration: ensure all defined registration columns exist ---
-    new_reg_cols = [col for col in registration_columns if col not in df_reg.columns]
-    if new_reg_cols:
-        df_reg[new_reg_cols] = pd.DataFrame({col: "" for col in new_reg_cols}, index=df_reg.index)
+    # --- Registration: batch-insert missing registration columns ---
+    new_reg = {col: "" for col in registration_columns if col not in df_reg.columns}
+    if "UID" not in df_reg.columns and "UID" not in new_reg:
+        new_reg["UID"] = ""
+    if "ProblemDescription" not in df_reg.columns and "ProblemDescription" not in new_reg:
+        new_reg["ProblemDescription"] = ""
 
-    # --- Observation: problem columns ---
-    new_prob_cols = [col for col in problem_columns if col not in df_obs.columns]
-    if new_prob_cols:
-        df_obs[new_prob_cols] = pd.DataFrame({col: False for col in new_prob_cols}, index=df_obs.index)
+    if new_reg:
+        df_reg[list(new_reg.keys())] = pd.DataFrame(new_reg, index=df_reg.index)
+
+    # --- Observation: batch-insert missing observation columns ---
+    new_obs = {}
+    for col in problem_columns:
+        if col not in df_obs.columns:
+            new_obs[col] = False
+    for col in location_columns:
+        if col not in df_obs.columns:
+            new_obs[col] = ""
+
+    if "Images_Missing" not in df_obs.columns:
+        new_obs["Images_Missing"] = True
+    if "Images_Problem" not in df_obs.columns:
+        new_obs["Images_Problem"] = False
+    if REVIEWED_COLUMN not in df_obs.columns:
+        new_obs[REVIEWED_COLUMN] = False
+    if REVIEWED_AT_COLUMN not in df_obs.columns:
+        new_obs[REVIEWED_AT_COLUMN] = ""
+    if ONLINE_EXISTS_COLUMN not in df_obs.columns:
+        new_obs[ONLINE_EXISTS_COLUMN] = False
+
+    if new_obs:
+        df_obs[list(new_obs.keys())] = pd.DataFrame(new_obs, index=df_obs.index)
+
     if problem_columns:
         df_obs[problem_columns] = df_obs[problem_columns].fillna(False).astype(bool)
-
-    # --- Observation: location columns ---
-    new_loc_cols = [col for col in location_columns if col not in df_obs.columns]
-    if new_loc_cols:
-        df_obs[new_loc_cols] = pd.DataFrame({col: "" for col in new_loc_cols}, index=df_obs.index)
-
 
     if location_columns:
         df_obs[location_columns] = df_obs[location_columns].fillna("").astype(object)
@@ -91,51 +109,24 @@ def _normalise_dataframes(df_reg, df_obs, config):
                 df_obs[col] = df_obs[col].replace({"": "False", None: "False"}).fillna("False")
                 df_obs[col] = df_obs[col].replace({True: "True", False: "False"}).astype(str)
 
-
-
-    # --- Observation: image / review flags ---
-    new_obs_cols = {}
-    if "Images_Missing" not in df_obs.columns:
-        new_obs_cols["Images_Missing"] = True
-    if "Images_Problem" not in df_obs.columns:
-        new_obs_cols["Images_Problem"] = False
-    if REVIEWED_COLUMN not in df_obs.columns:
-        new_obs_cols[REVIEWED_COLUMN] = False
-    if REVIEWED_AT_COLUMN not in df_obs.columns:
-        new_obs_cols[REVIEWED_AT_COLUMN] = ""
-    if ONLINE_EXISTS_COLUMN not in df_obs.columns:
-        new_obs_cols[ONLINE_EXISTS_COLUMN] = False
-
-    if new_obs_cols:
-        df_obs[list(new_obs_cols.keys())] = pd.DataFrame(new_obs_cols, index=df_obs.index)
-
     df_obs["Images_Missing"] = df_obs["Images_Missing"].fillna(True).astype(bool)
     df_obs["Images_Problem"] = df_obs["Images_Problem"].fillna(False).astype(bool)
     df_obs[REVIEWED_COLUMN] = df_obs[REVIEWED_COLUMN].fillna(False).astype(bool)
     df_obs[REVIEWED_AT_COLUMN] = df_obs[REVIEWED_AT_COLUMN].fillna("").astype(object)
 
-    # --- Registration: fill NaN, ensure UID and ProblemDescription ---
-    # Fill NaN and cast to object in bulk for non-ObjectID columns
+    # --- Registration: fill NaN, ensure types and UIDs ---
     cols_to_fill = [col for col in df_reg.columns if col != "ObjectID"]
     if cols_to_fill:
         df_reg[cols_to_fill] = df_reg[cols_to_fill].fillna("").astype(object)
-
-    new_reg_cols = {}
-    if "UID" not in df_reg.columns:
-        new_reg_cols["UID"] = ""
-    if "ProblemDescription" not in df_reg.columns:
-        new_reg_cols["ProblemDescription"] = ""
-
-    if new_reg_cols:
-        df_reg[list(new_reg_cols.keys())] = pd.DataFrame(new_reg_cols, index=df_reg.index)
 
     df_reg["ProblemDescription"] = df_reg["ProblemDescription"].astype(object)
 
     # Generate short UIDs for any row that is missing one
     missing_uid = df_reg["UID"].isna() | (df_reg["UID"].astype(str).str.strip() == "")
-    if missing_uid.any():
+    missing_count = missing_uid.sum()
+    if missing_count > 0:
         df_reg.loc[missing_uid, "UID"] = [
-            uuid.uuid4().hex[:8] for _ in range(missing_uid.sum())
+            uuid.uuid4().hex[:8] for _ in range(missing_count)
         ]
 
     return df_reg, df_obs
