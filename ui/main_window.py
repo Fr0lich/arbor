@@ -274,6 +274,13 @@ class ObjectProgramUI(
             return False   # scan not complete yet
         return oid in sug or str(oid) in sug
 
+    def save_user_pref(self, key, value):
+        import config
+        prefs = config.load_prefs()
+        prefs[key] = value
+        config.save_prefs(prefs)
+        setattr(self, key, value)
+
     @property
     def autoAdvanceOnReview(self):
         return self.auto_advance_var.get()
@@ -4139,14 +4146,24 @@ class ObjectProgramUI(
         self.images_missing_label.pack(side="right", padx=(0, 8))
 
         # Image Control Overlay Toolbar
-        image_toolbar = ttk.Frame(right, style="MiddlePane.TFrame")
-        self.image_toolbar = image_toolbar
-        image_toolbar.pack(fill="x", padx=6, pady=(0, 2))
-
-        ttk.Button(image_toolbar, text="Zoom +", style="Primary.TButton", command=self.zoom_image_in, width=10).pack(side="left", padx=2)
-        ttk.Button(image_toolbar, text="Zoom -", style="Primary.TButton", command=self.zoom_image_out, width=10).pack(side="left", padx=2)
-        ttk.Button(image_toolbar, text="Rotate 90", style="Primary.TButton", command=self.rotate_image, width=10).pack(side="left", padx=2)
-        ttk.Button(image_toolbar, text="Reset", style="Primary.TButton", command=self.reset_image_view, width=8).pack(side="left", padx=2)
+        from ui.image_toolbar import create_image_toolbar
+        self.image_toolbar = create_image_toolbar(
+            parent=right,
+            live_callbacks={
+                "zoom_in": self.zoom_image_in,
+                "zoom_out": self.zoom_image_out,
+                "rotate_cw": lambda: self.rotate_image(90) if hasattr(self, 'rotate_image') else None,
+                "rotate_ccw": lambda: self.rotate_image(-90) if hasattr(self, 'rotate_image') else None,
+                "reset": self.reset_image_view,
+                "fit": getattr(self, "fit_image_view", self.reset_image_view),
+                "design_toggle": lambda mode: self.save_user_pref("image_button_style", mode)
+            },
+            design_mode=getattr(self, "image_button_style", "standard"),
+            dark_mode=getattr(self, "dark_mode_active", False),
+            zoom_level=getattr(self, "image_zoom_factor", 1.0),
+            rotation_angle=getattr(self, "image_rotation_angle", 0)
+        )
+        self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2))
 
         image_box = ttk.Frame(right, relief="flat", padding=0, style="MiddlePane.TFrame")
         self.image_box = image_box

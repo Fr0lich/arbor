@@ -670,6 +670,9 @@ class LayoutSettingsMixin:
 
     def apply_theme(self):
         import config
+
+        if hasattr(self, "image_toolbar") and hasattr(self.image_toolbar, "set_dark_mode"):
+            self.image_toolbar.set_dark_mode(self.dark_mode_active)
         self._ensure_theme_widgets_registered()
         style = ttk.Style(self.root)
         theme_name = config.get_theme()
@@ -677,6 +680,9 @@ class LayoutSettingsMixin:
         # Always use 'clam' as base — required for full border/color control on Windows.
         # Native themes (vista, xpnative) lock widget rendering and prevent Stitch styling.
         style.theme_use("clam")
+
+        if hasattr(self, "image_toolbar") and hasattr(self.image_toolbar, "set_dark_mode"):
+            self.image_toolbar.set_dark_mode(self.dark_mode_active)
 
         if self.dark_mode_active:
             bg_color = "#1e1e2e"
