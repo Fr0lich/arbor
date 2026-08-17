@@ -226,7 +226,7 @@ class HistoricalSuggestionsMixin:
 
     def _load_books_file_worker(self, path):
         try:
-            xls = pd.ExcelFile(path, engine="openpyxl")
+            xls = pd.ExcelFile(path, engine="calamine")
             loaded = []
             total = len(xls.sheet_names)
 

@@ -1257,7 +1257,7 @@ class StartupDialog:
                     "df_reg": df_reg, "reg_by_id": None,
                 })
             else:
-                xls = pd.ExcelFile(path, engine="openpyxl")
+                xls = pd.ExcelFile(path, engine="calamine")
                 allowed_cols = set(self.app.config.get("books_columns", []))
                 if "ObjectID" not in allowed_cols:
                     allowed_cols.add("ObjectID")
