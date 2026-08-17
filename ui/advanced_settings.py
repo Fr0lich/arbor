@@ -427,7 +427,7 @@ class AdvancedSettingsWindow:
                                                self.vars[item["id"]], item.get("choices", []))
                     elif item["type"] == "text":
                         self.create_text_row(group_content, item["label"], item.get("description", ""), self.vars[item["id"]])
-                    elif item.get("type") == "button":  # Fix: skip button types
+                    elif item.get("type") == "button":
                         # Support trigger buttons
                         callback_name = item.get("callback")
                         cmd = lambda cb=callback_name: self.execute_button_callback(cb)
@@ -544,7 +544,7 @@ class AdvancedSettingsWindow:
         immediate_callbacks = []
 
         for item in ADVANCED_SETTINGS_SCHEMA:
-            if item.get("type") == "button":  # Fix: skip button types
+            if item.get("type") == "button":
                 continue
 
             item_id = item["id"]
