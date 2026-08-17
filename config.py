@@ -38,9 +38,11 @@ def load_prefs():
     if os.path.exists(_PREFS_PATH):
         try:
             with open(_PREFS_PATH, "r", encoding="utf-8") as f:
-                _prefs_cache = json.load(f)
-                return _prefs_cache
-        except Exception as e:  # Fix: Replace bare except
+                data = json.load(f)
+                if isinstance(data, dict):
+                    _prefs_cache = data
+                    return _prefs_cache
+        except Exception:
             pass
     _prefs_cache = {}
     return _prefs_cache
@@ -58,20 +60,22 @@ def save_prefs(prefs):
         global _save_job_id
         _save_job_id = None
         try:
-            with open(_PREFS_PATH, "w", encoding="utf-8") as f:
+            tmp_path = _PREFS_PATH + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(_prefs_cache, f, indent=2)
-        except Exception as e:  # Fix: Replace bare except
+            os.replace(tmp_path, _PREFS_PATH)
+        except Exception:
             pass
 
     if root:
         if _save_job_id is not None:
             try:
                 root.after_cancel(_save_job_id)
-            except Exception as e:  # Fix: Replace bare except
+            except Exception:
                 pass
         try:
             _save_job_id = root.after(100, _do_write)
-        except Exception as e:  # Fix: Replace bare except
+        except Exception:
             # Fallback if scheduler fails
             _do_write()
     else:

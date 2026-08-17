@@ -122,5 +122,23 @@ class TestOptimize(unittest.TestCase):
         other_sum = has_prob_series.drop("1", errors="ignore").sum()
         self.assertEqual(other_sum, 1)
 
+    def test_get_reg_by_id_none_database(self):
+        # Passing None or dict with None df_reg should return None safely without raising AttributeError
+        self.assertIsNone(ObjectProgramUI._get_reg_by_id(None, None))
+        self.assertIsNone(ObjectProgramUI._get_reg_by_id(None, {}))
+        self.assertIsNone(ObjectProgramUI._get_reg_by_id(None, {"df_reg": None, "reg_by_id": None}))
+
+    def test_alphanumeric_image_url_resolution(self):
+        from ui.image_handler import ImageHandlerMixin
+        class DummyImageUI(ImageHandlerMixin):
+            def __init__(self):
+                self.app = type("App", (), {"config": {"image_url_pattern": "https://example.com/photos/{num:04d}{suffix}.jpg"}})()
+        
+        handler = DummyImageUI()
+        # Should not raise ValueError on alphanumeric IDs
+        urls = handler.build_online_image_urls("42A")
+        self.assertEqual(len(urls), 4)
+        self.assertIn("https://example.com/photos/{num:04d}{suffix}.jpg/42A", urls)
+
 if __name__ == "__main__":
     unittest.main()

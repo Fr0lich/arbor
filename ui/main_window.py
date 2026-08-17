@@ -1734,19 +1734,21 @@ class ObjectProgramUI(
 
 
     def _get_reg_by_id(self, db):
-
+        if not db:
+            return None
         if db.get("reg_by_id") is None:
+            df_reg = db.get("df_reg")
+            if df_reg is None or not isinstance(df_reg, pd.DataFrame):
+                return None
             try:
-                db["reg_by_id"] = db["df_reg"].set_index("ObjectID")
+                if "ObjectID" in df_reg.columns:
+                    db["reg_by_id"] = df_reg.set_index("ObjectID")
+                else:
+                    db["reg_by_id"] = df_reg
             except Exception:
                 return None
 
-        # PERFORMANCE OPTIMIZATION (Bolt):
-        # Removed completely unused `value_cache` assignment which was doing
-        # a very expensive `df.groupby("ObjectID").first()` operation on every DB load.
-        # This significantly accelerates historical database / books file loading.
-
-        return db["reg_by_id"]
+        return db.get("reg_by_id")
 
 
        

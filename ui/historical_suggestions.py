@@ -301,9 +301,18 @@ class HistoricalSuggestionsMixin:
 
         self._history_presence_set = set()
         for db in loaded:
-            if db["reg_by_id"] is None:
-                db["reg_by_id"] = db["df_reg"].set_index("ObjectID")
-            self._history_presence_set.update(db["reg_by_id"].index)
+            reg_df = self._get_reg_by_id(db) if hasattr(self, "_get_reg_by_id") else None
+            if reg_df is None and db.get("reg_by_id") is None and db.get("df_reg") is not None and isinstance(db.get("df_reg"), pd.DataFrame):
+                try:
+                    if "ObjectID" in db["df_reg"].columns:
+                        db["reg_by_id"] = db["df_reg"].set_index("ObjectID")
+                    else:
+                        db["reg_by_id"] = db["df_reg"]
+                except Exception:
+                    pass
+            reg_by_id = db.get("reg_by_id")
+            if reg_by_id is not None and hasattr(reg_by_id, "index"):
+                self._history_presence_set.update(reg_by_id.index)
 
         self.app.historical_dbs = loaded
 

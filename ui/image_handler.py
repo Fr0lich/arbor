@@ -239,10 +239,10 @@ class ImageHandlerMixin:
             if "{id}" in pattern:
                 url = pattern.replace("{id}", f"{oid}{s}")
             elif "{num" in pattern and "{suffix}" in pattern:
-                try:
+                if str(oid).isdigit():
                     num = int(oid)
                     url = pattern.format(num=num, suffix=s)
-                except Exception:
+                else:
                     url = f"{pattern.rstrip('/')}/{oid}{s}"
             else:
                 url = f"{pattern}{oid}{s}"
