@@ -2235,14 +2235,7 @@ class ObjectProgramUI(
         popup.add_command(label="New Database", command=self.create_new_database)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
-    def show_settings_dropdown(self):
-        popup = tk.Menu(self.root, tearoff=0)
-        popup.add_command(label="General Settings...",  command=lambda: self._open_unified("general"))
-        popup.add_command(label="Layout Settings...",   command=lambda: self._open_unified("layout"))
-        popup.add_command(label="Focus Settings...",    command=lambda: self._open_unified("focus"))
-        popup.add_separator()
-        popup.add_command(label="Advanced Settings...", command=lambda: self._open_unified("advanced"))
-        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
 
     def _open_unified(self, tab="general"):
         """Open or switch-to-tab the unified settings window."""
@@ -3098,9 +3091,9 @@ class ObjectProgramUI(
 
         self.sb_settings_btn = ttk.Button(
             self.sb_buttons_frame,
-            text="SETTINGS ▾",
+            text="SETTINGS",
             style="Nav.TButton",
-            command=self.show_settings_dropdown
+            command=self._open_unified
         )
         self.sb_settings_btn.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
 
