@@ -266,8 +266,9 @@ class AutosaveMixin:
             reverse=True
         )
         import config as _app_cfg
-        advanced_prefs = _app_cfg.load_prefs().get("advanced", {})
-        limit = int(advanced_prefs.get("autosave_archive_limit", "10"))
+        prefs = _app_cfg.load_prefs() or {}
+        advanced_prefs = prefs.get("advanced", {})
+        limit = int(prefs.get("autosave_archive_limit", advanced_prefs.get("autosave_archive_limit", "10")))
         if len(archives) > limit:
             self.root.after(500, lambda: self._prompt_archive_clutter(archive_dir, archives))
 

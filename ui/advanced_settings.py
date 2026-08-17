@@ -570,6 +570,10 @@ class AdvancedSettingsWindow:
 
         # Save to disk
         config.save_prefs(prefs)
+        try:
+            utils.reload_log_level()
+        except Exception:
+            pass
 
         # Close settings window
         self.win.destroy()

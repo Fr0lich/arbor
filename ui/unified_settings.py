@@ -182,8 +182,27 @@ class UnifiedSettingsWindow:
         ).pack(side="left", padx=sc(6), pady=sc(10))
 
     def _init_draft_variables(self):
-        """Initialize draft Variables from config and prefs."""
+        """Initialize draft Variables from live host app state and saved prefs."""
         p = self.prefs
+        app = self.app
+
+        def _get_val(attr_name, default):
+            if not app:
+                return default
+            obj = getattr(app, attr_name, None)
+            if obj is None:
+                return default
+            if isinstance(obj, tk.Variable):
+                try:
+                    val = obj.get()
+                    if not isinstance(val, (bool, str, int, float)):
+                        return default
+                    return val
+                except Exception:
+                    return default
+            if isinstance(obj, (bool, str, int, float)):
+                return obj
+            return default
 
         # General
         current_mins = config.AUTOSAVE_INTERVAL_MS // 60000
@@ -192,33 +211,94 @@ class UnifiedSettingsWindow:
         self.var_excel_backup = tk.BooleanVar(value=p.get("enable_excel_import_backup", True))
         self.var_log_verbosity = tk.StringVar(value=p.get("log_verbosity", "ERROR"))
         self.var_archive_limit = tk.StringVar(value=str(p.get("autosave_archive_limit", 10)))
+        
+        auto_adv = _get_val("auto_advance_var", p.get("auto_advance_on_review", True))
+        auto_adv_hist = _get_val("auto_advance_history_var", p.get("auto_advance_history", False))
+        self.var_auto_advance = tk.BooleanVar(value=bool(auto_adv))
+        self.var_auto_advance_history = tk.BooleanVar(value=bool(auto_adv_hist))
 
         # Appearance & Visuals
-        self.var_dark_mode = tk.BooleanVar(value=p.get("dark_mode", False))
+        dark_active = _get_val("dark_mode_active", p.get("dark_mode", False))
+        self.var_dark_mode = tk.BooleanVar(value=bool(dark_active))
         self.var_ui_scale = tk.DoubleVar(value=p.get("ui_scale", getattr(config, "UI_SCALE", 1.0)))
         self.var_problem_highlights = tk.BooleanVar(value=p.get("enable_problem_highlights", True))
         self.var_highlight_color = tk.StringVar(value=p.get("problem_highlight_color", "Default (Red)"))
-        self.var_large_reviewed_btn = tk.BooleanVar(value=p.get("large_reviewed_button", False))
-        self.var_snap_lock = tk.BooleanVar(value=p.get("snap_lock", False))
+        
+        large_rev = _get_val("large_reviewed_button_var", p.get("large_reviewed_button", True))
+        self.var_large_reviewed_btn = tk.BooleanVar(value=bool(large_rev))
+        
+        snap_lck = _get_val("snap_lock_var", p.get("snap_lock", False))
+        self.var_snap_lock = tk.BooleanVar(value=bool(snap_lck))
 
         # Layout & Panels
-        self.var_show_list = tk.BooleanVar(value=p.get("show_list", True))
-        self.var_show_search = tk.BooleanVar(value=p.get("show_search", True))
-        self.var_show_reg = tk.BooleanVar(value=p.get("show_reg", True))
-        self.var_show_images = tk.BooleanVar(value=p.get("show_images", True))
-        self.var_location_center = tk.BooleanVar(value=p.get("location_in_center", False))
-        self.var_show_image_tools = tk.BooleanVar(value=p.get("show_image_tools", True))
-        self.var_show_bulk_edit = tk.BooleanVar(value=p.get("show_bulk_edit", True))
-        self.var_dashboard_embedded = tk.BooleanVar(value=(p.get("dashboard_mode", "Window") == "Embedded"))
-        self.var_image_stack = tk.BooleanVar(value=p.get("image_stack", False))
+        show_lst = _get_val("show_list_var", p.get("show_list", True))
+        show_srch = _get_val("show_search_var", p.get("show_search", True))
+        show_rg = _get_val("show_reg_var", p.get("show_reg", True))
+        show_imgs = _get_val("show_images_var", p.get("show_images", True))
+        loc_center = _get_val("location_in_center_var", p.get("location_in_center", False))
+        
+        loc_2r = False
+        if app and hasattr(app, "location_panel_horiz") and getattr(app, "location_panel_horiz", None) is not None:
+            mode_val = getattr(app.location_panel_horiz, "layout_mode", None)
+            if isinstance(mode_val, str):
+                loc_2r = (mode_val == "horizontal_2row")
+            else:
+                loc_2r = p.get("location_2row", False)
+        else:
+            loc_2r = p.get("location_2row", False)
+            
+        show_img_tls = _get_val("show_image_tools_var", p.get("show_image_tools", True))
+        show_blk = _get_val("show_bulk_edit_var", p.get("show_bulk_edit", True))
+        
+        dash_val = _get_val("dashboard_mode_var", p.get("dashboard_mode", "Window"))
+        dash_emb = (dash_val == "Embedded")
+        img_stk = _get_val("image_stack_var", p.get("image_stack", False))
+
+        self.var_show_list = tk.BooleanVar(value=bool(show_lst))
+        self.var_show_search = tk.BooleanVar(value=bool(show_srch))
+        self.var_show_reg = tk.BooleanVar(value=bool(show_rg))
+        self.var_show_images = tk.BooleanVar(value=bool(show_imgs))
+        self.var_location_center = tk.BooleanVar(value=bool(loc_center))
+        self.var_location_2row = tk.BooleanVar(value=bool(loc_2r))
+        self.var_show_image_tools = tk.BooleanVar(value=bool(show_img_tls))
+        self.var_show_bulk_edit = tk.BooleanVar(value=bool(show_blk))
+        self.var_dashboard_embedded = tk.BooleanVar(value=bool(dash_emb))
+        self.var_image_stack = tk.BooleanVar(value=bool(img_stk))
         self.var_layout_dynamic = tk.BooleanVar(value=False)  # runtime-only, not persisted
 
         # Focus Mode
-        self.var_focus_mode = tk.BooleanVar(value=p.get("focus_mode", False))
-        self.var_focus_fallback = tk.BooleanVar(value=p.get("focus_fallback", True))
-        self.var_focus_dynamic = tk.BooleanVar(value=p.get("focus_dynamic_update", False))
-        self.var_focus_sec_problems = tk.BooleanVar(value=p.get("focus_sec_problems", True))
-        self.var_focus_sec_location = tk.BooleanVar(value=p.get("focus_sec_location", True))
+        focus_m = _get_val("focus_mode_var", p.get("focus_mode", p.get("focus_mode_active", False)))
+        focus_fb = _get_val("focus_fallback_var", p.get("focus_fallback", True))
+        focus_dyn = _get_val("focus_dynamic_update_var", p.get("focus_dynamic_update", False))
+        
+        self.var_focus_mode = tk.BooleanVar(value=bool(focus_m))
+        self.var_focus_fallback = tk.BooleanVar(value=bool(focus_fb))
+        self.var_focus_dynamic = tk.BooleanVar(value=bool(focus_dyn))
+
+        # Focus section visibility (Problems & Location)
+        saved_vis = p.get("focus_visibility", {})
+        if app and hasattr(app, "focus_visibility_vars") and isinstance(app.focus_visibility_vars, dict) and "Problems" in app.focus_visibility_vars:
+            prob_vis = _get_val("Problems", saved_vis.get("Problems", p.get("focus_sec_problems", True)))
+            if "Problems" in app.focus_visibility_vars and isinstance(app.focus_visibility_vars["Problems"], tk.Variable):
+                try:
+                    prob_vis = app.focus_visibility_vars["Problems"].get()
+                except Exception:
+                    pass
+        else:
+            prob_vis = saved_vis.get("Problems", p.get("focus_sec_problems", True))
+
+        if app and hasattr(app, "focus_visibility_vars") and isinstance(app.focus_visibility_vars, dict) and "Location" in app.focus_visibility_vars:
+            loc_vis = saved_vis.get("Location", p.get("focus_sec_location", True))
+            if "Location" in app.focus_visibility_vars and isinstance(app.focus_visibility_vars["Location"], tk.Variable):
+                try:
+                    loc_vis = app.focus_visibility_vars["Location"].get()
+                except Exception:
+                    pass
+        else:
+            loc_vis = saved_vis.get("Location", p.get("focus_sec_location", True))
+
+        self.var_focus_sec_problems = tk.BooleanVar(value=bool(prob_vis))
+        self.var_focus_sec_location = tk.BooleanVar(value=bool(loc_vis))
 
         # Advanced
         self.var_resampling = tk.StringVar(value=p.get("image_resampling_algorithm", "LANCZOS (High Quality)"))
@@ -228,17 +308,38 @@ class UnifiedSettingsWindow:
         self.var_auto_resolve = tk.BooleanVar(value=p.get("auto_resolve_conflicts", False))
         self.var_strict_validation = tk.BooleanVar(value=p.get("strict_input_validation", False))
 
-        # Toolbar draft vars (populated from app_ref.toolbar_vars if available)
+        # Toolbar draft vars
         self.draft_toolbar_vars = {}
-        if self.app and hasattr(self.app, "toolbar_vars"):
-            for k, v in self.app.toolbar_vars.items():
-                self.draft_toolbar_vars[k] = tk.BooleanVar(value=v.get())
+        if app and hasattr(app, "toolbar_vars") and isinstance(app.toolbar_vars, dict):
+            for k, v in app.toolbar_vars.items():
+                if isinstance(v, tk.Variable):
+                    try:
+                        self.draft_toolbar_vars[k] = tk.BooleanVar(value=bool(v.get()))
+                    except Exception:
+                        self.draft_toolbar_vars[k] = tk.BooleanVar(value=True)
+                elif isinstance(v, bool):
+                    self.draft_toolbar_vars[k] = tk.BooleanVar(value=v)
+        else:
+            tb_saved = p.get("toolbar_buttons", {})
+            for k, v in tb_saved.items():
+                self.draft_toolbar_vars[k] = tk.BooleanVar(value=bool(v))
 
-        # Focus visibility draft vars
+        # Focus visibility draft vars (per-field registration fields)
         self.draft_focus_visibility_vars = {}
-        if self.app and hasattr(self.app, "focus_visibility_vars"):
-            for k, v in self.app.focus_visibility_vars.items():
-                self.draft_focus_visibility_vars[k] = tk.BooleanVar(value=v.get())
+        if app and hasattr(app, "focus_visibility_vars") and isinstance(app.focus_visibility_vars, dict):
+            for k, v in app.focus_visibility_vars.items():
+                if k not in ("Problems", "Location"):
+                    if isinstance(v, tk.Variable):
+                        try:
+                            self.draft_focus_visibility_vars[k] = tk.BooleanVar(value=bool(v.get()))
+                        except Exception:
+                            self.draft_focus_visibility_vars[k] = tk.BooleanVar(value=True)
+                    elif isinstance(v, bool):
+                        self.draft_focus_visibility_vars[k] = tk.BooleanVar(value=v)
+        else:
+            for k, v in saved_vis.items():
+                if k not in ("Problems", "Location"):
+                    self.draft_focus_visibility_vars[k] = tk.BooleanVar(value=bool(v))
 
     def _build_sidebar_nav(self):
         nav_items = [
@@ -398,6 +499,11 @@ class UnifiedSettingsWindow:
                      values=["ERROR", "WARNING", "INFO", "DEBUG"],
                      state="readonly", width=12).pack(side="left", padx=sc(12))
 
+        # Card 3: Workflow & Auto-Advance
+        card3 = self._create_card(c, "Workflow & Navigation")
+        create_toggle_row(card3, "Auto-advance to next object when marked Reviewed", self.var_auto_advance)
+        create_toggle_row(card3, "Auto-advance when resolving with Historical Suggestion", self.var_auto_advance_history)
+
     # ── TAB 2: APPEARANCE ────────────────────────────────────────────────────
     def _build_tab_appearance(self):
         c = self._create_scrollable_tab("appearance")
@@ -456,14 +562,18 @@ class UnifiedSettingsWindow:
         f_clr.pack(fill="x", pady=sc(6))
         tk.Label(f_clr, text="Highlight Color Style:", font=self.FONT_DATA,
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
-        ttk.Combobox(f_clr, textvariable=self.var_highlight_color,
-                     values=["Default (Red)", "Yellow", "Orange", "Blue"],
-                     state="readonly", width=16).pack(side="left", padx=sc(12))
+        cb_hl = ttk.Combobox(f_clr, textvariable=self.var_highlight_color,
+                             values=["Default (Red)", "Yellow", "Orange", "Blue"],
+                             state="readonly", width=16)
+        cb_hl.pack(side="left", padx=sc(12))
+        cb_hl.bind("<<ComboboxSelected>>", lambda e: self._notify_live("problem_highlight_color", self.var_highlight_color.get()))
 
         # Card 3: Visual Controls
         card3 = self._create_card(c, "Visual Controls")
-        create_toggle_row(card3, "Large 'Mark Reviewed' Button", self.var_large_reviewed_btn)
-        create_toggle_row(card3, "Snap Window Layout Grid", self.var_snap_lock)
+        create_toggle_row(card3, "Large 'Mark Reviewed' Button", self.var_large_reviewed_btn,
+                          command=lambda: self._notify_live("large_reviewed_btn", self.var_large_reviewed_btn.get()))
+        create_toggle_row(card3, "Snap Window Layout Grid", self.var_snap_lock,
+                          command=lambda: self._notify_live("snap_lock", self.var_snap_lock.get()))
 
     # ── TAB 3: LAYOUT ────────────────────────────────────────────────────────
     def _build_tab_layout(self):
@@ -480,6 +590,8 @@ class UnifiedSettingsWindow:
         def _notify_panel(key, var):
             if key == "location_center":
                 self._notify_live("location_center", var.get())
+            elif key == "location_2row":
+                self._notify_live("location_2row", var.get())
             else:
                 self._notify_live(f"show_{key}", var.get())
             _apply_if_dynamic()
@@ -494,17 +606,21 @@ class UnifiedSettingsWindow:
                           command=lambda: _notify_panel("images", self.var_show_images))
         create_toggle_row(card1, "Place Location Panel in Center View", self.var_location_center,
                           command=lambda: _notify_panel("location_center", self.var_location_center))
+        create_toggle_row(card1, "Compact 2-Row Location Layout (Center View)", self.var_location_2row,
+                          command=lambda: _notify_panel("location_2row", self.var_location_2row))
         create_toggle_row(card1, "Show Image Zoom/Rotate Toolbar", self.var_show_image_tools,
-                          command=_apply_if_dynamic)
+                          command=lambda: (_notify_panel("image_tools", self.var_show_image_tools), self._notify_live("show_image_tools", self.var_show_image_tools.get())))
         create_toggle_row(card1, "Show Bulk Edit Button", self.var_show_bulk_edit,
-                          command=_apply_if_dynamic)
+                          command=lambda: (_notify_panel("bulk_edit", self.var_show_bulk_edit), self._notify_live("show_bulk_edit", self.var_show_bulk_edit.get())))
 
         # Card 2: Behavior
         card2 = self._create_card(c, "View & Dashboard Display")
         create_toggle_row(card2, "Embedded Session Dashboard (vs Separate Window)",
-                          self.var_dashboard_embedded, command=_apply_if_dynamic)
+                          self.var_dashboard_embedded,
+                          command=lambda: (_apply_if_dynamic(), self._notify_live("dashboard_mode", "Embedded" if self.var_dashboard_embedded.get() else "Window")))
         create_toggle_row(card2, "View Images as Stack by Default",
-                          self.var_image_stack, command=_apply_if_dynamic)
+                          self.var_image_stack,
+                          command=lambda: (_apply_if_dynamic(), self._notify_live("image_stack", self.var_image_stack.get())))
 
         # Card 3: Update Mode
         card3 = self._create_card(c, "Live Update Behaviour")
@@ -523,6 +639,14 @@ class UnifiedSettingsWindow:
             tb_grid.columnconfigure(0, weight=1)
             tb_grid.columnconfigure(1, weight=1)
 
+            def _make_tb_toggle_cmd(name, var):
+                def _cmd():
+                    if self.app and hasattr(self.app, "toolbar_vars") and name in self.app.toolbar_vars:
+                        self.app.toolbar_vars[name].set(var.get())
+                        if hasattr(self.app, "_toggle_toolbar_buttons"):
+                            self.app._toggle_toolbar_buttons()
+                return _cmd
+
             for idx, (name, var) in enumerate(sorted(self.draft_toolbar_vars.items())):
                 row_idx = idx // 2
                 col_idx = idx % 2
@@ -530,7 +654,7 @@ class UnifiedSettingsWindow:
                 cell.grid(row=row_idx, column=col_idx, sticky="ew", padx=sc(4), pady=sc(2))
                 tk.Label(cell, text=name, font=self.FONT_DATA, fg=self.COLORS["on_surface"],
                          bg=self.COLORS["card_bg"]).pack(side="left", anchor="w")
-                ToggleSwitch(cell, var, ui_ref=self.app).pack(side="right")
+                ToggleSwitch(cell, var, command=_make_tb_toggle_cmd(name, var), ui_ref=self.app).pack(side="right")
         else:
             card4 = self._create_card(c, "Toolbar Button Visibility")
             tk.Label(card4,
@@ -587,8 +711,34 @@ class UnifiedSettingsWindow:
 
             if hasattr(self.app, "image_stack_var"):
                 self.app.image_stack_var.set(self.var_image_stack.get())
+                self.app.image_view_mode = "stack" if self.var_image_stack.get() else "gallery"
+                if hasattr(self.app, "update_image_view_button"):
+                    self.app.update_image_view_button()
+                if hasattr(self.app, "refresh_image_view"):
+                    self.app.refresh_image_view()
             if hasattr(self.app, "draft_image_stack_var"):
                 self.app.draft_image_stack_var.set(self.var_image_stack.get())
+
+            if hasattr(self.app, "large_reviewed_button_var"):
+                self.app.large_reviewed_button_var.set(self.var_large_reviewed_btn.get())
+                if hasattr(self.app, "update_reviewed_button_state"):
+                    self.app.update_reviewed_button_state()
+
+            if hasattr(self.app, "snap_lock_var"):
+                self.app.snap_lock_var.set(self.var_snap_lock.get())
+
+            if hasattr(self.app, "auto_advance_var"):
+                self.app.auto_advance_var.set(self.var_auto_advance.get())
+            if hasattr(self.app, "auto_advance_history_var"):
+                self.app.auto_advance_history_var.set(self.var_auto_advance_history.get())
+            if hasattr(self.app, "auto_resolve_conflicts_var"):
+                self.app.auto_resolve_conflicts_var.set(self.var_auto_resolve.get())
+            if hasattr(self.app, "strict_input_validation_var"):
+                self.app.strict_input_validation_var.set(self.var_strict_validation.get())
+
+            if hasattr(self.app, "location_panel_horiz") and hasattr(self.app.location_panel_horiz, "set_layout_mode"):
+                mode = "horizontal_2row" if self.var_location_2row.get() else "horizontal_1row"
+                self.app.location_panel_horiz.set_layout_mode(mode)
 
             # Sync toolbar vars
             for k, v in self.draft_toolbar_vars.items():
@@ -596,6 +746,26 @@ class UnifiedSettingsWindow:
                     self.app.toolbar_vars[k].set(v.get())
                 if hasattr(self.app, "draft_toolbar_vars") and k in self.app.draft_toolbar_vars:
                     self.app.draft_toolbar_vars[k].set(v.get())
+            if hasattr(self.app, "_toggle_toolbar_buttons"):
+                self.app._toggle_toolbar_buttons()
+
+            # Sync focus mode & visibility
+            if hasattr(self.app, "focus_mode_var"):
+                self.app.focus_mode_var.set(self.var_focus_mode.get())
+            if hasattr(self.app, "focus_fallback_var"):
+                self.app.focus_fallback_var.set(self.var_focus_fallback.get())
+            if hasattr(self.app, "focus_dynamic_update_var"):
+                self.app.focus_dynamic_update_var.set(self.var_focus_dynamic.get())
+            if hasattr(self.app, "focus_visibility_vars"):
+                if "Problems" in self.app.focus_visibility_vars:
+                    self.app.focus_visibility_vars["Problems"].set(self.var_focus_sec_problems.get())
+                if "Location" in self.app.focus_visibility_vars:
+                    self.app.focus_visibility_vars["Location"].set(self.var_focus_sec_location.get())
+                for k, v in self.draft_focus_visibility_vars.items():
+                    if k in self.app.focus_visibility_vars:
+                        self.app.focus_visibility_vars[k].set(v.get())
+            if hasattr(self.app, "update_reg_fields_visibility"):
+                self.app.update_reg_fields_visibility()
 
             # Trigger panel updates directly on app
             if hasattr(self.app, "toggle_list_panel"):
@@ -671,29 +841,33 @@ class UnifiedSettingsWindow:
             name = cb_layout.get()
             if not name:
                 return
+            p = config.load_prefs() or {}
+            layout = p.get("layouts", {}).get("saved", {}).get(name)
+            if not layout:
+                return
+            self.var_show_list.set(layout.get("show_list", True))
+            self.var_show_search.set(layout.get("show_search", True))
+            self.var_show_reg.set(layout.get("show_reg", True))
+            self.var_show_images.set(layout.get("show_images", True))
+            self.var_location_center.set(layout.get("location_in_center", False))
+            self.var_location_2row.set(layout.get("location_2row", False))
+            self.var_show_image_tools.set(layout.get("show_image_tools", True))
+            self.var_show_bulk_edit.set(layout.get("show_bulk_edit", True))
+            self.var_dashboard_embedded.set(layout.get("dashboard_mode", "Window") == "Embedded")
+            self.var_image_stack.set(layout.get("image_stack", False))
+            self.var_large_reviewed_btn.set(layout.get("large_reviewed_button", True))
+            self.var_snap_lock.set(layout.get("snap_lock", False))
+            self.var_focus_mode.set(layout.get("focus_problems", False))
+            if "toolbar_buttons" in layout:
+                for tb_name, tb_val in layout["toolbar_buttons"].items():
+                    if tb_name in self.draft_toolbar_vars:
+                        self.draft_toolbar_vars[tb_name].set(tb_val)
+
             if self.app and hasattr(self.app, "apply_saved_layout"):
                 self.app.apply_saved_layout(name)
-                if hasattr(self.app, "show_list_var"):
-                    self.var_show_list.set(self.app.show_list_var.get())
-                if hasattr(self.app, "show_search_var"):
-                    self.var_show_search.set(self.app.show_search_var.get())
-                if hasattr(self.app, "show_reg_var"):
-                    self.var_show_reg.set(self.app.show_reg_var.get())
-                if hasattr(self.app, "show_images_var"):
-                    self.var_show_images.set(self.app.show_images_var.get())
-                if hasattr(self.app, "location_in_center_var"):
-                    self.var_location_center.set(self.app.location_in_center_var.get())
-                if hasattr(self.app, "show_image_tools_var"):
-                    self.var_show_image_tools.set(self.app.show_image_tools_var.get())
-                if hasattr(self.app, "show_bulk_edit_var"):
-                    self.var_show_bulk_edit.set(self.app.show_bulk_edit_var.get())
-                if hasattr(self.app, "dashboard_mode_var"):
-                    self.var_dashboard_embedded.set(self.app.dashboard_mode_var.get() == "Embedded")
-                if hasattr(self.app, "image_stack_var"):
-                    self.var_image_stack.set(self.app.image_stack_var.get())
-                messagebox.showinfo("Layout Loaded", f"Layout '{name}' applied.", parent=self.win)
-            else:
-                messagebox.showinfo("Presets", f"Layout: {name}", parent=self.win)
+            elif self.app:
+                self._push_layout_to_app()
+            messagebox.showinfo("Layout Loaded", f"Layout '{name}' applied.", parent=self.win)
 
         ttk.Button(r1, text="Load", width=8, command=_load_layout).pack(side="left", padx=2)
 
@@ -719,21 +893,43 @@ class UnifiedSettingsWindow:
             name = entry_layout.get().strip()
             if not name:
                 return
-            if self.app and hasattr(self.app, "save_layout_as"):
-                self.app.save_layout_as(name)
-            else:
-                p = config.load_prefs() or {}
-                if "layouts" not in p:
-                    p["layouts"] = {}
-                if "saved" not in p["layouts"]:
-                    p["layouts"]["saved"] = {}
-                p["layouts"]["saved"][name] = {
-                    "show_list": self.var_show_list.get(),
-                    "show_search": self.var_show_search.get(),
-                    "show_reg": self.var_show_reg.get(),
-                    "show_images": self.var_show_images.get(),
-                }
-                config.save_prefs(p)
+            p = config.load_prefs() or {}
+            if "layouts" not in p:
+                p["layouts"] = {}
+            if "saved" not in p["layouts"]:
+                p["layouts"]["saved"] = {}
+            layout = {
+                "show_list": self.var_show_list.get(),
+                "show_search": self.var_show_search.get(),
+                "show_reg": self.var_show_reg.get(),
+                "show_images": self.var_show_images.get(),
+                "location_in_center": self.var_location_center.get(),
+                "location_2row": self.var_location_2row.get(),
+                "show_image_tools": self.var_show_image_tools.get(),
+                "show_bulk_edit": self.var_show_bulk_edit.get(),
+                "dashboard_mode": "Embedded" if self.var_dashboard_embedded.get() else "Window",
+                "image_stack": self.var_image_stack.get(),
+                "large_reviewed_button": self.var_large_reviewed_btn.get(),
+                "snap_lock": self.var_snap_lock.get(),
+                "focus_problems": self.var_focus_mode.get(),
+                "toolbar_buttons": {k: v.get() for k, v in self.draft_toolbar_vars.items()},
+            }
+            if self.app:
+                if hasattr(self.app, "root"):
+                    layout["window_state"] = self.app.root.state()
+                    layout["window_geometry"] = self.app.root.geometry()
+                if hasattr(self.app, "middle_panes"):
+                    try:
+                        layout["middle_sash"] = self.app.middle_panes.sashpos(0)
+                    except Exception:
+                        pass
+                if hasattr(self.app, "panes"):
+                    try:
+                        layout["main_sashes"] = [self.app.panes.sashpos(0), self.app.panes.sashpos(1)]
+                    except Exception:
+                        pass
+            p["layouts"]["saved"][name] = layout
+            config.save_prefs(p)
             _refresh_layouts()
             entry_layout.delete(0, "end")
             messagebox.showinfo("Preset Saved",
@@ -795,9 +991,15 @@ class UnifiedSettingsWindow:
                 self.var_focus_fallback.set(preset.get("fallback", True))
                 self.var_focus_mode.set(True)
                 vis = preset.get("visibility", {})
+                if "Problems" in vis:
+                    self.var_focus_sec_problems.set(vis["Problems"])
+                if "Location" in vis:
+                    self.var_focus_sec_location.set(vis["Location"])
                 for k, v in self.draft_focus_visibility_vars.items():
                     if k in vis:
                         v.set(vis[k])
+                if self.app:
+                    self._push_layout_to_app()
                 messagebox.showinfo("Focus Preset", f"Preset '{name}' loaded.", parent=self.win)
 
         def _delete_focus():
@@ -827,6 +1029,8 @@ class UnifiedSettingsWindow:
             if "focus_presets" not in p:
                 p["focus_presets"] = {}
             vis = {k: v.get() for k, v in self.draft_focus_visibility_vars.items()}
+            vis["Problems"] = self.var_focus_sec_problems.get()
+            vis["Location"] = self.var_focus_sec_location.get()
             p["focus_presets"][name] = {
                 "fallback": self.var_focus_fallback.get(),
                 "visibility": vis,
@@ -948,6 +1152,12 @@ class UnifiedSettingsWindow:
                     "Unmark all currently filtered objects as reviewed.",
                     "Unmark Reviewed", "batch_set_reviewed_false")
 
+        # Card 5: Guidance & Tutorials
+        card5 = self._create_card(c, "Tutorials & Guidance")
+        _action_btn(card5, "Reset Tutorial Progress",
+                    "Clear completed tutorial flags so interactive guides show again.",
+                    "Reset Tutorials", "reset_tutorials")
+
         if not self.app:
             note = tk.Frame(c, bg=self.COLORS["surface"], pady=sc(8))
             note.pack(fill="x")
@@ -959,6 +1169,21 @@ class UnifiedSettingsWindow:
     def _execute_action(self, callback_name):
         """Dispatch a named action to the host application."""
         if not callback_name:
+            return
+        if callback_name == "reset_tutorials":
+            p = config.load_prefs() or {}
+            p["completed_tutorials"] = []
+            config.save_prefs(p)
+            try:
+                from ui.tutorial import TutorialManager
+                tm = TutorialManager()
+                tm.pending_main_tutorial = False
+                tm.close_tutorial()
+            except Exception:
+                pass
+            messagebox.showinfo("Tutorials Reset",
+                                "Tutorial progress has been reset. Interactive guides will appear again when relevant screens open.",
+                                parent=self.win)
             return
         if not self.app:
             messagebox.showinfo("No Session",
@@ -1034,6 +1259,8 @@ class UnifiedSettingsWindow:
         p["disable_tutorials"] = new_disable_tutorials
         p["enable_excel_import_backup"] = self.var_excel_backup.get()
         p["log_verbosity"] = self.var_log_verbosity.get()
+        p["auto_advance_on_review"] = self.var_auto_advance.get()
+        p["auto_advance_history"] = self.var_auto_advance_history.get()
         try:
             p["autosave_archive_limit"] = int(self.var_archive_limit.get())
         except ValueError:
@@ -1058,19 +1285,24 @@ class UnifiedSettingsWindow:
         p["show_reg"] = self.var_show_reg.get()
         p["show_images"] = self.var_show_images.get()
         p["location_in_center"] = self.var_location_center.get()
+        p["location_2row"] = self.var_location_2row.get()
         p["show_image_tools"] = self.var_show_image_tools.get()
         p["show_bulk_edit"] = self.var_show_bulk_edit.get()
         p["dashboard_mode"] = "Embedded" if self.var_dashboard_embedded.get() else "Window"
         p["image_stack"] = self.var_image_stack.get()
+        p["toolbar_buttons"] = {k: v.get() for k, v in self.draft_toolbar_vars.items()}
 
         # ── Focus ─────────────────────────────────────────────────────────────
         p["focus_mode"] = self.var_focus_mode.get()
+        p["focus_mode_active"] = self.var_focus_mode.get()
         p["focus_fallback"] = self.var_focus_fallback.get()
         p["focus_dynamic_update"] = self.var_focus_dynamic.get()
         p["focus_sec_problems"] = self.var_focus_sec_problems.get()
         p["focus_sec_location"] = self.var_focus_sec_location.get()
-        if self.draft_focus_visibility_vars:
-            p["focus_visibility"] = {k: v.get() for k, v in self.draft_focus_visibility_vars.items()}
+        f_vis = {k: v.get() for k, v in self.draft_focus_visibility_vars.items()}
+        f_vis["Problems"] = self.var_focus_sec_problems.get()
+        f_vis["Location"] = self.var_focus_sec_location.get()
+        p["focus_visibility"] = f_vis
 
         # ── Advanced ──────────────────────────────────────────────────────────
         old_resampling = old_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)")
@@ -1099,6 +1331,11 @@ class UnifiedSettingsWindow:
 
         # ── Persist ───────────────────────────────────────────────────────────
         config.save_prefs(p)
+        try:
+            import utils
+            utils.reload_log_level()
+        except Exception:
+            pass
 
         # ── Post-save side-effects ────────────────────────────────────────────
         restart_needed = False
@@ -1139,13 +1376,18 @@ class UnifiedSettingsWindow:
                 except Exception as e:
                     print(f"[UnifiedSettings] refresh_styles_and_highlights error: {e}")
 
-        # 5. Refresh image rendering if algorithm changed
-        if self.app and new_resampling != old_resampling:
+        # 5. Refresh image rendering if algorithm or pattern changed
+        if self.app and (new_resampling != old_resampling or p["image_url_pattern_override"] != old_prefs.get("image_url_pattern_override", "")):
             if hasattr(self.app, "refresh_image_rendering"):
                 try:
                     self.app.refresh_image_rendering()
                 except Exception as e:
                     print(f"[UnifiedSettings] refresh_image_rendering error: {e}")
+            if hasattr(self.app, "load_images_for_current"):
+                try:
+                    self.app.load_images_for_current()
+                except Exception as e:
+                    pass
 
         # 6. Update focus toggle visibility
         if self.app and new_focus_toggle != old_focus_toggle:

@@ -1,4 +1,4 @@
-﻿import traceback
+import traceback
 import os
 import sys
 import threading
@@ -102,7 +102,8 @@ def _read_log_level_from_disk() -> str:
         if os.path.exists(prefs_path):
             with open(prefs_path, "r", encoding="utf-8") as f:
                 prefs = json.load(f)
-                return prefs.get("advanced", {}).get("log_verbosity", "ERROR")
+                if isinstance(prefs, dict):
+                    return prefs.get("log_verbosity", prefs.get("advanced", {}).get("log_verbosity", "ERROR"))
     except Exception as e:
         pass
     return "ERROR"

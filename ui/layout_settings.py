@@ -613,7 +613,7 @@ class LayoutSettingsMixin:
                     
         self._theme_widgets_registered = True
 
-    def apply_theme(self):
+    def apply_theme(self, enable_hl_override=None, color_override=None):
         import config
 
         if hasattr(self, "image_toolbar") and hasattr(self.image_toolbar, "set_dark_mode"):
@@ -727,9 +727,10 @@ class LayoutSettingsMixin:
             style.map("TNotebook.Tab", background=[("selected", bg_color)])
 
             # Get advanced settings for highlights
-            advanced_prefs = config.load_prefs().get("advanced", {})
-            enable_hl = advanced_prefs.get("enable_problem_highlights", True)
-            hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+            prefs = config.load_prefs() or {}
+            advanced_prefs = prefs.get("advanced", {})
+            enable_hl = enable_hl_override if enable_hl_override is not None else prefs.get("enable_problem_highlights", advanced_prefs.get("enable_problem_highlights", True))
+            hl_color_name = color_override if color_override is not None else prefs.get("problem_highlight_color", advanced_prefs.get("problem_highlight_color", "Default (Red)"))
             
             if not enable_hl:
                 problem_bg = "#181825"
@@ -922,9 +923,10 @@ class LayoutSettingsMixin:
             style.configure("Hover.TLabel", background="#eeeeee")
             style.configure("Hover.TFrame", background="#eeeeee")
             # Get advanced settings for highlights
-            advanced_prefs = config.load_prefs().get("advanced", {})
-            enable_hl = advanced_prefs.get("enable_problem_highlights", True)
-            hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+            prefs = config.load_prefs() or {}
+            advanced_prefs = prefs.get("advanced", {})
+            enable_hl = enable_hl_override if enable_hl_override is not None else prefs.get("enable_problem_highlights", advanced_prefs.get("enable_problem_highlights", True))
+            hl_color_name = color_override if color_override is not None else prefs.get("problem_highlight_color", advanced_prefs.get("problem_highlight_color", "Default (Red)"))
             
             if not enable_hl:
                 problem_bg = "#ffffff"

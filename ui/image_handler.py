@@ -220,8 +220,8 @@ class ImageHandlerMixin:
 
     def build_online_image_urls(self, oid):
         import config
-        advanced_prefs = config.load_prefs().get("advanced", {})
-        pattern_override = advanced_prefs.get("image_url_pattern_override", "").strip()
+        prefs = config.load_prefs() or {}
+        pattern_override = prefs.get("image_url_pattern_override", prefs.get("advanced", {}).get("image_url_pattern_override", "")).strip()
         
         if pattern_override:
             pattern = pattern_override
@@ -235,13 +235,30 @@ class ImageHandlerMixin:
 
         suffixes = ["", "-01", "-02", "-03"]
         urls = []
+        is_numeric = str(oid).isdigit()
+        
         for s in suffixes:
             if "{id}" in pattern:
-                url = pattern.replace("{id}", f"{oid}{s}")
+                if "{suffix}" in pattern:
+                    url = pattern.replace("{id}", str(oid)).replace("{suffix}", s)
+                else:
+                    url = pattern.replace("{id}", f"{oid}{s}")
             elif "{num" in pattern and "{suffix}" in pattern:
-                if str(oid).isdigit():
+                if is_numeric:
                     num = int(oid)
                     url = pattern.format(num=num, suffix=s)
+                else:
+                    url = f"{pattern.rstrip('/')}/{oid}{s}"
+            elif "{num" in pattern:
+                if is_numeric:
+                    num = int(oid)
+                    url = pattern.format(num=num)
+                    if s:
+                        if "." in url.rsplit("/", 1)[-1]:
+                            base, ext = url.rsplit(".", 1)
+                            url = f"{base}{s}.{ext}"
+                        else:
+                            url = f"{url}{s}"
                 else:
                     url = f"{pattern.rstrip('/')}/{oid}{s}"
             else:
@@ -471,8 +488,9 @@ class ImageHandlerMixin:
 
                 # Get advanced settings resampling algorithm
                 import config
-                advanced_prefs = config.load_prefs().get("advanced", {})
-                algo_name = advanced_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)")
+                prefs = config.load_prefs() or {}
+                advanced_prefs = prefs.get("advanced", {})
+                algo_name = prefs.get("image_resampling_algorithm", advanced_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)"))
                 if "BILINEAR" in algo_name:
                     resample_filter = Image.BILINEAR
                 elif "NEAREST" in algo_name:
@@ -954,8 +972,9 @@ class ImageHandlerMixin:
         canvas_h = height if height > 150 else 350
 
         import config
-        advanced_prefs = config.load_prefs().get("advanced", {})
-        algo_name = advanced_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)")
+        prefs = config.load_prefs() or {}
+        advanced_prefs = prefs.get("advanced", {})
+        algo_name = prefs.get("image_resampling_algorithm", advanced_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)"))
         if "BILINEAR" in algo_name:
             resample_filter = Image.BILINEAR
         elif "NEAREST" in algo_name:

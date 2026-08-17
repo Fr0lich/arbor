@@ -466,8 +466,9 @@ class SQLiteRepository:
             (df_reg, df_obs, df_photo, df_log) — the data that was imported.
         """
         import config as _app_cfg
-        advanced_prefs = _app_cfg.load_prefs().get("advanced", {})
-        enable_backup = advanced_prefs.get("enable_excel_import_backup", True)
+        prefs = _app_cfg.load_prefs() or {}
+        advanced_prefs = prefs.get("advanced", {})
+        enable_backup = prefs.get("enable_excel_import_backup", advanced_prefs.get("enable_excel_import_backup", True))
         
         if enable_backup:
             backup_dir = os.path.join(os.path.dirname(excel_path), "backups")

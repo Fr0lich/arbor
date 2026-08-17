@@ -365,16 +365,28 @@ class ObjectProgramUI(
         self.focus_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("focus_dynamic_update", True))
         self.layout_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("layout_dynamic_update", True))
         self.large_reviewed_button_var = tk.BooleanVar(value=_init_prefs.get("large_reviewed_button", True))
-        self.auto_advance_var = tk.BooleanVar(value=True)
-        self.auto_advance_history_var = tk.BooleanVar(value=False)
+        self.auto_advance_var = tk.BooleanVar(value=_init_prefs.get("auto_advance_on_review", True))
+        self.auto_advance_history_var = tk.BooleanVar(value=_init_prefs.get("auto_advance_history", False))
+        self.auto_resolve_conflicts_var = tk.BooleanVar(value=_init_prefs.get("auto_resolve_conflicts", False))
+        self.strict_input_validation_var = tk.BooleanVar(value=_init_prefs.get("strict_input_validation", False))
 
         def _on_auto_advance_changed(*args):
-            if self.auto_advance_var.get() and self.auto_advance_history_var.get():
-                self.auto_advance_history_var.set(False)
+            try:
+                import config
+                p = config.load_prefs() or {}
+                p["auto_advance_on_review"] = self.auto_advance_var.get()
+                config.save_prefs(p)
+            except Exception:
+                pass
 
         def _on_auto_advance_history_changed(*args):
-            if self.auto_advance_history_var.get() and self.auto_advance_var.get():
-                self.auto_advance_var.set(False)
+            try:
+                import config
+                p = config.load_prefs() or {}
+                p["auto_advance_history"] = self.auto_advance_history_var.get()
+                config.save_prefs(p)
+            except Exception:
+                pass
 
         self.auto_advance_var.trace_add("write", _on_auto_advance_changed)
         self.auto_advance_history_var.trace_add("write", _on_auto_advance_history_changed)
@@ -686,13 +698,13 @@ class ObjectProgramUI(
         if "focus_presets" not in prefs:
             prefs["focus_presets"] = {}
             
-        self.focus_mode_var.set(prefs.get("focus_mode_active", False))
+        self.focus_mode_var.set(prefs.get("focus_mode", prefs.get("focus_mode_active", False)))
         self.focus_fallback_var.set(prefs.get("focus_fallback", True))
         
         saved_vis = prefs.get("focus_visibility", {})
         
-        self.focus_visibility_vars["Problems"] = tk.BooleanVar(value=saved_vis.get("Problems", True))
-        self.focus_visibility_vars["Location"] = tk.BooleanVar(value=saved_vis.get("Location", True))
+        self.focus_visibility_vars["Problems"] = tk.BooleanVar(value=saved_vis.get("Problems", prefs.get("focus_sec_problems", True)))
+        self.focus_visibility_vars["Location"] = tk.BooleanVar(value=saved_vis.get("Location", prefs.get("focus_sec_location", True)))
         
         # Note: Dynamic registration fields will be initialized in build_sections()
 
@@ -2149,15 +2161,15 @@ class ObjectProgramUI(
             except Exception as e:
                 print(f"Error refreshing image view: {e}")
 
-    def refresh_styles_and_highlights(self):
+    def refresh_styles_and_highlights(self, enable_hl_override=None, color_override=None):
         if hasattr(self, "apply_theme"):
             try:
-                self.apply_theme()
+                self.apply_theme(enable_hl_override=enable_hl_override, color_override=color_override)
             except Exception as e:
                 print(f"Error applying theme: {e}")
         if hasattr(self, "_update_all_problem_row_styles"):
             try:
-                self._update_all_problem_row_styles()
+                self._update_all_problem_row_styles(enable_hl_override=enable_hl_override, color_override=color_override)
             except Exception as e:
                 print(f"Error updating problem styles: {e}")
 
@@ -2223,13 +2235,23 @@ class ObjectProgramUI(
             app_ref=self,
             initial_tab=tab,
             live_callbacks={
-                "dark_mode":          self._live_dark_mode,
-                "show_list":          lambda v: (self.show_list_var.set(v), self.toggle_list_panel()),
-                "show_search":        lambda v: (self.show_search_var.set(v), self.toggle_search_panel()),
-                "show_reg":           lambda v: (self.show_reg_var.set(v), self.toggle_reg_panel()),
-                "show_images":        lambda v: (self.show_images_var.set(v), self.toggle_images_panel()),
-                "location_center":    lambda v: (self.location_in_center_var.set(v), self.toggle_location_panel()),
-                "problem_highlights": lambda v: self.refresh_styles_and_highlights(),
+                "dark_mode":               self._live_dark_mode,
+                "show_list":               lambda v: (self.show_list_var.set(v), self.toggle_list_panel()),
+                "show_search":             lambda v: (self.show_search_var.set(v), self.toggle_search_panel()),
+                "show_reg":                lambda v: (self.show_reg_var.set(v), self.toggle_reg_panel()),
+                "show_images":             lambda v: (self.show_images_var.set(v), self.toggle_images_panel()),
+                "location_center":         lambda v: (self.location_in_center_var.set(v), self.toggle_location_panel()),
+                "location_2row":           lambda v: self._live_location_2row(v),
+                "problem_highlights":      lambda v: self.refresh_styles_and_highlights(enable_hl_override=v),
+                "problem_highlight_color": lambda v: self.refresh_styles_and_highlights(color_override=v),
+                "large_reviewed_btn":      lambda v: (self.large_reviewed_button_var.set(v), self.update_reviewed_button_state()),
+                "snap_lock":               lambda v: self.snap_lock_var.set(v),
+                "show_image_tools":        lambda v: (self.show_image_tools_var.set(v), self.toggle_image_tools()),
+                "show_bulk_edit":          lambda v: (self.show_bulk_edit_var.set(v), self.toggle_bulk_edit_btn()),
+                "dashboard_mode":          lambda v: (self.dashboard_mode_var.set(v), self.toggle_dashboard_mode()),
+                "image_stack":             lambda v: self._live_image_stack(v),
+                "focus_mode":              lambda v: (self.focus_mode_var.set(v), self.update_reg_fields_visibility()),
+                "focus_fallback":          lambda v: (self.focus_fallback_var.set(v), self.update_reg_fields_visibility()),
             }
         )
         # Ensure the ref is cleared when the window is closed
@@ -2246,6 +2268,19 @@ class ObjectProgramUI(
         """Live callback: toggle dark mode only when value actually changes."""
         if bool(value) != bool(getattr(self, "dark_mode_active", False)):
             self.toggle_dark_mode()
+
+    def _live_location_2row(self, val):
+        mode = "horizontal_2row" if val else "horizontal_1row"
+        if hasattr(self, "location_panel_horiz") and hasattr(self.location_panel_horiz, "set_layout_mode"):
+            self.location_panel_horiz.set_layout_mode(mode)
+
+    def _live_image_stack(self, val):
+        self.image_stack_var.set(val)
+        self.image_view_mode = "stack" if val else "gallery"
+        if hasattr(self, "update_image_view_button"):
+            self.update_image_view_button()
+        if hasattr(self, "refresh_image_view"):
+            self.refresh_image_view()
 
     def batch_set_reviewed_true(self):
         self._batch_set_reviewed(True)
@@ -8152,7 +8187,7 @@ class ObjectProgramUI(
     # Problem row styling helpers
     # ------------------------------------------------------------------
 
-    def _update_problem_row_style(self, field_name, is_active):
+    def _update_problem_row_style(self, field_name, is_active, enable_hl_override=None, color_override=None):
         """Apply or remove the red visual treatment on a registration row.
 
         Called whenever a mapped problem var changes (trace) or on load.
@@ -8163,9 +8198,10 @@ class ObjectProgramUI(
         """
         # Get advanced settings for highlights
         import config
-        advanced_prefs = config.load_prefs().get("advanced", {})
-        enable_hl = advanced_prefs.get("enable_problem_highlights", True)
-        hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+        prefs = config.load_prefs() or {}
+        advanced_prefs = prefs.get("advanced", {})
+        enable_hl = enable_hl_override if enable_hl_override is not None else prefs.get("enable_problem_highlights", advanced_prefs.get("enable_problem_highlights", True))
+        hl_color_name = color_override if color_override is not None else prefs.get("problem_highlight_color", advanced_prefs.get("problem_highlight_color", "Default (Red)"))
 
         is_dark = getattr(self, "dark_mode_active", False)
         
@@ -8240,7 +8276,7 @@ class ObjectProgramUI(
             else:
                 badge_label.config(text="")
 
-    def _update_all_problem_row_styles(self):
+    def _update_all_problem_row_styles(self, enable_hl_override=None, color_override=None):
         """Refresh styling for every mapped problem field.
 
         Called after load_object sets all problem vars, and after undo restores state,
@@ -8252,7 +8288,7 @@ class ObjectProgramUI(
             prob_col = field_to_problem.get(field_name)
             if prob_col and prob_col in self.problem_vars:
                 is_active = bool(self.problem_vars[prob_col].get())
-                self._update_problem_row_style(field_name, is_active)
+                self._update_problem_row_style(field_name, is_active, enable_hl_override=enable_hl_override, color_override=color_override)
         
         self._update_accordion_badges()
 

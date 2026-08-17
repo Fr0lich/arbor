@@ -324,7 +324,17 @@ class HistoricalConflictResolverWindow:
         
         tk.Label(content, text="HISTORICAL_SUGGESTIONS", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, 8))
         
-        res_var = tk.StringVar(value=current_val)
+        import config
+        prefs = config.load_prefs() or {}
+        auto_resolve = prefs.get("auto_resolve_conflicts", False)
+        if getattr(self.main_app, "auto_resolve_conflicts_var", None) is not None:
+            auto_resolve = self.main_app.auto_resolve_conflicts_var.get()
+
+        initial_val = current_val
+        if auto_resolve and len(unique_vals) == 1 and (not current_val or current_val == "nan" or (hasattr(self.main_app, "is_unknown") and self.main_app.is_unknown(current_val)) or status_code in ("ERR", "UKN")):
+            initial_val = unique_vals[0]
+
+        res_var = tk.StringVar(value=initial_val)
         self.res_vars[field] = res_var
         
         if unique_vals:
@@ -492,3 +502,7 @@ class HistoricalConflictResolverWindow:
         self.main_app.update_dirty_ui()
         self.update_stats()
         self.win.destroy()
+
+        if getattr(self.main_app, "auto_advance_history_var", None) and self.main_app.auto_advance_history_var.get():
+            if hasattr(self.main_app, "goto_next_problem_with_history"):
+                self.main_app.goto_next_problem_with_history()
