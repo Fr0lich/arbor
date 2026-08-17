@@ -705,6 +705,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         # Status badge
         if reviewed:
             badge_label, badge_bg, badge_fg = "OK",   "#2E7D32", "#ffffff"
+        elif has_problem and problems_have_history:
+            badge_label, badge_bg, badge_fg = "ERR",  "#C62828", "#ffffff"
         elif has_problem:
             badge_label, badge_bg, badge_fg = "ERR",  "#C62828", "#ffffff"
         elif problems_have_history:

@@ -413,16 +413,13 @@ class DatabaseOpsMixin:
                     auto_val = pd.Series(False, index=df_reg.index)
                     if p in problem_mapping:
                         field = problem_mapping.get(p)
-                        if field:
-                            if field in df_reg.columns:
-                                raw_vals = df_reg[field]
-                                is_missing = raw_vals.isna() | (raw_vals.astype(str).str.strip() == "")
-                                # PERFORMANCE OPTIMIZATION (Bolt): Replaced slow row-by-row .apply(self.is_unknown)
-                                # with vectorized Pandas .isin() running entirely in C, speeding up load times.
-                                is_unknown = raw_vals.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
-                                auto_val = is_missing & ~is_unknown
-                            else:
-                                auto_val = pd.Series(True, index=df_reg.index)
+                        if field and field in df_reg.columns:
+                            raw_vals = df_reg[field]
+                            is_missing = raw_vals.isna() | (raw_vals.astype(str).str.strip() == "")
+                            # PERFORMANCE OPTIMIZATION (Bolt): Replaced slow row-by-row .apply(self.is_unknown)
+                            # with vectorized Pandas .isin() running entirely in C, speeding up load times.
+                            is_unknown = raw_vals.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
+                            auto_val = is_missing & ~is_unknown
 
                     has_prob_series |= (obs_val | auto_val)
 

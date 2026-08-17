@@ -56,3 +56,20 @@ class TestLoading:
         assert "Loc1" in df_obs_out.columns
         assert df_log_out.empty  # Normalised log DataFrame is empty of rows
         assert "Timestamp" in df_log_out.columns
+
+    def test_precompute_startup_caches_clean_object(self):
+        from ui.database_ops import DatabaseOpsMixin
+        from repository import REVIEWED_COLUMN
+
+        class DummyOps(DatabaseOpsMixin):
+            def __init__(self):
+                self.problem_columns = ["Genus_Problem", "Other_problem"]
+                self.problem_to_field = {"Genus_Problem": "Genus", "Other_problem": "Other"}
+                self.image_mode = "online"
+
+        ops = DummyOps()
+        df_reg = pd.DataFrame({"Genus": ["Quercus"]}, index=["1"])
+        df_obs = pd.DataFrame({REVIEWED_COLUMN: [False], "Genus_Problem": [False], "Other_problem": [False]}, index=["1"])
+
+        ops._precompute_startup_caches(df_reg, df_obs, df_photo=None)
+        assert ops._problem_cache["1"] == False

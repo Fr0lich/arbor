@@ -7076,7 +7076,7 @@ class ObjectProgramUI(
    
         if prob_col in self.problem_to_field:
             field = self.problem_to_field.get(prob_col)
-            if not field:
+            if not field or field not in reg.index:
                 return obs_val
 
             raw_val = reg.get(field, "")
@@ -7646,7 +7646,7 @@ class ObjectProgramUI(
                         auto_val = False
                         if p in problem_mapping:
                             field = problem_mapping.get(p)
-                            if field:
+                            if field and field in reg_row:
                                 raw_val = reg_row.get(field, "")
                                 is_missing = (
                                     pd.isna(raw_val) or
