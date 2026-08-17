@@ -108,6 +108,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         # State tracking
         self.items_list = []      # list of oids in order
         self.items_set = set()    # fast lookup set
+        self._oid_to_index = {}   # O(1) oid -> idx inverted index
         self.item_data = {}       # oid -> {title, genus, species, reviewed, foreground, tags, ...}
         self.selected_iids = []   # list of selected oids
         self.focused_iid = None
@@ -127,6 +128,15 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.tree.column("ID", width=sc(50), minwidth=sc(35), stretch=True)
         self.tree.column("Genus", width=sc(85), minwidth=sc(60), stretch=True)
         self.tree.column("Species", width=sc(85), minwidth=sc(60), stretch=True)
+
+        # Pre-configure common color and alternating row tags to eliminate Tcl roundtrips during bulk insert
+        self._configured_tags = set()
+        self._tag_configs = {}
+        for c in ("4CAF50", "2E7D32", "BB86FC", "7B1FA2", "f28b82", "C62828", "5ab0e8", "0284C7", "f0ad4e", "0bd45b", "bb6bd9", "d9534f"):
+            tname = f"color_{c}"
+            self.tree.tag_configure(tname, foreground=f"#{c}")
+            self._configured_tags.add(tname)
+            self._tag_configs[tname] = {"foreground": f"#{c}"}
 
         # Bind double-click and selection for Treeview click
         self.tree.bind("<Button-1>", self._on_treeview_click)
@@ -198,11 +208,9 @@ class TreeviewListboxWrapper(ttk.Frame):
         if not self.selected_iids:
             new_idx = 0
         else:
-            try:
-                curr_idx = self.items_list.index(self.selected_iids[0])
-                new_idx = max(0, curr_idx - 1)
-            except Exception:
-                new_idx = 0
+            first_sel = self.selected_iids[0]
+            curr_idx = self._oid_to_index.get(first_sel, 0)
+            new_idx = max(0, curr_idx - 1)
         self.selection_clear()
         self.selection_set(new_idx)
         self.see(new_idx)
@@ -215,11 +223,9 @@ class TreeviewListboxWrapper(ttk.Frame):
         if not self.selected_iids:
             new_idx = 0
         else:
-            try:
-                curr_idx = self.items_list.index(self.selected_iids[0])
-                new_idx = min(len(self.items_list) - 1, curr_idx + 1)
-            except Exception:
-                new_idx = 0
+            first_sel = self.selected_iids[0]
+            curr_idx = self._oid_to_index.get(first_sel, 0)
+            new_idx = min(len(self.items_list) - 1, curr_idx + 1)
         self.selection_clear()
         self.selection_set(new_idx)
         self.see(new_idx)
@@ -583,7 +589,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             del self.item_data[oid]["card_frame"]
 
     def _clear_virtual_cards(self):
-        for win_id, card in self._active_card_windows.values():
+        for win_id, card in list(self._active_card_windows.values()):
             try:
                 self.canvas.delete(win_id)
                 card.destroy()
@@ -596,7 +602,10 @@ class TreeviewListboxWrapper(ttk.Frame):
 
     def _schedule_viewport_update(self):
         if self._pending_viewport_update:
-            self.after_cancel(self._pending_viewport_update)
+            try:
+                self.after_cancel(self._pending_viewport_update)
+            except Exception:
+                pass
         self._pending_viewport_update = self.after(10, self._update_visible_cards)
 
     def _update_visible_cards(self):
@@ -966,8 +975,9 @@ class TreeviewListboxWrapper(ttk.Frame):
     def curselection(self):
         res = []
         for oid in self.selected_iids:
-            if oid in self.items_list:
-                res.append(self.items_list.index(oid))
+            idx = self._oid_to_index.get(oid)
+            if idx is not None:
+                res.append(idx)
         return res
 
     def selection_clear(self, first=0, last=None):
@@ -1006,11 +1016,10 @@ class TreeviewListboxWrapper(ttk.Frame):
                 return
         else:
             oid = str(index_or_iid)
-            if oid in self.items_list:
-                idx = self.items_list.index(oid)
+            idx = self._oid_to_index.get(oid, -1)
 
         if self.active_view == "compact":
-            if oid in self.items_list:
+            if oid in self._oid_to_index:
                 self.tree.see(oid)
         else:
             if idx >= 0 and self._card_height:
@@ -1043,6 +1052,7 @@ class TreeviewListboxWrapper(ttk.Frame):
     def delete(self, first=0, last=None):
         self.items_list.clear()
         self.items_set.clear()
+        self._oid_to_index.clear()
         self.selected_iids.clear()
         self.focused_iid = None
         self._tree_dirty = False
@@ -1067,17 +1077,18 @@ class TreeviewListboxWrapper(ttk.Frame):
         else:
             self.items_set.add(oid)
 
+        idx = len(self.items_list)
         self.items_list.append(oid)
+        self._oid_to_index[oid] = idx
 
         rev_char = "☑" if reviewed else "☐"
-        row_tags = ["even" if len(self.items_list) % 2 == 0 else "odd"]
+        row_tags = ["even" if idx % 2 == 0 else "odd"]
         
         if color:
             tag_name = f"color_{color.replace('#', '')}"
-            if not hasattr(self, "_configured_tags"):
-                self._configured_tags = set()
             if tag_name not in self._configured_tags:
-                self.tag_configure(tag_name, foreground=color)
+                self.tree.tag_configure(tag_name, foreground=color)
+                self._tag_configs[tag_name] = {"foreground": color}
                 self._configured_tags.add(tag_name)
             row_tags.append(tag_name)
 

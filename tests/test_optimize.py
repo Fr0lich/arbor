@@ -101,6 +101,47 @@ class TestOptimize(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+        # Test direct split dict serialization (new optimized format)
+        fd2, temp_path2 = tempfile.mkstemp(suffix=".json")
+        os.close(fd2)
+        try:
+            json_data2 = {
+                k: v.to_dict(orient="split") if v is not None else None
+                for k, v in data.items()
+            }
+            with open(temp_path2, "w") as f:
+                json.dump(json_data2, f)
+
+            with open(temp_path2, "r") as f:
+                loaded_json2 = json.load(f)
+
+            def load_df(key):
+                val = loaded_json2.get(key)
+                if val is None:
+                    return None
+                if isinstance(val, str):
+                    if '"schema"' in val:
+                        return pd.read_json(io.StringIO(val), orient="table")
+                    return pd.read_json(io.StringIO(val), orient="split")
+                elif isinstance(val, dict):
+                    if "schema" in val:
+                        return pd.read_json(io.StringIO(json.dumps(val)), orient="table")
+                    elif "columns" in val and "data" in val:
+                        return pd.DataFrame(data=val["data"], index=val.get("index"), columns=val["columns"])
+                return None
+
+            loaded2 = {
+                k: load_df(k) for k in ("df_reg", "df_obs", "df_photo", "df_log")
+            }
+
+            self.assertTrue(loaded2["df_reg"].equals(df_reg))
+            self.assertTrue(loaded2["df_obs"].equals(df_obs))
+            self.assertTrue(loaded2["df_photo"].equals(df_photo))
+            self.assertTrue(loaded2["df_log"].equals(df_log))
+        finally:
+            if os.path.exists(temp_path2):
+                os.remove(temp_path2)
+
     def test_update_dashboard_vectorized_logic(self):
         # Test the core logic used in our optimized update_dashboard method.
         # We check that .any(axis=1) works properly on a DataFrame.
@@ -139,6 +180,39 @@ class TestOptimize(unittest.TestCase):
         urls = handler.build_online_image_urls("42A")
         self.assertEqual(len(urls), 4)
         self.assertIn("https://example.com/photos/{num:04d}{suffix}.jpg/42A", urls)
+
+    def test_treeview_listbox_inverted_index(self):
+        import tkinter as tk
+        from ui.widgets import TreeviewListboxWrapper
+        root = tk.Tk()
+        try:
+            root.withdraw()
+            dummy_mw = type("MW", (), {"dark_mode_active": False, "_toggle_reviewed_for_id": lambda s, o: None})()
+            wrapper = TreeviewListboxWrapper(root, dummy_mw)
+            
+            # Insert items
+            for i in range(10):
+                wrapper.insert(tk.END, f"OID_{i} Genus{i} Species{i}", genus=f"Genus{i}", species=f"Species{i}", reviewed=(i % 2 == 0), bulk=True)
+            
+            self.assertEqual(len(wrapper.items_list), 10)
+            self.assertEqual(wrapper._oid_to_index.get("OID_5"), 5)
+            self.assertEqual(wrapper._oid_to_index.get("OID_0"), 0)
+            
+            # Selection set by index
+            wrapper.selection_set(5)
+            self.assertEqual(wrapper.curselection(), [5])
+            
+            # Selection set by iid
+            wrapper.selection_set("OID_3")
+            self.assertEqual(wrapper.curselection(), [3])
+            
+            # Clear and delete
+            wrapper.delete(0, tk.END)
+            self.assertEqual(len(wrapper.items_list), 0)
+            self.assertEqual(len(wrapper._oid_to_index), 0)
+            self.assertEqual(wrapper.curselection(), [])
+        finally:
+            root.destroy()
 
 if __name__ == "__main__":
     unittest.main()

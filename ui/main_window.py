@@ -4410,12 +4410,7 @@ class ObjectProgramUI(
         else:
             cf_text = jf(changed_fields)
 
-        # Defensive: ensure columns exist if the user loaded this file before the update
-        for col in ["ProblemsChanged", "ProblemsChangedValues", "LocationChanged", "LocationChangedValues"]:
-            if col not in self.app.df_log.columns:
-                self.app.df_log[col] = ""
-
-        self.app.df_log.loc[len(self.app.df_log)] = {
+        entry = {
             "Timestamp": datetime.now().isoformat(timespec="seconds"),
             "Action": action,
             "ObjectID": self.app.current_object_id,
@@ -4426,9 +4421,18 @@ class ObjectProgramUI(
             "LocationChanged": jf(loc_fields),
             "LocationChangedValues": jv(loc_values),
             "User": getpass.getuser(),
-            "SourceFile": os.path.basename(self.app.excel_path),
-            "OutputFile": os.path.basename(self.app.output_path),
+            "SourceFile": os.path.basename(self.app.excel_path) if self.app.excel_path else "",
+            "OutputFile": os.path.basename(self.app.output_path) if self.app.output_path else "",
         }
+
+        if not hasattr(self.app, "_log_records") or not self.app._log_records:
+            if self.app.df_log is not None and not self.app.df_log.empty:
+                self.app._log_records = self.app.df_log.to_dict(orient="records")
+            else:
+                self.app._log_records = []
+
+        self.app._log_records.append(entry)
+        self.app.df_log = pd.DataFrame(self.app._log_records)
 
     # ---------- Commit ----------
     def commit_current_object(self, skip_heavy=None):
@@ -4628,14 +4632,23 @@ class ObjectProgramUI(
 
 
     def update_location_summary(self, oid):
-        if oid not in self.obs_by_id.index:
+        obs_dict = self._get_obs_dict() if hasattr(self, "_get_obs_dict") else None
+        if obs_dict is not None:
+            obs = obs_dict.get(oid)
+            if obs is None and str(oid).isdigit():
+                obs = obs_dict.get(int(oid))
+            if obs is None:
+                self.location_summary_label.config(text="")
+                return
+        elif hasattr(self, "obs_by_id") and self.obs_by_id is not None and oid in self.obs_by_id.index:
+            obs = self.obs_by_id.loc[oid]
+            if isinstance(obs, pd.DataFrame):
+                obs = obs.iloc[0].to_dict()
+            elif isinstance(obs, pd.Series):
+                obs = obs.to_dict()
+        else:
             self.location_summary_label.config(text="")
             return
-
-        obs = self.obs_by_id.loc[oid]
-    
-        if isinstance(obs, pd.DataFrame):
-            obs = obs.iloc[0]
 
 
 
@@ -5134,12 +5147,7 @@ class ObjectProgramUI(
                 var.set(utils.fmt_pandas_val(val))
 
 
-            if oid in self.photo_by_id.index:
-                photo = self.photo_by_id.loc[oid]
-                if isinstance(photo, pd.DataFrame):
-                    photo = photo.iloc[0]
-            else:
-                photo = {}
+            # Location and registration fields updated from obs/reg dicts
             
 
             for col, widget in self.reg_entries.items():
@@ -8285,11 +8293,15 @@ class ObjectProgramUI(
         if not self.app.active_object_ids or oid not in self.app.active_object_ids:
             return
             
-        color = None
-        try:
-            reviewed = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
-        except Exception:
-            reviewed = False
+        if getattr(self, "_cached_reviewed_dict", None) is not None:
+            reviewed = bool(self._cached_reviewed_dict.get(oid, False))
+        elif getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+            reviewed = bool(self._cached_obs_dict[oid].get(REVIEWED_COLUMN, False))
+        else:
+            try:
+                reviewed = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
+            except Exception:
+                reviewed = False
             
         has_problem = self._get_cached_problem(oid)
         has_history = self._problems_have_history(oid)

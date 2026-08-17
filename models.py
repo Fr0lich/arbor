@@ -30,6 +30,9 @@ class AppState:
         # Snapshot of df_obs at load time, used to detect changes
         self.initial_df_obs: pd.DataFrame | None = None
 
+        # In-memory buffer of log dictionaries for fast O(1) appends
+        self._log_records: list[dict] = []
+
         # Ordered list of ObjectIDs currently visible in the object list
         self.active_object_ids: list[str] = []
 

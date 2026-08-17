@@ -70,8 +70,8 @@ def _normalise_dataframes(df_reg, df_obs, config):
     if "ProblemDescription" not in df_reg.columns and "ProblemDescription" not in new_reg:
         new_reg["ProblemDescription"] = ""
 
-    if new_reg:
-        df_reg[list(new_reg.keys())] = pd.DataFrame(new_reg, index=df_reg.index)
+    for col, default_val in new_reg.items():
+        df_reg[col] = default_val
 
     # --- Observation: batch-insert missing observation columns ---
     new_obs = {}
@@ -93,8 +93,8 @@ def _normalise_dataframes(df_reg, df_obs, config):
     if ONLINE_EXISTS_COLUMN not in df_obs.columns:
         new_obs[ONLINE_EXISTS_COLUMN] = False
 
-    if new_obs:
-        df_obs[list(new_obs.keys())] = pd.DataFrame(new_obs, index=df_obs.index)
+    for col, default_val in new_obs.items():
+        df_obs[col] = default_val
 
     if problem_columns:
         df_obs[problem_columns] = df_obs[problem_columns].fillna(False).astype(bool)
@@ -106,8 +106,9 @@ def _normalise_dataframes(df_reg, df_obs, config):
         if field.get("type") == "checkbox":
             col = field["name"]
             if col in df_obs.columns:
-                df_obs[col] = df_obs[col].replace({"": "False", None: "False"}).fillna("False")
-                df_obs[col] = df_obs[col].replace({True: "True", False: "False"}).astype(str)
+                s = df_obs[col]
+                is_true = s.isin([True, "True", 1, "1", "yes", "true", "YES", "TRUE"])
+                df_obs[col] = is_true.map({True: "True", False: "False"}).astype(str)
 
     df_obs["Images_Missing"] = df_obs["Images_Missing"].fillna(True).astype(bool)
     df_obs["Images_Problem"] = df_obs["Images_Problem"].fillna(False).astype(bool)

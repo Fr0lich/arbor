@@ -65,24 +65,25 @@ class SearchEngine:
         if not query:
             return None # Indicate no match / return all
 
-        matched_with_priority = []
+        p1 = []
+        p2 = []
+        p3 = []
+        p4 = []
+        p5 = []
 
         for oid, tokens_dict in index.items():
             if query not in tokens_dict["all"]:
                 continue
 
             if query == tokens_dict["id"]:
-                priority = 1
+                p1.append(oid)
             elif query in tokens_dict["id"]:
-                priority = 2
+                p2.append(oid)
             elif query in tokens_dict["genus_species"]:
-                priority = 3
+                p3.append(oid)
             elif query in tokens_dict["family"]:
-                priority = 4
+                p4.append(oid)
             else:
-                priority = 5
+                p5.append(oid)
 
-            matched_with_priority.append((priority, oid))
-
-        matched_with_priority.sort(key=lambda x: x[0])
-        return [oid for priority, oid in matched_with_priority]
+        return p1 + p2 + p3 + p4 + p5

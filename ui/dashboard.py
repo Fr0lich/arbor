@@ -93,7 +93,32 @@ class DashboardMixin:
 
         reviewed_count = int(self.app.df_obs[REVIEWED_COLUMN].sum())
         not_reviewed = total - reviewed_count
-        with_problems = sum(1 for oid in self.app.df_reg.index if self.has_any_problem(oid))
+
+        # Fast vectorized problem series helper
+        def _get_prob_series(prob_col, subset_idx=None):
+            idx = self.app.df_reg.index if subset_idx is None else subset_idx
+            obs_s = pd.Series(False, index=idx)
+            if prob_col in self.app.df_obs.columns:
+                vals = self.app.df_obs[prob_col].fillna(False).astype(bool)
+                obs_s = vals.reindex(idx, fill_value=False)
+
+            if hasattr(self, "problem_to_field") and prob_col in self.problem_to_field:
+                field = self.problem_to_field.get(prob_col)
+                if field and field in self.app.df_reg.columns:
+                    reg_s = self.app.df_reg[field].reindex(idx, fill_value="")
+                    is_missing = reg_s.isna() | (reg_s.astype(str).str.strip() == "")
+                    is_unknown = reg_s.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
+                    obs_s |= (is_missing & ~is_unknown)
+            return obs_s
+
+        if hasattr(self, "_problem_cache") and len(self._problem_cache) >= total:
+            with_problems = sum(1 for oid in self.app.df_reg.index if self._problem_cache.get(oid, False))
+        else:
+            cols = [p for p in self.problem_columns if p in self.app.df_obs.columns]
+            if cols:
+                with_problems = int(self.app.df_obs[cols].any(axis=1).sum())
+            else:
+                with_problems = 0
 
         def pct(n):
             return f"{int(n / total * 100)}%" if total else "0%"
@@ -168,7 +193,7 @@ class DashboardMixin:
 
         for prob_col in self.problem_columns:
             if prob_col in self.app.df_obs.columns:
-                count = sum(1 for oid in self.app.df_reg.index if self.is_problem_active(oid, prob_col))
+                count = int(_get_prob_series(prob_col).sum())
                 label = prob_col.replace("_", " ")
                 add_row(label, f"{count}  ({pct(count)})", r, bold=count > 0)
                 r += 1
@@ -179,7 +204,7 @@ class DashboardMixin:
         for prob_col in self.problem_columns:
             if prob_col in self.app.df_obs.columns:
                 if self.app.active_object_ids:
-                    count = sum(1 for oid in self.app.active_object_ids if self.is_problem_active(oid, prob_col))
+                    count = int(_get_prob_series(prob_col, self.app.active_object_ids).sum())
                 else:
                     count = 0
                 label = prob_col.replace("_", " ")
@@ -228,8 +253,12 @@ class DashboardMixin:
         stats_file = os.path.splitext(base_path)[0] + "_session_stats.csv"
 
         total = len(self.app.df_reg)
-        reviewed = int(self.app.df_obs[REVIEWED_COLUMN].sum())
-        problems = sum(1 for oid in self.app.df_reg.index if self.has_any_problem(oid))
+        reviewed = int(self.app.df_obs[REVIEWED_COLUMN].sum()) if REVIEWED_COLUMN in self.app.df_obs.columns else 0
+        if hasattr(self, "_problem_cache") and len(self._problem_cache) >= total:
+            problems = sum(1 for oid in self.app.df_reg.index if self._problem_cache.get(oid, False))
+        else:
+            cols = [p for p in self.problem_columns if p in self.app.df_obs.columns]
+            problems = int(self.app.df_obs[cols].any(axis=1).sum()) if cols else 0
 
         # In a real app we'd track session duration, here we mock it or track from startup
         duration_mins = (datetime.now() - getattr(self.app, "session_start_time", datetime.now())).total_seconds() / 60

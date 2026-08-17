@@ -43,7 +43,7 @@ class AutosaveMixin:
                     "df_log": df_log_copy
                 }
                 json_data = {
-                    k: v.to_json(orient="table") if v is not None else None
+                    k: v.to_dict(orient="split") if v is not None else None
                     for k, v in data.items()
                 }
                 # Write to tmp first then replace for atomic safety
@@ -201,8 +201,17 @@ class AutosaveMixin:
 
                 def load_df(key):
                     val = data.get(key)
-                    if val is not None:
-                        return pd.read_json(io.StringIO(val), orient="table")
+                    if val is None:
+                        return None
+                    if isinstance(val, str):
+                        if '"schema"' in val:
+                            return pd.read_json(io.StringIO(val), orient="table")
+                        return pd.read_json(io.StringIO(val), orient="split")
+                    elif isinstance(val, dict):
+                        if "schema" in val:
+                            return pd.read_json(io.StringIO(json.dumps(val)), orient="table")
+                        elif "columns" in val and "data" in val:
+                            return pd.DataFrame(data=val["data"], index=val.get("index"), columns=val["columns"])
                     return None
 
                 df_reg = load_df("df_reg")

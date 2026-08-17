@@ -91,19 +91,31 @@ class HistoricalSuggestionsMixin:
 
 
         if show_all:
-            fields.update(self.reg_by_id.columns)
+            if hasattr(self, "reg_columns") and self.reg_columns:
+                fields.update(self.reg_columns)
+            elif hasattr(self, "reg_by_id") and self.reg_by_id is not None:
+                fields.update(self.reg_by_id.columns)
 
-
-
-        # Get registration row
-        reg = self.reg_by_id.loc[oid] if oid in self.reg_by_id.index else pd.Series()
-        if isinstance(reg, pd.DataFrame):
-            reg = reg.iloc[0]
+        # Get registration row via fast dictionary lookup
+        reg = {}
+        reg_dict = self._get_reg_dict() if hasattr(self, "_get_reg_dict") else None
+        if reg_dict is not None:
+            reg = reg_dict.get(oid)
+            if reg is None and str(oid).isdigit():
+                reg = reg_dict.get(int(oid), {})
+            if reg is None:
+                reg = {}
+        elif hasattr(self, "reg_by_id") and self.reg_by_id is not None and oid in self.reg_by_id.index:
+            r = self.reg_by_id.loc[oid]
+            if isinstance(r, pd.DataFrame):
+                reg = r.iloc[0].to_dict()
+            elif isinstance(r, pd.Series):
+                reg = r.to_dict()
 
         for field in fields:
             prob_col = field_to_prob.get(field)
 
-            is_unknown = self.is_unknown(str(reg.get(field, "")).strip()) if not reg.empty else False
+            is_unknown = self.is_unknown(str(reg.get(field, "")).strip()) if reg else False
             is_active_prob = prob_col and self.is_problem_active(oid, prob_col)
 
             if not show_all:

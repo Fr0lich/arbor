@@ -1,6 +1,19 @@
 import pandas as pd
 from repository import REVIEWED_COLUMN
 
+def _get_location_str(val):
+    if val is None or val == "" or (isinstance(val, float) and pd.isna(val)):
+        return ""
+    if isinstance(val, float) and val.is_integer():
+        return str(int(val))
+    return str(val)
+
+def _is_unknown(val):
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return True
+    s = str(val).strip().lower()
+    return s in ("", "unknown", "?", "ukjent")
+
 class FilterManager:
     def __init__(self):
         pass
@@ -11,35 +24,20 @@ class FilterManager:
             return filtered_ids
 
         building_filter, floor_filter, cabinet_filter = location_filters
-
         has_location_filter = bool(building_filter or floor_filter or cabinet_filter)
+        clean_cabinet_filter = cabinet_filter.replace(" ", "").lower() if cabinet_filter else ""
         no_filters = all(len(v) == 0 for v in groups.values()) and not has_location_filter
 
         if no_filters and not not_reviewed_only:
             return list(df_reg.index)
 
         fast_problem_cache = {}
-
-        def get_location_str(val):
-            if pd.isna(val) or val == "":
-                return ""
-            if isinstance(val, float) and val.is_integer():
-                return str(int(val))
-            return str(val)
-
-        def is_unknown(val):
-            if pd.isna(val):
-                return True
-            s = str(val).strip().lower()
-            return s in ("", "unknown", "?", "ukjent")
+        include_image_problems = (image_mode == "folder")
 
         def fast_has_history(oid):
             return oid in history_set
 
-        def fast_is_problem_active(oid, prob_col):
-            obs_row = obs_dict.get(oid, {})
-            reg_row = reg_dict.get(oid, {})
-
+        def fast_is_problem_active(oid, prob_col, obs_row, reg_row):
             if prob_col == "Other_problem":
                 return bool(obs_row.get(prob_col, False))
 
@@ -68,44 +66,42 @@ class FilterManager:
                 raw_val = reg_row.get(field, "")
 
                 is_missing = (
-                    pd.isna(raw_val) or
+                    raw_val is None or
+                    (isinstance(raw_val, float) and pd.isna(raw_val)) or
                     (isinstance(raw_val, str) and raw_val.strip() == "")
                 )
 
-                auto_val = is_missing and not is_unknown(raw_val)
+                auto_val = is_missing and not _is_unknown(raw_val)
 
             return obs_val or auto_val
 
-        def fast_has_any_problem(oid, include_image_problems=True):
+        def fast_has_any_problem(oid, obs_row, reg_row):
             for p in problem_columns:
                 if p == "Images_Missing":
                     continue
-                if not include_image_problems:
-                    if "Image" in p:
-                        continue
-                if fast_is_problem_active(oid, p):
+                if not include_image_problems and "Image" in p:
+                    continue
+                if fast_is_problem_active(oid, p, obs_row, reg_row):
                     return True
             return False
 
-        def fast_get_cached_problem(oid):
+        def fast_get_cached_problem(oid, obs_row, reg_row):
             if oid not in fast_problem_cache:
                 fast_problem_cache[oid] = fast_has_any_problem(
                     oid,
-                    include_image_problems=(image_mode == "folder")
+                    obs_row,
+                    reg_row
                 )
             return fast_problem_cache[oid]
 
-        def check_group(oid, items, mode):
+        def check_group(oid, items, mode, obs_row, reg_row):
             if not items:
                 return None
 
             results = []
-            obs_row = obs_dict.get(oid, {})
-            reg_row = reg_dict.get(oid, {})
-
             for p in items:
                 if p == "Any_Problem":
-                    val = fast_has_any_problem(oid)
+                    val = fast_has_any_problem(oid, obs_row, reg_row)
                 elif p == "Has_Images":
                     val = not obs_row.get("Images_Missing", False)
                 elif p == "Images_Missing":
@@ -123,53 +119,48 @@ class FilterManager:
                 elif p == "Extra_Not_Empty":
                     val = bool(str(obs_row.get("Extra", "")).strip())
                 elif p == "Unknown":
-                    val = any(is_unknown(reg_row.get(field, "")) for field in unknown_fields)
+                    val = any(_is_unknown(reg_row.get(field, "")) for field in unknown_fields)
                 elif p == "Reviewed_With_Problem":
-                    val = (bool(obs_row.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid))
+                    val = (bool(obs_row.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs_row, reg_row))
                 elif p == "Problem_With_History":
-                    val = fast_get_cached_problem(oid) and fast_has_history(oid)
+                    val = fast_get_cached_problem(oid, obs_row, reg_row) and fast_has_history(oid)
                 elif p == "Has_History":
                     val = fast_has_history(oid)
                 else:
-                    val = fast_is_problem_active(oid, p)
+                    val = fast_is_problem_active(oid, p, obs_row, reg_row)
 
                 results.append(val)
 
             return all(results) if mode == "AND" else any(results)
 
-
         for oid in df_reg.index:
+            obs_row = obs_dict.get(oid, {})
+
             if not_reviewed_only:
-                obs_row = obs_dict.get(oid, {})
                 if obs_row.get(REVIEWED_COLUMN):
                     continue
                 filtered_ids.append(oid)
                 continue
 
+            # Short-circuit location checks early before executing heavy group evaluations
+            if building_filter and _get_location_str(obs_row.get("Building", "")) != building_filter:
+                continue
+            if floor_filter and _get_location_str(obs_row.get("Floor", "")) != floor_filter:
+                continue
+            if clean_cabinet_filter:
+                cabinet_val = _get_location_str(obs_row.get("Cabinet", "")).lower()
+                if clean_cabinet_filter not in cabinet_val.replace(" ", ""):
+                    continue
+
+            reg_row = reg_dict.get(oid, {})
             group_results = []
             for group_name, items in groups.items():
                 mode = group_modes.get(group_name, "AND")
-                result = check_group(oid, items, mode)
+                result = check_group(oid, items, mode, obs_row, reg_row)
                 if result is not None:
                     group_results.append(result)
 
-            location_match = True
-            obs_row = obs_dict.get(oid, {})
-
-            if building_filter:
-                if get_location_str(obs_row.get("Building", "")) != building_filter:
-                    location_match = False
-            if floor_filter:
-                if get_location_str(obs_row.get("Floor", "")) != floor_filter:
-                    location_match = False
-            if cabinet_filter:
-                cabinet_val = get_location_str(obs_row.get("Cabinet", "")).lower()
-                if cabinet_filter.replace(" ", "") not in cabinet_val.replace(" ", ""):
-                    location_match = False
-
             ok = all(group_results) if group_results else True
-            ok = ok and location_match
-
             if ok:
                 filtered_ids.append(oid)
 

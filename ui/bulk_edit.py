@@ -331,36 +331,51 @@ class BulkEditWindow:
             
         self.main_window._show_progress(f"Bulk applying to {len(oids)} objects...", len(oids))
         
-        problem_keys = [f["name"] for f in self.app.config["ui_sections"].get("problems", [])] + ["Reviewed"]
-        
-        for i, oid in enumerate(oids):
+        reg_df = self.app.df_reg
+        obs_df = self.app.df_obs
+        reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else {}
+        obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else {}
+
+        # Snapshot undo state efficiently
+        for oid in oids:
+            reg_snap = reg_dict.get(oid, {}).copy() if reg_dict else (reg_df.loc[oid].copy() if (reg_df is not None and oid in reg_df.index) else {})
+            obs_snap = obs_dict.get(oid, {}).copy() if obs_dict else (obs_df.loc[oid].copy() if (obs_df is not None and oid in obs_df.index) else {})
             self.main_window.app.undo_stacks.setdefault(oid, []).append({
-                "reg": self.app.df_reg.loc[oid].copy(),
-                "obs": self.app.df_obs.loc[oid].copy(),
+                "reg": reg_snap,
+                "obs": obs_snap,
             })
-            
-            for key, val in updates.items():
-                if key in self.app.df_reg.columns:
-                    self.app.df_reg.at[oid, key] = val
-                    if key == "Loaned out":
-                        from datetime import datetime
-                        if utils.parse_bool(val):
-                            self.app.df_reg.at[oid, "Loaned out date"] = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-                        else:
-                            self.app.df_reg.at[oid, "Loaned out date"] = ""
-                elif key in self.app.df_obs.columns:
-                    if key in problem_keys:
-                        val = utils.parse_bool(val)
-                    self.app.df_obs.at[oid, key] = val
-                    if key == "Reviewed" and val:
-                        from datetime import datetime
-                        self.app.df_obs.at[oid, REVIEWED_AT_COLUMN] = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-            
-            # Recalculate problems cache
+
+        reg_updates = {}
+        obs_updates = {}
+        for key, val in updates.items():
+            if reg_df is not None and key in reg_df.columns:
+                reg_updates[key] = val
+            elif obs_df is not None and key in obs_df.columns:
+                if key in problem_keys:
+                    val = utils.parse_bool(val)
+                obs_updates[key] = val
+
+        from datetime import datetime
+        now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+
+        valid_reg_oids = [oid for oid in oids if reg_df is not None and oid in reg_df.index]
+        valid_obs_oids = [oid for oid in oids if obs_df is not None and oid in obs_df.index]
+
+        for key, val in reg_updates.items():
+            reg_df.loc[valid_reg_oids, key] = val
+            if key == "Loaned out":
+                loaned_date = now_str if utils.parse_bool(val) else ""
+                if "Loaned out date" in reg_df.columns:
+                    reg_df.loc[valid_reg_oids, "Loaned out date"] = loaned_date
+
+        for key, val in obs_updates.items():
+            obs_df.loc[valid_obs_oids, key] = val
+            if key == "Reviewed" and val:
+                if REVIEWED_AT_COLUMN in obs_df.columns:
+                    obs_df.loc[valid_obs_oids, REVIEWED_AT_COLUMN] = now_str
+
+        for oid in oids:
             self.main_window._problem_cache.pop(oid, None)
-            
-            if i % 10 == 0:
-                self.main_window.image_scan_progress.configure(value=i, maximum=len(oids))
 
         self.main_window._hide_progress("Bulk apply complete")
         self.app.dirty = True
