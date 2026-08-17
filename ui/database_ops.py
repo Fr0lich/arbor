@@ -98,8 +98,11 @@ class DatabaseOpsMixin:
 
     def create_new_database(self):
         from ui.new_database_wizard import NewDatabaseWizard
-        def on_complete():
-            pass
+        def on_complete(file_path=None, name=None):
+            if file_path and os.path.exists(file_path):
+                self.open_excel_from_path(file_path)
+            elif hasattr(self, "refresh_list"):
+                self.refresh_list()
         NewDatabaseWizard(self.root, self.app, on_complete)
 
 

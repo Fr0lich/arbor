@@ -339,10 +339,113 @@ DATABASE_CONFIGS = {
                   "maps_to": "Collection Date"
                 },
                 {
-                  "name": "Unknown_Collection_Place",
-                  "maps_to": "Collection Place"
+                    "name": "Unknown_Collection_Place",
+                    "maps_to": "Collection Place"
                 }
             ]
         }
+    },
+
+    "Loan Tracking": {
+        "has_images": False,
+        "image_url_pattern": "",
+        "sheets": {
+            "reg": "Registration",
+            "obs": "Observation",
+            "photo": "Photo",
+            "log": "Log",
+        },
+        "ui_sections": {
+            "registration": [
+                {"name": "Item Name", "type": "text"},
+                {"name": "Borrower", "type": "text"},
+                {"name": "Institution", "type": "text"},
+                {"name": "Loan Date", "type": "text"},
+                {"name": "Due Date", "type": "text"},
+                {"name": "Return Date", "type": "text"},
+                {"name": "Purpose", "type": "multiline"},
+                {"name": "Status", "type": "choice", "choices": ["Active", "Returned", "Overdue", "Pending"]},
+                {"name": "Notes", "type": "multiline"},
+                {"name": "UID", "type": "text", "readonly": True}
+            ],
+            "reg_groups": [
+                {"name": "Loan Details", "fields": ["Item Name", "Borrower", "Institution", "Purpose"]},
+                {"name": "Schedule & Status", "fields": ["Loan Date", "Due Date", "Return Date", "Status"]},
+                {"name": "Notes & Admin", "fields": ["Notes", "UID"]}
+            ],
+            "location": [
+                {"name": "Building", "type": "text"},
+                {"name": "Room", "type": "text"},
+                {"name": "Cabinet", "type": "text"},
+                {"name": "Shelf", "type": "text"},
+                {"name": "Stored as", "type": "text"}
+            ],
+            "problems": [
+                {"name": "Item_Name_Problem", "type": "bool", "maps_to": "Item Name"},
+                {"name": "Borrower_Problem", "type": "bool", "maps_to": "Borrower"},
+                {"name": "Due_Date_Problem", "type": "bool", "maps_to": "Due Date"},
+                {"name": "Other_problem", "type": "bool", "maps_to": "Other"}
+            ],
+            "unknown_fields": []
+        }
+    },
+
+    "Blank Minimal": {
+        "has_images": False,
+        "image_url_pattern": "",
+        "sheets": {
+            "reg": "Registration",
+            "obs": "Observation",
+            "photo": "Photo",
+            "log": "Log",
+        },
+        "ui_sections": {
+            "registration": [
+                {"name": "Title", "type": "text"},
+                {"name": "Category", "type": "text"},
+                {"name": "Date", "type": "text"},
+                {"name": "Status", "type": "choice", "choices": ["Active", "Draft", "Archived"]},
+                {"name": "Description", "type": "multiline"},
+                {"name": "Notes", "type": "multiline"},
+                {"name": "UID", "type": "text", "readonly": True}
+            ],
+            "reg_groups": [
+                {"name": "General Info", "fields": ["Title", "Category", "Date", "Status"]},
+                {"name": "Content", "fields": ["Description", "Notes"]},
+                {"name": "Admin", "fields": ["UID"]}
+            ],
+            "location": [
+                {"name": "Location", "type": "text"},
+                {"name": "Storage Unit", "type": "text"}
+            ],
+            "problems": [
+                {"name": "Title_Problem", "type": "bool", "maps_to": "Title"},
+                {"name": "Date_Problem", "type": "bool", "maps_to": "Date"},
+                {"name": "Other_problem", "type": "bool", "maps_to": "Other"}
+            ],
+            "unknown_fields": []
+        }
     }
 }
+
+# Standard built-in starter template profiles for New Database Wizard
+BUILTIN_TEMPLATES = {
+    "Botany / Herbarium": {
+        "description": "Standard botanical specimen & herbarium collection with taxonomy, collection data, and plant part tracking.",
+        "icon": "🌿",
+        "badge": "Specimen & Taxonomy",
+        "config_key": "Økonomisk Botanisk"
+    },
+    "Loan Tracking": {
+        "description": "Track outbound loans, borrower institutions, due dates, return statuses, and object conditions.",
+        "icon": "📋",
+        "badge": "Loans & Curatorial",
+        "config_key": "Loan Tracking"
+    },
+    "Blank Minimal": {
+        "description": "Clean, light starter schema with Title, Category, Date, Status, Description, and Notes.",
+        "icon": "📄",
+        "badge": "Minimal & Custom",
+        "config_key": "Blank Minimal"
+    }
+}

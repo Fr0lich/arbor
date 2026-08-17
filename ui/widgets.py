@@ -2,15 +2,241 @@ import tkinter as tk
 from tkinter import ttk
 import utils
 
-def create_toggle_row(parent, label_text, var, command=None, ui_ref=None):
+def create_toggle_row(parent, label_text, var, command=None, ui_ref=None, info_text=None):
     from config import sc
     row = ttk.Frame(parent)
     row.pack(fill="x", pady=sc(4))
     lbl = ttk.Label(row, text=label_text)
     lbl.pack(side="left", anchor="w")
+    if info_text:
+        badge = InfoButton(row, text=info_text, ui_ref=ui_ref)
+        badge.pack(side="left", padx=(sc(6), 0))
     sw = ToggleSwitch(row, var, command=command, ui_ref=ui_ref)
     sw.pack(side="right")
     return row
+
+def create_info_badge(parent, text, ui_ref=None, **kwargs):
+    """Factory helper to create and return an InfoButton widget."""
+    return InfoButton(parent, text=text, ui_ref=ui_ref, **kwargs)
+
+class InfoButton(tk.Canvas):
+    """
+    Lightweight, accessible Info Badge (ⓘ / ?) widget with floating tooltip.
+    Features:
+    - Subtle circular badge with muted foreground (#747878 light / #9399b2 dark)
+    - Hover & focus micro-interactions with gentle background highlight
+    - Non-blocking floating tooltip popover with high-DPI scaling and screen bounds checking
+    - Full dark mode theme support
+    - Accessible keyboard navigation (Tab focus + Enter/Space trigger)
+    - Clean lifecycle cleanup on unbind/destroy
+    """
+    def __init__(self, parent, text="", ui_ref=None, width=18, height=18, icon="ⓘ", **kwargs):
+        from config import sc
+        self.ui_ref = ui_ref
+        self.text = text
+        self.icon = icon
+        self.base_width = width
+        self.base_height = height
+        self._is_hovered = False
+        self._is_focused = False
+        self.tip_window = None
+
+        scaled_w = sc(width) if ui_ref else width
+        scaled_h = sc(height) if ui_ref else height
+        kwargs.setdefault('takefocus', 1)
+
+        super().__init__(parent, width=scaled_w, height=scaled_h, highlightthickness=0, bd=0, cursor="hand2", **kwargs)
+
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_click)
+        self.bind("<FocusIn>", self._on_focus_in)
+        self.bind("<FocusOut>", self._on_focus_out)
+        self.bind("<space>", self._on_click)
+        self.bind("<Return>", self._on_click)
+        self.bind("<Configure>", lambda e: self.draw())
+        self.bind("<Destroy>", self._on_destroy)
+
+        self.draw()
+
+    def get_text(self):
+        return self.text
+
+    def set_text(self, text):
+        self.text = text
+
+    def is_dark_mode(self):
+        if self.ui_ref:
+            if hasattr(self.ui_ref, "var_dark_mode") and isinstance(self.ui_ref.var_dark_mode, tk.Variable):
+                try:
+                    return bool(self.ui_ref.var_dark_mode.get())
+                except Exception:
+                    pass
+            if hasattr(self.ui_ref, "dark_mode_active"):
+                return bool(self.ui_ref.dark_mode_active)
+            if hasattr(self.ui_ref, "app") and self.ui_ref.app and hasattr(self.ui_ref.app, "dark_mode_active"):
+                return bool(self.ui_ref.app.dark_mode_active)
+        try:
+            bg_col = self.master.cget("bg")
+            if bg_col and bg_col.startswith("#") and len(bg_col) == 7:
+                r, g, b = int(bg_col[1:3], 16), int(bg_col[3:5], 16), int(bg_col[5:7], 16)
+                if (r * 0.299 + g * 0.587 + b * 0.114) < 128:
+                    return True
+        except Exception:
+            pass
+        try:
+            import config
+            prefs = config.load_prefs() or {}
+            return bool(prefs.get("dark_mode", False))
+        except Exception:
+            return False
+
+    def draw(self):
+        self.delete("all")
+        w = self.winfo_width()
+        h = self.winfo_height()
+        if w <= 1:
+            w = self.cget("width")
+        if h <= 1:
+            h = self.cget("height")
+        try:
+            w = int(w)
+            h = int(h)
+        except (ValueError, TypeError):
+            w, h = 18, 18
+
+        is_dark = self.is_dark_mode()
+
+        try:
+            bg_canvas = self.master.cget("bg")
+        except Exception:
+            bg_canvas = "#1e1e2e" if is_dark else "#ffffff"
+
+        if is_dark:
+            fg_icon = "#cdd6f4" if (self._is_hovered or self._is_focused) else "#9399b2"
+            circle_fill = "#313244" if (self._is_hovered or self._is_focused) else bg_canvas
+            circle_outline = "#89b4fa" if self._is_focused else ("#585b70" if self._is_hovered else "#45475a")
+        else:
+            fg_icon = "#1a1c1c" if (self._is_hovered or self._is_focused) else "#747878"
+            circle_fill = "#e2e2e2" if (self._is_hovered or self._is_focused) else bg_canvas
+            circle_outline = "#0058a3" if self._is_focused else ("#747878" if self._is_hovered else "#c4c7c7")
+
+        self.configure(bg=bg_canvas)
+
+        pad = 2
+        cx, cy = w / 2, h / 2
+        r = min(w, h) / 2 - pad
+
+        self.create_oval(
+            cx - r, cy - r, cx + r, cy + r,
+            fill=circle_fill, outline=circle_outline, width=1
+        )
+
+        font_size = max(7, int(r * 0.95))
+        self.create_text(
+            cx, cy,
+            text=self.icon,
+            fill=fg_icon,
+            font=("Segoe UI", font_size, "bold")
+        )
+
+    def _on_enter(self, event=None):
+        self._is_hovered = True
+        self.draw()
+        self.show_tip()
+
+    def _on_leave(self, event=None):
+        self._is_hovered = False
+        self.draw()
+        self.hide_tip()
+
+    def _on_focus_in(self, event=None):
+        self._is_focused = True
+        self.draw()
+        self.show_tip()
+
+    def _on_focus_out(self, event=None):
+        self._is_focused = False
+        self.draw()
+        self.hide_tip()
+
+    def _on_click(self, event=None):
+        if self.tip_window:
+            self.hide_tip()
+        else:
+            self.show_tip()
+
+    def show_tip(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        from config import sc
+
+        try:
+            self.update_idletasks()
+            x = self.winfo_rootx() + self.winfo_width() + sc(6)
+            y = self.winfo_rooty() - sc(2)
+        except Exception:
+            return
+
+        is_dark = self.is_dark_mode()
+        if is_dark:
+            bg_color = "#181825"
+            fg_color = "#cdd6f4"
+            border_color = "#45475a"
+        else:
+            bg_color = "#1a1c1c"
+            fg_color = "#ffffff"
+            border_color = "#4c4546"
+
+        self.tip_window = tw = tk.Toplevel(self)
+        tw.wm_overrideredirect(True)
+        tw.attributes("-topmost", True)
+
+        outer = tk.Frame(tw, bg=border_color, padx=1, pady=1)
+        outer.pack(fill="both", expand=True)
+
+        inner = tk.Frame(outer, bg=bg_color, padx=sc(10), pady=sc(7))
+        inner.pack(fill="both", expand=True)
+
+        font_tip = ("Inter", sc(9))
+        label = tk.Label(
+            inner,
+            text=self.text,
+            justify=tk.LEFT,
+            background=bg_color,
+            foreground=fg_color,
+            font=font_tip,
+            wraplength=sc(340),
+            anchor="w"
+        )
+        label.pack(fill="both", expand=True)
+
+        tw.update_idletasks()
+        tip_w = tw.winfo_reqwidth()
+        tip_h = tw.winfo_reqheight()
+        screen_w = tw.winfo_screenwidth()
+        screen_h = tw.winfo_screenheight()
+
+        if x + tip_w > screen_w - 10:
+            x = self.winfo_rootx() - tip_w - sc(6)
+            if x < 10:
+                x = max(10, screen_w - tip_w - 10)
+
+        if y + tip_h > screen_h - 10:
+            y = max(10, screen_h - tip_h - 10)
+
+        tw.wm_geometry(f"+{int(x)}+{int(y)}")
+
+    def hide_tip(self, event=None):
+        if self.tip_window:
+            try:
+                self.tip_window.destroy()
+            except Exception:
+                pass
+            self.tip_window = None
+
+    def _on_destroy(self, event=None):
+        self.hide_tip()
 
 class ToggleSwitch(tk.Canvas):
     def __init__(self, parent, variable, command=None, width=42, height=22, ui_ref=None, **kwargs):

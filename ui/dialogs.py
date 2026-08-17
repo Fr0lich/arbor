@@ -435,7 +435,9 @@ class StartupDialog:
             placeholder=None,
             browse_cmd=self.browse_database,
             status_type="required",
-            tutorial_id="db_path_entry"
+            tutorial_id="db_path_entry",
+            action_btn_text="+ Create New Database",
+            action_cmd=self.create_new_database_startup
         )
         tk.Frame(body, bg=self.C_CARD, height=int(16*s)).pack()  # spacer
 
@@ -495,7 +497,7 @@ class StartupDialog:
     # Section Header helper
     # ------------------------------------------------------------------
 
-    def _build_section_header(self, parent, text, status_type=None):
+    def _build_section_header(self, parent, text, status_type=None, action_btn_text=None, action_cmd=None):
         s = self._scale
         header_frame = tk.Frame(parent, bg=self.C_CARD)
         header_frame.pack(anchor="w", fill="x", pady=(0, int(2*s)))
@@ -530,6 +532,21 @@ class StartupDialog:
             anchor="w"
         )
         lbl.pack(side="left")
+
+        if action_btn_text and action_cmd:
+            btn = tk.Button(
+                header_frame, text=action_btn_text,
+                bg=self.C_SURFACE_LOW, fg=self.C_PRIMARY,
+                font=("Segoe UI", sc(8.5), "bold"),
+                relief="flat", bd=0, cursor="hand2",
+                padx=sc(6), pady=sc(1),
+                command=action_cmd,
+                highlightthickness=1, highlightbackground=self.C_OUTLINE
+            )
+            btn.pack(side="right")
+            btn.bind("<Enter>", lambda e, b=btn: b.config(bg=self.C_HOVER))
+            btn.bind("<Leave>", lambda e, b=btn: b.config(bg=self.C_SURFACE_LOW))
+
         return header_frame
 
     # ------------------------------------------------------------------
@@ -537,9 +554,13 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_file_row(self, parent, label_text, path_var, entry_bg,
-                        placeholder, browse_cmd, status_type=None, tutorial_id=None):
+                        placeholder, browse_cmd, status_type=None, tutorial_id=None,
+                        action_btn_text=None, action_cmd=None):
         s = self._scale
-        self._build_section_header(parent, label_text, status_type=status_type)
+        self._build_section_header(
+            parent, label_text, status_type=status_type,
+            action_btn_text=action_btn_text, action_cmd=action_cmd
+        )
 
         row = tk.Frame(parent, bg=self.C_CARD)
         if tutorial_id:
@@ -1186,20 +1207,28 @@ class StartupDialog:
     # Existing load methods (unchanged)
     # ------------------------------------------------------------------
 
+    def create_new_database_startup(self):
+        from ui.new_database_wizard import NewDatabaseWizard
+        NewDatabaseWizard(self.win, self.app, self.on_new_db_created)
+
     def on_db_selected(self, event=None):
         if hasattr(self, "db_var") and self.db_var.get() == "<Create New Database...>":
-            from ui.new_database_wizard import NewDatabaseWizard
-            NewDatabaseWizard(self.win, self.app, self.on_new_db_created)
+            self.create_new_database_startup()
 
-    def on_new_db_created(self):
+    def on_new_db_created(self, file_path=None, profile_name=None):
         from config import DATABASE_CONFIGS
         db_names = list(DATABASE_CONFIGS.keys())
         new_values = list(db_names)
         new_values.append("<Create New Database...>")
         if hasattr(self, "db_dropdown"):
             self.db_dropdown["values"] = new_values
-            if db_names:
+            if profile_name and profile_name in db_names:
+                self.db_var.set(profile_name)
+            elif db_names:
                 self.db_var.set(db_names[-1])
+        if file_path:
+            self.db_path_var.set(file_path)
+            self._refresh_launch_state()
 
     def on_close(self):
         self.completed = False

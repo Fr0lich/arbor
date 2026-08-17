@@ -21,7 +21,58 @@ if parent_dir not in sys.path:
 
 import config
 from config import sc
-from ui.widgets import ToggleSwitch, create_toggle_row
+from ui.widgets import ToggleSwitch, create_toggle_row, InfoButton, create_info_badge
+
+SETTING_INFO_TEXTS = {
+    "focus_fallback": (
+        "When Focus Mode is active, if a record has no active problem fields, "
+        "Arbor automatically falls back to showing standard registration fields "
+        "so you are never left with an empty screen."
+    ),
+    "focus_dynamic_update": (
+        "As you navigate between records, the form dynamically adjusts to display "
+        "only the specific fields that have problems for that exact record, "
+        "rather than a static list."
+    ),
+    "snap_lock": (
+        "Automatically snaps and adjusts panel sash dividers when entering Focus Mode "
+        "to optimize visible screen space for problem fields and zoom in on content."
+    ),
+    "image_url_pattern_override": (
+        "Custom URL format template for fetching object photos online. Supports tokens:\n"
+        "• {id} – Full alphanumeric Object ID\n"
+        "• {num} – Numeric ID only\n"
+        "• {num:04d} – Zero-padded 4-digit number\n"
+        "• {suffix} – Photo variant suffix ('', '-01', '-02')\n"
+        "Leave blank to use the database default."
+    ),
+    "image_resampling_algorithm": (
+        "Rendering filter used during image zoom:\n"
+        "• LANCZOS: Maximum clarity, slower for very large images.\n"
+        "• BILINEAR: Smooth and balanced performance.\n"
+        "• NEAREST: No smoothing (pixelated), fastest for low-spec hardware or pixel-level inspection."
+    ),
+    "auto_advance_history": (
+        "After accepting a historical suggestion to resolve a conflict, "
+        "Arbor immediately navigates to the next record that contains outstanding historical suggestions."
+    ),
+    "autosave_archive_limit": (
+        "Threshold of historical session autosaves stored before Arbor prompts you to "
+        "review or clean up old restore points."
+    ),
+    "enable_excel_import_backup": (
+        "Automatically generates a timestamped snapshot of your current dataset inside "
+        "the 'backups/' directory before importing an external Excel sheet."
+    ),
+    "dashboard_mode": (
+        "When enabled, docks session statistics and logs directly into the workspace layout. "
+        "When disabled, the dashboard opens in an independent floating window."
+    ),
+    "strict_input_validation": (
+        "Enforces strict data format checks before committing edits or navigating away, "
+        "rather than solely applying visual warning tints."
+    ),
+}
 
 
 class UnifiedSettingsWindow:
@@ -478,10 +529,12 @@ class UnifiedSettingsWindow:
         f2.pack(fill="x", pady=sc(6))
         tk.Label(f2, text="Autosave archive warning limit:", font=self.FONT_DATA,
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
+        create_info_badge(f2, SETTING_INFO_TEXTS["autosave_archive_limit"], ui_ref=self.app or self).pack(side="left", padx=(sc(6), sc(8)))
         ttk.Combobox(f2, textvariable=self.var_archive_limit, values=["5", "10", "20", "50"],
-                     state="readonly", width=8).pack(side="left", padx=sc(12))
+                     state="readonly", width=8).pack(side="left", padx=sc(4))
 
-        create_toggle_row(card1, "Enable Backup on Excel Import", self.var_excel_backup)
+        create_toggle_row(card1, "Enable Backup on Excel Import", self.var_excel_backup,
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["enable_excel_import_backup"])
         tk.Label(card1,
                  text="Note: Saves use background atomic pickles for maximum performance.",
                  font=self.FONT_SUBTITLE, fg=self.COLORS["on_surface_variant"],
@@ -489,7 +542,7 @@ class UnifiedSettingsWindow:
 
         # Card 2: Guidance & Diagnostics
         card2 = self._create_card(c, "System Guidance & Diagnostics")
-        create_toggle_row(card2, "Disable Interactive Tutorials & Banners", self.var_disable_tutorials)
+        create_toggle_row(card2, "Disable Interactive Tutorials & Banners", self.var_disable_tutorials, ui_ref=self.app or self)
 
         f3 = tk.Frame(card2, bg=self.COLORS["card_bg"])
         f3.pack(fill="x", pady=sc(6))
@@ -501,8 +554,9 @@ class UnifiedSettingsWindow:
 
         # Card 3: Workflow & Auto-Advance
         card3 = self._create_card(c, "Workflow & Navigation")
-        create_toggle_row(card3, "Auto-advance to next object when marked Reviewed", self.var_auto_advance)
-        create_toggle_row(card3, "Auto-advance when resolving with Historical Suggestion", self.var_auto_advance_history)
+        create_toggle_row(card3, "Auto-advance to next object when marked Reviewed", self.var_auto_advance, ui_ref=self.app or self)
+        create_toggle_row(card3, "Auto-advance when resolving with Historical Suggestion", self.var_auto_advance_history,
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["auto_advance_history"])
 
     # ── TAB 2: APPEARANCE ────────────────────────────────────────────────────
     def _build_tab_appearance(self):
@@ -571,9 +625,11 @@ class UnifiedSettingsWindow:
         # Card 3: Visual Controls
         card3 = self._create_card(c, "Visual Controls")
         create_toggle_row(card3, "Large 'Mark Reviewed' Button", self.var_large_reviewed_btn,
-                          command=lambda: self._notify_live("large_reviewed_btn", self.var_large_reviewed_btn.get()))
+                          command=lambda: self._notify_live("large_reviewed_btn", self.var_large_reviewed_btn.get()),
+                          ui_ref=self.app or self)
         create_toggle_row(card3, "Snap Window Layout Grid", self.var_snap_lock,
-                          command=lambda: self._notify_live("snap_lock", self.var_snap_lock.get()))
+                          command=lambda: self._notify_live("snap_lock", self.var_snap_lock.get()),
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["snap_lock"])
 
     # ── TAB 3: LAYOUT ────────────────────────────────────────────────────────
     def _build_tab_layout(self):
@@ -617,10 +673,12 @@ class UnifiedSettingsWindow:
         card2 = self._create_card(c, "View & Dashboard Display")
         create_toggle_row(card2, "Embedded Session Dashboard (vs Separate Window)",
                           self.var_dashboard_embedded,
-                          command=lambda: (_apply_if_dynamic(), self._notify_live("dashboard_mode", "Embedded" if self.var_dashboard_embedded.get() else "Window")))
+                          command=lambda: (_apply_if_dynamic(), self._notify_live("dashboard_mode", "Embedded" if self.var_dashboard_embedded.get() else "Window")),
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["dashboard_mode"])
         create_toggle_row(card2, "View Images as Stack by Default",
                           self.var_image_stack,
-                          command=lambda: (_apply_if_dynamic(), self._notify_live("image_stack", self.var_image_stack.get())))
+                          command=lambda: (_apply_if_dynamic(), self._notify_live("image_stack", self.var_image_stack.get())),
+                          ui_ref=self.app or self)
 
         # Card 3: Update Mode
         card3 = self._create_card(c, "Live Update Behaviour")
@@ -793,14 +851,16 @@ class UnifiedSettingsWindow:
 
         # Card 1: Focus Master Switches
         card1 = self._create_card(c, "Focus Mode Controls")
-        create_toggle_row(card1, "Enable Focus Mode", self.var_focus_mode)
-        create_toggle_row(card1, "Dynamic Problem Fallback", self.var_focus_fallback)
-        create_toggle_row(card1, "Update Fields Dynamically", self.var_focus_dynamic)
+        create_toggle_row(card1, "Enable Focus Mode", self.var_focus_mode, ui_ref=self.app or self)
+        create_toggle_row(card1, "Dynamic Problem Fallback", self.var_focus_fallback,
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["focus_fallback"])
+        create_toggle_row(card1, "Update Fields Dynamically", self.var_focus_dynamic,
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["focus_dynamic_update"])
 
         # Card 2: Section Visibility (built-in sections)
         card2 = self._create_card(c, "Form Sections Visibility")
-        create_toggle_row(card2, "Problems Section", self.var_focus_sec_problems)
-        create_toggle_row(card2, "Location Section", self.var_focus_sec_location)
+        create_toggle_row(card2, "Problems Section", self.var_focus_sec_problems, ui_ref=self.app or self)
+        create_toggle_row(card2, "Location Section", self.var_focus_sec_location, ui_ref=self.app or self)
 
         # Card 3: Per-field visibility (from app.focus_visibility_vars if available)
         if self.draft_focus_visibility_vars:
@@ -1053,19 +1113,21 @@ class UnifiedSettingsWindow:
         f_res.pack(fill="x", pady=sc(4))
         tk.Label(f_res, text="Resampling Algorithm:", font=self.FONT_DATA,
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
+        create_info_badge(f_res, SETTING_INFO_TEXTS["image_resampling_algorithm"], ui_ref=self.app or self).pack(side="left", padx=(sc(6), sc(8)))
         ttk.Combobox(f_res, textvariable=self.var_resampling,
                      values=["LANCZOS (High Quality)", "BILINEAR (Balanced)",
                              "NEAREST (Fast draft / Pixelated)"],
-                     state="readonly", width=28).pack(side="left", padx=sc(12))
+                     state="readonly", width=28).pack(side="left", padx=sc(4))
 
         f_url = tk.Frame(card1, bg=self.COLORS["card_bg"])
         f_url.pack(fill="x", pady=sc(6))
         tk.Label(f_url, text="Image URL Pattern Override:", font=self.FONT_DATA,
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
+        create_info_badge(f_url, SETTING_INFO_TEXTS["image_url_pattern_override"], ui_ref=self.app or self).pack(side="left", padx=(sc(6), sc(8)))
         url_entry_frame = tk.Frame(f_url, bg=self.COLORS["card_bg"],
                                    highlightbackground=self.COLORS["outline_variant"],
                                    highlightthickness=1)
-        url_entry_frame.pack(side="left", padx=sc(12))
+        url_entry_frame.pack(side="left", padx=sc(4))
         tk.Entry(url_entry_frame, textvariable=self.var_url_pattern,
                  font=self.FONT_DATA, fg=self.COLORS["on_surface"],
                  bg=self.COLORS["card_bg"], bd=0, width=28).pack(padx=sc(4), pady=sc(2))
@@ -1075,10 +1137,11 @@ class UnifiedSettingsWindow:
 
         # Card 2: Feature Flags & Experimental
         card2 = self._create_card(c, "Unfinished & Experimental Features")
-        create_toggle_row(card2, "Enable Bulk Editor Tool", self.var_enable_bulk)
-        create_toggle_row(card2, "Show Focus Mode Header Toggle", self.var_enable_focus_toggle)
-        create_toggle_row(card2, "Auto-resolve Conflicts", self.var_auto_resolve)
-        create_toggle_row(card2, "Strict Input Validation", self.var_strict_validation)
+        create_toggle_row(card2, "Enable Bulk Editor Tool", self.var_enable_bulk, ui_ref=self.app or self)
+        create_toggle_row(card2, "Show Focus Mode Header Toggle", self.var_enable_focus_toggle, ui_ref=self.app or self)
+        create_toggle_row(card2, "Auto-resolve Conflicts", self.var_auto_resolve, ui_ref=self.app or self)
+        create_toggle_row(card2, "Strict Input Validation", self.var_strict_validation,
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["strict_input_validation"])
         tk.Label(card2,
                  text="⚠ Some experimental features require an application restart.",
                  font=self.FONT_SUBTITLE, fg=self.COLORS["search_orange"],

@@ -478,4 +478,113 @@ def test_auto_resolve_conflicts_in_historical_resolver(tk_root, tmp_path, monkey
     resolver.win.destroy()
 
 
+def test_info_button_widget_interactions(tk_root):
+    from ui.widgets import InfoButton, create_info_badge
+
+    frame = tk.Frame(tk_root)
+    frame.pack()
+
+    info_btn = InfoButton(frame, text="Sample tooltip info text", icon="ⓘ")
+    assert info_btn.get_text() == "Sample tooltip info text"
+
+    # Test set_text
+    info_btn.set_text("Updated explanation")
+    assert info_btn.get_text() == "Updated explanation"
+
+    # Test hover enter -> creates tip window
+    assert info_btn.tip_window is None
+    info_btn._on_enter()
+    assert info_btn.tip_window is not None
+    assert info_btn.tip_window.winfo_exists()
+
+    # Test hover leave -> destroys tip window
+    info_btn._on_leave()
+    assert info_btn.tip_window is None
+
+    # Test click toggle
+    info_btn._on_click()
+    assert info_btn.tip_window is not None
+    info_btn._on_click()
+    assert info_btn.tip_window is None
+
+    # Test focus events
+    info_btn._on_focus_in()
+    assert info_btn.tip_window is not None
+    info_btn._on_focus_out()
+    assert info_btn.tip_window is None
+
+    # Test factory helper
+    badge = create_info_badge(frame, "Helper text")
+    assert isinstance(badge, InfoButton)
+    assert badge.get_text() == "Helper text"
+
+    # Test dark mode detection
+    class MockAppDark:
+        dark_mode_active = True
+
+    dark_btn = InfoButton(frame, text="Dark mode test", ui_ref=MockAppDark())
+    assert dark_btn.is_dark_mode() is True
+    dark_btn._on_enter()
+    assert dark_btn.tip_window is not None
+    dark_btn.destroy()
+
+    frame.destroy()
+
+
+def test_create_toggle_row_with_info_text(tk_root):
+    from ui.widgets import create_toggle_row, InfoButton
+
+    frame = tk.Frame(tk_root)
+    frame.pack()
+    var = tk.BooleanVar(value=True)
+
+    row = create_toggle_row(frame, "Setting with Info", var, info_text="Detailed info here")
+    info_buttons = [w for w in row.winfo_children() if isinstance(w, InfoButton)]
+    assert len(info_buttons) == 1
+    assert info_buttons[0].get_text() == "Detailed info here"
+
+    frame.destroy()
+
+
+def test_unified_settings_all_10_target_info_buttons(tk_root):
+    from ui.unified_settings import UnifiedSettingsWindow, SETTING_INFO_TEXTS
+    from ui.widgets import InfoButton
+
+    expected_keys = [
+        "focus_fallback",
+        "focus_dynamic_update",
+        "snap_lock",
+        "image_url_pattern_override",
+        "image_resampling_algorithm",
+        "auto_advance_history",
+        "autosave_archive_limit",
+        "enable_excel_import_backup",
+        "dashboard_mode",
+        "strict_input_validation",
+    ]
+
+    for k in expected_keys:
+        assert k in SETTING_INFO_TEXTS
+        assert len(SETTING_INFO_TEXTS[k]) > 10
+
+    win = UnifiedSettingsWindow(tk_root, initial_tab="general")
+
+    def _find_all_info_buttons(widget):
+        btns = []
+        for child in widget.winfo_children():
+            if isinstance(child, InfoButton):
+                btns.append(child)
+            btns.extend(_find_all_info_buttons(child))
+        return btns
+
+    all_buttons = _find_all_info_buttons(win.win)
+    all_texts = [b.get_text() for b in all_buttons]
+
+    for k in expected_keys:
+        expected_text = SETTING_INFO_TEXTS[k]
+        assert expected_text in all_texts, f"Expected info text for '{k}' not found in rendered InfoButtons"
+
+    win.win.destroy()
+
+
 
