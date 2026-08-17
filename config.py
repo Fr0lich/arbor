@@ -1,3 +1,5 @@
+import utils
+from exceptions import UIConfigurationError
 # =====================
 # UI SCALE (DPI)
 # =====================
@@ -40,8 +42,8 @@ def load_prefs():
             with open(_PREFS_PATH, "r", encoding="utf-8") as f:
                 _prefs_cache = json.load(f)
                 return _prefs_cache
-        except Exception as e:  # Fix: Replace bare except
-            pass
+        except Exception as e:
+            utils.debug_log("ERROR", "Config load error", str(e))
     _prefs_cache = {}
     return _prefs_cache
 

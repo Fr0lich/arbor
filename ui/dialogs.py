@@ -1,3 +1,4 @@
+import utils
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
@@ -1277,7 +1278,7 @@ class StartupDialog:
                             "df_reg": df, "reg_by_id": None,
                         })
                     except Exception as sheet_err:
-                        print(f"Error loading sheet {sheet_name}: {sheet_err}")
+                        utils.debug_log("INFO", f"Error loading sheet {sheet_name}: {sheet_err}")
             self.safe_ui_call(lambda: self._finish_books_load(loaded))
         except Exception as e:
             debug_error("Load Books Failed", str(e))

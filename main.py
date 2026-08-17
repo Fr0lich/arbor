@@ -304,7 +304,8 @@ if __name__ == "__main__":
             from utils import debug_error
             debug_error("Application Error", str(e))
         except Exception as import_err:
-            print(f"Could not import utils to log crash: {import_err}")
+            import logging
+            logging.error(f"Could not import utils to log crash: {import_err}")
 
         # Guarantee that a GUI message box is shown for startup/runtime crashes so they are never silent
         try:

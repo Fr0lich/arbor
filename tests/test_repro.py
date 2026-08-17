@@ -12,9 +12,11 @@ def test_advanced_settings_save_with_buttons():
     adv_win = AdvancedSettingsWindow(root, mock_main_window)
     try:
         adv_win.save_settings()
-        print("Success")
+        import utils
+        utils.debug_log("INFO", "Success")
     except Exception as e:
-        print(f"Error: {e}")
+        import utils
+        utils.debug_error("Error in test_repro", str(e))
     finally:
         root.destroy()
 

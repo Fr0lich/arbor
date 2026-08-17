@@ -3,8 +3,88 @@ import os
 import sys
 import threading
 import collections
+import logging
+import logging.handlers
 from datetime import datetime
 import pandas as pd
+
+# Canonical log directory
+def _get_log_dir() -> str:
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        here = os.path.dirname(os.path.abspath(__file__))
+        base = here
+    log_dir = os.path.join(base, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    return log_dir
+
+# Initialize standard logging
+_SESSION_LOG_PATH: str | None = None
+_SESSION_HAS_ERRORS: bool = False
+
+def get_session_log_path() -> str:
+    """Return (and create if needed) the path to this session's log file."""
+    global _SESSION_LOG_PATH
+    if _SESSION_LOG_PATH is None:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        _SESSION_LOG_PATH = os.path.join(_get_log_dir(), f"arbor_{ts}.log")
+    return _SESSION_LOG_PATH
+
+_logger_initialized = False
+logger = logging.getLogger("arbor")
+
+import queue
+import atexit
+
+_log_queue = queue.Queue(-1)
+_queue_listener = None
+_logging_lock = threading.Lock()
+
+def _setup_logging():
+    global _logger_initialized, _queue_listener
+    if _logger_initialized:
+        return
+
+    with _logging_lock:
+        if _logger_initialized:
+            return
+
+        log_path = get_session_log_path()
+
+        # Application-specific logger configuration
+        logger.setLevel(logging.DEBUG)
+        # Prevent logs from propagating to the root logger to avoid duplicates
+        logger.propagate = False
+
+        formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
+        # File handler
+        file_handler = logging.handlers.RotatingFileHandler(log_path, maxBytes=10*1024*1024, backupCount=5, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+
+        # Console handler
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+
+        # Setup asynchronous queue handler
+        queue_handler = logging.handlers.QueueHandler(_log_queue)
+        logger.addHandler(queue_handler)
+
+        _queue_listener = logging.handlers.QueueListener(
+            _log_queue, file_handler, console_handler, respect_handler_level=True
+        )
+        _queue_listener.start()
+
+        def stop_listener():
+            global _queue_listener
+            if _queue_listener:
+                _queue_listener.stop()
+                _queue_listener = None
+
+        atexit.register(stop_listener)
+
+        _logger_initialized = True
 
 def fmt_pandas_val(val):
     if pd.isna(val) or val == "":
@@ -25,33 +105,6 @@ def parse_bool(val) -> bool:
             return True
         return False
     return False
-
-
-# -- Canonical log directory --------------------------------------------------
-# Always sits in a "logs/" folder next to the .exe (frozen) or main.py (dev).
-def _get_log_dir() -> str:
-    if getattr(sys, "frozen", False):
-        base = os.path.dirname(sys.executable)
-    else:
-        here = os.path.dirname(os.path.abspath(__file__))
-        base = here
-    log_dir = os.path.join(base, "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    return log_dir
-
-
-# One log file per session, created lazily on first error
-_SESSION_LOG_PATH: str | None = None
-_SESSION_HAS_ERRORS: bool = False
-
-
-def get_session_log_path() -> str:
-    """Return (and create if needed) the path to this session''s log file."""
-    global _SESSION_LOG_PATH
-    if _SESSION_LOG_PATH is None:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        _SESSION_LOG_PATH = os.path.join(_get_log_dir(), f"arbor_{ts}.log")
-    return _SESSION_LOG_PATH
 
 
 def session_had_errors() -> bool:
@@ -108,77 +161,20 @@ def _read_log_level_from_disk() -> str:
     return "ERROR"
 
 
-# -- P1-D: Asynchronous log queue ---------------------------------------------
-# Previously every debug_log() call did a synchronous file open/write/close on
-# the main UI thread. Under heavy event firing this added disk-I/O latency.
-#
-# Solution: collect entries in an in-memory deque; flush to disk in a single
-# batched write every LOG_FLUSH_INTERVAL_S seconds on a background daemon.
-# debug_error() bypasses the queue and writes directly so crash records always
-# survive even if the process is killed immediately afterwards.
-
-LOG_FLUSH_INTERVAL_S = 5.0
-
-_log_queue: collections.deque = collections.deque()
-_log_queue_lock = threading.Lock()
-_log_flush_thread: threading.Thread | None = None
-_log_flush_stop = threading.Event()
-
-
-def _ensure_flush_thread() -> None:
-    global _log_flush_thread
-    if _log_flush_thread is not None and _log_flush_thread.is_alive():
-        return
-    _log_flush_stop.clear()
-    t = threading.Thread(target=_flush_loop, daemon=True, name="log-flush")
-    t.start()
-    _log_flush_thread = t
-
-
-def _flush_loop() -> None:
-    while not _log_flush_stop.wait(timeout=LOG_FLUSH_INTERVAL_S):
-        _flush_log_queue()
-
-
-def _flush_log_queue() -> None:
-    with _log_queue_lock:
-        if not _log_queue:
-            return
-        entries = list(_log_queue)
-        _log_queue.clear()
-    try:
-        log_path = get_session_log_path()
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write("\n".join(entries) + "\n")
-    except Exception as e:  # Fix: Replace bare except
-        pass
-
-
 def debug_error(context: str, extra: str = "", is_crash: bool = False) -> None:
-    """Log an error with full traceback to the session log and to stdout.
-
-    Always writes directly to disk (bypasses the async queue) so crash records
-    survive even if the process is terminated immediately afterwards.
-    """
+    """Log an error with full traceback to the session log and to stdout."""
     global _SESSION_HAS_ERRORS
     _SESSION_HAS_ERRORS = True
 
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    tb = traceback.format_exc()
+    _setup_logging()
+
     crash_prefix = "[CRASH] " if is_crash else ""
-    msg = f"[{ts}] [ERROR] {crash_prefix}{context}"
+    msg = f"{crash_prefix}{context}"
     if extra:
         msg += f" -- {extra}"
-    msg += f"\n{tb}"
 
-    print(msg)
-
-    log_path = get_session_log_path()
-    try:
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(msg + "\n" + ("-" * 80) + "\n")
-    except Exception as e:  # Fix: Replace bare except
-        pass
+    # The standard logger's exception() method will capture and print the traceback
+    logger.exception(msg)
 
 
 def center_and_fit_toplevel(win, base_w=None, base_h=None):
@@ -203,29 +199,22 @@ def center_and_fit_toplevel(win, base_w=None, base_h=None):
 
 
 def debug_log(level: str, context: str, extra: str = "") -> None:
-    """Log a message at the specified level if it meets the verbosity threshold.
+    """Log a message at the specified level if it meets the verbosity threshold."""
+    levels = {"DEBUG": logging.DEBUG, "INFO": logging.INFO, "WARNING": logging.WARNING, "ERROR": logging.ERROR}
 
-    P1-C: Uses the in-memory cached log level -- no disk I/O per call.
-    P1-D: Enqueues the entry for batched background flush -- no synchronous
-          file open/write/close on the calling (UI) thread.
-    """
-    levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
+    req_level = levels.get(level, logging.INFO)
+
+    # We still use the custom cached get_log_level for user verbosity preferences
     current_level = get_log_level()
+    min_level = levels.get(current_level, logging.ERROR)
 
-    req_idx  = levels.index(level)         if level         in levels else 1
-    curr_idx = levels.index(current_level) if current_level in levels else 3
-
-    if req_idx < curr_idx:
+    if req_level < min_level:
         return
 
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    msg = f"[{ts}] [{level}] {context}"
+    _setup_logging()
+
+    msg = context
     if extra:
         msg += f" -- {extra}"
 
-    print(msg)
-
-    with _log_queue_lock:
-        _log_queue.append(msg)
-
-    _ensure_flush_thread()
+    logger.log(req_level, msg)

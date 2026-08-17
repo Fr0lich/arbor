@@ -1,3 +1,4 @@
+import utils
 import pandas as pd
 import uuid
 import os
@@ -195,51 +196,55 @@ class ExcelRepository:
         # archive once, then read sheets from it. This prevents reopening/reparsing the zip and shared
         # string tables 4 times, leading to a massive speedup (~60-70% faster loads).
         # We use 'calamine' for a further 5-10x parsing speedup.
-        with pd.ExcelFile(path, engine="calamine") as xls:
-            sheet_names = xls.sheet_names
+        try:
+            with pd.ExcelFile(path, engine="calamine") as xls:
+                sheet_names = xls.sheet_names
 
-            # Read Registration sheet
-            sheet_reg = sheets.get("reg", "Registration")
-            if sheet_reg in sheet_names:
-                df_reg = pd.read_excel(xls, sheet_name=sheet_reg)
-            else:
-                df_reg = pd.read_excel(xls, sheet_name=sheet_reg) # Let it raise if missing
+                # Read Registration sheet
+                sheet_reg = sheets.get("reg", "Registration")
+                if sheet_reg in sheet_names:
+                    df_reg = pd.read_excel(xls, sheet_name=sheet_reg)
+                else:
+                    df_reg = pd.read_excel(xls, sheet_name=sheet_reg) # Let it raise if missing
 
-            # Read Observation sheet
-            sheet_obs = sheets.get("obs", "Observation")
-            if sheet_obs in sheet_names:
-                df_obs = pd.read_excel(xls, sheet_name=sheet_obs)
-            else:
-                df_obs = pd.DataFrame(columns=["ObjectID"])
+                # Read Observation sheet
+                sheet_obs = sheets.get("obs", "Observation")
+                if sheet_obs in sheet_names:
+                    df_obs = pd.read_excel(xls, sheet_name=sheet_obs)
+                else:
+                    df_obs = pd.DataFrame(columns=["ObjectID"])
 
-            # Read Photo sheet (optional)
-            sheet_photo = sheets.get("photo", "Photo")
-            if sheet_photo in sheet_names:
-                df_photo = pd.read_excel(xls, sheet_name=sheet_photo)
-            else:
-                df_photo = pd.DataFrame(columns=["ObjectID"])
+                # Read Photo sheet (optional)
+                sheet_photo = sheets.get("photo", "Photo")
+                if sheet_photo in sheet_names:
+                    df_photo = pd.read_excel(xls, sheet_name=sheet_photo)
+                else:
+                    df_photo = pd.DataFrame(columns=["ObjectID"])
 
-            # Ensure mapped registration fields exist before normalisation
-            missing_mapped_fields = [col for col in mapped_fields if col not in df_reg.columns]
-            if missing_mapped_fields:
-                df_reg[missing_mapped_fields] = pd.DataFrame({col: "" for col in missing_mapped_fields}, index=df_reg.index)
+                # Ensure mapped registration fields exist before normalisation
+                missing_mapped_fields = [col for col in mapped_fields if col not in df_reg.columns]
+                if missing_mapped_fields:
+                    df_reg[missing_mapped_fields] = pd.DataFrame({col: "" for col in missing_mapped_fields}, index=df_reg.index)
 
-            # Normalise both main dataframes
-            df_reg, df_obs = _normalise_dataframes(df_reg, df_obs, config)
+                # Normalise both main dataframes
+                df_reg, df_obs = _normalise_dataframes(df_reg, df_obs, config)
 
-            if not df_photo.empty:
-                df_photo["ObjectID"] = df_photo["ObjectID"].astype(str).str.strip()
+                if not df_photo.empty:
+                    df_photo["ObjectID"] = df_photo["ObjectID"].astype(str).str.strip()
 
-            # Read Log sheet (optional)
-            sheet_log = sheets.get("log", "Log")
-            if sheet_log in sheet_names:
-                df_log = pd.read_excel(xls, sheet_name=sheet_log)
-            else:
-                df_log = pd.DataFrame()
-            
-        df_log = _normalise_log_dataframe(df_log)
+                # Read Log sheet (optional)
+                sheet_log = sheets.get("log", "Log")
+                if sheet_log in sheet_names:
+                    df_log = pd.read_excel(xls, sheet_name=sheet_log)
+                else:
+                    df_log = pd.DataFrame()
 
-        return df_reg, df_obs, df_photo, df_log
+            df_log = _normalise_log_dataframe(df_log)
+
+            return df_reg, df_obs, df_photo, df_log
+        except Exception as e:
+            from exceptions import DatabaseLoadError
+            raise DatabaseLoadError(f"Failed to load Excel file: {str(e)}", filepath=path) from e
 
 
 class SQLiteRepository:
@@ -411,7 +416,7 @@ class SQLiteRepository:
                 os.path.basename(excel_path) + f".backup_{timestamp}.xlsx"
             )
             shutil.copy2(excel_path, backup_path)
-            print(f"Backed up {excel_path} to {backup_path}")
+            utils.debug_log("INFO", f"Backed up {excel_path} to {backup_path}")
 
         df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(excel_path, config)
         SQLiteRepository.save_sqlite(sqlite_path, df_reg, df_obs, df_photo, df_log)

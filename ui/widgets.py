@@ -1110,7 +1110,7 @@ class TreeviewListboxWrapper(ttk.Frame):
                     self.item(oid, tags=current_tags)
 
     def xview_moveto(self, fraction):
-        pass
+                pass
 
     def bind(self, sequence, func, add=None):
         if sequence == "<<ListboxSelect>>":

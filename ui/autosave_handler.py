@@ -1,3 +1,4 @@
+import utils
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -163,6 +164,7 @@ class AutosaveMixin:
             orig_mtime = os.path.getmtime(original_path)
             auto_mtime = os.path.getmtime(autosave_path)
         except Exception:
+            pass
             return
         if auto_mtime <= orig_mtime:
             # Autosave is not newer — clean it up silently
