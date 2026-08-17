@@ -1,3 +1,4 @@
+import utils
 import time
 import importlib
 import ui.main_window
@@ -39,5 +40,5 @@ def test_optimized():
                 continue
     return time.time() - start_time
 
-print(f"Current: {test_current():.4f}s")
-print(f"Optimized: {test_optimized():.4f}s")
+utils.debug_log("INFO", f"Current: {test_current():.4f}s")
+utils.debug_log("INFO", f"Optimized: {test_optimized():.4f}s")

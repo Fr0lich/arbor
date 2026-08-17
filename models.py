@@ -5,6 +5,11 @@ import threading
 class AppState:
     """Central application state passed between the UI and data layers.
 
+    This class serves as the single source of truth for the active database session.
+    It holds dataframes (e.g., registration, observation, photos), tracks unsaved
+    changes (dirty flag), manages the list of active object IDs being viewed, and
+    maintains an undo/redo stack for transactional modifications.
+
     All attributes are initialised to None/empty here so that accidental access
     before a file is loaded raises an AttributeError rather than reading a
     shared class-level default from a previous session.
@@ -50,6 +55,22 @@ class AppState:
         # Use acquire() before .copy() in any worker thread to avoid read-during-write
         # races when the main thread commits an edit mid-save.
         self.df_lock: threading.RLock = threading.RLock()
+
+    def __repr__(self) -> str:
+        """Returns a developer-friendly representation of the current application state."""
+        has_reg = self.df_reg is not None
+        num_objects = len(self.df_reg) if has_reg else 0
+        return (f"<AppState dirty={self.dirty} "
+                f"excel_path='{self.excel_path}' "
+                f"objects={num_objects} "
+                f"active_id={self.current_object_id}>")
+
+    def __str__(self) -> str:
+        """Returns a human-readable string summarizing the database state."""
+        status = "Unsaved Changes" if self.dirty else "Saved"
+        if not self.excel_path:
+            return f"AppState (No File Loaded) - {status}"
+        return f"AppState ({self.excel_path}) - {status} ({len(self.active_object_ids)} active objects)"
 
 
 # P1-F: Single source of truth for per-object undo stack depth.

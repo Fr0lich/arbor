@@ -96,7 +96,7 @@ class DatabaseOpsMixin:
     def create_new_database(self):
         from ui.new_database_wizard import NewDatabaseWizard
         def on_complete():
-            pass
+                pass
         NewDatabaseWizard(self.root, self.app, on_complete)
 
 

@@ -1,3 +1,4 @@
+import utils
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -243,6 +244,7 @@ class ImageHandlerMixin:
                     num = int(oid)
                     url = pattern.format(num=num, suffix=s)
                 except Exception:
+                    pass
                     url = f"{pattern.rstrip('/')}/{oid}{s}"
             else:
                 url = f"{pattern}{oid}{s}"
@@ -607,6 +609,7 @@ class ImageHandlerMixin:
             if available_width < 300:
                 available_width = 800
         except Exception:
+            pass
             available_width = 800
 
         # Estimate a height for the placeholder frame to reserve space for the image
@@ -1033,6 +1036,7 @@ class ImageHandlerMixin:
                     # stop retrying immediately to save time.
                     return None
                 except Exception:
+                    pass
                     # Connection errors (e.g. RemoteDisconnected) are expected when
                     # an image URL does not exist — silently skip to the next attempt.
                     pass
@@ -1329,6 +1333,7 @@ class ImageHandlerMixin:
                 max_width = int((available_width / 2) * 0.95)
                 max_height = int(self.root.winfo_height() * 0.85)
             except Exception:
+                pass
                 max_width, max_height = 400, 400
 
             for path in paths_to_load:
@@ -1384,6 +1389,7 @@ class ImageHandlerMixin:
         try:
             old_y = self.image_canvas.yview()[0]
         except Exception:
+            pass
             old_y = 0.0
 
         # P1-G: Targeted cache eviction — only remove entries whose path belongs

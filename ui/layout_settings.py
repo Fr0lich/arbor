@@ -1,3 +1,4 @@
+import utils
 import tkinter as tk
 from tkinter import ttk
 from config import sc
@@ -142,11 +143,13 @@ class LayoutSettingsMixin:
             try:
                 mid_sash = self.middle_panes.sashpos(0)
             except Exception:
+                pass
                 mid_sash = 400
 
             try:
                 main_sashes = [self.panes.sashpos(0), self.panes.sashpos(1)]
             except Exception:
+                pass
                 main_sashes = [300, 800]
 
             tb_states = {k: v.get() for k, v in self.draft_toolbar_vars.items()}
@@ -443,11 +446,13 @@ class LayoutSettingsMixin:
             if self.focus_mode_var.get() and hasattr(self, "_last_manual_middle_sash"):
                 mid_sash = self._last_manual_middle_sash
         except Exception:
+            pass
             mid_sash = 400
 
         try:
             main_sashes = [self.panes.sashpos(0), self.panes.sashpos(1)]
         except Exception:
+            pass
             main_sashes = [300, 800]
 
         # Save toolbar button visibility

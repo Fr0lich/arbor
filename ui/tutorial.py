@@ -1,3 +1,4 @@
+import utils
 import tkinter as tk
 import json
 import os
@@ -133,12 +134,13 @@ class TutorialManager:
             target_widget = self._find_widget(self.active_root, step["target"])
 
         if step.get("target") and not target_widget:
-            print(f"Target {step['target']} not found for step {step['id']}")
+            utils.debug_log("INFO", f"Target {step['target']} not found for step {step['id']}")
             
         if target_widget:
             try:
                 self.highlight = TutorialHighlight(self.active_root, target_widget)
             except Exception:
+                pass
                 self.highlight = None
             
         try:
@@ -218,6 +220,7 @@ class TutorialHighlight:
                 self.win.geometry(f"{w + pad*2}x{h + pad*2}+{x - pad}+{y - pad}")
                 self.canvas.coords(self.rect, pad, pad, w + pad, h + pad)
         except Exception:
+            pass
             try:
                 if self.win.winfo_exists():
                     self.win.withdraw()

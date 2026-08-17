@@ -581,7 +581,7 @@ class AdvancedSettingsWindow:
                 try:
                     method()
                 except Exception as e:
-                    print(f"Error executing callback '{cb_name}': {e}")
+                    utils.debug_log("INFO", f"Error executing callback '{cb_name}': {e}")
 
         # Warn if restart is required
         if restart_needed:
