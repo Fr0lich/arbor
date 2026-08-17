@@ -359,6 +359,11 @@ class DatabaseOpsMixin:
         """
         from repository import REVIEWED_COLUMN
 
+        if df_reg is not None and "ObjectID" in df_reg.columns and df_reg.index.name != "ObjectID":
+            df_reg = df_reg.set_index("ObjectID", drop=False)
+        if df_obs is not None and "ObjectID" in df_obs.columns and df_obs.index.name != "ObjectID":
+            df_obs = df_obs.set_index("ObjectID", drop=False)
+
         # 1. Full row dicts — expensive DataFrame.to_dict() done once here
         reg_dict = df_reg.to_dict(orient="index") if df_reg is not None else {}
         obs_dict = df_obs.to_dict(orient="index") if df_obs is not None else {}

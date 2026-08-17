@@ -354,6 +354,18 @@ class ObjectProgramUI(
         self.layout_dynamic_update_var = tk.BooleanVar(value=True)
         self.large_reviewed_button_var = tk.BooleanVar(value=True)
         self.auto_advance_var = tk.BooleanVar(value=True)
+        self.auto_advance_history_var = tk.BooleanVar(value=False)
+
+        def _on_auto_advance_changed(*args):
+            if self.auto_advance_var.get() and self.auto_advance_history_var.get():
+                self.auto_advance_history_var.set(False)
+
+        def _on_auto_advance_history_changed(*args):
+            if self.auto_advance_history_var.get() and self.auto_advance_var.get():
+                self.auto_advance_var.set(False)
+
+        self.auto_advance_var.trace_add("write", _on_auto_advance_changed)
+        self.auto_advance_history_var.trace_add("write", _on_auto_advance_history_changed)
 
 
 
@@ -1303,7 +1315,10 @@ class ObjectProgramUI(
                 edit_frame,
                 text=name.replace("_", " "),
                 variable=var,
-                command=lambda: self.update_reg_fields_visibility(skip_snap=True)
+                command=lambda: (
+                    self.update_reg_fields_visibility(skip_snap=True),
+                    self.commit_current_object()
+                )
             )
             row = i // 2
             col = i % 2
@@ -4330,6 +4345,24 @@ class ObjectProgramUI(
             "Automatically advance to the next item when marked as reviewed"
         )
 
+        self.auto_next_history_cb = tk.Checkbutton(
+            action_row1b,
+            text="Auto-next with Historical Suggestion",
+            variable=self.auto_advance_history_var,
+            font=("Segoe UI", sc(9.5)),
+            bg=bg_pane, fg=fg_col,
+            activebackground=bg_pane, activeforeground=fg_col,
+            selectcolor=bg_col,
+            relief="flat", bd=0, highlightthickness=0,
+            cursor="hand2",
+            padx=sc(4), pady=sc(3)
+        )
+        self.auto_next_history_cb.pack(side="left", padx=4)
+        self.add_tooltip(
+            self.auto_next_history_cb,
+            "Automatically advance to the next unreviewed item with historical suggestions when marked as reviewed"
+        )
+
         self.reviewed_time_label = ttk.Label(
             action_row1b,
             text="",
@@ -5003,6 +5036,10 @@ class ObjectProgramUI(
 
             self._list_dirty = True
             self._problem_cache.pop(oid, None)
+            s_oid = str(oid)
+            self._problem_cache.pop(s_oid, None)
+            if s_oid.isdigit():
+                self._problem_cache.pop(int(s_oid), None)
 
             # Invalidate row caches so dynamic badges pull fresh data
             self._invalidate_row_cache()
@@ -6497,7 +6534,10 @@ class ObjectProgramUI(
                 grid_frame,
                 text=name.replace("_", " "),
                 variable=var,
-                command=lambda: self.update_reg_fields_visibility(skip_snap=True)
+                command=lambda: (
+                    self.update_reg_fields_visibility(skip_snap=True),
+                    self.commit_current_object()
+                )
             )
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=8)
             self.problem_checkbuttons.append(cb)
@@ -7282,26 +7322,28 @@ class ObjectProgramUI(
 
     def _get_cached_problem(self, oid):
         """Returns True if the object has any checked problem checkbox. Result is cached."""
-        # Check direct key first
         if oid in self._problem_cache:
             return self._problem_cache[oid]
-            
-        try:
-            lookup_key = int(oid) if str(oid).isdigit() else oid
-            if lookup_key in self._problem_cache:
-                return self._problem_cache[lookup_key]
-        except Exception:
-            lookup_key = oid
+        s_oid = str(oid)
+        if s_oid in self._problem_cache:
+            return self._problem_cache[s_oid]
+        if s_oid.isdigit():
+            i_oid = int(s_oid)
+            if i_oid in self._problem_cache:
+                return self._problem_cache[i_oid]
 
-        # If not cached, calculate and store under lookup_key
+        # If not cached, calculate and store
         try:
-            self._problem_cache[lookup_key] = self.has_any_problem(
-                lookup_key,
+            val = self.has_any_problem(
+                oid,
                 include_image_problems=(self.image_mode == "folder")
             )
+            self._problem_cache[oid] = val
+            self._problem_cache[s_oid] = val
+            return val
         except Exception:
-            self._problem_cache[lookup_key] = False
-        return self._problem_cache[lookup_key]
+            self._problem_cache[oid] = False
+            return False
 
     def _has_history(self, oid):
         """Returns True if object appears in any loaded historical database."""
@@ -7548,20 +7590,39 @@ class ObjectProgramUI(
         
         self.push_undo_state()
         
-        now = datetime.now().strftime("%d.%m.%Y %H:%M") if value else ""
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if value else ""
         
         for oid in selection:
-            self.app.redo_stacks.setdefault(oid, []).clear()
-            self.app.df_obs.loc[oid, REVIEWED_COLUMN] = value
-            self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = now
+            try:
+                lookup_key = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_obs.index else oid
+            except Exception:
+                lookup_key = oid
+
+            self.app.redo_stacks.setdefault(lookup_key, []).clear()
+            self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN] = value
+            self.app.df_obs.loc[lookup_key, REVIEWED_AT_COLUMN] = now
+
+            s_oid = str(oid)
+            self._problem_cache.pop(oid, None)
+            self._problem_cache.pop(s_oid, None)
+            if s_oid.isdigit():
+                self._problem_cache.pop(int(s_oid), None)
+
+            # Update item values so CardView item_data is synchronized
+            current_vals = list(self.object_list.item(oid, "values") or [])
+            if current_vals:
+                current_vals[0] = "☑" if value else "☐"
+                self.object_list.item(oid, values=current_vals)
+
             self.update_list_item_color(oid)
             
+        self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'])
         self.app.dirty = True
         self.update_dirty_ui()
-        self._problem_cache.clear()
         self._invalidate_row_cache()
         self.update_review_progress()
         self.update_dashboard()
+        self.update_reviewed_button_state()
         
         current_oid = self.app.current_object_id
         if current_oid in selection:
@@ -8745,32 +8806,18 @@ class ObjectProgramUI(
         oid = self.app.current_object_id
         if not oid:
             return
-
-        # Ensure the current item is marked as reviewed (set to True)
-        self.push_undo_state()
-
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.app.df_obs.loc[oid, REVIEWED_COLUMN] = True
-        self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = now
-
-        # If this is the currently active object, also update the checkbox variable and display
-        self.reviewed_var.set(True)
-        self.reviewed_time_label.config(text=now)
-
-        self.app.dirty = True
-        self.update_dirty_ui()
-        self.update_dashboard()
-        self.update_list_item_color(oid)
-        self.update_review_progress()
-        self._list_dirty = True
-        self.update_reviewed_button_state()
-
-        # If autoAdvanceOnReview is True and a next item exists, advance
-        if self.autoAdvanceOnReview:
-            if oid in self.app.active_object_ids:
-                idx = self.app.active_object_ids.index(oid)
-                if idx + 1 < len(self.app.active_object_ids):
-                    self.navigate_object(1)
+        was_reviewed = bool(self.reviewed_var.get())
+        self._toggle_reviewed_for_id(oid)
+        
+        # If toggled ON to Reviewed:
+        if not was_reviewed:
+            if self.autoAdvanceOnReview:
+                if oid in self.app.active_object_ids:
+                    idx = self.app.active_object_ids.index(oid)
+                    if idx + 1 < len(self.app.active_object_ids):
+                        self.navigate_object(1)
+            elif getattr(self, "auto_advance_history_var", None) and self.auto_advance_history_var.get():
+                self.goto_next_problem_with_history()
 
     def _toggle_reviewed_for_id(self, oid):
         if not oid:
@@ -8778,22 +8825,41 @@ class ObjectProgramUI(
         self.push_undo_state()
         
         # Toggle in df_obs
+        try:
+            lookup_key = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_obs.index else oid
+        except Exception:
+            lookup_key = oid
+
         current = False
-        if self.app.df_obs is not None and oid in self.app.df_obs.index:
+        if self.app.df_obs is not None and lookup_key in self.app.df_obs.index:
             try:
-                current = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
+                current = bool(self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN])
             except Exception:
                 pass
         new_val = not current
         
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.app.df_obs.loc[oid, REVIEWED_COLUMN] = new_val
-        self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN] = now
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if new_val else ""
+        self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN] = new_val
+        self.app.df_obs.loc[lookup_key, REVIEWED_AT_COLUMN] = now
+
+        s_oid = str(oid)
+        self._problem_cache.pop(oid, None)
+        self._problem_cache.pop(s_oid, None)
+        if s_oid.isdigit():
+            self._problem_cache.pop(int(s_oid), None)
+
+        # Synchronize CardView item_data
+        current_vals = list(self.object_list.item(oid, "values") or [])
+        if current_vals:
+            current_vals[0] = "☑" if new_val else "☐"
+            self.object_list.item(oid, values=current_vals)
         
         # If this is the currently active object, also update the checkbox variable
         if oid == self.app.current_object_id:
             self.reviewed_var.set(new_val)
             self.reviewed_time_label.config(text=now if new_val else "")
+
+        self.log_action("REVIEWED" if new_val else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{new_val}"'])
             
         self.app.dirty = True
         self.update_dirty_ui()
@@ -8801,6 +8867,7 @@ class ObjectProgramUI(
         self.update_list_item_color(oid)
         self.update_review_progress()
         self._list_dirty = True
+        self.update_reviewed_button_state()
 
 
 
