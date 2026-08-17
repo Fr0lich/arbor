@@ -407,34 +407,48 @@ class AddObjectsWindow:
         # Save current edits first
         self._save_current_staged_data()
         
+        problem_columns = [f["name"] for f in self.app.config["ui_sections"].get("problems", [])]
+        location_fields = self.app.config["ui_sections"].get("location", [])
+        location_columns = [f["name"] for f in location_fields]
+        checkbox_loc_cols = {f["name"] for f in location_fields if f.get("type") == "checkbox"}
+
+        new_reg_dict = {}
+        new_obs_dict = {}
+        new_photo_dict = {}
+
         for oid in oids:
             obj_data = self.staged_data.get(oid, {})
-            updates = {k: v for k, v in obj_data.items() if v.strip()}
+            updates = {k: v for k, v in obj_data.items() if str(v).strip()}
             
-            # df_reg
-            new_reg_row = {col: "" for col in self.app.df_reg.columns}
-            new_reg_row["UID"] = uuid.uuid4().hex[:8]
+            # df_reg row
+            reg_row = {col: "" for col in self.app.df_reg.columns}
+            reg_row["UID"] = uuid.uuid4().hex[:8]
             for k, v in updates.items():
                 if k in self.app.df_reg.columns:
-                    new_reg_row[k] = v
-            self.app.df_reg.loc[oid] = new_reg_row
+                    reg_row[k] = v
+            new_reg_dict[oid] = reg_row
 
-            # df_obs
-            problem_columns = [f["name"] for f in self.app.config["ui_sections"].get("problems", [])]
-            location_columns = [f["name"] for f in self.app.config["ui_sections"].get("location", [])]
-            
-            new_obs_row = {col: False for col in problem_columns}
-            new_obs_row["Images_Missing"] = True
+            # df_obs row
+            obs_row = {col: False for col in problem_columns}
+            obs_row["Images_Missing"] = True
+            obs_row["Images_Problem"] = False
+            obs_row["Images_Wrong"] = False
+            obs_row[REVIEWED_COLUMN] = False
+            obs_row["ReviewedAt"] = ""
+            obs_row["Online_Images_Exist"] = False
             
             for col in location_columns:
-                new_obs_row[col] = updates.get(col, "")
+                if col in updates:
+                    obs_row[col] = updates[col]
+                elif col in checkbox_loc_cols:
+                    obs_row[col] = "False"
+                else:
+                    obs_row[col] = ""
                 
-            self.app.df_obs.loc[oid] = new_obs_row
+            new_obs_dict[oid] = obs_row
 
-            # df_photo
             if not self.app.df_photo.empty:
-                new_photo_row = {col: "" for col in self.app.df_photo.columns}
-                self.app.df_photo.loc[oid] = new_photo_row
+                new_photo_dict[oid] = {col: "" for col in self.app.df_photo.columns}
 
             self.app.active_object_ids.append(oid)
             
@@ -443,6 +457,19 @@ class AddObjectsWindow:
                 ["ObjectID"],
                 [f"Created {oid}"]
             )
+
+        # Batch append to dataframes (zero fragmentation)
+        if new_reg_dict:
+            new_reg_df = pd.DataFrame.from_dict(new_reg_dict, orient="index")
+            self.app.df_reg = pd.concat([self.app.df_reg, new_reg_df])
+
+        if new_obs_dict:
+            new_obs_df = pd.DataFrame.from_dict(new_obs_dict, orient="index")
+            self.app.df_obs = pd.concat([self.app.df_obs, new_obs_df])
+
+        if new_photo_dict:
+            new_photo_df = pd.DataFrame.from_dict(new_photo_dict, orient="index")
+            self.app.df_photo = pd.concat([self.app.df_photo, new_photo_df])
 
         self.main_window._invalidate_row_cache()
         self.main_window.invalidate_search_index()

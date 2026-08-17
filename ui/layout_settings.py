@@ -446,6 +446,13 @@ class LayoutSettingsMixin:
         prefs = config.load_prefs()
         layout = prefs.get("layouts", {}).get("saved", {}).get(name)
         if not layout:
+            # Fallback to top-level preferences if present
+            loc_in_center = prefs.get("location_in_center", False)
+            if hasattr(self, "location_in_center_var"):
+                self.location_in_center_var.set(loc_in_center)
+            if hasattr(self, "toggle_location_panel"):
+                self.toggle_location_panel()
+
             # No saved layout — apply resolution-aware sash defaults
             def _set_default_sashes():
                 try:
@@ -1059,6 +1066,17 @@ class LayoutSettingsMixin:
             try:
                 if self.title_problem_count_label.winfo_exists():
                     self.title_problem_count_label.configure(bg=bg_color)
+            except Exception:
+                pass
+
+        if hasattr(self, "location_panel") and hasattr(self.location_panel, "set_dark_mode"):
+            try:
+                self.location_panel.set_dark_mode(self.dark_mode_active)
+            except Exception:
+                pass
+        if hasattr(self, "location_panel_horiz") and hasattr(self.location_panel_horiz, "set_dark_mode"):
+            try:
+                self.location_panel_horiz.set_dark_mode(self.dark_mode_active)
             except Exception:
                 pass
 

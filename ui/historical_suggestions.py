@@ -238,41 +238,39 @@ class HistoricalSuggestionsMixin:
 
     def _load_books_file_worker(self, path):
         try:
-            xls = pd.ExcelFile(path, engine="openpyxl")
-            loaded = []
-            total = len(xls.sheet_names)
+            from repository import _open_excel_reader, _normalize_object_id_series
+            with _open_excel_reader(path) as xls:
+                loaded = []
+                total = len(xls.sheet_names)
 
-            allowed_cols = set(self.app.config.get("books_columns", []))
-            if "ObjectID" not in allowed_cols:
-                allowed_cols.add("ObjectID")
+                allowed_cols = set(self.app.config.get("books_columns", []))
+                if "ObjectID" not in allowed_cols:
+                    allowed_cols.add("ObjectID")
 
-            for i, sheet_name in enumerate(xls.sheet_names):
+                for i, sheet_name in enumerate(xls.sheet_names):
+                    self.root.after(0, lambda current_idx=i, total_count=total: self.image_scan_progress.configure(value=current_idx, maximum=total_count))
 
+                    try:
+                        df = pd.read_excel(
+                            xls,
+                            sheet_name=sheet_name,
+                            usecols=lambda x: x in allowed_cols
+                        )
 
-                self.root.after(0, lambda current_idx=i, total_count=total: self.image_scan_progress.configure(value=current_idx, maximum=total_count))
+                        if "ObjectID" not in df.columns:
+                            continue
 
+                        df["ObjectID"] = _normalize_object_id_series(df["ObjectID"])
 
-                try:
-                    df = pd.read_excel(
-                        xls,
-                        sheet_name=sheet_name,
-                        usecols=lambda x: x in allowed_cols
-                    )
+                        loaded.append({
+                            "name": f"Books: {sheet_name}",
+                            "path": path,
+                            "df_reg": df,
+                            "reg_by_id": None,
+                        })
 
-                    if "ObjectID" not in df.columns:
+                    except Exception:
                         continue
-
-                    df["ObjectID"] = df["ObjectID"].astype(str).str.strip()
-
-                    loaded.append({
-                        "name": f"Books: {sheet_name}",
-                        "path": path,
-                        "df_reg": df,
-                        "reg_by_id": None,
-                    })
-
-                except Exception:
-                    continue
 
 
             self.root.after(

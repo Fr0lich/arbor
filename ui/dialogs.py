@@ -1257,27 +1257,28 @@ class StartupDialog:
                     "df_reg": df_reg, "reg_by_id": None,
                 })
             else:
-                xls = pd.ExcelFile(path, engine="openpyxl")
-                allowed_cols = set(self.app.config.get("books_columns", []))
-                if "ObjectID" not in allowed_cols:
-                    allowed_cols.add("ObjectID")
-                total_sheets = len(xls.sheet_names)
-                for i, sheet_name in enumerate(xls.sheet_names):
-                    try:
-                        self.safe_ui_call(
-                            lambda i=i, t=total_sheets: self.progress_var.set(((i+1) / t) * 100)
-                        )
-                        df = pd.read_excel(xls, sheet_name=sheet_name,
-                                           usecols=lambda x: x in allowed_cols)
-                        if "ObjectID" not in df.columns:
-                            continue
-                        df["ObjectID"] = df["ObjectID"].astype(str).str.strip()
-                        loaded.append({
-                            "name": f"Books: {sheet_name}", "path": path,
-                            "df_reg": df, "reg_by_id": None,
-                        })
-                    except Exception as sheet_err:
-                        print(f"Error loading sheet {sheet_name}: {sheet_err}")
+                from repository import _open_excel_reader, _normalize_object_id_series
+                with _open_excel_reader(path) as xls:
+                    allowed_cols = set(self.app.config.get("books_columns", []))
+                    if "ObjectID" not in allowed_cols:
+                        allowed_cols.add("ObjectID")
+                    total_sheets = len(xls.sheet_names)
+                    for i, sheet_name in enumerate(xls.sheet_names):
+                        try:
+                            self.safe_ui_call(
+                                lambda i=i, t=total_sheets: self.progress_var.set(((i+1) / t) * 100)
+                            )
+                            df = pd.read_excel(xls, sheet_name=sheet_name,
+                                               usecols=lambda x: x in allowed_cols)
+                            if "ObjectID" not in df.columns:
+                                continue
+                            df["ObjectID"] = _normalize_object_id_series(df["ObjectID"])
+                            loaded.append({
+                                "name": f"Books: {sheet_name}", "path": path,
+                                "df_reg": df, "reg_by_id": None,
+                            })
+                        except Exception as sheet_err:
+                            print(f"Error loading sheet {sheet_name}: {sheet_err}")
             self.safe_ui_call(lambda: self._finish_books_load(loaded))
         except Exception as e:
             debug_error("Load Books Failed", str(e))

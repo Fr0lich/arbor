@@ -478,7 +478,10 @@ class UnifiedSettingsWindow:
                 self._push_layout_to_app()
 
         def _notify_panel(key, var):
-            self._notify_live(f"show_{key}", var.get())
+            if key == "location_center":
+                self._notify_live("location_center", var.get())
+            else:
+                self._notify_live(f"show_{key}", var.get())
             _apply_if_dynamic()
 
         create_toggle_row(card1, "Show Object List Panel", self.var_show_list,
@@ -490,7 +493,7 @@ class UnifiedSettingsWindow:
         create_toggle_row(card1, "Show Images Panel", self.var_show_images,
                           command=lambda: _notify_panel("images", self.var_show_images))
         create_toggle_row(card1, "Place Location Panel in Center View", self.var_location_center,
-                          command=_apply_if_dynamic)
+                          command=lambda: _notify_panel("location_center", self.var_location_center))
         create_toggle_row(card1, "Show Image Zoom/Rotate Toolbar", self.var_show_image_tools,
                           command=_apply_if_dynamic)
         create_toggle_row(card1, "Show Bulk Edit Button", self.var_show_bulk_edit,
@@ -542,31 +545,75 @@ class UnifiedSettingsWindow:
         try:
             if hasattr(self.app, "show_list_var"):
                 self.app.show_list_var.set(self.var_show_list.get())
+            if hasattr(self.app, "draft_show_list_var"):
+                self.app.draft_show_list_var.set(self.var_show_list.get())
+
             if hasattr(self.app, "show_search_var"):
                 self.app.show_search_var.set(self.var_show_search.get())
+            if hasattr(self.app, "draft_show_search_var"):
+                self.app.draft_show_search_var.set(self.var_show_search.get())
+
             if hasattr(self.app, "show_reg_var"):
                 self.app.show_reg_var.set(self.var_show_reg.get())
+            if hasattr(self.app, "draft_show_reg_var"):
+                self.app.draft_show_reg_var.set(self.var_show_reg.get())
+
             if hasattr(self.app, "show_images_var"):
                 self.app.show_images_var.set(self.var_show_images.get())
+            if hasattr(self.app, "draft_show_images_var"):
+                self.app.draft_show_images_var.set(self.var_show_images.get())
+
             if hasattr(self.app, "location_in_center_var"):
                 self.app.location_in_center_var.set(self.var_location_center.get())
+            if hasattr(self.app, "draft_location_in_center_var"):
+                self.app.draft_location_in_center_var.set(self.var_location_center.get())
+
             if hasattr(self.app, "show_image_tools_var"):
                 self.app.show_image_tools_var.set(self.var_show_image_tools.get())
+            if hasattr(self.app, "draft_show_image_tools_var"):
+                self.app.draft_show_image_tools_var.set(self.var_show_image_tools.get())
+
             if hasattr(self.app, "show_bulk_edit_var"):
                 self.app.show_bulk_edit_var.set(self.var_show_bulk_edit.get())
+            if hasattr(self.app, "draft_show_bulk_edit_var"):
+                self.app.draft_show_bulk_edit_var.set(self.var_show_bulk_edit.get())
+
             if hasattr(self.app, "dashboard_mode_var"):
                 self.app.dashboard_mode_var.set(
                     "Embedded" if self.var_dashboard_embedded.get() else "Window"
                 )
+            if hasattr(self.app, "draft_dashboard_embedded_var"):
+                self.app.draft_dashboard_embedded_var.set(self.var_dashboard_embedded.get())
+
             if hasattr(self.app, "image_stack_var"):
                 self.app.image_stack_var.set(self.var_image_stack.get())
+            if hasattr(self.app, "draft_image_stack_var"):
+                self.app.draft_image_stack_var.set(self.var_image_stack.get())
+
             # Sync toolbar vars
             for k, v in self.draft_toolbar_vars.items():
                 if hasattr(self.app, "toolbar_vars") and k in self.app.toolbar_vars:
                     self.app.toolbar_vars[k].set(v.get())
-            # Call _on_apply_layout_settings to refresh the UI
-            if hasattr(self.app, "_on_apply_layout_settings"):
-                self.app._on_apply_layout_settings()
+                if hasattr(self.app, "draft_toolbar_vars") and k in self.app.draft_toolbar_vars:
+                    self.app.draft_toolbar_vars[k].set(v.get())
+
+            # Trigger panel updates directly on app
+            if hasattr(self.app, "toggle_list_panel"):
+                self.app.toggle_list_panel()
+            if hasattr(self.app, "toggle_search_panel"):
+                self.app.toggle_search_panel()
+            if hasattr(self.app, "toggle_location_panel"):
+                self.app.toggle_location_panel()
+            if hasattr(self.app, "toggle_images_panel"):
+                self.app.toggle_images_panel()
+            if hasattr(self.app, "toggle_reg_panel"):
+                self.app.toggle_reg_panel()
+            if hasattr(self.app, "toggle_image_tools"):
+                self.app.toggle_image_tools()
+            if hasattr(self.app, "toggle_bulk_edit_btn"):
+                self.app.toggle_bulk_edit_btn()
+            if hasattr(self.app, "toggle_dashboard_mode"):
+                self.app.toggle_dashboard_mode()
         except Exception as e:
             print(f"[UnifiedSettings] Error pushing layout to app: {e}")
 
@@ -626,6 +673,24 @@ class UnifiedSettingsWindow:
                 return
             if self.app and hasattr(self.app, "apply_saved_layout"):
                 self.app.apply_saved_layout(name)
+                if hasattr(self.app, "show_list_var"):
+                    self.var_show_list.set(self.app.show_list_var.get())
+                if hasattr(self.app, "show_search_var"):
+                    self.var_show_search.set(self.app.show_search_var.get())
+                if hasattr(self.app, "show_reg_var"):
+                    self.var_show_reg.set(self.app.show_reg_var.get())
+                if hasattr(self.app, "show_images_var"):
+                    self.var_show_images.set(self.app.show_images_var.get())
+                if hasattr(self.app, "location_in_center_var"):
+                    self.var_location_center.set(self.app.location_in_center_var.get())
+                if hasattr(self.app, "show_image_tools_var"):
+                    self.var_show_image_tools.set(self.app.show_image_tools_var.get())
+                if hasattr(self.app, "show_bulk_edit_var"):
+                    self.var_show_bulk_edit.set(self.app.show_bulk_edit_var.get())
+                if hasattr(self.app, "dashboard_mode_var"):
+                    self.var_dashboard_embedded.set(self.app.dashboard_mode_var.get() == "Embedded")
+                if hasattr(self.app, "image_stack_var"):
+                    self.var_image_stack.set(self.app.image_stack_var.get())
                 messagebox.showinfo("Layout Loaded", f"Layout '{name}' applied.", parent=self.win)
             else:
                 messagebox.showinfo("Presets", f"Layout: {name}", parent=self.win)

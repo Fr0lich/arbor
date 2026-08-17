@@ -21,7 +21,8 @@ class DatabaseOpsMixin:
             config=self.app.config,
             df_reg=self.app.df_reg,
             df_obs=self.app.df_obs,
-            df_log=self.app.df_log
+            df_log=self.app.df_log,
+            df_photo=self.app.df_photo
         )
 
 
@@ -56,6 +57,7 @@ class DatabaseOpsMixin:
             with self.app.df_lock:
                 df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
                 df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
+                df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None
                 df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
         except Exception as e:
             self._save_in_progress = False
@@ -80,7 +82,8 @@ class DatabaseOpsMixin:
                     config=self.app.config,
                     df_reg=df_reg_copy,
                     df_obs=df_obs_copy,
-                    df_log=df_log_copy
+                    df_log=df_log_copy,
+                    df_photo=df_photo_copy
                 )
                 self.root.after(0, lambda: _on_done(True, None))
             except Exception as e:
@@ -606,6 +609,7 @@ class DatabaseOpsMixin:
                 with self.app.df_lock:
                     df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
                     df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
+                    df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None
                     df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
 
                 def _worker():
@@ -614,7 +618,7 @@ class DatabaseOpsMixin:
                         SQLiteRepository.export_to_excel(
                             sqlite_path, path,
                             self.app.config,
-                            df_reg=df_reg_copy, df_obs=df_obs_copy, df_log=df_log_copy
+                            df_reg=df_reg_copy, df_obs=df_obs_copy, df_log=df_log_copy, df_photo=df_photo_copy
                         )
                         self.root.after(0, lambda: (
                             self._hide_progress("Export complete"),
@@ -719,7 +723,8 @@ class DatabaseOpsMixin:
                     progress_callback=_on_progress,
                     df_reg=self.app.df_reg,
                     df_obs=self.app.df_obs,
-                    df_log=self.app.df_log
+                    df_log=self.app.df_log,
+                    df_photo=self.app.df_photo
                 )
                 self.root.after(0, lambda: (
                     self._hide_progress("Export complete"),

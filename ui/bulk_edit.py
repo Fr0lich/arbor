@@ -345,6 +345,9 @@ class BulkEditWindow:
                 "obs": obs_snap,
             })
 
+        problem_keys = {f["name"] for f in self.app.config.get("ui_sections", {}).get("problems", [])}
+        problem_keys.update({"Reviewed", "Images_Missing", "Images_Problem", "Images_Wrong", "Online_Images_Exist"})
+
         reg_updates = {}
         obs_updates = {}
         for key, val in updates.items():
@@ -374,13 +377,30 @@ class BulkEditWindow:
                 if REVIEWED_AT_COLUMN in obs_df.columns:
                     obs_df.loc[valid_obs_oids, REVIEWED_AT_COLUMN] = now_str
 
+        # Surgically sync in-memory row caches
+        if getattr(self.main_window, "_cached_reg_dict", None) is not None:
+            for oid in valid_reg_oids:
+                if oid in self.main_window._cached_reg_dict:
+                    self.main_window._cached_reg_dict[oid].update(reg_updates)
+                    if "Genus" in reg_updates and getattr(self.main_window, "_cached_genus_dict", None) is not None:
+                        self.main_window._cached_genus_dict[oid] = reg_updates["Genus"]
+                    if "Species" in reg_updates and getattr(self.main_window, "_cached_species_dict", None) is not None:
+                        self.main_window._cached_species_dict[oid] = reg_updates["Species"]
+
+        if getattr(self.main_window, "_cached_obs_dict", None) is not None:
+            for oid in valid_obs_oids:
+                if oid in self.main_window._cached_obs_dict:
+                    self.main_window._cached_obs_dict[oid].update(obs_updates)
+                    if "Reviewed" in obs_updates and getattr(self.main_window, "_cached_reviewed_dict", None) is not None:
+                        self.main_window._cached_reviewed_dict[oid] = obs_updates["Reviewed"]
+
         for oid in oids:
-            self.main_window._problem_cache.pop(oid, None)
+            if hasattr(self.main_window, "_problem_cache") and self.main_window._problem_cache is not None:
+                self.main_window._problem_cache.pop(oid, None)
 
         self.main_window._hide_progress("Bulk apply complete")
         self.app.dirty = True
         self.main_window.update_dirty_ui()
-        self.main_window._invalidate_row_cache()
         self.main_window.invalidate_search_index()
         self.main_window.refresh_list()
         

@@ -12,6 +12,7 @@ from ui.image_handler import ImageHandlerMixin
 from ui.historical_suggestions import HistoricalSuggestionsMixin
 from ui.layout_settings import LayoutSettingsMixin
 from ui.unified_settings import open_unified_settings
+from ui.location_panel import LocationPanel, create_location_panel
 from ui.dashboard import DashboardMixin
 from ui.database_ops import DatabaseOpsMixin
 from ui.log_viewer import LogViewerMixin
@@ -347,20 +348,23 @@ class ObjectProgramUI(
         self.toolbar_buttons = {}
         self.toolbar_vars = {}
         
-        self.show_list_var = tk.BooleanVar(value=True)
-        self.show_search_var = tk.BooleanVar(value=True)
-        self.show_images_var = tk.BooleanVar(value=True)
-        self.location_in_center_var = tk.BooleanVar(value=False)
-        self.show_image_tools_var = tk.BooleanVar(value=True)
-        self.show_bulk_edit_var = tk.BooleanVar(value=True)
-        self.show_reg_var = tk.BooleanVar(value=True)
+        import config
+        _init_prefs = config.load_prefs() or {}
         
-        self.snap_lock_var = tk.BooleanVar(value=False)
-        self.image_stack_var = tk.BooleanVar(value=False)
-        self.dashboard_mode_var = tk.StringVar(value="Window")
-        self.focus_dynamic_update_var = tk.BooleanVar(value=True)
-        self.layout_dynamic_update_var = tk.BooleanVar(value=True)
-        self.large_reviewed_button_var = tk.BooleanVar(value=True)
+        self.show_list_var = tk.BooleanVar(value=_init_prefs.get("show_list", True))
+        self.show_search_var = tk.BooleanVar(value=_init_prefs.get("show_search", True))
+        self.show_images_var = tk.BooleanVar(value=_init_prefs.get("show_images", True))
+        self.location_in_center_var = tk.BooleanVar(value=_init_prefs.get("location_in_center", False))
+        self.show_image_tools_var = tk.BooleanVar(value=_init_prefs.get("show_image_tools", True))
+        self.show_bulk_edit_var = tk.BooleanVar(value=_init_prefs.get("show_bulk_edit", True))
+        self.show_reg_var = tk.BooleanVar(value=_init_prefs.get("show_reg", True))
+        
+        self.snap_lock_var = tk.BooleanVar(value=_init_prefs.get("snap_lock", False))
+        self.image_stack_var = tk.BooleanVar(value=_init_prefs.get("image_stack", False))
+        self.dashboard_mode_var = tk.StringVar(value=_init_prefs.get("dashboard_mode", "Window"))
+        self.focus_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("focus_dynamic_update", True))
+        self.layout_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("layout_dynamic_update", True))
+        self.large_reviewed_button_var = tk.BooleanVar(value=_init_prefs.get("large_reviewed_button", True))
         self.auto_advance_var = tk.BooleanVar(value=True)
         self.auto_advance_history_var = tk.BooleanVar(value=False)
 
@@ -881,101 +885,37 @@ class ObjectProgramUI(
         return presets_frame
 
     def _build_vertical_location_ui(self):
-        from config import FONT_MONO_FAMILY
         is_dark = getattr(self, "dark_mode_active", False)
-        bg_col = "#1e1e2e" if is_dark else "#f3f3f3"
-        fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
-        bd_col = "#313244" if is_dark else "#d1d1d1"
-        
-        # 1. Header Frame (flat, borderless, matching LeftPane background)
-        hdr = tk.Frame(self.location_frame, bg=bg_col)
-        hdr.pack(fill="x", pady=(4, 8))
-        
-        title = tk.Label(hdr, text="LOCATION", font=("Hanken Grotesk", sc(11), "bold"), bg=bg_col, fg=fg_col)
-        title.pack(side="left", padx=4)
-        
-        sep = tk.Frame(self.location_frame, bg=bd_col, height=1)
-        sep.pack(fill="x", pady=(0, 10))
-        
-        # Content frame packed inside
-        content = tk.Frame(self.location_frame, bg=bg_col)
-        content.pack(fill="both", expand=True, padx=4)
-        
-        field_names_order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
-        
-        loc_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("location", [])}
-
-        for name in field_names_order:
-            field = loc_config_dict.get(name)
-            if not field: continue
-            
-            row = self._create_loc_widget(content, name, field.get("type", "text"), field, "JetBrains Mono", 10, bg_col, fg_col, bd_col, is_horiz=False)
-            if row:
-                row.pack(fill="x", pady=3)
-                
-        # Thin divider before Loaned out checkbox
-        sep2 = tk.Frame(content, bg=bd_col, height=1)
-        sep2.pack(fill="x", pady=6)
-        
-        loan_field = loc_config_dict.get("Loaned out")
-        if loan_field:
-            row = self._create_loc_widget(content, "Loaned out", "checkbox", loan_field, FONT_MONO_FAMILY, 10, bg_col, fg_col, bd_col, is_horiz=False)
-            if row:
-                children = row.winfo_children()
-                if children:
-                    cb_frame = children[0]
-                    presets_ui = self._build_presets_ui(cb_frame, bg_col, bd_col, is_horiz=False)
-                    presets_ui.pack(side="right", padx=(10, 0))
-                row.pack(fill="x", pady=4)
+        self.location_panel = create_location_panel(
+            self.location_frame,
+            mode="vertical",
+            location_vars=self.location_vars,
+            config_ref=getattr(self.app, "config", None),
+            live_callbacks={"on_commit": lambda *args: self.commit_current_object()},
+            dark_mode=is_dark
+        )
+        self.location_panel.pack(fill="both", expand=True)
+        if hasattr(self.location_panel, "field_entries"):
+            for w in self.location_panel.field_entries:
+                self.location_entries.append(w)
 
     def _build_horizontal_location_ui(self):
-        from config import FONT_MONO_FAMILY
+        import config
+        prefs = config.load_prefs() or {}
         is_dark = getattr(self, "dark_mode_active", False)
-        bg_col = "#1e1e2e" if is_dark else "#f3f3f3"
-        fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
-        bd_col = "#313244" if is_dark else "#d1d1d1"
-        header_bg = "#11111b" if is_dark else "#eaeaea"
-        
-        self.loc_frame_horizontal.config(bg=bg_col)
-        
-        # No main_box wrapper frame. Pack directly into self.loc_frame_horizontal
-        hdr = tk.Frame(self.loc_frame_horizontal, bg=header_bg)
-        hdr.pack(fill="x", pady=(2, 4))
-        
-        title = tk.Label(hdr, text="LOCATION", font=(FONT_MONO_FAMILY, sc(10), "bold"), bg=header_bg, fg=fg_col)
-        title.pack(side="left", padx=8, pady=4)
-        
-        loc_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("location", [])}
-
-        loan_field = loc_config_dict.get("Loaned out")
-        if loan_field:
-            row = self._create_loc_widget(hdr, "Loaned out", "checkbox", loan_field, FONT_MONO_FAMILY, 9, header_bg, fg_col, bd_col, is_horiz=True)
-            if row:
-                children = row.winfo_children()
-                if children:
-                    cb_frame = children[0]
-                    presets_ui = self._build_presets_ui(cb_frame, header_bg, bd_col, is_horiz=True)
-                    presets_ui.pack(side="left", padx=(0, 10))
-                row.pack(side="right", padx=8)
-                
-        # Content Grid packed directly inside self.loc_frame_horizontal
-        content = tk.Frame(self.loc_frame_horizontal, bg=bg_col)
-        content.pack(fill="x", padx=8, pady=4)
-        
-        for i in range(5):
-            content.columnconfigure(i, weight=1, uniform="col")
-            
-        field_names_order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
-        for idx, name in enumerate(field_names_order):
-            field = loc_config_dict.get(name)
-            if not field: continue
-            
-            cell = tk.Frame(content, bg=bg_col)
-            cell.grid(row=0, column=idx, sticky="nsew", padx=4)
-            
-            row = self._create_loc_widget(cell, name, field.get("type", "text"), field, FONT_MONO_FAMILY, 10, bg_col, fg_col, bd_col, is_horiz=True)
-            if row:
-                row.pack(fill="x")
+        mode = "horizontal_2row" if prefs.get("location_2row", False) else "horizontal_1row"
+        self.location_panel_horiz = create_location_panel(
+            self.loc_frame_horizontal,
+            mode=mode,
+            location_vars=self.location_vars,
+            config_ref=getattr(self.app, "config", None),
+            live_callbacks={"on_commit": lambda *args: self.commit_current_object()},
+            dark_mode=is_dark
+        )
+        self.location_panel_horiz.pack(fill="both", expand=True)
+        if hasattr(self.location_panel_horiz, "field_entries"):
+            for w in self.location_panel_horiz.field_entries:
+                self.location_entries.append(w)
 
 
     def build_sections(self):
@@ -1521,8 +1461,23 @@ class ObjectProgramUI(
 
 #------ location shortcuts
 
-    def _focus_first_location(self, event=None):
+    def _get_active_location_entries(self):
+        is_center = hasattr(self, "location_in_center_var") and self.location_in_center_var.get()
+        panel = getattr(self, "location_panel_horiz", None) if is_center else getattr(self, "location_panel", None)
+        if panel and hasattr(panel, "field_entries") and panel.field_entries:
+            return panel.field_entries
         if self.location_entries:
+            visible = [w for w in self.location_entries if w.winfo_exists() and w.winfo_ismapped()]
+            if visible:
+                return visible
+            return self.location_entries
+        return []
+
+    def _focus_first_location(self, event=None):
+        entries = self._get_active_location_entries()
+        if entries:
+            entries[0].focus_set()
+        elif self.location_entries:
             self.location_entries[0].focus_set()
         return "break"
 
@@ -1541,18 +1496,20 @@ class ObjectProgramUI(
 
     def _get_focused_location_index(self):
         current = self.root.focus_get()
-
-        for i, w in enumerate(self.location_entries):
+        entries = self._get_active_location_entries()
+        for i, w in enumerate(entries if entries else self.location_entries):
             if w == current:
                 return i
         return None
 
     def _location_nav_down(self, event):
-        self._navigate_list(self.location_entries, 1)
+        entries = self._get_active_location_entries()
+        self._navigate_list(entries if entries else self.location_entries, 1)
         return "break"
 
     def _location_nav_up(self, event):
-        self._navigate_list(self.location_entries, -1)
+        entries = self._get_active_location_entries()
+        self._navigate_list(entries if entries else self.location_entries, -1)
         return "break"
 
 
@@ -1727,7 +1684,10 @@ class ObjectProgramUI(
 
         # Pre-build dict caches in a background thread so navigation is instant
         if self.app.historical_dbs:
-            self._prescan_historical_dbs(self.app.historical_dbs)
+            threading.Thread(
+                target=self._prescan_suggestions_worker,
+                daemon=True
+            ).start()
 
 
 
@@ -2268,6 +2228,7 @@ class ObjectProgramUI(
                 "show_search":        lambda v: (self.show_search_var.set(v), self.toggle_search_panel()),
                 "show_reg":           lambda v: (self.show_reg_var.set(v), self.toggle_reg_panel()),
                 "show_images":        lambda v: (self.show_images_var.set(v), self.toggle_images_panel()),
+                "location_center":    lambda v: (self.location_in_center_var.set(v), self.toggle_location_panel()),
                 "problem_highlights": lambda v: self.refresh_styles_and_highlights(),
             }
         )
@@ -2837,6 +2798,12 @@ class ObjectProgramUI(
 
 
     def _apply_default_data_preset_shortcut(self, event=None):
+        # Trigger apply_active_preset on the active location panel if present
+        is_center = hasattr(self, "location_in_center_var") and self.location_in_center_var.get()
+        active_panel = getattr(self, "location_panel_horiz", None) if is_center else getattr(self, "location_panel", None)
+        if active_panel and hasattr(active_panel, "apply_active_preset"):
+            active_panel.apply_active_preset()
+            return "break"
         if not hasattr(self, "active_preset_var"):
             return "break"
         default = self.active_preset_var.get().strip()
