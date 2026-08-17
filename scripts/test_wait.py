@@ -1,0 +1,21 @@
+import tkinter as tk
+
+def main():
+    root = tk.Tk()
+    root.withdraw()
+    d = tk.Toplevel(root)
+    d.geometry('400x300')
+    b1 = tk.Button(d, text='Close Dialog', command=d.destroy)
+    b1.pack(pady=20)
+    def start_tut():
+        t = tk.Toplevel(d)
+        t.overrideredirect(True)
+        t.geometry('200x100+100+100')
+        t.config(bg='gray')
+        b2 = tk.Button(t, text='Close Tut', command=lambda: print('CLICKED'))
+        b2.pack(pady=20)
+    d.after(1000, start_tut)
+    root.wait_window(d)
+
+if __name__ == "__main__":
+    main()

@@ -359,6 +359,11 @@ class DatabaseOpsMixin:
         """
         from repository import REVIEWED_COLUMN
 
+        if df_reg is not None and "ObjectID" in df_reg.columns and df_reg.index.name != "ObjectID":
+            df_reg = df_reg.set_index("ObjectID", drop=False)
+        if df_obs is not None and "ObjectID" in df_obs.columns and df_obs.index.name != "ObjectID":
+            df_obs = df_obs.set_index("ObjectID", drop=False)
+
         # 1. Full row dicts — expensive DataFrame.to_dict() done once here
         reg_dict = df_reg.to_dict(orient="index") if df_reg is not None else {}
         obs_dict = df_obs.to_dict(orient="index") if df_obs is not None else {}
@@ -413,16 +418,13 @@ class DatabaseOpsMixin:
                     auto_val = pd.Series(False, index=df_reg.index)
                     if p in problem_mapping:
                         field = problem_mapping.get(p)
-                        if field:
-                            if field in df_reg.columns:
-                                raw_vals = df_reg[field]
-                                is_missing = raw_vals.isna() | (raw_vals.astype(str).str.strip() == "")
-                                # PERFORMANCE OPTIMIZATION (Bolt): Replaced slow row-by-row .apply(self.is_unknown)
-                                # with vectorized Pandas .isin() running entirely in C, speeding up load times.
-                                is_unknown = raw_vals.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
-                                auto_val = is_missing & ~is_unknown
-                            else:
-                                auto_val = pd.Series(True, index=df_reg.index)
+                        if field and field in df_reg.columns:
+                            raw_vals = df_reg[field]
+                            is_missing = raw_vals.isna() | (raw_vals.astype(str).str.strip() == "")
+                            # PERFORMANCE OPTIMIZATION (Bolt): Replaced slow row-by-row .apply(self.is_unknown)
+                            # with vectorized Pandas .isin() running entirely in C, speeding up load times.
+                            is_unknown = raw_vals.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
+                            auto_val = is_missing & ~is_unknown
 
                     has_prob_series |= (obs_val | auto_val)
 

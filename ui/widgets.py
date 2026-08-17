@@ -438,22 +438,76 @@ class TreeviewListboxWrapper(ttk.Frame):
         canvas_bg = "#1e1e2e" if is_dark else "#f9f9f9"
 
         reviewed = self.item_data[oid].get("reviewed", False)
-        has_problem = getattr(self.main_window, "_problem_cache", {}).get(oid, False)
+        if hasattr(self.main_window, "_get_cached_problem"):
+            has_problem = self.main_window._get_cached_problem(oid)
+        else:
+            has_problem = getattr(self.main_window, "_problem_cache", {}).get(oid, False)
         problems_have_history = self.main_window._problems_have_history(oid) if hasattr(self.main_window, "_problems_have_history") else False
 
         if reviewed:
             new_color = "#4CAF50" if is_dark else "#2E7D32"
+            badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
         elif has_problem and problems_have_history:
             new_color = "#BB86FC" if is_dark else "#7B1FA2"
+            badge_label, badge_bg, badge_fg = "ERR+HIS", "#7B1FA2", "#ffffff"
         elif has_problem:
             new_color = "#f28b82" if is_dark else "#C62828"
+            badge_label, badge_bg, badge_fg = "ERR",     "#C62828", "#ffffff"
         elif problems_have_history:
             new_color = "#5ab0e8" if is_dark else "#0284C7"
+            badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
         else:
             new_color = canvas_bg
+            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
 
         accent_strip.configure(bg=new_color)
         self.item_data[oid]["accent_color_normal"] = new_color
+
+        status_badge = self.item_data[oid].get("status_badge")
+        if status_badge and status_badge.winfo_exists():
+            status_badge.configure(text=badge_label, bg=badge_bg, fg=badge_fg, highlightbackground=badge_bg)
+
+        self._apply_tags_to_card(oid)
+
+        # Update Loaned badge dynamically
+        obs_dict = getattr(self.main_window, "_cached_obs_dict", None)
+        if obs_dict is None and hasattr(self.main_window, "_get_obs_dict"):
+            obs_dict = self.main_window._get_obs_dict()
+        obs_row = obs_dict.get(oid) if obs_dict else {}
+        if obs_row is None:
+            try:
+                lookup_key = int(oid) if str(oid).isdigit() else oid
+                obs_row = obs_dict.get(lookup_key, {})
+            except Exception:
+                obs_row = {}
+
+        loaned_raw = obs_row.get("Loaned out", False)
+        loaned = utils.parse_bool(loaned_raw)
+
+        row1 = self.item_data[oid].get("row1")
+        loaned_badge = self.item_data[oid].get("loaned_badge")
+
+        if loaned and not loaned_badge and row1 and row1.winfo_exists():
+            from config import sc
+            l_bg = "#203040" if is_dark else "#e3f2fd"
+            l_fg = "#64b5f6" if is_dark else "#0d47a1"
+            l_bd = "#bbdefb" if is_dark else "#90caf9"
+
+            l_badge = self._create_badge(row1, "Loaned", l_bg, l_fg, l_bd)
+            l_badge.pack(side="right", padx=(sc(2), sc(2)))
+
+            # Reapply tags to new child for hover effects
+            card_tag = f"Card_{oid}"
+            tags = l_badge.bindtags()
+            if card_tag not in tags:
+                l_badge.bindtags((tags[0], card_tag) + tags[1:])
+
+            self.item_data[oid]["loaned_badge"] = l_badge
+
+        elif not loaned and loaned_badge:
+            if loaned_badge.winfo_exists():
+                loaned_badge.destroy()
+            self.item_data[oid]["loaned_badge"] = None
 
     def _create_badge(self, parent, text, bg, fg, border_color):
         from config import sc
@@ -630,7 +684,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             except Exception:
                 reg_row = {}
 
-        has_problem = self.main_window._problem_cache.get(oid, False) if hasattr(self.main_window, "_problem_cache") else False
+        has_problem = self.main_window._get_cached_problem(oid) if hasattr(self.main_window, "_get_cached_problem") else (self.main_window._problem_cache.get(oid, False) if hasattr(self.main_window, "_problem_cache") else False)
         has_history = self.main_window._has_history(oid) if hasattr(self.main_window, "_has_history") else False
         problems_have_history = self.main_window._problems_have_history(oid) if hasattr(self.main_window, "_problems_have_history") else False
         reviewed    = self.item_data[oid].get("reviewed", False)
@@ -655,13 +709,15 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         # Status badge
         if reviewed:
-            badge_label, badge_bg, badge_fg = "OK",   "#2E7D32", "#ffffff"
+            badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
+        elif has_problem and problems_have_history:
+            badge_label, badge_bg, badge_fg = "ERR+HIS", "#7B1FA2", "#ffffff"
         elif has_problem:
-            badge_label, badge_bg, badge_fg = "ERR",  "#C62828", "#ffffff"
+            badge_label, badge_bg, badge_fg = "ERR",     "#C62828", "#ffffff"
         elif problems_have_history:
-            badge_label, badge_bg, badge_fg = "CFCT", "#0284C7", "#ffffff"
+            badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
         else:
-            badge_label, badge_bg, badge_fg = "UKN",  "#FBC02D", "#1a1c1c"
+            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
 
         # Outer container (canvas-colored so accent strip "floats")
         outer_frame = tk.Frame(parent, bg=canvas_bg, bd=0, highlightthickness=0, cursor="hand2")
@@ -703,8 +759,11 @@ class TreeviewListboxWrapper(ttk.Frame):
         tax_lbl.pack(side="left", fill="x", expand=True, padx=(0, sc(4)))
         self.item_data[oid]["tax_label"] = tax_lbl
 
+        self.item_data[oid]["row1"] = row1
+
         s_badge = self._create_badge(row1, badge_label, badge_bg, badge_fg, badge_bg)
         s_badge.pack(side="right", padx=(sc(2), 0))
+        self.item_data[oid]["status_badge"] = s_badge
 
         if loaned:
             l_bg = "#203040" if is_dark else "#e3f2fd"
@@ -712,6 +771,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             l_bd = "#bbdefb" if is_dark else "#90caf9"
             l_badge = self._create_badge(row1, "Loaned", l_bg, l_fg, l_bd)
             l_badge.pack(side="right", padx=(sc(2), sc(2)))
+            self.item_data[oid]["loaned_badge"] = l_badge
 
         # Row 2: family · separator · catalog ID · photo count
         row2 = tk.Frame(card_body, bg=card_bg)
