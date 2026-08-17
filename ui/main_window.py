@@ -2060,7 +2060,6 @@ class ObjectProgramUI(
   
         win = tk.Toplevel(self.root)
         win.title("User Guide")
-        import utils
         utils.center_and_fit_toplevel(win, 620, 700)
         win.bind("<Escape>", lambda e: win.destroy())
 
@@ -2236,7 +2235,6 @@ class ObjectProgramUI(
             return
 
         from config import sc
-        import utils
         import config as _cfg
 
         COLORS = {
@@ -2518,8 +2516,6 @@ class ObjectProgramUI(
         win.title("Help Center")
         win.resizable(True, True)
         win.transient(self.root)
-        
-        import utils
         # Size of the dialog
         w_width = sc(400)
         w_height = sc(320)
@@ -4560,8 +4556,6 @@ class ObjectProgramUI(
 
         bg_color = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
         win.configure(background=bg_color)
-
-        import utils
         utils.center_and_fit_toplevel(win, sc(400), sc(250))
 
         win.bind("<Escape>", lambda e: win.destroy())
@@ -4649,7 +4643,6 @@ class ObjectProgramUI(
         # Create a beautiful Toplevel HUD window
         win = tk.Toplevel(self.root)
         win.title("Keyboard Shortcuts HUD")
-        import utils
         utils.center_and_fit_toplevel(win, 800, 650)
         win.configure(background="#1e1e2e") # Dark theme for heads-up display look!
         win.transient(self.root)
@@ -5139,7 +5132,6 @@ class ObjectProgramUI(
         dialog.grab_set()
 
         s = getattr(self, "_scale", 1.0)
-        import utils
         utils.center_and_fit_toplevel(dialog, int(600 * s), int(450 * s))
 
         # Main frame
@@ -5792,8 +5784,6 @@ class ObjectProgramUI(
         win.resizable(True, True)
         win.minsize(sc(660), sc(420))  # U2-G: scaled to DPI
         win.configure(bg="#1a1a2e")
-
-        import utils
         utils.center_and_fit_toplevel(win, 760, 560)
 
         # ── Header bar ──────────────────────────────────────────────────────
@@ -6263,8 +6253,6 @@ class ObjectProgramUI(
         win.title("Edit Location")
         win.resizable(True, True)
         win.transient(self.root)
-
-        import utils
         utils.center_and_fit_toplevel(win, sc(380), sc(340))
 
         frame = ttk.Frame(win, padding=15)
@@ -6486,8 +6474,6 @@ class ObjectProgramUI(
         win.title("Edit Problem Flags")
         win.resizable(True, True)
         win.transient(self.root)
-
-        import utils
         utils.center_and_fit_toplevel(win, sc(400), sc(350))
 
         frame = ttk.Frame(win, padding=15)
@@ -6609,7 +6595,6 @@ class ObjectProgramUI(
             return
 
         from config import sc
-        import utils
         
         COLORS = {
             "surface": "#f9f9f9",
@@ -6981,7 +6966,6 @@ class ObjectProgramUI(
             
         win = tk.Toplevel(self.filter_window)
         win.title("Load Preset")
-        import utils
         utils.center_and_fit_toplevel(win, 250, 300)
         
         lb = tk.Listbox(win)
@@ -8952,7 +8936,6 @@ class ObjectProgramUI(
         
         win.configure(background=bg_color)
         win.title("Configure Ignored Words")
-        import utils
         utils.center_and_fit_toplevel(win, 500, 550)
         
         title_lbl = ttk.Label(win, text="Suggestions Filter: Ignored Words", font=("Segoe UI", sc(12), "bold"))

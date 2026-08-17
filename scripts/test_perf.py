@@ -53,14 +53,7 @@ class DummyApp:
         end_time = time.perf_counter()
         return end_time - start_time
 
-<<<<<<< HEAD:test_perf.py
-
-app = DummyApp()
-utils.debug_log("INFO", f"Baseline Time: {app.config_lookup_test_baseline():.6f} seconds")
-utils.debug_log("INFO", f"Optimized Time: {app.config_lookup_test_optimized():.6f} seconds")
-=======
 if __name__ == "__main__":
     app = DummyApp()
     print(f"Baseline Time: {app.config_lookup_test_baseline():.6f} seconds")
     print(f"Optimized Time: {app.config_lookup_test_optimized():.6f} seconds")
->>>>>>> origin/main:scripts/test_perf.py
