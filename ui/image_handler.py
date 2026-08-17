@@ -1366,8 +1366,8 @@ class ImageHandlerMixin:
         self._re_render_current_images()
 
 
-    def rotate_image(self):
-        self.image_rotation_angle = (self.image_rotation_angle - 90) % 360
+    def rotate_image(self, angle=-90):
+        self.image_rotation_angle = (self.image_rotation_angle + angle) % 360
         self._re_render_current_images()
 
 
@@ -1378,6 +1378,8 @@ class ImageHandlerMixin:
 
 
     def _re_render_current_images(self):
+        if hasattr(self, "image_toolbar") and hasattr(self.image_toolbar, "set_status"):
+            self.image_toolbar.set_status(self.image_zoom_factor, self.image_rotation_angle)
         if not getattr(self.app, "current_object_id", None):
             return
 
