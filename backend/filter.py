@@ -18,7 +18,7 @@ class FilterManager:
     def __init__(self):
         pass
 
-    def apply_filter(self, df_reg, reg_dict, obs_dict, history_set, groups, group_modes, not_reviewed_only, location_filters, problem_columns, problem_to_field, unknown_fields, image_mode):
+    def apply_filter(self, df_reg, reg_dict, obs_dict, history_set, groups, global_mode, not_reviewed_only, location_filters, problem_columns, problem_to_field, unknown_fields, image_mode):
         filtered_ids = []
         if df_reg is None:
             return filtered_ids
@@ -159,15 +159,17 @@ class FilterManager:
                     continue
 
             reg_row = reg_dict.get(oid, {})
-            group_results = []
+            all_items = []
             for group_name, items in groups.items():
-                mode = group_modes.get(group_name, "AND")
-                result = check_group(oid, items, mode, obs_row, reg_row)
-                if result is not None:
-                    group_results.append(result)
+                if items:
+                    all_items.extend(items)
 
-            ok = all(group_results) if group_results else True
-            if ok:
+            if not all_items:
+                filtered_ids.append(oid)
+                continue
+
+            result = check_group(oid, all_items, global_mode, obs_row, reg_row)
+            if result:
                 filtered_ids.append(oid)
 
         return filtered_ids

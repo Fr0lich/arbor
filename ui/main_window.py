@@ -575,15 +575,6 @@ class ObjectProgramUI(
             "Cabinet": tk.StringVar(value="")
         }
 
-
-        self.filter_modes = {
-            "Problems": tk.StringVar(value="OR"),
-            "Images": tk.StringVar(value="OR"),
-            "Status": tk.StringVar(value="OR"),
-            "Text": tk.StringVar(value="OR"),
-            "Unknown": tk.StringVar(value="OR"),
-        }
-
         style.configure(
             "Dirty.TButton",
             foreground="red"
@@ -6269,6 +6260,32 @@ class ObjectProgramUI(
         tab_nav.pack(fill="x", side="top")
         tk.Frame(tab_nav, bg=COLORS["outline"], height=1).pack(fill="x", side="bottom")
 
+        # Global Match Mode Toggle (Right side of tab_nav)
+        global_mode_frame = tk.Frame(tab_nav, bg=COLORS["surface_container_highest"])
+        global_mode_frame.pack(side="right", fill="y", padx=sc(16))
+
+        tk.Label(global_mode_frame, text="Match criteria:", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"]).pack(side="left", padx=(0, sc(8)))
+
+        from tkinter import ttk
+        style = ttk.Style(self.root)
+        style.configure("GlobalMode.TCombobox", fieldbackground=COLORS["surface"], background=COLORS["surface"], borderwidth=0)
+
+        def on_global_mode_change(event):
+            val = global_mode_cb.get()
+            if "ALL" in val.upper():
+                self.filter_mode.set("AND")
+            else:
+                self.filter_mode.set("OR")
+            self.update_filter_button_text()
+
+        current_mode = self.filter_mode.get()
+        cb_val = "All selected (AND)" if current_mode == "AND" else "Any selected (OR)"
+
+        global_mode_cb = ttk.Combobox(global_mode_frame, values=["All selected (AND)", "Any selected (OR)"], state="readonly", width=18, style="GlobalMode.TCombobox")
+        global_mode_cb.set(cb_val)
+        global_mode_cb.pack(side="left", pady=sc(8))
+        global_mode_cb.bind("<<ComboboxSelected>>", on_global_mode_change)
+
         tab_content_area = tk.Frame(main_container, bg=COLORS["surface"])
         tab_content_area.pack(fill="both", expand=True)
 
@@ -6346,10 +6363,6 @@ class ObjectProgramUI(
         status_left.pack(side="left", fill="both", expand=True, padx=sc(16), pady=sc(16))
         status_right = tk.Frame(tab_status, bg=COLORS["surface"])
         status_right.pack(side="right", fill="both", expand=True, padx=sc(16), pady=sc(16))
-        
-        c_logic = create_group(status_left, "Condition Logic")
-        make_rad(c_logic, "Match ALL conditions (AND)", self.filter_modes["Status"], "AND")
-        make_rad(c_logic, "Match ANY condition (OR)", self.filter_modes["Status"], "OR")
 
         p_status = create_group(status_left, "Processing Status")
         make_chk(p_status, "Reviewed", self.filter_vars["Reviewed"], COLORS["secondary"])
@@ -6395,16 +6408,10 @@ class ObjectProgramUI(
             make_chk(p_list, col.replace("_", " "), self.filter_vars.get(col), COLORS["error"])
         make_chk(p_list, "Any problem (except images)", self.filter_vars.get("Any_Problem"), COLORS["error"])
         
-        p_mode = create_group(probs_inner, "Problems Match Mode")
-        make_rad(p_mode, "Match ALL (AND)", self.filter_modes["Problems"], "AND")
-        make_rad(p_mode, "Match ANY (OR)", self.filter_modes["Problems"], "OR")
-        
         u_list = create_group(probs_inner, "Unknown values")
         if not hasattr(self, "filter_unknown_var"):
             self.filter_unknown_var = tk.BooleanVar()
         make_chk(u_list, "Show objects with unknown fields", self.filter_unknown_var)
-        make_rad(u_list, "Match ALL (AND)", self.filter_modes["Unknown"], "AND")
-        make_rad(u_list, "Match ANY (OR)", self.filter_modes["Unknown"], "OR")
 
         # TAB 3: IMAGES
         tab_imgs = tk.Frame(tab_content_area, bg=COLORS["surface"])
@@ -6421,10 +6428,6 @@ class ObjectProgramUI(
                 clean_name = col.replace("_", " ")
                 bar_color = COLORS["error"] if "Missing" in col or "Problem" in col else COLORS["botanical_green"]
                 make_chk(i_list, clean_name, self.filter_vars[col], bar_color)
-                
-        i_mode = create_group(img_inner, "Images Match Mode")
-        make_rad(i_mode, "Match ALL (AND)", self.filter_modes["Images"], "AND")
-        make_rad(i_mode, "Match ANY (OR)", self.filter_modes["Images"], "OR")
 
         # TAB 4: LOCATION
         tab_loc = tk.Frame(tab_content_area, bg=COLORS["surface"])
@@ -6541,7 +6544,7 @@ class ObjectProgramUI(
             preset = {
                 "vars": {k: v.get() for k, v in self.filter_vars.items() if isinstance(v, tk.BooleanVar) and v.get()},
                 "locs": {k: v.get() for k, v in self.filter_location_vars.items() if v.get()},
-                "modes": {k: v.get() for k, v in self.filter_modes.items()}
+                "mode": self.filter_mode.get()
             }
             presets_file = os.path.join(os.path.dirname(_PREFS_PATH), "filter_presets.json")
             try:
@@ -6596,9 +6599,19 @@ class ObjectProgramUI(
             for k, v in preset.get("locs", {}).items():
                 if k in self.filter_location_vars:
                     self.filter_location_vars[k].set(v)
-            for k, v in preset.get("modes", {}).items():
-                if k in self.filter_modes:
-                    self.filter_modes[k].set(v)
+
+            # Load global mode or gracefully fallback from legacy multi-mode presets
+            legacy_modes = preset.get("modes", {})
+            if "mode" in preset:
+                self.filter_mode.set(preset["mode"])
+            elif legacy_modes:
+                # If any legacy mode was AND, assume AND to be safe, else OR
+                if any(m == "AND" for m in legacy_modes.values()):
+                    self.filter_mode.set("AND")
+                else:
+                    self.filter_mode.set("OR")
+            else:
+                self.filter_mode.set("AND")
                     
             self.update_filter_button_text()
             win.destroy()
@@ -6798,15 +6811,13 @@ class ObjectProgramUI(
         floor_filter = floor_var.get() if floor_var else ""
         cabinet_filter = cabinet_var.get().strip().lower() if cabinet_var else ""
 
-        group_modes = {group_name: self.filter_modes[group_name].get() for group_name in groups}
-
         matched = self.filter_manager.apply_filter(
             df_reg=self.app.df_reg,
             reg_dict=reg_dict,
             obs_dict=obs_dict,
             history_set=history_set,
             groups=groups,
-            group_modes=group_modes,
+            global_mode=filter_state["mode"],
             not_reviewed_only=not_reviewed_only,
             location_filters=(building_filter, floor_filter, cabinet_filter),
             problem_columns=self.problem_columns,
