@@ -336,10 +336,31 @@ class BulkEditWindow:
         reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else {}
         obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else {}
 
+        # Pre-fetch fallback dictionaries for undo snapshots using vectorized pandas operations if caches are empty
+        if reg_dict:
+            reg_fallback = {}
+        else:
+            valid_reg_oids = [oid for oid in oids if reg_df is not None and oid in reg_df.index]
+            reg_fallback = reg_df.loc[valid_reg_oids].to_dict('index') if valid_reg_oids else {}
+
+        if obs_dict:
+            obs_fallback = {}
+        else:
+            valid_obs_oids = [oid for oid in oids if obs_df is not None and oid in obs_df.index]
+            obs_fallback = obs_df.loc[valid_obs_oids].to_dict('index') if valid_obs_oids else {}
+
         # Snapshot undo state efficiently
         for oid in oids:
-            reg_snap = reg_dict.get(oid, {}).copy() if reg_dict else (reg_df.loc[oid].copy() if (reg_df is not None and oid in reg_df.index) else {})
-            obs_snap = obs_dict.get(oid, {}).copy() if obs_dict else (obs_df.loc[oid].copy() if (obs_df is not None and oid in obs_df.index) else {})
+            if reg_dict:
+                reg_snap = reg_dict.get(oid, {}).copy()
+            else:
+                reg_snap = reg_fallback.get(oid, {}).copy() if oid in reg_fallback else {}
+
+            if obs_dict:
+                obs_snap = obs_dict.get(oid, {}).copy()
+            else:
+                obs_snap = obs_fallback.get(oid, {}).copy() if oid in obs_fallback else {}
+
             self.main_window.app.undo_stacks.setdefault(oid, []).append({
                 "reg": reg_snap,
                 "obs": obs_snap,
