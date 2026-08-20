@@ -103,9 +103,15 @@ class FilterManager:
                 if p == "Any_Problem":
                     val = fast_has_any_problem(oid, obs_row, reg_row)
                 elif p == "Has_Images":
-                    val = not obs_row.get("Images_Missing", False)
+                    if oid not in obs_dict:
+                        val = False
+                    else:
+                        val = not bool(obs_row.get("Images_Missing", False))
                 elif p == "Images_Missing":
-                    val = obs_row.get("Images_Missing", False)
+                    if image_mode in ("online", "offline"):
+                        val = False
+                    else:
+                        val = bool(obs_row.get("Images_Missing", False))
                 elif p == "Reviewed":
                     val = bool(obs_row.get(REVIEWED_COLUMN, False))
                 elif p == "Not_Reviewed":
