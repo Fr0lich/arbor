@@ -3968,7 +3968,7 @@ class ObjectProgramUI(
         self.right_panes.add(self.reg_data_frame, weight=3)
 
         # Registration Header Panel (fixed top inside reg_data_frame)
-        reg_header = ttk.Frame(self.reg_data_frame, padding=(8, 6), style="RightPane.TFrame")
+        reg_header = ttk.Frame(self.reg_data_frame, padding=(4, 2), style="RightPane.TFrame")
         reg_header.pack(fill="x", side="top")
         ttk.Separator(self.reg_data_frame, orient="horizontal").pack(fill="x", side="top")
 
@@ -4051,7 +4051,40 @@ class ObjectProgramUI(
             command=self._on_reviewed_clicked
         )
         self.reviewed_button.tutorial_id = "reviewed_button"
-        self.reviewed_button.pack(fill="x", expand=True)
+        self.reviewed_button.pack(side="left", fill="x", expand=True)
+
+        import config
+        prefs = config.load_prefs() or {}
+        self.show_action_options_var = tk.BooleanVar(value=prefs.get("show_action_options", False))
+
+        def _toggle_action_options():
+            self.show_action_options_var.set(not self.show_action_options_var.get())
+            if self.show_action_options_var.get():
+                self.action_row1b.pack(fill="x", pady=(4, 0))
+                self.options_toggle_btn.config(text="▲")
+            else:
+                self.action_row1b.pack_forget()
+                self.options_toggle_btn.config(text="▼")
+
+            try:
+                import config
+                p = config.load_prefs() or {}
+                p["show_action_options"] = self.show_action_options_var.get()
+                config.save_prefs(p)
+            except Exception:
+                pass
+
+        self.options_toggle_btn = tk.Button(
+            action_row1,
+            text="▼" if not self.show_action_options_var.get() else "▲",
+            font=("Hanken Grotesk", sc(11)),
+            relief="flat", bd=0, cursor="hand2",
+            padx=sc(8), pady=pady_val,
+            highlightthickness=0,
+            command=_toggle_action_options
+        )
+        self.options_toggle_btn.pack(side="right")
+        self.add_tooltip(self.options_toggle_btn, "Toggle review options")
 
         self.reviewed_var.trace_add("write", lambda *args: self.update_reviewed_button_state())
         self.reviewed_button.bind("<Enter>", self._on_reviewed_btn_enter)
@@ -4060,8 +4093,10 @@ class ObjectProgramUI(
         self.reviewed_button.bind("<ButtonRelease-1>", self._on_reviewed_btn_release)
 
         # Row 1b: Secondary action — clear problems checkbutton + status indicators
-        action_row1b = ttk.Frame(action_bar, style="RightPane.TFrame")
-        action_row1b.pack(fill="x", pady=(4, 0))
+        self.action_row1b = ttk.Frame(action_bar, style="RightPane.TFrame")
+        action_row1b = self.action_row1b
+        if self.show_action_options_var.get():
+            action_row1b.pack(fill="x", pady=(4, 0))
 
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2d" if is_dark else "#ffffff"
