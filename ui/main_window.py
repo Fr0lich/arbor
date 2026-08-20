@@ -4510,25 +4510,23 @@ class ObjectProgramUI(
 
             new = bool(var.get())
 
-            # Only check for edits if the state has actually been edited since loading
+            # Check for edits against the underlying database state so auto-detected problems are saved
             db_val = False
             if col in self.app.df_obs.columns:
                 val = self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index else False
                 db_val = bool(val) if not pd.isna(val) else False
 
-            loaded_val = self.loaded_problem_states.get(col, db_val)
-
             if col not in self.app.df_obs.columns:
                 self.app.df_obs[col] = False
 
-            if loaded_val != new:
+            if db_val != new:
                 ensure_undo()
                 self.app.df_obs.at[oid, col] = new
                 if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
                     self._cached_obs_dict[oid][col] = new
 
                 prob_changed_fields.append(col)
-                prob_changed_values.append(f'{col}: "{loaded_val}"  "{new}"')
+                prob_changed_values.append(f'{col}: "{db_val}"  "{new}"')
                 
                 self._list_dirty = True
                 self.loaded_problem_states[col] = new
