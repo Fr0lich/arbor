@@ -1416,12 +1416,9 @@ class ImageHandlerMixin:
         # time the user zoomed or rotated, forcing an expensive full re-render.
         if getattr(self, "_image_paths", None):
             current_paths = set(self._image_paths)
-            stale_keys = [
-                k for k in list(self.image_render_cache)
-                if k[0] in current_paths
-            ]
-            for k in stale_keys:
-                del self.image_render_cache[k]
+            for k in list(self.image_render_cache):
+                if k[0] in current_paths:
+                    del self.image_render_cache[k]
         else:
             self.image_render_cache.clear()
 
