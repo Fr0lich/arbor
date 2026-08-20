@@ -9,6 +9,7 @@ problem flag rule engine, and real-time simulated record preview.
 """
 
 import os
+import shutil
 import re
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
@@ -108,16 +109,19 @@ class NewDatabaseWizard:
 
     STEP_NAMES = [
         "1. Template & Source",
-        "2. Schema & Fields",
-        "3. Flags & Groups",
-        "4. Image & Location",
-        "5. Review & Create"
+        "2. Define Fields",
+        "3. Organize Layout",
+        "4. Quality Flags",
+        "5. External Modules",
+        "6. Review & Finalize"
     ]
 
-    def __init__(self, parent, app=None, on_complete=None):
+    def __init__(self, parent, app=None, on_complete=None, edit_config=None, edit_mode=False):
         self.parent = parent
         self.app = app
         self.on_complete = on_complete
+        self.edit_mode = edit_mode
+        self.edit_config = edit_config
 
         # Detect dark mode
         self.dark_mode = False
@@ -167,7 +171,10 @@ class NewDatabaseWizard:
         self.output_file_path = ""
 
         # Initialize default template schema
-        self._load_template_data("Botany / Herbarium")
+        if self.edit_mode and self.edit_config:
+            self._load_from_edit_config()
+        else:
+            self._load_template_data("Botany / Herbarium")
 
         # Fonts
         self.FONT_TITLE = ("Lora", sc(13), "bold")
@@ -383,13 +390,14 @@ class NewDatabaseWizard:
     def goto_step(self, step_num):
         self.current_step = step_num
         self.max_step_visited = max(self.max_step_visited, step_num)
-        self.step_indicator_lbl.config(text=f"Step {step_num} of 5")
+        self.step_indicator_lbl.config(text=f"Step {step_num} of 6")
         self._build_stepper()
 
         # Update button states
         self.btn_back.config(state="normal" if step_num > 1 else "disabled")
-        if step_num == 5:
-            self.btn_next.config(text="✨ Create Database", bg=self.colors["secondary"])
+        if step_num == 6:
+            btn_text = "💾 Save Updates" if getattr(self, "edit_mode", False) else "✨ Create Database"
+            self.btn_next.config(text=btn_text, bg=self.colors["secondary"])
         else:
             self.btn_next.config(text="Next Step →", bg=self.colors["primary"])
 
@@ -407,11 +415,13 @@ class NewDatabaseWizard:
             self._render_step4()
         elif step_num == 5:
             self._render_step5()
+        elif step_num == 6:
+            self._render_step6()
 
     def _on_next(self):
         if not self._validate_step(self.current_step):
             return
-        if self.current_step < 5:
+        if self.current_step < 6:
             self.goto_step(self.current_step + 1)
         else:
             self._initialize_database()
@@ -438,7 +448,7 @@ class NewDatabaseWizard:
             if len(names) != len(set(names)):
                 messagebox.showwarning("Validation Warning", "Field names must be unique.", parent=self.win)
                 return False
-        elif step == 5:
+        elif step == 6:
             name = self.profile_name_var.get().strip() if hasattr(self, "profile_name_var") else ""
             if not name:
                 messagebox.showwarning("Validation Warning", "Please specify a profile name.", parent=self.win)
@@ -452,6 +462,35 @@ class NewDatabaseWizard:
     # --------------------------------------------------------------------------
     # Template loading helpers
     # --------------------------------------------------------------------------
+    def _load_from_edit_config(self):
+        self.profile_name = "Edited Database" # Will be overridden in step 6
+        self.fields = []
+        if "ui_sections" in self.edit_config:
+            # Registration fields
+            for f in self.edit_config["ui_sections"].get("registration", []):
+                new_f = dict(f)
+                new_f["original_name"] = f["name"]
+                self.fields.append(new_f)
+
+            # Problem flags
+            self.problem_flags = {}
+            for pf in self.edit_config["ui_sections"].get("problems", []):
+                # problem maps to field
+                if pf.get("maps_to"):
+                    self.problem_flags[pf["maps_to"]] = True
+
+            # Groups
+            self.groups = {}
+            for g in self.edit_config["ui_sections"].get("reg_groups", []):
+                self.groups[g["name"]] = list(g["fields"])
+                if g["name"] not in self.group_names:
+                    self.group_names.append(g["name"])
+                for fname in g["fields"]:
+                    self.field_group_map[fname] = g["name"]
+
+        self.has_images = self.edit_config.get("has_images", True)
+        self.image_url_pattern = self.edit_config.get("image_url_pattern", "")
+
     def _load_template_data(self, template_key):
         self.selected_template = template_key
 
@@ -1110,818 +1149,242 @@ class NewDatabaseWizard:
     # STEP 3: Category-First Field Organization & Quality Flags (POLISHED)
     # --------------------------------------------------------------------------
     def _render_step3(self):
-        inner = self._create_scrollable_card("Step 3: Organize Fields by Category & Configure Quality Flags")
+        inner = self._create_scrollable_card("Step 3: Organize Fields by Category")
+
+        # Run smart auto organize immediately when step loads if we haven't done it manually yet
+        if not hasattr(self, "_auto_organized_done"):
+            self._smart_auto_organize()
+            self._auto_organized_done = True
 
         if not self.active_category or self.active_category not in self.group_names:
             self.active_category = self.group_names[0] if self.group_names else "General"
-        self.preview_active_group = self.active_category
 
-        # 1. Clear Purpose & Context Banner
-        info_box = tk.Frame(
-            inner, bg=self.colors["surface_container_low"],
-            highlightthickness=1, highlightbackground=self.colors["card_border"],
-            padx=sc(10), pady=sc(7)
-        )
-        info_box.pack(fill="x", pady=(0, sc(8)))
+        info_box = tk.Frame(inner, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(10), pady=config.sc(7))
+        info_box.pack(fill="x", pady=(0, config.sc(8)))
+        tk.Label(info_box, text="💡 Group your fields:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"], fg=self.colors["secondary"]).pack(anchor="w")
+        tk.Label(info_box, text="1. Select a category on the left.\n2. Move fields into the category on the right.", font=self.FONT_SMALL, bg=self.colors["surface_container_low"], fg=self.colors["on_surface_variant"], justify="left").pack(anchor="w", pady=(config.sc(2), 0))
 
-        tk.Label(
-            info_box, text="💡 What to do here:",
-            font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"],
-            fg=self.colors["secondary"]
-        ).pack(anchor="w")
-
-        tk.Label(
-            info_box,
-            text="1. Select a category tab above to see what fields belong inside that workspace section.\n"
-                 "2. Click '⇄ Move' or click '+ Field' to pull fields into this category.\n"
-                 "3. Toggle '🚩 Flagged' on fields where curators should verify data accuracy during audits.",
-            font=self.FONT_SMALL, bg=self.colors["surface_container_low"],
-            fg=self.colors["on_surface_variant"], justify="left"
-        ).pack(anchor="w", pady=(sc(2), 0))
-
-        # 2. Category Tabs Strip (Category-First Navigation)
-        self.cat_nav_container = tk.Frame(inner, bg=self.colors["card_bg"])
-        self.cat_nav_container.pack(fill="x", pady=(0, sc(8)))
-
-        # 3. Two-Column Workspace: Left = Category Field Manager, Right = Synchronized Live Preview
         split_pane = tk.Frame(inner, bg=self.colors["card_bg"])
-        split_pane.pack(fill="both", expand=True, pady=(0, sc(8)))
-        split_pane.columnconfigure(0, weight=3)
-        split_pane.columnconfigure(1, weight=3)
+        split_pane.pack(fill="both", expand=True, pady=(0, config.sc(8)))
+        split_pane.columnconfigure(0, weight=1)
+        split_pane.columnconfigure(1, weight=2)
 
-        # ── LEFT COLUMN: Active Category Field Manager ──
-        self.left_cat_col = tk.Frame(split_pane, bg=self.colors["card_bg"])
-        self.left_cat_col.grid(row=0, column=0, sticky="nsew", padx=(0, sc(6)))
+        # LEFT PANE: Categories
+        self.left_cat_col = tk.Frame(split_pane, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(8), pady=config.sc(8))
+        self.left_cat_col.grid(row=0, column=0, sticky="nsew", padx=(0, config.sc(6)))
 
-        # ── RIGHT COLUMN: Synchronized Live Form Preview ──
-        self.right_prev_col = tk.Frame(
-            split_pane, bg=self.colors["surface_container_low"],
-            highlightthickness=1, highlightbackground=self.colors["card_border"],
-            padx=sc(10), pady=sc(8)
-        )
-        self.right_prev_col.grid(row=0, column=1, sticky="nsew", padx=(sc(6), 0))
+        tk.Label(self.left_cat_col, text="Categories", font=self.FONT_HEADER, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, config.sc(6)))
 
-        # Preview Header & Mode Switcher
-        prev_hdr = tk.Frame(self.right_prev_col, bg=self.colors["surface_container_low"])
-        prev_hdr.pack(fill="x", pady=(0, sc(4)))
+        self.cat_list_frame = tk.Frame(self.left_cat_col, bg=self.colors["surface_container_low"])
+        self.cat_list_frame.pack(fill="both", expand=True)
 
-        self.prev_title_lbl = tk.Label(
-            prev_hdr, text=f"👁️ PREVIEW: {self.active_category.upper()}",
-            font=self.FONT_STEPPER, bg=self.colors["surface_container_low"],
-            fg=self.colors["secondary"]
-        )
-        self.prev_title_lbl.pack(side="left")
+        btn_add_cat = tk.Button(self.left_cat_col, text="+ Add Category", font=self.FONT_BUTTON, bg=self.colors["primary"], fg=self.colors["on_primary"], cursor="hand2", command=self._add_category)
+        btn_add_cat.pack(fill="x", pady=(config.sc(8), 0))
 
-        # Preview Mode Toggle (Standard vs Flagged Focus)
-        self.btn_prev_mode = tk.Button(
-            prev_hdr, text="🔍 Focus Mode" if self.preview_mode == "standard" else "📋 All Fields",
-            font=("Inter", sc(7.5)), bg=self.colors["card_bg"], fg=self.colors["on_surface"],
-            relief="solid", bd=1, cursor="hand2", padx=sc(5), pady=0,
-            command=self._toggle_preview_mode
-        )
-        self.btn_prev_mode.pack(side="right")
+        # RIGHT PANE: Field Manager
+        self.right_field_col = tk.Frame(split_pane, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(8), pady=config.sc(8))
+        self.right_field_col.grid(row=0, column=1, sticky="nsew", padx=(config.sc(6), 0))
 
-        tk.Label(
-            self.right_prev_col, text="Simulated live Arbor audit card for this section:",
-            font=self.FONT_SMALL, bg=self.colors["surface_container_low"],
-            fg=self.colors["on_surface_variant"]
-        ).pack(anchor="w", pady=(0, sc(6)))
+        self._refresh_step3_layout()
 
-        # Preview Body
-        self.preview_body_frame = tk.Frame(
-            self.right_prev_col, bg=self.colors["card_bg"],
-            highlightthickness=1, highlightbackground=self.colors["card_border"],
-            padx=sc(8), pady=sc(8)
-        )
-        self.preview_body_frame.pack(fill="both", expand=True)
+    def _add_category(self):
+        new_cat = tk.simpledialog.askstring("New Category", "Category Name:", parent=self.win)
+        if new_cat and new_cat.strip() not in self.group_names:
+            self.group_names.append(new_cat.strip())
+            self.active_category = new_cat.strip()
+            self._refresh_step3_layout()
 
-        # Global Bottom Custom Flags Drawer
-        self.custom_flags_container = tk.Frame(inner, bg=self.colors["card_bg"])
-        self.custom_flags_container.pack(fill="x", pady=(sc(6), 0))
-
-        # Populate Left & Right Panels
-        self._refresh_step3_ui()
-
-    def _select_category_tab(self, cat_name):
-        self.active_category = cat_name
-        self.preview_active_group = cat_name
-        self.move_chip_open_field = None
-        self._refresh_step3_ui()
-
-    def _refresh_step3_ui(self):
-        # Ensure active category is valid
-        if not self.active_category or self.active_category not in self.group_names:
-            self.active_category = self.group_names[0] if self.group_names else "General"
-        self.preview_active_group = self.active_category
-
-        # 1. Render Category Navigation Tabs Strip
-        for w in self.cat_nav_container.winfo_children():
+    def _refresh_step3_layout(self):
+        # Refresh categories
+        for w in self.cat_list_frame.winfo_children():
             w.destroy()
 
-        tab_scroll = tk.Frame(self.cat_nav_container, bg=self.colors["card_bg"])
-        tab_scroll.pack(fill="x")
+        for cat in self.group_names:
+            is_active = (cat == self.active_category)
+            bg_color = self.colors["primary_container"] if is_active else self.colors["surface_container_low"]
+            fg_color = self.colors["on_primary_container"] if is_active else self.colors["on_surface"]
 
-        # Group field counts
-        cat_counts = {g: 0 for g in self.group_names}
-        for f in self.fields:
-            g = self.field_group_map.get(f["name"], "General")
-            cat_counts[g] = cat_counts.get(g, 0) + 1
+            btn = tk.Button(self.cat_list_frame, text=cat, font=self.FONT_LABEL_BOLD if is_active else self.FONT_LABEL, bg=bg_color, fg=fg_color, relief="flat", anchor="w", padx=config.sc(8), pady=config.sc(4), command=lambda c=cat: self._select_category(c))
+            btn.pack(fill="x", pady=config.sc(2))
 
-        for g in self.group_names:
-            is_active = (g == self.active_category)
-            count = cat_counts.get(g, 0)
-            icon = "🧬" if "tax" in g.lower() else ("📦" if "coll" in g.lower() else ("📝" if "note" in g.lower() else ("⚙" if "admin" in g.lower() else "📁")))
-            tab_text = f"{icon} {g} ({count})"
-
-            btn_bg = self.colors["primary"] if is_active else self.colors["surface_container_low"]
-            btn_fg = self.colors["on_primary"] if is_active else self.colors["on_surface"]
-
-            btn = tk.Button(
-                tab_scroll, text=tab_text,
-                font=("Inter", sc(8.5), "bold" if is_active else "normal"),
-                bg=btn_bg, fg=btn_fg, relief="flat" if is_active else "solid",
-                bd=0 if is_active else 1, cursor="hand2", padx=sc(8), pady=sc(3),
-                command=lambda gn=g: self._select_category_tab(gn)
-            )
-            btn.pack(side="left", padx=sc(2))
-
-        # Add New Category Button
-        btn_add_cat = tk.Button(
-            tab_scroll, text="➕ New Category...", font=("Inter", sc(8)),
-            bg=self.colors["surface_container_highest"], fg=self.colors["on_surface"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(6), pady=sc(3),
-            command=self._prompt_add_group
-        )
-        btn_add_cat.pack(side="left", padx=sc(4))
-
-        # Smart Auto-Organize button
-        btn_auto = tk.Button(
-            tab_scroll, text="⚡ Auto-Organize", font=("Inter", sc(8), "bold"),
-            bg=self.colors["secondary"], fg=self.colors["on_secondary"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(3),
-            command=self._smart_auto_organize
-        )
-        btn_auto.pack(side="right")
-
-        # 2. Render Left Column: Active Category Field Manager
-        for w in self.left_cat_col.winfo_children():
+        # Refresh right pane
+        for w in self.right_field_col.winfo_children():
             w.destroy()
 
-        # Category Header Card
-        cat_card = tk.Frame(
-            self.left_cat_col, bg=self.colors["surface_container_low"],
-            highlightthickness=1, highlightbackground=self.colors["card_border"],
-            padx=sc(8), pady=sc(6)
-        )
-        cat_card.pack(fill="x", pady=(0, sc(6)))
+        header = tk.Frame(self.right_field_col, bg=self.colors["surface_container_low"])
+        header.pack(fill="x", pady=(0, config.sc(6)))
+        tk.Label(header, text=f"Fields in: {self.active_category}", font=self.FONT_HEADER, bg=self.colors["surface_container_low"], fg=self.colors["secondary"]).pack(side="left")
+
+        # Uncategorized or other fields combo
+        all_other_fields = [f["name"] for f in self.fields if self.field_group_map.get(f["name"]) != self.active_category]
+        if all_other_fields:
+            add_frame = tk.Frame(self.right_field_col, bg=self.colors["surface_container_low"])
+            add_frame.pack(fill="x", pady=(0, config.sc(8)))
+
+            self.pull_field_var = tk.StringVar()
+            if all_other_fields:
+                self.pull_field_var.set(all_other_fields[0])
+            cb = ttk.Combobox(add_frame, textvariable=self.pull_field_var, values=all_other_fields, state="readonly", width=20)
+            cb.pack(side="left", padx=(0, config.sc(6)))
+
+            tk.Button(add_frame, text="Pull into Category", font=self.FONT_SMALL, bg=self.colors["card_bg"], command=self._pull_field).pack(side="left")
+
+        # List of fields in this category
+        fields_in_cat = [f["name"] for f in self.fields if self.field_group_map.get(f["name"], "General") == self.active_category]
+        for fname in fields_in_cat:
+            row = tk.Frame(self.right_field_col, bg=self.colors["card_bg"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(6), pady=config.sc(4))
+            row.pack(fill="x", pady=config.sc(2))
+            tk.Label(row, text=fname, font=self.FONT_MONO, bg=self.colors["card_bg"], fg=self.colors["on_surface"]).pack(side="left")
+
+            # Remove from category (moves to General or Uncategorized)
+            if self.active_category != "General":
+                tk.Button(row, text="Remove", font=self.FONT_SMALL, bg=self.colors["error_container"], fg=self.colors["on_surface"], bd=0, command=lambda fn=fname: self._remove_field_from_cat(fn)).pack(side="right")
+
+    def _pull_field(self):
+        fname = self.pull_field_var.get()
+        if fname:
+            self.field_group_map[fname] = self.active_category
+            self._refresh_step3_layout()
+
+    def _remove_field_from_cat(self, fname):
+        self.field_group_map[fname] = "General"
+        self._refresh_step3_layout()
+
+    def _select_category(self, cat):
+        self.active_category = cat
+        self._refresh_step3_layout()
 
-        cat_hdr = tk.Frame(cat_card, bg=self.colors["surface_container_low"])
-        cat_hdr.pack(fill="x")
-
-        icon_act = "🧬" if "tax" in self.active_category.lower() else ("📦" if "coll" in self.active_category.lower() else ("📝" if "note" in self.active_category.lower() else ("⚙" if "admin" in self.active_category.lower() else "📁")))
-        tk.Label(
-            cat_hdr, text=f"{icon_act} Fields in {self.active_category}:",
-            font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"],
-            fg=self.colors["on_surface"]
-        ).pack(side="left")
-
-        # Category Delete Button (if not core)
-        if self.active_category not in ["Admin", "General"] and len(self.group_names) > 1:
-            tk.Button(
-                cat_hdr, text="Delete Category ✕", font=("Inter", sc(7)),
-                bg=self.colors["surface_container_low"], fg=self.colors["error"],
-                relief="flat", bd=0, cursor="hand2",
-                command=lambda gn=self.active_category: self._delete_group(gn)
-            ).pack(side="right")
-
-        # Strategy presets chips bar for quick bulk flagging
-        strat_sub = tk.Frame(cat_card, bg=self.colors["surface_container_low"])
-        strat_sub.pack(fill="x", pady=(sc(4), 0))
-        tk.Label(strat_sub, text="Quality Flags Strategy:", font=self.FONT_SMALL, bg=self.colors["surface_container_low"], fg=self.colors["on_surface_variant"]).pack(side="left", padx=(0, sc(4)))
-
-        for s_key, s_lbl in [("key_fields", "🎯 Key Fields"), ("all_fields", "📋 All Flags"), ("none", "🚫 None")]:
-            is_s = (self.validation_strategy == s_key)
-            tk.Button(
-                strat_sub, text=s_lbl, font=("Inter", sc(7)),
-                bg=self.colors["primary"] if is_s else self.colors["card_bg"],
-                fg=self.colors["on_primary"] if is_s else self.colors["on_surface"],
-                relief="flat" if is_s else "solid", bd=0 if is_s else 1,
-                cursor="hand2", padx=sc(4), pady=0,
-                command=lambda sk=s_key: self._apply_validation_strategy(sk)
-            ).pack(side="left", padx=1)
-
-        # Fields in Active Category List Container
-        fields_box = tk.Frame(self.left_cat_col, bg=self.colors["card_bg"])
-        fields_box.pack(fill="both", expand=True)
-
-        cat_fields = [f for f in self.fields if self.field_group_map.get(f["name"], "General") == self.active_category]
-
-        if not cat_fields:
-            empty_frame = tk.Frame(fields_box, bg=self.colors["surface_container_low"], padx=sc(8), pady=sc(10), highlightthickness=1, highlightbackground=self.colors["card_border"])
-            empty_frame.pack(fill="x", pady=sc(4))
-            tk.Label(
-                empty_frame, text=f"No fields in '{self.active_category}' yet.\nUse the transfer chips below to pull fields in.",
-                font=self.FONT_SMALL, bg=self.colors["surface_container_low"], fg=self.colors["outline"], justify="center"
-            ).pack()
-        else:
-            for f in cat_fields:
-                fname = f["name"]
-                ftype = f.get("type", "text")
-                icon = self._get_field_icon(fname, ftype)
-
-                frow = tk.Frame(fields_box, bg=self.colors["surface_container_low"], padx=sc(6), pady=sc(3), highlightthickness=1, highlightbackground=self.colors["card_border"])
-                frow.pack(fill="x", pady=1)
-
-                # Field Name + Type
-                tk.Label(
-                    frow, text=f"{icon} {fname}", font=self.FONT_MONO, width=17,
-                    anchor="w", bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]
-                ).pack(side="left")
-
-                # Problem Flag Toggle
-                if fname.upper() != "UID":
-                    is_flagged = self.problem_flags.get(fname, False)
-                    flag_btn_bg = self.colors["error"] if is_flagged else self.colors["card_bg"]
-                    flag_btn_fg = "#ffffff" if is_flagged else self.colors["on_surface"]
-                    flag_text = "🚩 Flagged" if is_flagged else "⚐ No Flag"
-
-                    def _toggle_f_flag(fn=fname):
-                        self.problem_flags[fn] = not self.problem_flags.get(fn, False)
-                        self._refresh_step3_ui()
-
-                    tk.Button(
-                        frow, text=flag_text, font=("Inter", sc(7.5), "bold" if is_flagged else "normal"),
-                        bg=flag_btn_bg, fg=flag_btn_fg, relief="flat" if is_flagged else "solid",
-                        bd=0 if is_flagged else 1, cursor="hand2",
-                        padx=sc(4), pady=0, command=_toggle_f_flag
-                    ).pack(side="left", padx=sc(2))
-
-                    # Move to other category toggle chip
-                    is_open = (self.move_chip_open_field == fname)
-                    def _toggle_move_chips(fn=fname):
-                        self.move_chip_open_field = None if self.move_chip_open_field == fn else fn
-                        self._refresh_step3_ui()
-
-                    tk.Button(
-                        frow, text="⇄ Move..." if not is_open else "✕ Close", font=("Inter", sc(7)),
-                        bg=self.colors["primary"] if is_open else self.colors["card_bg"],
-                        fg=self.colors["on_primary"] if is_open else self.colors["secondary"],
-                        relief="flat" if is_open else "solid", bd=0 if is_open else 1,
-                        cursor="hand2", padx=sc(4), pady=0,
-                        command=_toggle_move_chips
-                    ).pack(side="right")
-
-                # Inline Move Destination Chips (revealed when '⇄ Move...' is clicked)
-                if self.move_chip_open_field == fname:
-                    move_chip_bar = tk.Frame(fields_box, bg=self.colors["surface_container_highest"], padx=sc(6), pady=sc(3))
-                    move_chip_bar.pack(fill="x", pady=(0, 2))
-                    tk.Label(move_chip_bar, text="Move to:", font=self.FONT_SMALL_BOLD, bg=self.colors["surface_container_highest"], fg=self.colors["on_surface"]).pack(side="left", padx=(0, sc(4)))
-
-                    for target_g in self.group_names:
-                        if target_g != self.active_category:
-                            def _do_move(fn=fname, tg=target_g):
-                                self.field_group_map[fn] = tg
-                                self.move_chip_open_field = None
-                                self._refresh_step3_ui()
-
-                            tk.Button(
-                                move_chip_bar, text=target_g, font=("Inter", sc(7)),
-                                bg=self.colors["card_bg"], fg=self.colors["on_surface"],
-                                relief="solid", bd=1, cursor="hand2", padx=sc(4), pady=0,
-                                command=_do_move
-                            ).pack(side="left", padx=1)
-
-        # 3. Quick Pull Transfer Section (Fields from other categories ready to be pulled into active category)
-        other_fields = [f for f in self.fields if self.field_group_map.get(f["name"], "General") != self.active_category and f["name"].upper() != "UID"]
-        if other_fields:
-            pull_box = tk.Frame(
-                self.left_cat_col, bg=self.colors["card_bg"],
-                highlightthickness=1, highlightbackground=self.colors["card_border"],
-                padx=sc(6), pady=sc(4)
-            )
-            pull_box.pack(fill="x", pady=(sc(6), 0))
-
-            tk.Label(
-                pull_box, text=f"➕ Click to pull fields into '{self.active_category}':",
-                font=self.FONT_SMALL_BOLD, bg=self.colors["card_bg"],
-                fg=self.colors["secondary"]
-            ).pack(anchor="w", pady=(0, sc(2)))
-
-            pull_chips_frame = tk.Frame(pull_box, bg=self.colors["card_bg"])
-            pull_chips_frame.pack(fill="x")
-
-            for of in other_fields[:8]:  # Show top quick-pull chips
-                of_name = of["name"]
-                def _pull_field(fn=of_name):
-                    self.field_group_map[fn] = self.active_category
-                    self._refresh_step3_ui()
-
-                tk.Button(
-                    pull_chips_frame, text=f"+ {of_name}", font=("Inter", sc(7)),
-                    bg=self.colors["surface_container_low"], fg=self.colors["on_surface"],
-                    relief="solid", bd=1, cursor="hand2", padx=sc(4), pady=0,
-                    command=_pull_field
-                ).pack(side="left", padx=1, pady=1)
-
-        # 4. Inline Add Field to Active Category
-        add_in_cat = tk.Frame(self.left_cat_col, bg=self.colors["card_bg"])
-        add_in_cat.pack(fill="x", pady=(sc(6), 0))
-
-        tk.Button(
-            add_in_cat, text=f"+ Add New Field to {self.active_category}", font=("Inter", sc(8)),
-            bg=self.colors["surface_container_low"], fg=self.colors["on_surface"],
-            relief="solid", bd=1, cursor="hand2", padx=sc(8), pady=sc(2),
-            command=lambda gn=self.active_category: self._add_field_to_group(gn)
-        ).pack(side="left")
-
-        # 5. Render Custom Flags & System Flags at Bottom
-        for w in self.custom_flags_container.winfo_children():
-            w.destroy()
-
-        if self.custom_problem_flags or self._deleted_flags_undo_stack:
-            cf_box = tk.Frame(
-                self.custom_flags_container, bg=self.colors["surface_container_low"],
-                highlightthickness=1, highlightbackground=self.colors["card_border"],
-                padx=sc(6), pady=sc(4)
-            )
-            cf_box.pack(fill="x", pady=(0, sc(4)))
-
-            cf_top = tk.Frame(cf_box, bg=self.colors["surface_container_low"])
-            cf_top.pack(fill="x", pady=(0, sc(2)))
-
-            tk.Label(
-                cf_top, text=f"Custom Problem Rules ({len(self.custom_problem_flags)})",
-                font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"],
-                fg=self.colors["on_surface"]
-            ).pack(side="left")
-
-            if self._deleted_flags_undo_stack:
-                tk.Button(
-                    cf_top, text="↩ Undo Delete", font=("Inter", sc(7.5), "bold"),
-                    bg=self.colors["secondary"], fg=self.colors["on_secondary"],
-                    relief="flat", bd=0, cursor="hand2", padx=sc(4), pady=0,
-                    command=self._undo_delete_custom_flag
-                ).pack(side="right")
-
-            # Filtered flag list
-            for c_idx, cf in enumerate(self.custom_problem_flags):
-                c_row = tk.Frame(cf_box, bg=self.colors["card_bg"], padx=sc(4), pady=1, highlightthickness=1, highlightbackground=self.colors["card_border"])
-                c_row.pack(fill="x", pady=1)
-
-                tk.Label(c_row, text=f"🏷️ {cf['name']}", font=self.FONT_MONO_SM, bg=self.colors["card_bg"], fg=self.colors["on_surface"]).pack(side="left")
-                tk.Label(c_row, text=f"🔗 {cf.get('maps_to', 'General')}", font=self.FONT_SMALL, bg=self.colors["card_bg"], fg=self.colors["secondary"]).pack(side="left", padx=sc(4))
-
-                tk.Button(
-                    c_row, text="🗑️", font=("Inter", sc(7)),
-                    bg=self.colors["card_bg"], fg=self.colors["error"],
-                    relief="flat", bd=0, cursor="hand2",
-                    command=lambda idx=c_idx: self._delete_custom_flag(idx)
-                ).pack(side="right")
-
-                tk.Button(
-                    c_row, text="✏️", font=("Inter", sc(7)),
-                    bg=self.colors["card_bg"], fg=self.colors["on_surface"],
-                    relief="flat", bd=0, cursor="hand2",
-                    command=lambda idx=c_idx: self._edit_custom_flag(idx)
-                ).pack(side="right", padx=(0, sc(2)))
-
-        # Bottom row: Custom flag trigger and system flags
-        bot_row = tk.Frame(self.custom_flags_container, bg=self.colors["card_bg"])
-        bot_row.pack(fill="x", pady=(sc(2), 0))
-
-        tk.Button(
-            bot_row, text="🚩 + Custom Flag Rule...", font=("Inter", sc(8)),
-            bg=self.colors["surface_container_low"], fg=self.colors["on_surface"],
-            relief="solid", bd=1, cursor="hand2", padx=sc(8), pady=sc(2),
-            command=self._prompt_add_custom_flag
-        ).pack(side="left", padx=(0, sc(8)))
-
-        if self.has_images:
-            v_img = tk.BooleanVar(value=self.common_problems.get("Images_Problem", True))
-            def _t_img(v=v_img):
-                self.common_problems["Images_Problem"] = v.get()
-                self._update_live_preview()
-            ttk.Checkbutton(bot_row, text="Missing Photos Flag", variable=v_img, command=_t_img).pack(side="left", padx=sc(4))
-
-        v_oth = tk.BooleanVar(value=self.common_problems.get("Other_problem", True))
-        def _t_oth(v=v_oth):
-            self.common_problems["Other_problem"] = v.get()
-            self._update_live_preview()
-        ttk.Checkbutton(bot_row, text="General Review Flag", variable=v_oth, command=_t_oth).pack(side="left", padx=sc(4))
-
-        # 6. Update Live Mini Record Preview for Active Category
-        self._update_live_preview()
-
-    def _toggle_preview_mode(self):
-        self.preview_mode = "focus" if self.preview_mode == "standard" else "standard"
-        if hasattr(self, "btn_prev_mode") and self.btn_prev_mode.winfo_exists():
-            self.btn_prev_mode.config(text="🔍 Focus Mode" if self.preview_mode == "standard" else "📋 All Fields")
-        self._update_live_preview()
-
-    def _update_live_preview(self):
-        if hasattr(self, "prev_title_lbl") and self.prev_title_lbl.winfo_exists():
-            self.prev_title_lbl.config(text=f"👁️ PREVIEW: {self.active_category.upper()}")
-
-        # Update Preview Body
-        for w in self.preview_body_frame.winfo_children():
-            w.destroy()
-
-        active_fields = [f for f in self.fields if self.field_group_map.get(f["name"], "General") == self.active_category]
-
-        if not active_fields:
-            tk.Label(
-                self.preview_body_frame, text=f"No fields in '{self.active_category}' tab.",
-                font=self.FONT_SMALL, bg=self.colors["card_bg"], fg=self.colors["outline"]
-            ).pack(pady=sc(10))
-            return
-
-        rendered_count = 0
-        for f in active_fields:
-            fname = f["name"]
-            ftype = f.get("type", "text")
-            is_flagged = self.problem_flags.get(fname, False)
-            custom_matches = [cf["name"] for cf in self.custom_problem_flags if cf.get("maps_to") == fname]
-            if custom_matches:
-                is_flagged = True
-
-            # If in Focus Mode, only show flagged fields
-            if self.preview_mode == "focus" and not is_flagged:
-                continue
-
-            rendered_count += 1
-            field_box = tk.Frame(self.preview_body_frame, bg=self.colors["card_bg"])
-            field_box.pack(fill="x", pady=sc(3))
-
-            # Label row with optional 🚩 indicator
-            lbl_row = tk.Frame(field_box, bg=self.colors["card_bg"])
-            lbl_row.pack(fill="x")
-
-            lbl_color = self.colors["error"] if is_flagged else self.colors["on_surface"]
-            tk.Label(lbl_row, text=fname, font=self.FONT_LABEL_BOLD, bg=self.colors["card_bg"], fg=lbl_color).pack(side="left")
-
-            if is_flagged:
-                flag_desc = "🚩 Flag Active" if not custom_matches else f"🚩 {custom_matches[0]}"
-                tk.Label(lbl_row, text=flag_desc, font=("Inter", sc(7), "bold"), bg=self.colors["card_bg"], fg=self.colors["error"]).pack(side="right")
-
-            # Mock Input Container with 3px Accent bar when flagged
-            border_color = self.colors["error"] if is_flagged else self.colors["outline_variant"]
-            bg_input = self.colors["error_container"] if is_flagged else self.colors["surface_container_low"]
-
-            mock_input = tk.Frame(
-                field_box, bg=bg_input,
-                highlightthickness=1, highlightbackground=border_color,
-                padx=sc(6), pady=sc(3)
-            )
-            mock_input.pack(fill="x", pady=(1, 0))
-
-            if is_flagged:
-                # Left accent red bar matching AI_UI_GUIDE.md
-                accent_bar = tk.Frame(mock_input, bg=self.colors["error"], width=sc(3))
-                accent_bar.pack(side="left", fill="y", padx=(0, sc(4)))
-
-            if ftype == "multiline":
-                tk.Label(mock_input, text="— (Multi-line text area) —\nLine 2 notes...", font=self.FONT_SMALL, bg=bg_input, fg=self.colors["on_surface_variant"], justify="left").pack(anchor="w")
-            elif ftype == "choice":
-                choices = f.get("choices", [])
-                val_text = f"▼ {choices[0]}" if choices else "▼ Select option..."
-                tk.Label(mock_input, text=val_text, font=self.FONT_SMALL, bg=bg_input, fg=self.colors["on_surface_variant"]).pack(anchor="w")
-            elif ftype == "checkbox":
-                tk.Label(mock_input, text="☐ (Boolean Checkbox)", font=self.FONT_SMALL, bg=bg_input, fg=self.colors["on_surface_variant"]).pack(anchor="w")
-            else:
-                placeholder = f"— {fname} value —"
-                tk.Label(mock_input, text=placeholder, font=self.FONT_SMALL, bg=bg_input, fg=self.colors["on_surface_variant"]).pack(anchor="w")
-
-        if rendered_count == 0 and self.preview_mode == "focus":
-            tk.Label(
-                self.preview_body_frame, text="✨ No flagged fields in this section.\nAll fields verified!",
-                font=self.FONT_SMALL, bg=self.colors["card_bg"], fg=self.colors["secondary"], justify="center"
-            ).pack(pady=sc(12))
-
-    def _get_field_icon(self, name, ftype="text"):
-        n = name.lower()
-        if name.upper() == "UID":
-            return "🔑"
-        if any(kw in n for kw in ["genus", "species", "family", "author", "taxon", "plant", "mineral"]):
-            return "🌿"
-        if any(kw in n for kw in ["date", "tid", "dato", "due", "time"]):
-            return "📅"
-        if any(kw in n for kw in ["place", "location", "locality", "room", "building"]):
-            return "📍"
-        if any(kw in n for kw in ["borrower", "collector", "author", "person", "user"]):
-            return "👤"
-        if any(kw in n for kw in ["comment", "obs", "note", "desc", "notat"]):
-            return "📝"
-        if ftype == "checkbox":
-            return "☑"
-        if ftype == "choice":
-            return "☰"
-        return "🏷"
-
-    def _get_flag_suggestions(self, field_name, field_type="text"):
-        n = field_name.lower()
-        if any(kw in n for kw in ["genus", "species", "family", "author", "taxon", "scientific"]):
-            return [
-                ("Nomenclature_Outdated", "Taxonomic name is deprecated or outdated"),
-                ("Spelling_Doubtful", "Suspected typography typo or phonetic spelling"),
-                ("Type_Unverified", "Unverified type specimen status")
-            ]
-        elif any(kw in n for kw in ["place", "locality", "location", "coordinates", "lat", "lon", "country"]):
-            return [
-                ("Georef_Needed", "Coordinates need georeferencing"),
-                ("Imprecise_Location", "Locality is vague or ambiguous"),
-                ("Boundary_Unverified", "County/administrative boundary unconfirmed")
-            ]
-        elif any(kw in n for kw in ["date", "due", "return", "year", "tid", "dato"]):
-            return [
-                ("Date_Ambiguous", "Date format is incomplete or uncertain"),
-                ("Overdue_Notice", "Past scheduled return date")
-            ]
-        elif any(kw in n for kw in ["collector", "borrower", "person", "determiner"]):
-            return [
-                ("Unknown_Person", "Person not matched in institutional directory"),
-                ("Contact_Missing", "Affiliation or contact details absent")
-            ]
-        elif any(kw in n for kw in ["price", "cost", "value", "weight", "quantity"]):
-            return [
-                ("Valuation_Unverified", "Financial/numeric valuation needs audit"),
-                ("Receipt_Missing", "Supporting invoice or receipt absent")
-            ]
-        elif field_type == "multiline" or any(kw in n for kw in ["note", "comment", "desc", "obs"]):
-            return [
-                ("Transcription_Needed", "Handwritten label text needs transcription"),
-                ("Language_Translation", "Foreign language text requires translation")
-            ]
-        else:
-            return [
-                (f"{field_name}_Review", f"Review required for {field_name}"),
-                (f"{field_name}_Missing", f"Required {field_name} value is missing")
-            ]
-
-    def _prompt_add_custom_flag(self, default_target=None):
-        dlg = tk.Toplevel(self.win)
-        dlg.title("Create Custom Problem Flag")
-        dlg.configure(bg=self.colors["surface"])
-        dlg.transient(self.win)
-        dlg.grab_set()
-
-        import utils
-        utils.center_and_fit_toplevel(dlg, sc(500), sc(440))
-
-        tk.Label(dlg, text="🚩 Create Custom Problem Rule", font=self.FONT_HEADER, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w", padx=sc(16), pady=(sc(12), sc(2)))
-        tk.Label(dlg, text="Attach a specific validation issue to a field or create a general audit flag.", font=self.FONT_SMALL, bg=self.colors["surface"], fg=self.colors["on_surface_variant"]).pack(anchor="w", padx=sc(16), pady=(0, sc(10)))
-
-        # Target Field Selector
-        field_row = tk.Frame(dlg, bg=self.colors["surface"])
-        field_row.pack(fill="x", padx=sc(16), pady=sc(4))
-
-        tk.Label(field_row, text="Connected Field:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(side="left")
-
-        field_names = [f["name"] for f in self.fields if f["name"].upper() != "UID"] + ["(General Database Flag)"]
-        target_var = tk.StringVar(value=default_target if default_target in field_names else field_names[0])
-
-        cb_target = ttk.Combobox(field_row, textvariable=target_var, values=field_names, state="readonly", width=22)
-        cb_target.pack(side="right")
-
-        # Flag Name Input
-        name_row = tk.Frame(dlg, bg=self.colors["surface"])
-        name_row.pack(fill="x", padx=sc(16), pady=sc(4))
-        tk.Label(name_row, text="Flag Column Name:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w")
-
-        name_var = tk.StringVar()
-        entry_name = tk.Entry(dlg, textvariable=name_var, font=self.FONT_MONO, relief="solid", bd=1, highlightthickness=0, bg=self.colors["card_bg"], fg=self.colors["on_surface"])
-        entry_name.pack(fill="x", padx=sc(16), pady=sc(2), ipady=sc(3))
-
-        # Description Input
-        desc_row = tk.Frame(dlg, bg=self.colors["surface"])
-        desc_row.pack(fill="x", padx=sc(16), pady=(sc(4), 0))
-        tk.Label(desc_row, text="Description / Issue Reason:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w")
-
-        desc_var = tk.StringVar()
-        entry_desc = tk.Entry(dlg, textvariable=desc_var, font=self.FONT_SMALL, relief="solid", bd=1, highlightthickness=0, bg=self.colors["card_bg"], fg=self.colors["on_surface"])
-        entry_desc.pack(fill="x", padx=sc(16), pady=sc(2), ipady=sc(3))
-
-        # Suggestions Container
-        sugg_box = tk.Frame(dlg, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=sc(8), pady=sc(6))
-        sugg_box.pack(fill="both", expand=True, padx=sc(16), pady=sc(8))
-
-        tk.Label(sugg_box, text="💡 1-Click Suggestions for Selected Field:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"], fg=self.colors["secondary"]).pack(anchor="w")
-
-        sugg_chips_frame = tk.Frame(sugg_box, bg=self.colors["surface_container_low"])
-        sugg_chips_frame.pack(fill="both", expand=True, pady=sc(4))
-
-        def _update_suggestions():
-            for w in sugg_chips_frame.winfo_children():
-                w.destroy()
-            cur_target = target_var.get()
-            suggs = self._get_flag_suggestions(cur_target if cur_target != "(General Database Flag)" else "General")
-            for s_name, s_desc in suggs:
-                def _apply_sugg(sn=s_name, sd=s_desc):
-                    name_var.set(sn)
-                    desc_var.set(sd)
-                btn = tk.Button(
-                    sugg_chips_frame, text=f"+ {s_name}", font=("Inter", sc(7.5)),
-                    bg=self.colors["card_bg"], fg=self.colors["on_surface"],
-                    relief="solid", bd=1, cursor="hand2", padx=sc(4), pady=sc(2),
-                    command=_apply_sugg
-                )
-                btn.pack(anchor="w", pady=1)
-
-        cb_target.bind("<<ComboboxSelected>>", lambda e: _update_suggestions())
-        _update_suggestions()
-
-        # Save Button
-        btn_bar = tk.Frame(dlg, bg=self.colors["surface"], padx=sc(16), pady=sc(8))
-        btn_bar.pack(fill="x", side="bottom")
-
-        def _on_save():
-            raw_name = name_var.get().strip()
-            if not raw_name:
-                messagebox.showwarning("Missing Name", "Please enter a flag name.", parent=dlg)
-                return
-            clean_name = re.sub(r"[^\w]", "_", raw_name)
-            target = target_var.get()
-            if target == "(General Database Flag)":
-                target = "Other"
-
-            if any(cf["name"] == clean_name for cf in self.custom_problem_flags):
-                messagebox.showwarning("Duplicate Flag", f"Flag '{clean_name}' already exists.", parent=dlg)
-                return
-
-            self.custom_problem_flags.append({
-                "name": clean_name,
-                "maps_to": target,
-                "description": desc_var.get().strip(),
-                "category": self._deduce_flag_category(clean_name, target)
-            })
-            dlg.destroy()
-            self._refresh_step3_ui()
-
-        tk.Button(btn_bar, text="Cancel", font=self.FONT_BUTTON, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"], relief="solid", bd=1, cursor="hand2", padx=sc(8), pady=sc(3), command=dlg.destroy).pack(side="right", padx=(sc(6), 0))
-        tk.Button(btn_bar, text="✓ Save Custom Flag", font=self.FONT_BUTTON, bg=self.colors["primary"], fg=self.colors["on_primary"], relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3), command=_on_save).pack(side="right")
-
-    def _edit_custom_flag(self, idx):
-        if not (0 <= idx < len(self.custom_problem_flags)):
-            return
-        cf = self.custom_problem_flags[idx]
-
-        dlg = tk.Toplevel(self.win)
-        dlg.title(f"Edit Flag: {cf['name']}")
-        dlg.configure(bg=self.colors["surface"])
-        dlg.transient(self.win)
-        dlg.grab_set()
-
-        import utils
-        utils.center_and_fit_toplevel(dlg, sc(460), sc(320))
-
-        tk.Label(dlg, text="✏️ Edit Custom Flag Rule", font=self.FONT_HEADER, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w", padx=sc(16), pady=(sc(12), sc(4)))
-
-        # Target Field Selector
-        field_row = tk.Frame(dlg, bg=self.colors["surface"])
-        field_row.pack(fill="x", padx=sc(16), pady=sc(4))
-        tk.Label(field_row, text="Connected Field:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(side="left")
-
-        field_names = [f["name"] for f in self.fields if f["name"].upper() != "UID"] + ["Other"]
-        cur_target = cf.get("maps_to", "Other")
-        target_var = tk.StringVar(value=cur_target if cur_target in field_names else "Other")
-        cb_target = ttk.Combobox(field_row, textvariable=target_var, values=field_names, state="readonly", width=20)
-        cb_target.pack(side="right")
-
-        # Name
-        name_row = tk.Frame(dlg, bg=self.colors["surface"])
-        name_row.pack(fill="x", padx=sc(16), pady=sc(4))
-        tk.Label(name_row, text="Flag Name:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w")
-        name_var = tk.StringVar(value=cf["name"])
-        tk.Entry(dlg, textvariable=name_var, font=self.FONT_MONO, relief="solid", bd=1, highlightthickness=0, bg=self.colors["card_bg"], fg=self.colors["on_surface"]).pack(fill="x", padx=sc(16), pady=sc(2), ipady=sc(3))
-
-        # Description
-        desc_row = tk.Frame(dlg, bg=self.colors["surface"])
-        desc_row.pack(fill="x", padx=sc(16), pady=(sc(4), 0))
-        tk.Label(desc_row, text="Description:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w")
-        desc_var = tk.StringVar(value=cf.get("description", ""))
-        tk.Entry(dlg, textvariable=desc_var, font=self.FONT_SMALL, relief="solid", bd=1, highlightthickness=0, bg=self.colors["card_bg"], fg=self.colors["on_surface"]).pack(fill="x", padx=sc(16), pady=sc(2), ipady=sc(3))
-
-        btn_bar = tk.Frame(dlg, bg=self.colors["surface"], padx=sc(16), pady=sc(10))
-        btn_bar.pack(fill="x", side="bottom")
-
-        def _save_edit():
-            new_name = re.sub(r"[^\w]", "_", name_var.get().strip())
-            if not new_name:
-                return
-            cf["name"] = new_name
-            cf["maps_to"] = target_var.get()
-            cf["description"] = desc_var.get().strip()
-            cf["category"] = self._deduce_flag_category(new_name, cf["maps_to"])
-            dlg.destroy()
-            self._refresh_step3_ui()
-
-        tk.Button(btn_bar, text="Cancel", font=self.FONT_BUTTON, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"], relief="solid", bd=1, cursor="hand2", padx=sc(8), pady=sc(3), command=dlg.destroy).pack(side="right", padx=(sc(6), 0))
-        tk.Button(btn_bar, text="✓ Save Changes", font=self.FONT_BUTTON, bg=self.colors["primary"], fg=self.colors["on_primary"], relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3), command=_save_edit).pack(side="right")
-
-    def _delete_custom_flag(self, idx):
-        if 0 <= idx < len(self.custom_problem_flags):
-            deleted = self.custom_problem_flags.pop(idx)
-            self._deleted_flags_undo_stack.append(deleted)
-            self._refresh_step3_ui()
-
-    def _undo_delete_custom_flag(self):
-        if self._deleted_flags_undo_stack:
-            restored = self._deleted_flags_undo_stack.pop()
-            self.custom_problem_flags.append(restored)
-            self._refresh_step3_ui()
-
-    def _add_field_to_group(self, group_name):
-        new_name = simpledialog.askstring("Add Field", f"Enter new field name for '{group_name}':", parent=self.win)
-        if new_name and new_name.strip():
-            clean_name = new_name.strip()
-            if any(f["name"].lower() == clean_name.lower() for f in self.fields):
-                messagebox.showwarning("Duplicate Field", f"Field '{clean_name}' already exists.", parent=self.win)
-                return
-            if clean_name.lower() == "objectid":
-                messagebox.showwarning("Reserved Field", "ObjectID is the primary key and is created automatically.", parent=self.win)
-                return
-
-            # Insert field before UID
-            uid_idx = next((i for i, f in enumerate(self.fields) if f["name"].upper() == "UID"), -1)
-            new_entry = {"name": clean_name, "type": "text", "readonly": False, "choices": []}
-            if uid_idx >= 0:
-                self.fields.insert(uid_idx, new_entry)
-            else:
-                self.fields.append(new_entry)
-
-            self.field_group_map[clean_name] = group_name
-            self._refresh_step3_ui()
-
-    def _prompt_add_group(self):
-        new_g = simpledialog.askstring("Add Group Section", "Enter new UI section/tab name (e.g. Preservation, Conservation):", parent=self.win)
-        if new_g and new_g.strip():
-            clean_g = new_g.strip()
-            if clean_g not in self.group_names:
-                self.group_names.append(clean_g)
-                self.active_category = clean_g
-                self.preview_active_group = clean_g
-                self._refresh_step3_ui()
-
-    def _delete_group(self, group_name):
-        if group_name in self.group_names and len(self.group_names) > 1:
-            self.group_names.remove(group_name)
-            # Reassign orphaned fields to General
-            for f in self.fields:
-                if self.field_group_map.get(f["name"]) == group_name:
-                    self.field_group_map[f["name"]] = "General"
-            if "General" not in self.group_names:
-                self.group_names.insert(0, "General")
-            self.active_category = self.group_names[0]
-            self.preview_active_group = self.group_names[0]
-            self._refresh_step3_ui()
-
-    def _apply_validation_strategy(self, strategy):
-        self.validation_strategy = strategy
-        if strategy == "key_fields":
-            for f in self.fields:
-                fn = f["name"]
-                if fn.upper() != "UID":
-                    fn_lower = fn.lower()
-                    self.problem_flags[fn] = any(kw in fn_lower for kw in ["genus", "species", "title", "borrower", "item", "collector", "date"])
-        elif strategy == "all_fields":
-            for f in self.fields:
-                if f["name"].upper() != "UID":
-                    self.problem_flags[f["name"]] = True
-        elif strategy == "general_only" or strategy == "none":
-            for f in self.fields:
-                self.problem_flags[f["name"]] = False
-
-        self._refresh_step3_ui()
-
-    def _smart_auto_organize(self):
-        # Auto-detect groups based on best practice keywords
-        for f in self.fields:
-            fn = f["name"]
-            fn_lower = fn.lower()
-            if fn.upper() == "UID":
-                g = "Admin"
-            elif any(kw in fn_lower for kw in ["genus", "species", "family", "author", "order", "class", "taxon", "variant", "rank"]):
-                g = "Taxonomy"
-            elif any(kw in fn_lower for kw in ["collect", "date", "place", "locality", "innsamling", "country", "altitude"]):
-                g = "Collection"
-            elif any(kw in fn_lower for kw in ["obs", "comment", "note", "problem", "desc", "notat", "beskrivelse"]):
-                g = "Notes"
-            elif any(kw in fn_lower for kw in ["loan", "borrower", "due", "return", "status"]):
-                g = "Loan Details"
-            else:
-                g = "Details"
-
-            if g not in self.group_names:
-                self.group_names.append(g)
-            self.field_group_map[fn] = g
-
-        self._apply_validation_strategy(self.validation_strategy)
-        self._refresh_step3_ui()
-
-    # --------------------------------------------------------------------------
-    # STEP 4: Image & Location Setup
-    # --------------------------------------------------------------------------
     def _render_step4(self):
-        inner = self._create_scrollable_card("Step 4: Configure Image Fetching & Location Modules")
+        inner = self._create_scrollable_card("Step 4: Quality Flags & Validation")
+
+        info_box = tk.Frame(inner, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(10), pady=config.sc(7))
+        info_box.pack(fill="x", pady=(0, config.sc(8)))
+        tk.Label(info_box, text="💡 Set up quality flags:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"], fg=self.colors["secondary"]).pack(anchor="w")
+        tk.Label(info_box, text="Attach problem flags to specific fields. These flags highlight fields during data audits.", font=self.FONT_SMALL, bg=self.colors["surface_container_low"], fg=self.colors["on_surface_variant"], justify="left").pack(anchor="w", pady=(config.sc(2), 0))
+
+        split_pane = tk.Frame(inner, bg=self.colors["card_bg"])
+        split_pane.pack(fill="both", expand=True, pady=(0, config.sc(8)))
+        split_pane.columnconfigure(0, weight=2)
+        split_pane.columnconfigure(1, weight=1)
+
+        # LEFT PANE: Simulated Card
+        self.left_sim_col = tk.Frame(split_pane, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(8), pady=config.sc(8))
+        self.left_sim_col.grid(row=0, column=0, sticky="nsew", padx=(0, config.sc(6)))
+
+        # RIGHT PANE: Flag Toolbox
+        self.right_flag_col = tk.Frame(split_pane, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(8), pady=config.sc(8))
+        self.right_flag_col.grid(row=0, column=1, sticky="nsew", padx=(config.sc(6), 0))
+
+        self.selected_flag_field = None
+        self._refresh_step4_layout()
+
+    def _refresh_step4_layout(self):
+        # Left pane (Simulated Card)
+        for w in self.left_sim_col.winfo_children():
+            w.destroy()
+
+        tk.Label(self.left_sim_col, text="Simulated Object Card", font=self.FONT_HEADER, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, config.sc(6)))
+
+        # Global block
+        global_frame = tk.Frame(self.left_sim_col, bg=self.colors["card_bg"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(8), pady=config.sc(8))
+        global_frame.pack(fill="x", pady=(0, config.sc(6)))
+        tk.Label(global_frame, text="Global Record Settings", font=self.FONT_LABEL_BOLD, bg=self.colors["card_bg"], fg=self.colors["on_surface"]).pack(anchor="w")
+
+        global_flags = [pf for pf in self.custom_problem_flags if pf.get("maps_to") == "Other"]
+        if self.common_problems.get("Images_Problem", True) and self.has_images:
+            tk.Label(global_frame, text="[🚩 Images_Missing]", font=self.FONT_MONO_SM, bg=self.colors["card_bg"], fg=self.colors["error"]).pack(anchor="w")
+        if self.common_problems.get("Other_problem", True):
+            tk.Label(global_frame, text="[🚩 Other_problem]", font=self.FONT_MONO_SM, bg=self.colors["card_bg"], fg=self.colors["error"]).pack(anchor="w")
+        for gf in global_flags:
+            tk.Label(global_frame, text=f"[🚩 {gf.get('name')}]", font=self.FONT_MONO_SM, bg=self.colors["card_bg"], fg=self.colors["error"]).pack(anchor="w")
+
+        # Grouped fields
+        for cat in self.group_names:
+            cat_fields = [f["name"] for f in self.fields if self.field_group_map.get(f["name"], "General") == cat]
+            if not cat_fields: continue
+
+            cat_frame = tk.Frame(self.left_sim_col, bg=self.colors["card_bg"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=config.sc(8), pady=config.sc(8))
+            cat_frame.pack(fill="x", pady=config.sc(4))
+            tk.Label(cat_frame, text=cat.upper(), font=self.FONT_LABEL_BOLD, bg=self.colors["card_bg"], fg=self.colors["secondary"]).pack(anchor="w", pady=(0, config.sc(4)))
+
+            for fname in cat_fields:
+                row = tk.Frame(cat_frame, bg=self.colors["card_bg"], cursor="hand2")
+                row.pack(fill="x", pady=config.sc(2))
+                is_sel = (fname == self.selected_flag_field)
+                bg_col = self.colors["surface_container_highest"] if is_sel else self.colors["card_bg"]
+                row.config(bg=bg_col)
+
+                lbl = tk.Label(row, text=fname, font=self.FONT_MONO, bg=bg_col, fg=self.colors["on_surface"])
+                lbl.pack(side="left")
+
+                # Show flags mapped to this field
+                if self.problem_flags.get(fname):
+                    tk.Label(row, text=f"[🚩 {fname}_Problem]", font=self.FONT_MONO_SM, bg=bg_col, fg=self.colors["error"]).pack(side="left", padx=(config.sc(4), 0))
+
+                for cf in self.custom_problem_flags:
+                    if cf.get("maps_to") == fname:
+                        tk.Label(row, text=f"[🚩 {cf.get('name')}]", font=self.FONT_MONO_SM, bg=bg_col, fg=self.colors["error"]).pack(side="left", padx=(config.sc(4), 0))
+
+                # Bind click to select field
+                row.bind("<Button-1>", lambda e, f=fname: self._select_flag_field(f))
+                lbl.bind("<Button-1>", lambda e, f=fname: self._select_flag_field(f))
+
+        # Right pane (Toolbox)
+        for w in self.right_flag_col.winfo_children():
+            w.destroy()
+
+        if not self.selected_flag_field:
+            tk.Label(self.right_flag_col, text="Select a field on the left to manage its flags.", font=self.FONT_SMALL, bg=self.colors["surface_container_low"], fg=self.colors["on_surface_variant"], wraplength=config.sc(150)).pack(pady=config.sc(20))
+            return
+
+        tk.Label(self.right_flag_col, text=f"Flags for: {self.selected_flag_field}", font=self.FONT_HEADER, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, config.sc(8)))
+
+        # Default flag toggle
+        has_default = self.problem_flags.get(self.selected_flag_field, False)
+        btn_def = tk.Button(self.right_flag_col, text=f"Remove '{self.selected_flag_field}_Problem'" if has_default else f"Add '{self.selected_flag_field}_Problem'",
+                          font=self.FONT_SMALL, bg=self.colors["error_container"] if has_default else self.colors["primary_container"],
+                          command=self._toggle_default_flag)
+        btn_def.pack(fill="x", pady=config.sc(4))
+
+        # Custom flags
+        tk.Label(self.right_flag_col, text="Custom Flags:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(config.sc(8), config.sc(4)))
+        for cf in self.custom_problem_flags:
+            if cf.get("maps_to") == self.selected_flag_field:
+                cf_row = tk.Frame(self.right_flag_col, bg=self.colors["surface_container_low"])
+                cf_row.pack(fill="x", pady=config.sc(2))
+                tk.Label(cf_row, text=cf.get("name"), font=self.FONT_MONO_SM, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(side="left")
+                tk.Button(cf_row, text="X", font=self.FONT_SMALL, bg=self.colors["error"], fg="white", bd=0, command=lambda c=cf: self._remove_custom_flag(c)).pack(side="right")
+
+        tk.Button(self.right_flag_col, text="+ Add Custom Flag", font=self.FONT_SMALL, bg=self.colors["card_bg"], command=self._add_custom_flag).pack(fill="x", pady=(config.sc(8), 0))
+
+    def _select_flag_field(self, fname):
+        self.selected_flag_field = fname
+        self._refresh_step4_layout()
+
+    def _toggle_default_flag(self):
+        if self.selected_flag_field:
+            self.problem_flags[self.selected_flag_field] = not self.problem_flags.get(self.selected_flag_field, False)
+            self._refresh_step4_layout()
+
+    def _add_custom_flag(self):
+        if not self.selected_flag_field: return
+        name = tk.simpledialog.askstring("Custom Flag", "Flag Name (e.g. Needs_Conservation):", parent=self.win)
+        if name:
+            name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+            self.custom_problem_flags.append({
+                "name": name,
+                "maps_to": self.selected_flag_field,
+                "description": f"Custom flag for {self.selected_flag_field}"
+            })
+            self._refresh_step4_layout()
+
+    def _remove_custom_flag(self, flag_dict):
+        if flag_dict in self.custom_problem_flags:
+            self.custom_problem_flags.remove(flag_dict)
+            self._refresh_step4_layout()
+
+    def _render_step5(self):
+        inner = self._create_scrollable_card("Step 5: Configure External Modules (Images & Locations)")
 
         # Online Image Fetching Section
         img_box = tk.Frame(inner, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=sc(12), pady=sc(10))
@@ -2040,8 +1503,8 @@ class NewDatabaseWizard:
     # --------------------------------------------------------------------------
     # STEP 5: Review & Workspace Initialization
     # --------------------------------------------------------------------------
-    def _render_step5(self):
-        inner = self._create_scrollable_card("Step 5: Review & Initialize Database")
+    def _render_step6(self):
+        inner = self._create_scrollable_card("Step 6: Review & Finalize Database")
 
         # Summary Card
         summary_card = tk.Frame(inner, bg=self.colors["surface_container_low"], highlightthickness=1, highlightbackground=self.colors["card_border"], padx=sc(12), pady=sc(10))
@@ -2142,92 +1605,129 @@ class NewDatabaseWizard:
                 entry["choices"] = f["choices"]
             reg_sections.append(entry)
 
-        # Ensure UID is present
         if not any(f["name"].upper() == "UID" for f in reg_sections):
             reg_sections.append({"name": "UID", "type": "text", "readonly": True})
 
-        # Problem flags
         problem_sections = []
         for f_name, enabled in self.problem_flags.items():
             if enabled:
-                problem_sections.append({
-                    "name": f"{f_name}_Problem",
-                    "type": "bool",
-                    "maps_to": f_name
-                })
+                problem_sections.append({"name": f"{f_name}_Problem", "type": "bool", "maps_to": f_name})
 
         for cf in getattr(self, "custom_problem_flags", []):
             cf_name = cf.get("name")
             if cf_name and not any(p["name"] == cf_name for p in problem_sections):
-                problem_sections.append({
-                    "name": cf_name,
-                    "type": "bool",
-                    "maps_to": cf.get("maps_to", "Other"),
-                    "description": cf.get("description", "")
-                })
+                problem_sections.append({"name": cf_name, "type": "bool", "maps_to": cf.get("maps_to", "Other"), "description": cf.get("description", "")})
 
         if self.common_problems.get("Images_Problem", True) and self.has_images:
             problem_sections.append({"name": "Images_Missing", "type": "bool"})
         if self.common_problems.get("Other_problem", True):
             problem_sections.append({"name": "Other_problem", "type": "bool", "maps_to": "Other"})
 
-        # Group sections
         reg_groups_list = []
         for g_name, g_fields in self.groups.items():
             if g_fields:
                 reg_groups_list.append({"name": g_name, "fields": g_fields})
 
-        # Location sections
         loc_sections = []
         if self.include_location:
-            loc_sections = [
-                {"name": "Stored as", "type": "text"},
-                {"name": "Building", "type": "text"},
-                {"name": "Floor", "type": "text"},
-                {"name": "Room", "type": "text"},
-                {"name": "Cabinet", "type": "text"},
-                {"name": "Shelf", "type": "text"}
-            ]
-
-        # Loan sections
+            loc_sections = [{"name": "Stored as", "type": "text"}, {"name": "Building", "type": "text"}, {"name": "Floor", "type": "text"}, {"name": "Room", "type": "text"}, {"name": "Cabinet", "type": "text"}, {"name": "Shelf", "type": "text"}]
         if self.include_loan:
-            loc_sections.extend([
-                {"name": "Loaned out", "type": "checkbox"},
-                {"name": "Borrower", "type": "text"},
-                {"name": "Loan Date", "type": "text"},
-                {"name": "Due Date", "type": "text"},
-                {"name": "Return Date", "type": "text"}
-            ])
-
-        # Condition & Conservation sections
+            loc_sections.extend([{"name": "Loaned out", "type": "checkbox"}, {"name": "Borrower", "type": "text"}, {"name": "Loan Date", "type": "text"}, {"name": "Due Date", "type": "text"}, {"name": "Return Date", "type": "text"}])
         if self.include_condition:
-            loc_sections.extend([
-                {"name": "Condition Status", "type": "text"},
-                {"name": "Conservation Notes", "type": "multiline"},
-                {"name": "Examined Date", "type": "text"}
-            ])
+            loc_sections.extend([{"name": "Condition Status", "type": "text"}, {"name": "Conservation Notes", "type": "multiline"}, {"name": "Examined Date", "type": "text"}])
 
         image_pattern = self.url_var.get().strip() if hasattr(self, "url_var") else self.image_url_pattern
 
         new_config = {
             "has_images": self.has_images,
             "image_url_pattern": image_pattern,
-            "sheets": {
-                "reg": "Registration",
-                "obs": "Observation",
-                "photo": "Photo",
-                "log": "Log",
-            },
-            "ui_sections": {
-                "registration": reg_sections,
-                "reg_groups": reg_groups_list,
-                "location": loc_sections,
-                "problems": problem_sections,
-                "unknown_fields": []
-            }
+            "sheets": {"reg": "Registration", "obs": "Observation", "photo": "Photo", "log": "Log"},
+            "ui_sections": {"registration": reg_sections, "reg_groups": reg_groups_list, "location": loc_sections, "problems": problem_sections, "unknown_fields": []}
         }
 
-        # Build initial DataFrames
+        if getattr(self, "edit_mode", False) and getattr(self.app, "excel_path", None):
+            # Edit mode logic
+            try:
+                import shutil
+                bak_path = self.app.excel_path + ".bak"
+                shutil.copy2(self.app.excel_path, bak_path)
+
+                df_reg = self.app.df_reg.copy()
+                df_obs = self.app.df_obs.copy()
+                df_photo = self.app.df_photo.copy()
+                df_log = self.app.df_log.copy()
+
+                # Apply renames to reg
+                rename_map = {}
+                for f in self.fields:
+                    orig = f.get("original_name")
+                    if orig and orig != f["name"] and orig in df_reg.columns:
+                        rename_map[orig] = f["name"]
+                if rename_map:
+                    df_reg.rename(columns=rename_map, inplace=True)
+
+                # Drop removed cols
+                current_reg_cols = [f["name"] for f in reg_sections]
+                for col in list(df_reg.columns):
+                    if col not in current_reg_cols:
+                        df_reg.drop(columns=[col], inplace=True)
+
+                # Add new cols
+                for col in current_reg_cols:
+                    if col not in df_reg.columns:
+                        df_reg[col] = pd.NA
+
+                # Observation cols update
+                obs_cols = [f["name"] for f in loc_sections]
+                prob_cols = [f["name"] for f in problem_sections]
+                obs_cols.extend(prob_cols)
+                obs_cols.extend(["Reviewed", "ReviewedAt", "Images_Missing"])
+                obs_cols = list(dict.fromkeys(obs_cols))
+
+                for col in list(df_obs.columns):
+                    if col not in obs_cols and col not in ["ObjectID"]:
+                        df_obs.drop(columns=[col], inplace=True)
+
+                for col in obs_cols:
+                    if col not in df_obs.columns:
+                        if col in prob_cols or col == "Reviewed" or col == "Images_Missing":
+                            df_obs[col] = False
+                        else:
+                            df_obs[col] = pd.NA
+
+                # Save changes
+                with pd.ExcelWriter(self.app.excel_path) as writer:
+                    df_reg.to_excel(writer, sheet_name=new_config["sheets"]["reg"])
+                    df_obs.to_excel(writer, sheet_name=new_config["sheets"]["obs"])
+                    df_photo.to_excel(writer, sheet_name=new_config["sheets"]["photo"])
+                    df_log.to_excel(writer, sheet_name=new_config["sheets"]["log"], index=False)
+
+                prefs = config.load_prefs()
+                if "custom_databases" not in prefs:
+                    prefs["custom_databases"] = {}
+                prefs["custom_databases"][name] = new_config
+                config.save_prefs(prefs)
+                config.DATABASE_CONFIGS[name] = new_config
+
+                self.app.config = new_config
+                self.app.config_name = name
+                self.app.df_reg = df_reg
+                self.app.df_obs = df_obs
+
+                try:
+                    self.win.unbind_all("<MouseWheel>")
+                except Exception:
+                    pass
+                self.win.destroy()
+                messagebox.showinfo("Success", "Database schema updated successfully! A backup was created at " + bak_path, parent=self.parent)
+
+                if self.on_complete:
+                    self.on_complete(self.app.excel_path, name)
+            except Exception as e:
+                messagebox.showerror("Update Error", f"Failed to update schema:\n{e}", parent=self.win)
+            return
+
+        # NEW DB CREATION
         try:
             # Generate ObjectIDs
             object_ids = []
@@ -2236,7 +1736,6 @@ class NewDatabaseWizard:
                 for i in range(row_count):
                     object_ids.append(numeric_id + i)
             except ValueError:
-                # String prefix e.g. V-0001
                 m = re.match(r"^(.*?)(\d+)$", start_id)
                 if m:
                     prefix, num_str = m.groups()
@@ -2248,12 +1747,10 @@ class NewDatabaseWizard:
                     for i in range(row_count):
                         object_ids.append(f"{start_id}_{i+1}" if i > 0 else start_id)
 
-            # Registration sheet
             reg_cols = [f["name"] for f in reg_sections]
             df_reg = pd.DataFrame(index=object_ids, columns=reg_cols)
             df_reg.index.name = "ObjectID"
 
-            # Observation sheet
             obs_cols = [f["name"] for f in loc_sections]
             prob_cols = [f["name"] for f in problem_sections]
             obs_cols.extend(prob_cols)
@@ -2266,11 +1763,9 @@ class NewDatabaseWizard:
             df_obs["Reviewed"] = False
             df_obs["Images_Missing"] = False
 
-            # Photo sheet
             df_photo = pd.DataFrame(columns=["ObjectID", "ImagePath", "ImageNote"])
             df_photo.set_index("ObjectID", inplace=True)
 
-            # Log sheet
             df_log = pd.DataFrame([{
                 "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Action": "DATABASE_CREATED",
@@ -2278,7 +1773,6 @@ class NewDatabaseWizard:
                 "Values": f"Initial records count: {row_count}"
             }])
 
-            # Save Excel File
             os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
             with pd.ExcelWriter(file_path) as writer:
                 df_reg.to_excel(writer, sheet_name=new_config["sheets"]["reg"])
@@ -2286,7 +1780,6 @@ class NewDatabaseWizard:
                 df_photo.to_excel(writer, sheet_name=new_config["sheets"]["photo"])
                 df_log.to_excel(writer, sheet_name=new_config["sheets"]["log"], index=False)
 
-            # Save config into preferences
             prefs = config.load_prefs()
             if "custom_databases" not in prefs:
                 prefs["custom_databases"] = {}
@@ -2294,7 +1787,6 @@ class NewDatabaseWizard:
             config.save_prefs(prefs)
             config.DATABASE_CONFIGS[name] = new_config
 
-            # Update app session state if running
             if self.app:
                 self.app.config = new_config
                 self.app.config_name = name
@@ -2306,7 +1798,6 @@ class NewDatabaseWizard:
                 self.app.df_log = df_log
                 self.app.initial_df_obs = df_obs.copy()
 
-            # Execute completion callback
             if self.on_complete:
                 try:
                     import inspect
