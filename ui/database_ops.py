@@ -491,6 +491,63 @@ class DatabaseOpsMixin:
         self._search_index_cache = search_index
 
 
+    def _sync_auto_problems_vectorized(self):
+        """Vectorized sync of auto-detected problems across all objects before saving."""
+        if self.app.df_reg is None or self.app.df_obs is None:
+            return
+
+        df_reg = self.app.df_reg
+        df_obs = self.app.df_obs
+
+        # Get unknown values matching is_unknown logic
+        unknown_vals = ("ukjent", "unknown", "?", "-")
+
+        updated_oids = set()
+
+        for prob_col, field in getattr(self, "problem_to_field", {}).items():
+            if field not in df_reg.columns:
+                continue
+
+            if prob_col not in df_obs.columns:
+                df_obs[prob_col] = False
+
+            # Vectorized check for missing
+            raw_series = df_reg[field]
+            is_na = raw_series.isna()
+
+            # String conversions and stripping for safe checks
+            str_series = raw_series.astype(str).str.strip().str.lower()
+            is_empty_str = str_series == ""
+            is_unknown_str = str_series.isin(unknown_vals)
+
+            is_missing = is_na | is_empty_str
+            auto_val_mask = is_missing & ~is_unknown_str
+
+            # Find where we need to update df_obs
+            # If auto_val is True, ensure df_obs[prob_col] becomes True.
+            # We don't overwrite True with False (preserves user checks).
+
+            needs_update = auto_val_mask & ~df_obs[prob_col].fillna(False).astype(bool)
+
+            if needs_update.any():
+                df_obs.loc[needs_update, prob_col] = True
+                updated_oids.update(df_reg.index[needs_update].tolist())
+
+        if updated_oids:
+            # Patch caches
+            for oid in updated_oids:
+                if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                    for prob_col in getattr(self, "problem_to_field", {}).keys():
+                        if prob_col in df_obs.columns:
+                           self._cached_obs_dict[oid][prob_col] = bool(df_obs.at[oid, prob_col])
+
+                if getattr(self, "_problem_cache", None) is not None:
+                    # Clear it so it gets re-evaluated dynamically next time
+                    self._problem_cache.pop(oid, None)
+
+            if hasattr(self, "_invalidate_row_cache"):
+                self._invalidate_row_cache()
+
     def save_session(self, action):
         """Persist the current session to disk asynchronously.
 
@@ -500,6 +557,7 @@ class DatabaseOpsMixin:
         so the user always sees an immediate response and a clear outcome.
         """
         self.commit_current_object()
+        self._sync_auto_problems_vectorized()
 
         if not self.validate_before_save(action):
             return
