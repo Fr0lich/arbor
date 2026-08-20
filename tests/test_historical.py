@@ -196,6 +196,9 @@ def test_historical_resolver_logging():
         main_app.app.df_obs = df_obs
         main_app.app.df_log = df_log
         
+        main_app._get_reg_dict.return_value = {"1": {"Genus": "CurrentGenus"}}
+        main_app._get_obs_dict.return_value = {"1": {"Genus_Problem": True}}
+
         # Setup variables
         genus_var = tk.StringVar(value="CurrentGenus")
         genus_prob_var = tk.BooleanVar(value=True)

@@ -705,7 +705,7 @@ class NewDatabaseWizard:
             if file_path.endswith(".csv"):
                 df = pd.read_csv(file_path, nrows=50)
             else:
-                df = pd.read_excel(file_path, nrows=50)
+                df = pd.read_excel(file_path, nrows=50, engine='calamine')
 
             inferred_fields = []
             for col in df.columns:
