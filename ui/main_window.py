@@ -1153,7 +1153,8 @@ class ObjectProgramUI(
                         insertbackground="#000000" if not is_dark else "#cdd6f4",
                         bg="#ffffff" if not is_dark else "#181825",
                         fg="#1a1c1c" if not is_dark else "#cdd6f4",
-                        font=("Hanken Grotesk", sc(10))
+                        font=("Hanken Grotesk", sc(10)),
+                        undo=True, maxundo=-1, autoseparators=True
                     )
                     def bind_text_events(w):
                         w.bind("<KeyRelease>", self._on_text_change)
@@ -2528,7 +2529,14 @@ class ObjectProgramUI(
     def _smart_undo(self, event):
         widget = self.root.focus_get()
 
-        if isinstance(widget, (tk.Entry, ttk.Entry, tk.Text)):
+        if isinstance(widget, tk.Text):
+            try:
+                widget.edit_undo()
+            except tk.TclError:
+                pass
+            return "break"
+
+        if isinstance(widget, (tk.Entry, ttk.Entry)):
             return self.undo_field(event)
 
         return self.undo(event)
