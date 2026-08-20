@@ -212,6 +212,16 @@ def _normalise_dataframes(df_reg, df_obs, config):
             uuid.uuid4().hex[:8] for _ in range(missing_count)
         ]
 
+    # Auto-repair legacy datasets where Other_problem was corrupted (set to True on virtually all rows)
+    if "Other_problem" in df_obs.columns and not df_obs.empty and len(df_obs) > 1:
+        other_true_series = _coerce_bool_series(df_obs["Other_problem"], default=False)
+        if other_true_series.mean() >= 0.9:  # Corrupted dataset threshold (e.g. >= 90% rows True)
+            has_desc = pd.Series(False, index=df_reg.index)
+            for col in ["ProblemDescription", "Comment", "Observation"]:
+                if col in df_reg.columns:
+                    has_desc |= (df_reg[col].fillna("").astype(str).str.strip() != "")
+            df_obs["Other_problem"] = other_true_series & has_desc
+
     return df_reg, df_obs
 
 def _normalise_log_dataframe(df_log):

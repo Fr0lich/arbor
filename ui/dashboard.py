@@ -178,9 +178,9 @@ class DashboardMixin:
                 vals = self.app.df_obs[prob_col].fillna(False).astype(bool)
                 obs_s = vals.reindex(idx, fill_value=False)
 
-            if hasattr(self, "problem_to_field") and prob_col in self.problem_to_field:
+            if hasattr(self, "problem_to_field") and prob_col in self.problem_to_field and prob_col != "Other_problem":
                 field = self.problem_to_field.get(prob_col)
-                if field and field in self.app.df_reg.columns:
+                if field and field != "Other" and field in self.app.df_reg.columns:
                     reg_s = self.app.df_reg[field].reindex(idx, fill_value="")
                     is_missing = reg_s.isna() | (reg_s.astype(str).str.strip() == "")
                     is_unknown = reg_s.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])

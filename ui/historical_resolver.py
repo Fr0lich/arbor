@@ -382,7 +382,14 @@ class HistoricalConflictResolverWindow:
                 self.main_app.app.df_reg.loc[self.oid, f] = new_val
                 if f in self.main_app.reg_vars:
                     self.main_app.reg_vars[f].set(new_val)
-                    
+                if hasattr(self.main_app, "reg_entries") and f in self.main_app.reg_entries:
+                    w = self.main_app.reg_entries[f]
+                    if isinstance(w, tk.Text):
+                        w.delete("1.0", tk.END)
+                        w.insert("1.0", str(new_val))
+                if getattr(self.main_app, "_cached_reg_dict", None) is not None and self.oid in self.main_app._cached_reg_dict:
+                    self.main_app._cached_reg_dict[self.oid][f] = new_val
+
                 for pc, mf in self.main_app.problem_to_field.items():
                     if mf == f and pc in self.main_app.problem_vars:
                         old_prob = bool(self.main_app.app.df_obs.loc[self.oid].get(pc, False))
@@ -391,9 +398,14 @@ class HistoricalConflictResolverWindow:
                             prob_changed_values.append(f'{pc}: "True"  "False"')
                         self.main_app.problem_vars[pc].set(False)
                         self.main_app.app.df_obs.loc[self.oid, pc] = False
+                        if getattr(self.main_app, "_cached_obs_dict", None) is not None and self.oid in self.main_app._cached_obs_dict:
+                            self.main_app._cached_obs_dict[self.oid][pc] = False
                         if hasattr(self.main_app, "loaded_problem_states"):
                             self.main_app.loaded_problem_states[pc] = False
                 
+                self.main_app._row_cache_dirty = True
+                self.main_app.commit_current_object()
+
                 self.main_app.log_action(
                     "RESOLVE_HISTORICAL_CONFLICT",
                     changed_fields=reg_changed_fields,
@@ -471,6 +483,13 @@ class HistoricalConflictResolverWindow:
                 self.main_app.app.df_reg.loc[self.oid, field] = new_val
                 if field in self.main_app.reg_vars:
                     self.main_app.reg_vars[field].set(new_val)
+                if hasattr(self.main_app, "reg_entries") and field in self.main_app.reg_entries:
+                    w = self.main_app.reg_entries[field]
+                    if isinstance(w, tk.Text):
+                        w.delete("1.0", tk.END)
+                        w.insert("1.0", str(new_val))
+                if getattr(self.main_app, "_cached_reg_dict", None) is not None and self.oid in self.main_app._cached_reg_dict:
+                    self.main_app._cached_reg_dict[self.oid][field] = new_val
                 
                 reg_changed_fields.append(field)
                 reg_changed_values.append(f'{field}: "{current_val}"  "{new_val}"')
@@ -483,8 +502,13 @@ class HistoricalConflictResolverWindow:
                             prob_changed_values.append(f'{pc}: "True"  "False"')
                         self.main_app.problem_vars[pc].set(False)
                         self.main_app.app.df_obs.loc[self.oid, pc] = False
+                        if getattr(self.main_app, "_cached_obs_dict", None) is not None and self.oid in self.main_app._cached_obs_dict:
+                            self.main_app._cached_obs_dict[self.oid][pc] = False
                         if hasattr(self.main_app, "loaded_problem_states"):
                             self.main_app.loaded_problem_states[pc] = False
+
+                self.main_app._row_cache_dirty = True
+                self.main_app.commit_current_object()
                         
                 # Update card visually
                 if field in self.card_frames:

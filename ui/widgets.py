@@ -771,6 +771,48 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.selection_set(oid)
         return "break"
 
+    def refresh_object_card(self, oid):
+        """Live updates an object's card and/or Treeview row when fields (location, genus, species, etc.) change."""
+        if not oid:
+            return
+
+        obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else {}
+        reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else {}
+
+        obs_row = obs_dict.get(oid) or {}
+        reg_row = reg_dict.get(oid) or {}
+
+        genus = str(reg_row.get("Genus", "") or "").strip()
+        species = str(reg_row.get("Species", "") or "").strip()
+        reviewed = bool(obs_row.get("Reviewed", False))
+        rev_char = "☑" if reviewed else "☐"
+
+        if oid in self.item_data:
+            self.item_data[oid]["genus"] = genus
+            self.item_data[oid]["species"] = species
+            self.item_data[oid]["reviewed"] = reviewed
+            self.item_data[oid]["values"] = [rev_char, oid, genus, species]
+
+        oid_key = oid
+        if getattr(self, "_oid_to_index", None):
+            if oid_key not in self._oid_to_index and str(oid) in self._oid_to_index:
+                oid_key = str(oid)
+            elif oid_key not in self._oid_to_index and str(oid).isdigit() and int(oid) in self._oid_to_index:
+                oid_key = int(oid)
+
+        if getattr(self, "_oid_to_index", None) and oid_key in self._oid_to_index:
+            idx = self._oid_to_index[oid_key]
+            if idx in self._active_card_windows:
+                win_id, widget_dict = self._active_card_windows[idx]
+                self._populate_card_widget(widget_dict, oid)
+
+        if hasattr(self, "tree") and self.tree.exists(oid):
+            try:
+                current_tags = self.tree.item(oid, "tags") or ()
+                self.tree.item(oid, values=(rev_char, oid, genus, species), tags=current_tags)
+            except Exception:
+                pass
+
     def _update_card_checkbox(self, oid):
         if oid in self.item_data:
             reviewed = self.item_data[oid].get("reviewed", False)
@@ -799,6 +841,15 @@ class TreeviewListboxWrapper(ttk.Frame):
             has_problem = getattr(self.main_window, "_problem_cache", {}).get(oid, False)
         problems_have_history = self.main_window._problems_have_history(oid) if hasattr(self.main_window, "_problems_have_history") else False
 
+        has_unknown = False
+        if hasattr(self.main_window, "is_unknown"):
+            reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else {}
+            reg_row = reg_dict.get(oid) or {}
+            for v in reg_row.values():
+                if self.main_window.is_unknown(v):
+                    has_unknown = True
+                    break
+
         if reviewed:
             new_color = "#4CAF50" if is_dark else "#2E7D32"
             badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
@@ -811,9 +862,12 @@ class TreeviewListboxWrapper(ttk.Frame):
         elif problems_have_history:
             new_color = "#5ab0e8" if is_dark else "#0284C7"
             badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
+        elif has_unknown:
+            new_color = "#f59e0b" if is_dark else "#FBC02D"
+            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
         else:
             new_color = canvas_bg
-            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
+            badge_label, badge_bg, badge_fg = "UNREV",   "#6c757d" if not is_dark else "#45475a", "#ffffff"
 
         accent_strip.configure(bg=new_color)
         self.item_data[oid]["accent_color_normal"] = new_color
@@ -1169,6 +1223,13 @@ class TreeviewListboxWrapper(ttk.Frame):
         loaned_raw = obs_row.get("Loaned out", False)
         loaned = utils.parse_bool(loaned_raw)
 
+        has_unknown = False
+        if hasattr(self.main_window, "is_unknown"):
+            for v in reg_row.values():
+                if self.main_window.is_unknown(v):
+                    has_unknown = True
+                    break
+
         if reviewed:
             accent_color = "#4CAF50" if is_dark else "#2E7D32"  # green
             badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
@@ -1181,9 +1242,12 @@ class TreeviewListboxWrapper(ttk.Frame):
         elif problems_have_history:
             accent_color = "#5ab0e8" if is_dark else "#0284C7"  # blue
             badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
+        elif has_unknown:
+            accent_color = "#f59e0b" if is_dark else "#FBC02D"
+            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
         else:
             accent_color = canvas_bg  # visually transparent
-            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
+            badge_label, badge_bg, badge_fg = "UNREV",   "#6c757d" if not is_dark else "#45475a", "#ffffff"
 
         widgets["outer_frame"].configure(bg=canvas_bg)
         widgets["card_body"].configure(bg=card_bg)

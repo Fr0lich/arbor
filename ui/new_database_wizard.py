@@ -154,21 +154,30 @@ class NewDatabaseWizard:
             "Images_Problem": True,
             "Other_problem": True
         }
-        # Groups: list of group names and mapping
+        self.groups = {}
         self.group_names = ["General", "Taxonomy", "Collection", "Details", "Notes", "Admin"]
         self.field_group_map = {}
         # Image config
         self.has_images = True
+        self.has_images_var = tk.BooleanVar(value=self.has_images)
         self.image_url_pattern = "https://www.unimus.no/photos/image/jpeg/O-V-OE-{num:04d}{suffix}.jpg"
+        self.url_var = tk.StringVar(value=self.image_url_pattern)
         self.test_specimen_id = "1001"
+        self.test_id_var = tk.StringVar(value=self.test_specimen_id)
+        self.url_preview_lbl = tk.Label(self.parent)
         # Sub-modules toggles
         self.include_location = True
         self.include_loan = False
         self.include_condition = False
         # Starting object ID and record count
         self.start_object_id = "1"
+        self.start_id_var = tk.StringVar(value=self.start_object_id)
         self.initial_records_count = 1
+        self.row_count_var = tk.IntVar(value=self.initial_records_count)
         self.output_file_path = ""
+        self.output_path_var = tk.StringVar(value=self.output_file_path)
+        self.profile_name = "New_Database"
+        self.profile_name_var = tk.StringVar(value=self.profile_name)
 
         # Initialize default template schema
         if self.edit_mode and self.edit_config:
@@ -1001,6 +1010,28 @@ class NewDatabaseWizard:
         self.new_field_var.set("")
         self._refresh_fields_table()
 
+    def _add_field_to_group(self, group_name):
+        import tkinter.simpledialog as sd
+        name = sd.askstring("Add Field", f"Enter new field name for {group_name}:", parent=self.win)
+        if not name:
+            return
+        name = name.strip()
+        if not name:
+            return
+        if any(f["name"].lower() == name.lower() for f in self.fields):
+            messagebox.showwarning("Duplicate Field", f"Field '{name}' already exists.", parent=self.win)
+            return
+
+        new_entry = {"name": name, "type": "text", "readonly": False, "choices": []}
+        self.fields.append(new_entry)
+        self.field_group_map[name] = group_name
+        self._refresh_step3_ui()
+
+    def _toggle_preview_mode(self):
+        self.preview_mode = "focus" if self.preview_mode == "standard" else "standard"
+        if hasattr(self, "_refresh_step3_ui"):
+            self._refresh_step3_ui()
+
     def _duplicate_field(self, idx):
         if 0 <= idx < len(self.fields):
             src = self.fields[idx]
@@ -1148,6 +1179,50 @@ class NewDatabaseWizard:
     # --------------------------------------------------------------------------
     # STEP 3: Category-First Field Organization & Quality Flags (POLISHED)
     # --------------------------------------------------------------------------
+    def _smart_auto_organize(self):
+        """Auto-organize fields into categories based on field name keywords."""
+        if not hasattr(self, "groups") or not isinstance(self.groups, dict):
+            self.groups = {}
+
+        category_keywords = {
+            "Taxonomy": ["genus", "species", "family", "author", "taxon"],
+            "Collection": ["collector", "collection", "place", "date", "locality"],
+            "Notes": ["comment", "observation", "problem", "notes", "description"],
+            "Admin": ["uid", "status", "id"]
+        }
+
+        for field in self.fields:
+            fname = field.get("name", "")
+            if fname == "ObjectID":
+                continue
+            lower_fname = fname.lower()
+            assigned = False
+            for cat, keywords in category_keywords.items():
+                if any(w in lower_fname for w in keywords):
+                    g_list = self.groups.setdefault(cat, [])
+                    if not isinstance(g_list, list):
+                        g_list = []
+                        self.groups[cat] = g_list
+                    if fname not in g_list:
+                        g_list.append(fname)
+                    self.field_group_map[fname] = cat
+                    if cat not in self.group_names:
+                        self.group_names.append(cat)
+                    assigned = True
+                    break
+
+            if not assigned:
+                cat = "General"
+                g_list = self.groups.setdefault(cat, [])
+                if not isinstance(g_list, list):
+                    g_list = []
+                    self.groups[cat] = g_list
+                if fname not in g_list:
+                    g_list.append(fname)
+                self.field_group_map[fname] = cat
+                if cat not in self.group_names:
+                    self.group_names.append(cat)
+
     def _render_step3(self):
         inner = self._create_scrollable_card("Step 3: Organize Fields by Category")
 
@@ -1252,7 +1327,39 @@ class NewDatabaseWizard:
 
     def _select_category(self, cat):
         self.active_category = cat
+        self.preview_active_group = cat
         self._refresh_step3_layout()
+
+    _select_category_tab = _select_category
+
+    def _refresh_step3_ui(self):
+        if hasattr(self, "_refresh_step3_layout"):
+            self._refresh_step3_layout()
+
+    def _apply_validation_strategy(self, strategy):
+        self.validation_strategy = strategy
+        for f in self.fields:
+            fname = f.get("name", "")
+            if strategy == "all_fields":
+                self.problem_flags[fname] = True
+            elif strategy == "none":
+                self.problem_flags[fname] = False
+            elif strategy == "key_fields":
+                lower = fname.lower()
+                is_key = any(w in lower for w in ["genus", "species", "title", "item", "borrower"])
+                self.problem_flags[fname] = is_key
+
+    def _get_flag_suggestions(self, field_name, field_type):
+        suggestions = []
+        lower = field_name.lower()
+        if "species" in lower or "genus" in lower:
+            suggestions.append(("Nomenclature_Outdated", "Taxonomic name needs review"))
+        if "collector" in lower or "place" in lower or "location" in lower or "locality" in lower:
+            suggestions.append(("Locality_Unverified", "Geographic location needs check"))
+            suggestions.append(("Georef_Needed", "Geographic coordinates missing"))
+        if "date" in lower or "due" in lower or "return" in lower:
+            suggestions.append(("Overdue_Notice", "Date or loan deadline passed"))
+        return suggestions
 
     def _render_step4(self):
         inner = self._create_scrollable_card("Step 4: Quality Flags & Validation")
@@ -1378,10 +1485,27 @@ class NewDatabaseWizard:
             })
             self._refresh_step4_layout()
 
-    def _remove_custom_flag(self, flag_dict):
-        if flag_dict in self.custom_problem_flags:
-            self.custom_problem_flags.remove(flag_dict)
+    def _delete_custom_flag(self, index_or_item):
+        if isinstance(index_or_item, int):
+            if 0 <= index_or_item < len(self.custom_problem_flags):
+                flag = self.custom_problem_flags.pop(index_or_item)
+                self._deleted_flags_undo_stack.append(flag)
+        elif index_or_item in self.custom_problem_flags:
+            self.custom_problem_flags.remove(index_or_item)
+            self._deleted_flags_undo_stack.append(index_or_item)
+        if hasattr(self, "_refresh_step4_layout") and hasattr(self, "left_sim_col"):
             self._refresh_step4_layout()
+
+    def _remove_custom_flag(self, flag_dict):
+        self._delete_custom_flag(flag_dict)
+
+    def _undo_delete_custom_flag(self):
+        if self._deleted_flags_undo_stack:
+            flag = self._deleted_flags_undo_stack.pop()
+            if flag not in self.custom_problem_flags:
+                self.custom_problem_flags.append(flag)
+            if hasattr(self, "_refresh_step4_layout") and hasattr(self, "left_sim_col"):
+                self._refresh_step4_layout()
 
     def _render_step5(self):
         inner = self._create_scrollable_card("Step 5: Configure External Modules (Images & Locations)")
@@ -1392,7 +1516,7 @@ class NewDatabaseWizard:
 
         tk.Label(img_box, text="Online Specimen Image Fetching", font=self.FONT_HEADER, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(anchor="w")
 
-        self.has_images_var = tk.BooleanVar(value=self.has_images)
+        self.has_images_var.set(self.has_images)
         def _on_img_toggle():
             self.has_images = self.has_images_var.get()
             url_entry.config(state="normal" if self.has_images else "disabled")
@@ -1421,7 +1545,7 @@ class NewDatabaseWizard:
 
         tk.Label(img_box, text="URL Pattern Template:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(sc(4), 0))
 
-        self.url_var = tk.StringVar(value=self.image_url_pattern)
+        self.url_var.set(self.image_url_pattern)
         url_entry = tk.Entry(
             img_box, textvariable=self.url_var, font=self.FONT_MONO,
             relief="solid", bd=1, highlightthickness=0, bg=self.colors["surface"], fg=self.colors["on_surface"]
@@ -1443,7 +1567,7 @@ class NewDatabaseWizard:
 
         tk.Label(test_row, text="Live URL Preview  (Test ID:", font=self.FONT_LABEL_BOLD, bg=self.colors["card_bg"], fg=self.colors["on_surface"]).pack(side="left")
 
-        self.test_id_var = tk.StringVar(value=self.test_specimen_id)
+        self.test_id_var.set(self.test_specimen_id)
         test_entry = tk.Entry(test_row, textvariable=self.test_id_var, font=self.FONT_MONO_SM, width=8, relief="solid", bd=1, bg=self.colors["surface"], fg=self.colors["on_surface"])
         test_entry.pack(side="left", padx=sc(4))
         tk.Label(test_row, text="):", font=self.FONT_LABEL_BOLD, bg=self.colors["card_bg"], fg=self.colors["on_surface"]).pack(side="left")
@@ -1616,12 +1740,16 @@ class NewDatabaseWizard:
         for cf in getattr(self, "custom_problem_flags", []):
             cf_name = cf.get("name")
             if cf_name and not any(p["name"] == cf_name for p in problem_sections):
-                problem_sections.append({"name": cf_name, "type": "bool", "maps_to": cf.get("maps_to", "Other"), "description": cf.get("description", "")})
+                p_entry = {"name": cf_name, "type": "bool", "description": cf.get("description", "")}
+                p_map = cf.get("maps_to")
+                if p_map and p_map != "Other":
+                    p_entry["maps_to"] = p_map
+                problem_sections.append(p_entry)
 
         if self.common_problems.get("Images_Problem", True) and self.has_images:
             problem_sections.append({"name": "Images_Missing", "type": "bool"})
         if self.common_problems.get("Other_problem", True):
-            problem_sections.append({"name": "Other_problem", "type": "bool", "maps_to": "Other"})
+            problem_sections.append({"name": "Other_problem", "type": "bool"})
 
         reg_groups_list = []
         for g_name, g_fields in self.groups.items():

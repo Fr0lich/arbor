@@ -505,7 +505,7 @@ class DatabaseOpsMixin:
         updated_oids = set()
 
         for prob_col, field in getattr(self, "problem_to_field", {}).items():
-            if field not in df_reg.columns:
+            if prob_col == "Other_problem" or field == "Other" or not field or field not in df_reg.columns:
                 continue
 
             if prob_col not in df_obs.columns:

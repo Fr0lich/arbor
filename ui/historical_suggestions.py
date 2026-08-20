@@ -47,6 +47,20 @@ class HistoricalSuggestionsMixin:
 
         return cache
 
+    def invalidate_history_cache(self, oid=None):
+        if not hasattr(self, "_history_cache") or self._history_cache is None:
+            return
+        if oid is None:
+            self._history_cache.clear()
+        else:
+            self._history_cache.pop((oid, True), None)
+            self._history_cache.pop((oid, False), None)
+            s_oid = str(oid)
+            self._history_cache.pop((s_oid, True), None)
+            self._history_cache.pop((s_oid, False), None)
+            if s_oid.isdigit():
+                self._history_cache.pop((int(s_oid), True), None)
+                self._history_cache.pop((int(s_oid), False), None)
 
     def collect_historical_suggestions(self, oid, show_all_override=None):
 

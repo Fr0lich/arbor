@@ -650,7 +650,7 @@ class ObjectProgramUI(
             name = field["name"]
             self.problem_columns.append(name)
 
-            if "maps_to" in field:
+            if "maps_to" in field and field["maps_to"] and field["maps_to"] != "Other" and name != "Other_problem":
                 self.problem_to_field[name] = field["maps_to"]
 
         # filter (som fÃ¸r)
@@ -1191,6 +1191,7 @@ class ObjectProgramUI(
                     widget.bind("<KeyRelease>", lambda e, n=name, w=widget: self._on_autocomplete_key(e, n, w), add="+")
                     widget.bind("<KeyRelease>", lambda e: self.root.after(500, self._validate_fields), add="+")
                     widget.bind("<FocusOut>", lambda e, n=name, w=widget: self._run_fuzzy_match(n, w), add="+")
+                    widget.bind("<FocusOut>", lambda e: self.commit_current_object(), add="+")
 
                     if field.get("readonly"):
                         widget.configure(state="disabled")
@@ -4496,6 +4497,17 @@ class ObjectProgramUI(
                 reg_changed_fields.append(col)
                 reg_changed_values.append(f'{col}: "{old}"  "{new}"')
 
+                # If a field mapped to a problem column is populated with a non-empty value, auto-clear the problem flag
+                if new.strip() != "":
+                    for p_col, f_name in self.problem_to_field.items():
+                        if f_name == col and p_col in self.problem_vars:
+                            if self.problem_vars[p_col].get():
+                                self.problem_vars[p_col].set(False)
+                                self.app.df_obs.at[oid, p_col] = False
+                                if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                                    self._cached_obs_dict[oid][p_col] = False
+                                self.loaded_problem_states[p_col] = False
+
 
         # -------- PROBLEMS --------
         for col, var in self.problem_vars.items():
@@ -4600,6 +4612,8 @@ class ObjectProgramUI(
             self._problem_cache.pop(s_oid, None)
             if s_oid.isdigit():
                 self._problem_cache.pop(int(s_oid), None)
+            if hasattr(self, "invalidate_history_cache"):
+                self.invalidate_history_cache(oid)
             
             if {"Genus", "Species"} & set(reg_changed_fields):
                 self.invalidate_search_index()
@@ -5055,6 +5069,7 @@ class ObjectProgramUI(
         prev = self.app.current_object_id
 
         if prev and prev != oid:
+            self.commit_current_object()
             self.last_object_id = prev
 
             if not is_history_nav:
@@ -7856,8 +7871,11 @@ class ObjectProgramUI(
 
             if self.is_unknown(raw_val):
                 color = unknown_bg
-            elif self.current_object_suggestions and field_name in self.collect_historical_suggestions(self.app.current_object_id):
-                color = suggest_bg
+            elif getattr(self, "show_all_history_var", None) and self.show_all_history_var.get():
+                if self.current_object_suggestions and field_name in self.collect_historical_suggestions(self.app.current_object_id):
+                    color = suggest_bg
+            else:
+                color = norm_bg
 
         # Set background/style on widget
         try:
@@ -7889,8 +7907,8 @@ class ObjectProgramUI(
         if self._is_navigating or self.loading_object:
             return
 
-        self._refresh_field_background("Species")
-        self._refresh_field_background("Building")
+        for f_name in self.reg_entries.keys():
+            self._refresh_field_background(f_name)
 
 
     def _run_fuzzy_match(self, field_name, widget):
@@ -8353,6 +8371,7 @@ class ObjectProgramUI(
         has_problem = self._get_cached_problem(oid)
         has_history = self._problems_have_history(oid)
         
+        color = None
         if reviewed:
             color = "#4CAF50" if self.dark_mode_active else "#2E7D32"
         elif has_problem and has_history:
@@ -8378,7 +8397,9 @@ class ObjectProgramUI(
             current_vals[0] = "☑" if reviewed else "☐"
             self.object_list.item(oid, values=current_vals)
 
-        if hasattr(self.object_list, "_refresh_card_accent"):
+        if hasattr(self.object_list, "refresh_object_card"):
+            self.object_list.refresh_object_card(oid)
+        elif hasattr(self.object_list, "_refresh_card_accent"):
             self.object_list._refresh_card_accent(oid)
 
     def mark_current_as_reviewed(self):

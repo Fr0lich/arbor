@@ -320,8 +320,7 @@ DATABASE_CONFIGS = {
                 },
                 {
                     "name": "Other_problem",
-                    "type": "bool",
-                    "maps_to": "Other"
+                    "type": "bool"
                 }
 
  
@@ -384,7 +383,7 @@ DATABASE_CONFIGS = {
                 {"name": "Item_Name_Problem", "type": "bool", "maps_to": "Item Name"},
                 {"name": "Borrower_Problem", "type": "bool", "maps_to": "Borrower"},
                 {"name": "Due_Date_Problem", "type": "bool", "maps_to": "Due Date"},
-                {"name": "Other_problem", "type": "bool", "maps_to": "Other"}
+                {"name": "Other_problem", "type": "bool"}
             ],
             "unknown_fields": []
         }
@@ -421,7 +420,7 @@ DATABASE_CONFIGS = {
             "problems": [
                 {"name": "Title_Problem", "type": "bool", "maps_to": "Title"},
                 {"name": "Date_Problem", "type": "bool", "maps_to": "Date"},
-                {"name": "Other_problem", "type": "bool", "maps_to": "Other"}
+                {"name": "Other_problem", "type": "bool"}
             ],
             "unknown_fields": []
         }
