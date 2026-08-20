@@ -3356,7 +3356,7 @@ class ObjectProgramUI(
 
         # Inline Banner Frame (hidden by default)
         self._inline_banner_frame = tk.Frame(
-            self.root, bg="#fef08a", height=0,
+            self.root, bg="#fef08a",
             highlightthickness=1, highlightbackground="#facc15"
         )
 
@@ -4901,8 +4901,8 @@ class ObjectProgramUI(
         close_btn.bind("<Enter>", _on_enter)
         close_btn.bind("<Leave>", _on_leave)
 
-        # Pack at the top of root (below nav_bar)
-        self._inline_banner_frame.pack(side="top", fill="x", before=self.panes)
+        # Floating toast notification overlay
+        self._inline_banner_frame.place(relx=0.5, y=10, anchor="n")
 
         # Auto-dismiss timer
         if hasattr(self, "_banner_timer_id") and self._banner_timer_id:
@@ -4918,7 +4918,7 @@ class ObjectProgramUI(
             self.root.after_cancel(self._banner_timer_id)
             self._banner_timer_id = None
         if hasattr(self, "_inline_banner_frame"):
-            self._inline_banner_frame.pack_forget()
+            self._inline_banner_frame.place_forget()
 
 
 
