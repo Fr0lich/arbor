@@ -1,5 +1,4 @@
 import os
-import sys
 import tkinter as tk
 
 # Remove any pre-existing environment variables pointing to restricted WindowsApps paths

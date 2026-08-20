@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 import pandas as pd
 import utils
-import config
 from config import sc
 
 # Color schemes matching AI_UI_GUIDE.md & Arbor design tokens

@@ -1,6 +1,4 @@
 import time
-import importlib
-import ui.main_window
 
 # Mock app and config
 class MockApp:

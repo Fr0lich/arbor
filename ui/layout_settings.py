@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from config import sc
-from ui.widgets import ToggleSwitch, create_toggle_row
+from ui.widgets import ToggleSwitch
 
 class LayoutSettingsMixin:
     def _build_layout_menu(self, menubar):

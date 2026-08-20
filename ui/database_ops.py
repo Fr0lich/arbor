@@ -526,7 +526,6 @@ class DatabaseOpsMixin:
                 self.invalidate_search_index()  # Genus/Species may have changed
             else:
                 from utils import debug_error
-                import traceback
                 debug_error("save_session async", str(err))
                 self.show_traceback_dialog(
                     "Save Error",

@@ -1,6 +1,4 @@
 import tkinter as tk
-from tkinter import ttk
-import utils
 
 from ui.recent_activity_dialog import open_recent_activity_dialog
 

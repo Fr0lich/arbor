@@ -9,7 +9,7 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 import config
-from ui.unified_settings import UnifiedSettingsWindow, open_unified_settings
+from ui.unified_settings import UnifiedSettingsWindow
 
 @pytest.fixture
 def tk_root():
@@ -398,7 +398,6 @@ def test_auto_advance_independence(tk_root, tmp_path, monkeypatch):
     monkeypatch.setattr(config, "_PREFS_PATH", test_prefs_file)
     monkeypatch.setattr(config, "_prefs_cache", None)
 
-    from ui.main_window import ObjectProgramUI
     # Test independence of auto_advance traces on a minimal app mock
     class MinimalApp:
         def __init__(self):
