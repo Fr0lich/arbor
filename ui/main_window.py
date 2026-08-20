@@ -4458,6 +4458,7 @@ class ObjectProgramUI(
         reg_changed_values = []
         prob_changed_fields = []
         prob_changed_values = []
+        auto_prob_changed_fields = []
         loc_changed_fields = []
         loc_changed_values = []
 
@@ -4516,8 +4517,14 @@ class ObjectProgramUI(
                 if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
                     self._cached_obs_dict[oid][col] = new
 
-                prob_changed_fields.append(col)
-                prob_changed_values.append(f'{col}: "{db_val}"  "{new}"')
+                # If the current value matches the value that was loaded (which includes auto-detections),
+                # then this change is just saving an auto-detection to the DB, not a manual user edit.
+                loaded_val = self.loaded_problem_states.get(col, db_val)
+                if new != loaded_val:
+                    prob_changed_fields.append(col)
+                    prob_changed_values.append(f'{col}: "{db_val}"  "{new}"')
+                else:
+                    auto_prob_changed_fields.append(col)
                 
                 self._list_dirty = True
                 self.loaded_problem_states[col] = new
@@ -4572,18 +4579,21 @@ class ObjectProgramUI(
             bool(loc_changed_fields)
         )
 
-        if has_changes:
+        has_auto_changes = bool(auto_prob_changed_fields)
+
+        if has_changes or has_auto_changes:
             self.app.dirty = True
             self.update_dirty_ui()
             self._list_dirty = True
             
-            # Log the edit immediately so it's captured in the continuous session
-            self.log_action("EDIT", 
-                            reg_changed_fields, reg_changed_values,
-                            prob_changed_fields, prob_changed_values,
-                            loc_changed_fields, loc_changed_values)
+            if has_changes:
+                # Log the edit immediately so it's captured in the continuous session
+                self.log_action("EDIT",
+                                reg_changed_fields, reg_changed_values,
+                                prob_changed_fields, prob_changed_values,
+                                loc_changed_fields, loc_changed_values)
 
-            self.update_history_indicator(oid)   
+                self.update_history_indicator(oid)
 
             self._problem_cache.pop(oid, None)
             s_oid = str(oid)
