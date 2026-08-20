@@ -443,7 +443,7 @@ class RecentActivityDialog(tk.Toplevel):
         # Parse df_log
         if self.df_log is not None and not self.df_log.empty:
             cols = list(self.df_log.columns)
-            for row in reversed(list(self.df_log.itertuples(index=False, name=None))):
+            for row in self.df_log.iloc[::-1].itertuples(index=False, name=None):
                 row_dict = dict(zip(cols, row))
                 tstamp = str(row_dict.get("Timestamp", ""))
                 if "T" in tstamp:
