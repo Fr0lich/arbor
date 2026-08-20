@@ -80,10 +80,12 @@ class ZoomableImagePopup:
                             return
                         img_data.extend(chunk)
                     full_img = Image.open(BytesIO(img_data))
+                    full_img.load()
                 else:
                     full_img = None
             else:
                 full_img = Image.open(self.source)
+                full_img.load()
             
             if full_img:
                 self.top.after(0, lambda: self._apply_full_res(full_img))
@@ -1298,7 +1300,8 @@ class StartupDialog:
                                 lambda i=i, t=total_sheets: self.progress_var.set(((i+1) / t) * 100)
                             )
                             df = pd.read_excel(xls, sheet_name=sheet_name,
-                                               usecols=lambda x: x in allowed_cols)
+                                               usecols=lambda x: x in allowed_cols,
+                                               engine='calamine')
                             if "ObjectID" not in df.columns:
                                 continue
                             df["ObjectID"] = _normalize_object_id_series(df["ObjectID"])

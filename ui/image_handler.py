@@ -1047,7 +1047,9 @@ class ImageHandlerMixin:
                     # (3 s to connect, 8 s to receive the full response)
                     r = self._get_http_session().get(url, timeout=(3, 8))
                     if r.status_code == 200:
-                        return Image.open(BytesIO(r.content))
+                        img = Image.open(BytesIO(r.content))
+                        img.load()
+                        return img
                     # P1-H: Non-200 on first attempt almost never recovers;
                     # stop retrying immediately to save time.
                     return None
@@ -1173,7 +1175,7 @@ class ImageHandlerMixin:
 
                 else:
                     img = Image.open(path)
-
+                    img.load()
 
                     self.root.update_idletasks()
                     available_width = self.image_canvas.winfo_width()
@@ -1353,6 +1355,7 @@ class ImageHandlerMixin:
             for path in paths_to_load:
                 try:
                     img = Image.open(path)
+                    img.load()
                     img.thumbnail((max_width, max_height), Image.LANCZOS)
                     self.root.after(0, lambda p=path, im=img: self._cache_preloaded_image(p, im))
                 except Exception:

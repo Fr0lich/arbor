@@ -554,9 +554,12 @@ class DatabaseOpsMixin:
 
         issues = []
 
-        if hasattr(self, "_get_reg_dict") and hasattr(self, "_get_obs_dict"):
-            reg = self._get_reg_dict().get(oid, {})
-            obs = self._get_obs_dict().get(oid, {})
+        if hasattr(self.app, "ui") and hasattr(self.app.ui, "_get_reg_dict"):
+            reg = self.app.ui._get_reg_dict().get(oid) or self.app.df_reg.loc[oid]
+            obs = self.app.ui._get_obs_dict().get(oid) or self.app.df_obs.loc[oid]
+        elif hasattr(self, "_get_reg_dict") and hasattr(self, "_get_obs_dict"):
+            reg = self._get_reg_dict().get(oid) or self.app.df_reg.loc[oid]
+            obs = self._get_obs_dict().get(oid) or self.app.df_obs.loc[oid]
         else:
             reg = self.app.df_reg.loc[oid]
             obs = self.app.df_obs.loc[oid]

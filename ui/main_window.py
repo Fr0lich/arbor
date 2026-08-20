@@ -1026,7 +1026,7 @@ class ObjectProgramUI(
         tab_canvas.configure(yscrollcommand=tab_scroll.set)
         tab_canvas.bind(
             "<Configure>",
-            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width)
+            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width) if getattr(tc, "_last_width", None) != e.width and not setattr(tc, "_last_width", e.width) else None
         )
 
         # Mousewheel scrolling specific to this tab
@@ -1244,7 +1244,7 @@ class ObjectProgramUI(
         tab_canvas.configure(yscrollcommand=tab_scroll.set)
         tab_canvas.bind(
             "<Configure>",
-            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width)
+            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width) if getattr(tc, "_last_width", None) != e.width and not setattr(tc, "_last_width", e.width) else None
         )
         
         tab_canvas.pack(side="left", fill="both", expand=True)
@@ -4268,7 +4268,7 @@ class ObjectProgramUI(
         window_id = canvas.create_window((0, 0), window=scroll_content, anchor="nw")
         canvas.bind(
             "<Configure>",
-            lambda e: canvas.itemconfig(window_id, width=e.width)
+            lambda e: canvas.itemconfig(window_id, width=e.width) if getattr(canvas, "_last_width", None) != e.width and not setattr(canvas, "_last_width", e.width) else None
         )
         canvas.configure(yscrollcommand=scrollbar.set)
         
@@ -6372,7 +6372,7 @@ class ObjectProgramUI(
         
         probs_inner.bind("<Configure>", lambda e: probs_canvas.configure(scrollregion=probs_canvas.bbox("all")))
         probs_canvas_window = probs_canvas.create_window((0, 0), window=probs_inner, anchor="nw")
-        probs_canvas.bind("<Configure>", lambda e: probs_canvas.itemconfig(probs_canvas_window, width=e.width))
+        probs_canvas.bind("<Configure>", lambda e: probs_canvas.itemconfig(probs_canvas_window, width=e.width) if getattr(probs_canvas, "_last_width", None) != e.width and not setattr(probs_canvas, "_last_width", e.width) else None)
         probs_canvas.configure(yscrollcommand=probs_scrollbar.set)
         
         probs_canvas.pack(side="left", fill="both", expand=True, padx=(sc(16), 0), pady=sc(16))
@@ -6429,7 +6429,7 @@ class ObjectProgramUI(
         
         loc_inner.bind("<Configure>", lambda e: loc_canvas.configure(scrollregion=loc_canvas.bbox("all")))
         loc_canvas_window = loc_canvas.create_window((0, 0), window=loc_inner, anchor="nw")
-        loc_canvas.bind("<Configure>", lambda e: loc_canvas.itemconfig(loc_canvas_window, width=e.width))
+        loc_canvas.bind("<Configure>", lambda e: loc_canvas.itemconfig(loc_canvas_window, width=e.width) if getattr(loc_canvas, "_last_width", None) != e.width and not setattr(loc_canvas, "_last_width", e.width) else None)
         loc_canvas.configure(yscrollcommand=loc_scrollbar.set)
         
         loc_canvas.pack(side="left", fill="both", expand=True, padx=(sc(16), 0), pady=sc(16))
@@ -6672,11 +6672,13 @@ class ObjectProgramUI(
             return bool(val)
 
       
-        obs = self.obs_by_id.loc[oid]
+        obs_dict = self._get_obs_dict()
+        obs = obs_dict.get(oid) or self.obs_by_id.loc[oid]
         if isinstance(obs, pd.DataFrame):
             obs = obs.iloc[0]
 
-        reg = self.reg_by_id.loc[oid]
+        reg_dict = self._get_reg_dict()
+        reg = reg_dict.get(oid) or self.reg_by_id.loc[oid]
         if isinstance(reg, pd.DataFrame):
             reg = reg.iloc[0]
 

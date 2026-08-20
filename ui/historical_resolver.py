@@ -240,7 +240,8 @@ class HistoricalConflictResolverWindow:
         # Check current value for unknown status
         current_val = ""
         if self.oid in self.main_app.reg_by_id.index:
-            reg = self.main_app.reg_by_id.loc[self.oid]
+            reg_dict = self.main_app._get_reg_dict() if hasattr(self.main_app, "_get_reg_dict") else {}
+            reg = reg_dict.get(self.oid) or self.main_app.reg_by_id.loc[self.oid]
             if isinstance(reg, pd.DataFrame):
                 reg = reg.iloc[0]
             current_val = str(reg.get(field, "")).strip()
@@ -305,7 +306,9 @@ class HistoricalConflictResolverWindow:
         content = tk.Frame(card, bg=COLORS["surface"])
         content.pack(fill="x", padx=20, pady=20)
         
-        current_val = str(self.main_app.app.df_reg.loc[self.oid].get(field, "")).strip()
+        reg_dict = self.main_app._get_reg_dict() if hasattr(self.main_app, "_get_reg_dict") else {}
+        reg_row = reg_dict.get(self.oid) or self.main_app.app.df_reg.loc[self.oid]
+        current_val = str(reg_row.get(field, "")).strip()
         if current_val == "nan": current_val = ""
         
         # Current Value
@@ -458,7 +461,9 @@ class HistoricalConflictResolverWindow:
 
         # We simulate clicking apply on all fields that have a value different from current
         for field in self.fields:
-            current_val = str(self.main_app.app.df_reg.loc[self.oid].get(field, "")).strip()
+            reg_dict = self.main_app._get_reg_dict() if hasattr(self.main_app, "_get_reg_dict") else {}
+            reg_row = reg_dict.get(self.oid) or self.main_app.app.df_reg.loc[self.oid]
+            current_val = str(reg_row.get(field, "")).strip()
             if current_val == "nan": current_val = ""
             
             new_val = self.res_vars[field].get().strip()
