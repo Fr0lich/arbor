@@ -129,7 +129,6 @@ def test_unified_settings_push_layout_to_app(tk_root):
             self.location_in_center_var = tk.BooleanVar(value=False)
             self.show_image_tools_var = tk.BooleanVar(value=True)
             self.show_bulk_edit_var = tk.BooleanVar(value=True)
-            self.dashboard_mode_var = tk.StringVar(value="Window")
             self.image_stack_var = tk.BooleanVar(value=False)
             self.large_reviewed_button_var = tk.BooleanVar(value=False)
             self.snap_lock_var = tk.BooleanVar(value=False)
@@ -310,7 +309,6 @@ def test_bidirectional_settings_initialization_from_live_app(tk_root, tmp_path, 
             self.location_in_center_var = tk.BooleanVar(value=True)
             self.show_image_tools_var = tk.BooleanVar(value=False)
             self.show_bulk_edit_var = tk.BooleanVar(value=False)
-            self.dashboard_mode_var = tk.StringVar(value="Embedded")
             self.image_stack_var = tk.BooleanVar(value=True)
             self.large_reviewed_button_var = tk.BooleanVar(value=False)
             self.snap_lock_var = tk.BooleanVar(value=True)
@@ -333,7 +331,6 @@ def test_bidirectional_settings_initialization_from_live_app(tk_root, tmp_path, 
     assert win.var_location_center.get() is True
     assert win.var_show_image_tools.get() is False
     assert win.var_show_bulk_edit.get() is False
-    assert win.var_dashboard_embedded.get() is True
     assert win.var_image_stack.get() is True
     assert win.var_large_reviewed_btn.get() is False
     assert win.var_snap_lock.get() is True
@@ -358,7 +355,6 @@ def test_layout_preset_full_serialization(tk_root, tmp_path, monkeypatch):
     win.var_show_list.set(False)
     win.var_location_center.set(True)
     win.var_location_2row.set(True)
-    win.var_dashboard_embedded.set(True)
     win.var_image_stack.set(True)
     win.draft_toolbar_vars = {"Export": tk.BooleanVar(value=False)}
 
@@ -373,7 +369,6 @@ def test_layout_preset_full_serialization(tk_root, tmp_path, monkeypatch):
         "location_2row": win.var_location_2row.get(),
         "show_image_tools": win.var_show_image_tools.get(),
         "show_bulk_edit": win.var_show_bulk_edit.get(),
-        "dashboard_mode": "Embedded" if win.var_dashboard_embedded.get() else "Window",
         "image_stack": win.var_image_stack.get(),
         "large_reviewed_button": win.var_large_reviewed_btn.get(),
         "snap_lock": win.var_snap_lock.get(),
@@ -387,7 +382,6 @@ def test_layout_preset_full_serialization(tk_root, tmp_path, monkeypatch):
     assert preset["show_list"] is False
     assert preset["location_in_center"] is True
     assert preset["location_2row"] is True
-    assert preset["dashboard_mode"] == "Embedded"
     assert preset["image_stack"] is True
     assert preset["toolbar_buttons"]["Export"] is False
     win.win.destroy()
@@ -558,7 +552,6 @@ def test_unified_settings_all_10_target_info_buttons(tk_root):
         "auto_advance_history",
         "autosave_archive_limit",
         "enable_excel_import_backup",
-        "dashboard_mode",
         "strict_input_validation",
     ]
 

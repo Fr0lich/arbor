@@ -21,7 +21,6 @@ class LayoutSettingsMixin:
         self.draft_layout_focus_mode_var = tk.BooleanVar(value=self.focus_mode_var.get())
         self.draft_snap_lock_var = tk.BooleanVar(value=self.snap_lock_var.get())
         self.draft_image_stack_var = tk.BooleanVar(value=self.image_stack_var.get())
-        self.draft_dashboard_embedded_var = tk.BooleanVar(value=(self.dashboard_mode_var.get() == "Embedded"))
         self.draft_large_reviewed_button_var = tk.BooleanVar(value=self.large_reviewed_button_var.get())
 
         self.draft_toolbar_vars = {}
@@ -44,7 +43,6 @@ class LayoutSettingsMixin:
         self.image_stack_var.set(self.draft_image_stack_var.get())
 
         self.large_reviewed_button_var.set(self.draft_large_reviewed_button_var.get())
-        self.dashboard_mode_var.set("Embedded" if self.draft_dashboard_embedded_var.get() else "Window")
 
         for k, v in self.draft_toolbar_vars.items():
             self.toolbar_vars[k].set(v.get())
@@ -57,7 +55,6 @@ class LayoutSettingsMixin:
         self.toggle_reg_panel()
         self.toggle_image_tools()
         self.toggle_bulk_edit_btn()
-        self.toggle_dashboard_mode()
         self._toggle_toolbar_buttons()
         self.update_reg_fields_visibility()
 
@@ -98,7 +95,6 @@ class LayoutSettingsMixin:
                     self.draft_layout_focus_mode_var.set(layout.get("focus_problems", False))
                     self.draft_snap_lock_var.set(layout.get("snap_lock", False))
                     self.draft_image_stack_var.set(layout.get("image_stack", False))
-                    self.draft_dashboard_embedded_var.set(layout.get("dashboard_mode", "Window") == "Embedded")
                     self.draft_large_reviewed_button_var.set(layout.get("large_reviewed_button", True))
 
                     if "toolbar_buttons" in layout:
@@ -168,7 +164,6 @@ class LayoutSettingsMixin:
                 "show_bulk_edit": self.draft_show_bulk_edit_var.get(),
                 "snap_lock": self.draft_snap_lock_var.get(),
                 "image_stack": self.draft_image_stack_var.get(),
-                "dashboard_mode": "Embedded" if self.draft_dashboard_embedded_var.get() else "Window",
                 "large_reviewed_button": self.draft_large_reviewed_button_var.get(),
                 "active_filter": self.app.active_filter_dict.copy() if hasattr(self.app, 'active_filter_dict') else {}
             }
@@ -323,7 +318,6 @@ class LayoutSettingsMixin:
         create_toggle_row(behavior_content, "Focus Mode by default", self.draft_layout_focus_mode_var, command=on_switch_toggle, ui_ref=self)
         create_toggle_row(behavior_content, "Snap lock when focusing problems", self.draft_snap_lock_var, command=on_switch_toggle, ui_ref=self)
         create_toggle_row(behavior_content, "View images as stack by default", self.draft_image_stack_var, command=on_switch_toggle, ui_ref=self)
-        create_toggle_row(behavior_content, "Embedded Session Dashboard", self.draft_dashboard_embedded_var, command=on_switch_toggle, ui_ref=self)
 
         appearance_content = create_section("Appearance", scrollable_frame, "appearance")
         create_toggle_row(appearance_content, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var, command=on_switch_toggle, ui_ref=self)
@@ -408,7 +402,6 @@ class LayoutSettingsMixin:
             "show_reg": self.show_reg_var.get(),
             "snap_lock": self.snap_lock_var.get(),
             "image_stack": self.image_stack_var.get(),
-            "dashboard_mode": self.dashboard_mode_var.get(),
             "large_reviewed_button": self.large_reviewed_button_var.get(),
             "active_filter": self.app.active_filter_dict.copy() if hasattr(self.app, 'active_filter_dict') else {}
         }
@@ -485,7 +478,6 @@ class LayoutSettingsMixin:
         self.focus_mode_var.set(layout.get("focus_problems", False))
         self.snap_lock_var.set(layout.get("snap_lock", False))
         self.image_stack_var.set(layout.get("image_stack", False))
-        self.dashboard_mode_var.set(layout.get("dashboard_mode", "Window"))
         self.show_list_var.set(layout.get("show_list", True))
         self.show_search_var.set(layout.get("show_search", True))
         self.show_images_var.set(layout.get("show_images", True))
@@ -517,7 +509,6 @@ class LayoutSettingsMixin:
         self.toggle_images_panel()
         self.toggle_reg_panel()
         self.toggle_image_tools()
-        self.toggle_dashboard_mode()
         self.toggle_bulk_edit_btn()
         self.update_reg_fields_visibility()
 

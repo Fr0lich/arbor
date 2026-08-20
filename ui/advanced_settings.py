@@ -122,16 +122,7 @@ ADVANCED_SETTINGS_SCHEMA = [
         "button_text": "Toggle Theme",
         "callback": "toggle_dark_mode"
     },
-    {
-        "id": "action_dashboard",
-        "type": "button",
-        "tab": "UX & Themes",
-        "group": "Interface",
-        "label": "Session Dashboard",
-        "description": "Open the session statistics and logs dashboard.",
-        "button_text": "Open Dashboard",
-        "callback": "open_session_dashboard_window"
-    },
+
     {
         "id": "action_statistics",
         "type": "button",

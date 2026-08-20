@@ -5,62 +5,6 @@ from config import sc
 from repository import REVIEWED_COLUMN
 
 class DashboardMixin:
-    def open_session_dashboard_window(self):
-        if self.dashboard_mode_var.get() == "Window":
-            if hasattr(self, "dash_win") and self.dash_win.winfo_exists():
-                self.dash_win.focus_set()
-                return
-
-            self.dash_win = tk.Toplevel(self.root)
-            self.dash_win.title("Session Dashboard")
-            import utils
-            utils.center_and_fit_toplevel(self.dash_win, 400, 150)
-            self._build_dashboard_ui(self.dash_win, is_embedded=False)
-        else:
-            if not hasattr(self, "dash_embedded_frame") or not self.dash_embedded_frame.winfo_exists():
-                self.dash_embedded_frame = ttk.Frame(self.middle_frame, padding=15, relief="groove")
-                self._build_dashboard_ui(self.dash_embedded_frame, is_embedded=True)
-
-            if self.dash_embedded_frame.winfo_manager():
-                self.dash_embedded_frame.pack_forget()
-            else:
-                self.dash_embedded_frame.pack(side="bottom", fill="x", pady=(10, 0))
-
-            self.update_dashboard()
-
-    def _build_dashboard_ui(self, parent, is_embedded=False):
-        container = ttk.Frame(parent)
-        container.pack(fill="both", expand=True)
-
-        ttk.Label(container, text="📊 Session Dashboard", font=("Segoe UI", sc(12), "bold")).pack(anchor="w", pady=(0,10))
-
-        grid_frame = ttk.Frame(container)
-        grid_frame.pack(fill="x")
-        grid_frame.columnconfigure(0, weight=1)
-        grid_frame.columnconfigure(1, weight=1)
-
-        lbl_rev = ttk.Label(grid_frame, text="Reviewed: 0 / 0 (0%)", font=("Segoe UI", sc(9), "bold"))
-        lbl_rev.grid(row=0, column=0, sticky="w", pady=2)
-
-        lbl_prob = ttk.Label(grid_frame, text="Objects with Problems: 0", font=("Segoe UI", sc(9), "bold"))
-        lbl_prob.grid(row=0, column=1, sticky="w", pady=2)
-
-        prog = ttk.Progressbar(container, orient="horizontal", mode="determinate")
-        prog.pack(fill="x", pady=(15, 2))
-
-        ttk.Button(container, text="📊 Open Analytics", command=self.show_statistics).pack(pady=(10, 0))
-
-        if is_embedded:
-            self.dash_embedded_reviewed_lbl = lbl_rev
-            self.dash_embedded_problems_lbl = lbl_prob
-            self.dash_embedded_progress = prog
-        else:
-            self.dash_reviewed_lbl = lbl_rev
-            self.dash_problems_lbl = lbl_prob
-            self.dash_progress = prog
-
-        self.update_dashboard()
-
     def show_statistics(self):
         if self.app.df_reg is None or self.app.df_obs is None:
             messagebox.showinfo("No data", "Load an Excel file first")
@@ -356,44 +300,4 @@ class DashboardMixin:
             messagebox.showerror("Error", f"Failed to save stats:\n{e}")
 
     def update_dashboard(self):
-        if self.app.df_obs is None or self.app.df_reg is None:
-            return
-
-        total = len(self.app.df_obs)
-        if total == 0:
-            return
-
-        reviewed = int(self.app.df_obs[REVIEWED_COLUMN].sum())
-        pct = int((reviewed / total) * 100)
-
-        current_oid = self.app.current_object_id
-        problems_count = 0
-        if self.app.df_obs is not None and not self.app.df_obs.empty:
-            cols = [p for p in getattr(self, "problem_columns", []) if p in self.app.df_obs.columns]
-            if cols:
-                has_prob_series = self.app.df_obs[cols].any(axis=1)
-                if current_oid is not None and getattr(self, "object_loaded", False):
-                    other_sum = has_prob_series.drop(current_oid, errors="ignore").sum()
-                    current_has_prob = any(
-                        self.problem_vars.get(p).get()
-                        for p in getattr(self, "problem_columns", [])
-                        if self.problem_vars.get(p)
-                    )
-                    problems_count = int(other_sum) + (1 if current_has_prob else 0)
-                else:
-                    problems_count = int(has_prob_series.sum())
-
-        if hasattr(self, "dash_reviewed_lbl") and self.dash_reviewed_lbl.winfo_exists():
-            self.dash_reviewed_lbl.config(text=f"Reviewed: {reviewed} / {total} ({pct}%)")
-            self.dash_problems_lbl.config(text=f"Objects with Problems: {problems_count}")
-            self.dash_progress["value"] = pct
-
-        if hasattr(self, "dash_embedded_reviewed_lbl") and self.dash_embedded_reviewed_lbl.winfo_exists():
-            self.dash_embedded_reviewed_lbl.config(text=f"Reviewed: {reviewed} / {total} ({pct}%)")
-            self.dash_embedded_problems_lbl.config(text=f"Objects with Problems: {problems_count}")
-            self.dash_embedded_progress["value"] = pct
-
-        if hasattr(self, "review_progress_label") and self.review_progress_label is not None:
-            self.review_progress_label.config(text=f"Reviewed: {pct}% ({reviewed}/{total})")
-        if hasattr(self, "review_progress") and self.review_progress is not None:
-            self.review_progress["value"] = pct
+        pass

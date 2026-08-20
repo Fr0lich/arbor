@@ -361,7 +361,6 @@ class ObjectProgramUI(
         
         self.snap_lock_var = tk.BooleanVar(value=_init_prefs.get("snap_lock", False))
         self.image_stack_var = tk.BooleanVar(value=_init_prefs.get("image_stack", False))
-        self.dashboard_mode_var = tk.StringVar(value=_init_prefs.get("dashboard_mode", "Window"))
         self.focus_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("focus_dynamic_update", True))
         self.layout_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("layout_dynamic_update", True))
         self.large_reviewed_button_var = tk.BooleanVar(value=_init_prefs.get("large_reviewed_button", True))
@@ -477,8 +476,8 @@ class ObjectProgramUI(
         self.root.bind("<Control-D>", lambda e: self._duplicate_current_object())
         self.root.bind("<Control-Delete>", lambda e: self.delete_current_object())
         
-        # Dashboard toggle
-        self.root.bind("<Control-j>", lambda e: self.open_session_dashboard_window())
+        # Database Statistics shortcut
+        self.root.bind("<Control-j>", lambda e: self.show_statistics())
         self.root.bind("<Control-s>", lambda e: self.save_session("SAVE"))
         self.root.bind("<Control-g>", lambda e: self.open_filter_menu())
         self.root.bind("<Control-z>", self._smart_undo)
@@ -2240,7 +2239,6 @@ class ObjectProgramUI(
                 "snap_lock":               lambda v: self.snap_lock_var.set(v),
                 "show_image_tools":        lambda v: (self.show_image_tools_var.set(v), self.toggle_image_tools()),
                 "show_bulk_edit":          lambda v: (self.show_bulk_edit_var.set(v), self.toggle_bulk_edit_btn()),
-                "dashboard_mode":          lambda v: (self.dashboard_mode_var.set(v), self.toggle_dashboard_mode()),
                 "image_stack":             lambda v: self._live_image_stack(v),
                 "focus_mode":              lambda v: (self.focus_mode_var.set(v), self.update_reg_fields_visibility()),
                 "focus_fallback":          lambda v: (self.focus_fallback_var.set(v), self.update_reg_fields_visibility()),
@@ -3018,13 +3016,7 @@ class ObjectProgramUI(
             else:
                 self.bulk_edit_btn.pack_forget()
 
-    def toggle_dashboard_mode(self):
-        if self.dashboard_mode_var.get() == "Window":
-            if hasattr(self, "dash_embedded_frame") and self.dash_embedded_frame.winfo_manager():
-                self.dash_embedded_frame.pack_forget()
-        else:
-            if hasattr(self, "dash_win") and self.dash_win.winfo_exists():
-                self.dash_win.destroy()
+
 
 
 
@@ -4277,7 +4269,7 @@ class ObjectProgramUI(
             ("NAVIGATION", "Alt+Right", "Go forward in navigation history"),
             ("FOCUS", "Ctrl+F", "Jump to Search"),
             ("FOCUS", "Ctrl+O", "Jump to Object list"),
-            ("FOCUS", "Ctrl+J", "Open Session Dashboard (popup window)"),
+            ("FOCUS", "Ctrl+J", "Open Database Statistics"),
             ("FOCUS", "Ctrl+E / Ctrl+I", "Jump to first Registration field"),
             ("FOCUS", "Ctrl+L", "Jump to first Location field"),
             ("FOCUS", "Ctrl+P", "Jump to first Problem checkbox"),
@@ -7206,7 +7198,6 @@ class ObjectProgramUI(
         self.app.dirty = True
         self.update_dirty_ui()
         self.update_review_progress()
-        self.update_dashboard()
         self.update_reviewed_button_state()
         
         current_oid = self.app.current_object_id
@@ -7802,8 +7793,6 @@ class ObjectProgramUI(
 
         if not skip_snap and self.snap_lock_var.get():
             self.snap_to_place(shrink=focus_active)
-            
-        self.update_dashboard()
 
 
 
@@ -8470,7 +8459,6 @@ class ObjectProgramUI(
             
         self.app.dirty = True
         self.update_dirty_ui()
-        self.update_dashboard()
         self.update_list_item_color(oid)
         self.update_review_progress()
         self._list_dirty = True

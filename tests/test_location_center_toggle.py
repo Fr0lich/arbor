@@ -53,7 +53,6 @@ def test_unified_settings_push_layout_to_app(tk_root):
     mock_app.draft_location_in_center_var = tk.BooleanVar(value=False)
     mock_app.show_image_tools_var = tk.BooleanVar(value=True)
     mock_app.show_bulk_edit_var = tk.BooleanVar(value=True)
-    mock_app.dashboard_mode_var = tk.StringVar(value="Window")
     mock_app.image_stack_var = tk.BooleanVar(value=False)
     mock_app.toolbar_vars = {}
 

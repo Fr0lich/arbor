@@ -64,10 +64,6 @@ SETTING_INFO_TEXTS = {
         "Automatically generates a timestamped snapshot of your current dataset inside "
         "the 'backups/' directory before importing an external Excel sheet."
     ),
-    "dashboard_mode": (
-        "When enabled, docks session statistics and logs directly into the workspace layout. "
-        "When disabled, the dashboard opens in an independent floating window."
-    ),
     "strict_input_validation": (
         "Enforces strict data format checks before committing edits or navigating away, "
         "rather than solely applying visual warning tints."
@@ -301,8 +297,6 @@ class UnifiedSettingsWindow:
         show_img_tls = _get_val("show_image_tools_var", p.get("show_image_tools", True))
         show_blk = _get_val("show_bulk_edit_var", p.get("show_bulk_edit", True))
         
-        dash_val = _get_val("dashboard_mode_var", p.get("dashboard_mode", "Window"))
-        dash_emb = (dash_val == "Embedded")
         img_stk = _get_val("image_stack_var", p.get("image_stack", False))
 
         self.var_show_list = tk.BooleanVar(value=bool(show_lst))
@@ -313,7 +307,6 @@ class UnifiedSettingsWindow:
         self.var_location_2row = tk.BooleanVar(value=bool(loc_2r))
         self.var_show_image_tools = tk.BooleanVar(value=bool(show_img_tls))
         self.var_show_bulk_edit = tk.BooleanVar(value=bool(show_blk))
-        self.var_dashboard_embedded = tk.BooleanVar(value=bool(dash_emb))
         self.var_image_stack = tk.BooleanVar(value=bool(img_stk))
         self.var_layout_dynamic = tk.BooleanVar(value=False)  # runtime-only, not persisted
 
@@ -670,11 +663,7 @@ class UnifiedSettingsWindow:
                           command=lambda: (_notify_panel("bulk_edit", self.var_show_bulk_edit), self._notify_live("show_bulk_edit", self.var_show_bulk_edit.get())))
 
         # Card 2: Behavior
-        card2 = self._create_card(c, "View & Dashboard Display")
-        create_toggle_row(card2, "Embedded Session Dashboard (vs Separate Window)",
-                          self.var_dashboard_embedded,
-                          command=lambda: (_apply_if_dynamic(), self._notify_live("dashboard_mode", "Embedded" if self.var_dashboard_embedded.get() else "Window")),
-                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["dashboard_mode"])
+        card2 = self._create_card(c, "View Display Options")
         create_toggle_row(card2, "View Images as Stack by Default",
                           self.var_image_stack,
                           command=lambda: (_apply_if_dynamic(), self._notify_live("image_stack", self.var_image_stack.get())),
@@ -760,13 +749,6 @@ class UnifiedSettingsWindow:
             if hasattr(self.app, "draft_show_bulk_edit_var"):
                 self.app.draft_show_bulk_edit_var.set(self.var_show_bulk_edit.get())
 
-            if hasattr(self.app, "dashboard_mode_var"):
-                self.app.dashboard_mode_var.set(
-                    "Embedded" if self.var_dashboard_embedded.get() else "Window"
-                )
-            if hasattr(self.app, "draft_dashboard_embedded_var"):
-                self.app.draft_dashboard_embedded_var.set(self.var_dashboard_embedded.get())
-
             if hasattr(self.app, "image_stack_var"):
                 self.app.image_stack_var.set(self.var_image_stack.get())
                 self.app.image_view_mode = "stack" if self.var_image_stack.get() else "gallery"
@@ -840,8 +822,6 @@ class UnifiedSettingsWindow:
                 self.app.toggle_image_tools()
             if hasattr(self.app, "toggle_bulk_edit_btn"):
                 self.app.toggle_bulk_edit_btn()
-            if hasattr(self.app, "toggle_dashboard_mode"):
-                self.app.toggle_dashboard_mode()
         except Exception as e:
             print(f"[UnifiedSettings] Error pushing layout to app: {e}")
 
@@ -913,7 +893,6 @@ class UnifiedSettingsWindow:
             self.var_location_2row.set(layout.get("location_2row", False))
             self.var_show_image_tools.set(layout.get("show_image_tools", True))
             self.var_show_bulk_edit.set(layout.get("show_bulk_edit", True))
-            self.var_dashboard_embedded.set(layout.get("dashboard_mode", "Window") == "Embedded")
             self.var_image_stack.set(layout.get("image_stack", False))
             self.var_large_reviewed_btn.set(layout.get("large_reviewed_button", True))
             self.var_snap_lock.set(layout.get("snap_lock", False))
@@ -967,7 +946,6 @@ class UnifiedSettingsWindow:
                 "location_2row": self.var_location_2row.get(),
                 "show_image_tools": self.var_show_image_tools.get(),
                 "show_bulk_edit": self.var_show_bulk_edit.get(),
-                "dashboard_mode": "Embedded" if self.var_dashboard_embedded.get() else "Window",
                 "image_stack": self.var_image_stack.get(),
                 "large_reviewed_button": self.var_large_reviewed_btn.get(),
                 "snap_lock": self.var_snap_lock.get(),
@@ -1175,9 +1153,6 @@ class UnifiedSettingsWindow:
         _action_btn(card1, "Toggle Dark Mode",
                     "Switch the interface theme between light and dark mode.",
                     "Toggle Theme", "toggle_dark_mode")
-        _action_btn(card1, "Session Dashboard",
-                    "Open the session statistics and logs dashboard.",
-                    "Open Dashboard", "open_session_dashboard_window")
         _action_btn(card1, "Database Statistics",
                     "Examine overall counts and checklists of registered records.",
                     "View Statistics", "show_statistics")
@@ -1351,7 +1326,6 @@ class UnifiedSettingsWindow:
         p["location_2row"] = self.var_location_2row.get()
         p["show_image_tools"] = self.var_show_image_tools.get()
         p["show_bulk_edit"] = self.var_show_bulk_edit.get()
-        p["dashboard_mode"] = "Embedded" if self.var_dashboard_embedded.get() else "Window"
         p["image_stack"] = self.var_image_stack.get()
         p["toolbar_buttons"] = {k: v.get() for k, v in self.draft_toolbar_vars.items()}
 
