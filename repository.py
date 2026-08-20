@@ -511,16 +511,21 @@ class SQLiteRepository:
         sections = config.get("ui_sections", {})
 
         reg_columns = ["ObjectID"]
+        seen_reg = {"ObjectID"}
         for field in sections.get("registration", []):
-            if field["name"] not in reg_columns:
+            if field["name"] not in seen_reg:
+                seen_reg.add(field["name"])
                 reg_columns.append(field["name"])
 
         obs_columns = ["ObjectID"]
+        seen_obs = {"ObjectID"}
         for field in sections.get("location", []):
-            if field["name"] not in obs_columns:
+            if field["name"] not in seen_obs:
+                seen_obs.add(field["name"])
                 obs_columns.append(field["name"])
         for field in sections.get("problems", []):
-            if field["name"] not in obs_columns:
+            if field["name"] not in seen_obs:
+                seen_obs.add(field["name"])
                 obs_columns.append(field["name"])
 
         obs_columns.extend([
