@@ -45,16 +45,19 @@ class SearchEngine:
             all_s = df_str.apply(lambda row: " ".join(v.strip().lower() for v in row if v.strip() and v.strip().lower() not in ("nan", "none")), axis=1)
             all_s = index_str + " " + all_s
 
-            # Construct the dict
-            oids = df_str.index
-            for i in range(len(oids)):
-                oid = oids[i]
-                id_val = index_str.iloc[i]
+            # Construct the dict efficiently bypassing pandas .iloc overhead
+            oids = df_str.index.values
+            ids_arr = index_str.values
+            gs_arr = genus_species_s.values
+            fam_arr = family_s.values
+            all_arr = all_s.values
+
+            for oid, id_val, gs, fam, all_text in zip(oids, ids_arr, gs_arr, fam_arr, all_arr):
                 index[oid] = {
                     "id": id_val,
-                    "genus_species": genus_species_s.iloc[i],
-                    "family": family_s.iloc[i],
-                    "all": all_s.iloc[i]
+                    "genus_species": gs,
+                    "family": fam,
+                    "all": all_text
                 }
 
             self._search_index_cache = index
