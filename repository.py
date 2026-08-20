@@ -421,11 +421,14 @@ class SQLiteRepository:
                 df_photo_save = df_photo_save.reset_index()
 
             with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                existing_tables = {row[0] for row in cursor.fetchall()}
+
                 for table_name, df_save in [("Registration", df_reg_save), ("Observation", df_obs_save)]:
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
-                    if cursor.fetchone():
+                    if table_name in existing_tables:
                         # Table exists, check if columns match (so we don't break on schema changes)
+                        cursor = conn.cursor()
                         cursor.execute(f"PRAGMA table_info({table_name});")
                         db_cols = {row[1] for row in cursor.fetchall()}
                         df_cols = set(df_save.columns)
@@ -439,18 +442,16 @@ class SQLiteRepository:
                         df_save.to_sql(table_name, conn, if_exists="replace", index=False)
 
                 if not df_photo_save.empty:
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Photo';")
-                    if cursor.fetchone():
+                    if "Photo" in existing_tables:
+                        cursor = conn.cursor()
                         cursor.execute("DELETE FROM Photo;")
                         df_photo_save.to_sql("Photo", conn, if_exists="append", index=False)
                     else:
                         df_photo_save.to_sql("Photo", conn, if_exists="replace", index=False)
 
                 if df_log is not None and not df_log.empty:
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Log';")
-                    if cursor.fetchone():
+                    if "Log" in existing_tables:
+                        cursor = conn.cursor()
                         cursor.execute("DELETE FROM Log;")
                         df_log.to_sql("Log", conn, if_exists="append", index=False)
                     else:
