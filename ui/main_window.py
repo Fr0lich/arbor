@@ -6700,7 +6700,7 @@ class ObjectProgramUI(
    
         if prob_col in self.problem_to_field:
             field = self.problem_to_field.get(prob_col)
-            if not field or field not in reg.index:
+            if not field or field not in reg:
                 return obs_val
 
             raw_val = reg.get(field, "")
