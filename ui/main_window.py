@@ -5317,7 +5317,14 @@ class ObjectProgramUI(
             if res is None:
                 return
             if res:
-                self.save_session("CLOSE")
+                self.commit_current_object()
+                try:
+                    self._write_excel(self.app.output_path)
+                except Exception as e:
+                    from utils import debug_error
+                    debug_error("on_close sync save", str(e))
+                    messagebox.showerror("Save Error", f"Failed to save on exit: {e}")
+                    return
 
         if self._autosave_job:
             self.root.after_cancel(self._autosave_job)
