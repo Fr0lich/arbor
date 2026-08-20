@@ -323,7 +323,96 @@ class ToggleSwitch(tk.Canvas):
             self.variable.trace_remove("write", self._trace_id)
         except Exception:
             pass
-        super().destroy()
+class SleekScrollbar(tk.Canvas):
+    """A sleek, modern capsule-thumb scrollbar styled for Stitch-design principles."""
+    def __init__(self, parent, command=None, is_dark=False, width=8, **kwargs):
+        self.command = command
+        self.is_dark = is_dark
+        self._first = 0.0
+        self._last = 1.0
+        self._dragging = False
+        self._hover = False
+
+        bg_color = "#1e1e2e" if is_dark else "#f3f3f3"
+        super().__init__(parent, width=width, bg=bg_color, highlightthickness=0, bd=0, **kwargs)
+
+        self._update_colors()
+        self.bind("<Configure>", self._draw)
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_press)
+        self.bind("<B1-Motion>", self._on_drag)
+        self.bind("<ButtonRelease-1>", self._on_release)
+
+    def _update_colors(self):
+        self.track_bg = "#1e1e2e" if self.is_dark else "#f3f3f3"
+        self.thumb_normal = "#45475a" if self.is_dark else "#cccccc"
+        self.thumb_hover = "#585b70" if self.is_dark else "#aaaaaa"
+        self.thumb_active = "#89b4fa" if self.is_dark else "#0058a3"
+        self.configure(bg=self.track_bg)
+
+    def set_theme(self, is_dark):
+        self.is_dark = is_dark
+        self._update_colors()
+        self._draw()
+
+    def set(self, first, last):
+        try:
+            self._first = float(first)
+            self._last = float(last)
+        except (ValueError, TypeError):
+            return
+        self._draw()
+
+    def _draw(self, event=None):
+        self.delete("all")
+        h = self.winfo_height()
+        w = self.winfo_width()
+        if h <= 4 or w <= 4:
+            return
+
+        if self._last - self._first >= 0.999:
+            return
+
+        y0 = max(2, int(self._first * h))
+        y1 = min(h - 2, int(self._last * h))
+        if y1 - y0 < 16:
+            y1 = min(h - 2, y0 + 16)
+
+        color = self.thumb_active if self._dragging else (self.thumb_hover if self._hover else self.thumb_normal)
+        r = max(1, (w - 2) // 2)
+        # Draw rounded capsule thumb
+        self.create_oval(2, y0, w - 2, y0 + (w - 4), fill=color, outline="")
+        if y1 - y0 > (w - 4):
+            self.create_rectangle(2, y0 + r, w - 2, y1 - r, fill=color, outline="")
+        self.create_oval(2, y1 - (w - 4), w - 2, y1, fill=color, outline="")
+
+    def _on_enter(self, event):
+        self._hover = True
+        self._draw()
+
+    def _on_leave(self, event):
+        self._hover = False
+        self._draw()
+
+    def _on_press(self, event):
+        self._dragging = True
+        self._scroll_to(event.y)
+
+    def _on_drag(self, event):
+        self._scroll_to(event.y)
+
+    def _on_release(self, event):
+        self._dragging = False
+        self._draw()
+
+    def _scroll_to(self, y):
+        h = self.winfo_height()
+        if h <= 1 or self.command is None:
+            return
+        fraction = max(0.0, min(1.0, y / float(h)))
+        self.command("moveto", fraction)
+
 
 class TreeviewListboxWrapper(ttk.Frame):
     def __init__(self, parent, main_window, **kwargs):
@@ -371,9 +460,10 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.tree.bind("<Leave>", self._on_tree_leave)
         self._last_hovered_iid = None
 
-        # Create Scrollable Canvas for Detailed Mode
+        # Create Scrollable Canvas and SleekScrollbar for Detailed Mode
         self.canvas_container = ttk.Frame(self)
-        self.canvas = tk.Canvas(self.canvas_container, highlightthickness=0)
+        self.scrollbar = SleekScrollbar(self.canvas_container, command=self.canvas_yview_bridge, width=8)
+        self.canvas = tk.Canvas(self.canvas_container, highlightthickness=0, yscrollcommand=self._on_canvas_scroll)
         # PERFORMANCE OPTIMIZATION (Bolt): True Virtualization. Removed self.scrollable_frame.
 
         self.canvas.bind("<Configure>", self._on_canvas_configure)
@@ -392,6 +482,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         self._active_card_windows = {} # Maps idx -> (window_id, frame_widget)
         self._card_pool = [] # Pool of reusable card widget dictionaries
         self._pending_viewport_update = None
+
+        self._setup_virtual_card_bindtag()
 
         # Keyboard Navigation bindings for Detailed Mode
         self.bind("<Up>", self._on_keypress_up)
@@ -486,7 +578,9 @@ class TreeviewListboxWrapper(ttk.Frame):
             # Detailed view (Canvas Cards)
             self.tree.pack_forget()
             self.canvas_container.pack(fill="both", expand=True)
-            self.canvas.pack(fill="both", expand=True)
+            self.scrollbar.set_theme(is_dark)
+            self.scrollbar.pack(side="right", fill="y", padx=(0, 2), pady=2)
+            self.canvas.pack(side="left", fill="both", expand=True)
             self.active_view = "detailed"
 
             if self._card_height is None:
@@ -496,6 +590,18 @@ class TreeviewListboxWrapper(ttk.Frame):
             self._schedule_viewport_update()
 
         self._sync_view_selections()
+
+    def canvas_yview_bridge(self, *args):
+        return self.canvas.yview(*args)
+
+    def _on_canvas_scroll(self, first, last):
+        if hasattr(self, "scrollbar") and self.scrollbar.winfo_exists():
+            self.scrollbar.set(first, last)
+        if getattr(self, "_external_yscrollcommand", None):
+            try:
+                self._external_yscrollcommand(first, last)
+            except Exception:
+                pass
 
     def _on_canvas_configure(self, event):
         self._last_canvas_width = event.width
@@ -746,10 +852,12 @@ class TreeviewListboxWrapper(ttk.Frame):
             l_badge.pack(side="right", padx=(sc(2), sc(2)))
 
             # Reapply tags to new child for hover effects
-            card_tag = f"Card_{oid}"
             tags = l_badge.bindtags()
-            if card_tag not in tags:
-                l_badge.bindtags((tags[0], card_tag) + tags[1:])
+            if "VirtualCard" not in tags:
+                l_badge.bindtags((tags[0], "VirtualCard") + tags[1:])
+            card_body = self.item_data[oid].get("card_body")
+            l_badge._card_oid = oid
+            l_badge._card_body = card_body
 
             self.item_data[oid]["loaned_badge"] = l_badge
 
@@ -803,7 +911,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         if oid not in self.item_data:
             self.item_data[oid] = {"tags": [], "values": ["☐", oid, "", ""], "title": "", "genus": "", "species": "", "reviewed": False}
 
-        dummy_card = self._create_card_widget(oid, self.canvas)
+        widget_dict = self._build_empty_card_widget(self.canvas)
+        dummy_card = self._populate_card_widget(widget_dict, oid)
         # Update idletasks to ensure geometry is calculated
         self.update_idletasks()
 
@@ -812,8 +921,10 @@ class TreeviewListboxWrapper(ttk.Frame):
         self._card_height = h if h > 10 else 78
 
         dummy_card.destroy()
-        if "card_frame" in self.item_data[oid]:
-            del self.item_data[oid]["card_frame"]
+        if oid in self.item_data:
+            for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "id_label", "row1"]:
+                if key in self.item_data[oid]:
+                    del self.item_data[oid][key]
 
     def _clear_virtual_cards(self):
         for win_id, widget_dict in list(self._active_card_windows.values()):
@@ -979,6 +1090,18 @@ class TreeviewListboxWrapper(ttk.Frame):
         loc_lbl = tk.Label(row3, text="", bg=card_bg, fg=text_secondary,
                            font=("Segoe UI", sc(8)), anchor="w", justify="left")
         loc_lbl.pack(side="left", padx=(sc(18), 0), fill="x", expand=True)
+
+        cb_lbl.is_cb_lbl = True
+        def _add_virtual_tag(w):
+            if getattr(w, "is_cb_lbl", False):
+                return
+            tags = w.bindtags()
+            if "VirtualCard" not in tags:
+                w.bindtags((tags[0], "VirtualCard") + tags[1:])
+            for c in w.winfo_children():
+                _add_virtual_tag(c)
+
+        _add_virtual_tag(outer_frame)
 
         return {
             "outer_frame": outer_frame,
@@ -1163,38 +1286,58 @@ class TreeviewListboxWrapper(ttk.Frame):
         self._bind_card_events(widgets["outer_frame"], widgets["card_body"], oid)
         return widgets["outer_frame"]
 
-    def _bind_card_events(self, widget, card_body, oid):
-        """Attach hover, click, and context-menu bindings via a shared bindtag."""
-        card_tag = f"Card_{oid}"
-        is_dark  = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-        card_bg  = "#24273a" if is_dark else "#f3f3f3"
-        hover_bg = "#30354f" if is_dark else "#e8e8e8"
+    def _setup_virtual_card_bindtag(self):
+        """Attach hover, click, and context-menu bindings via a single static bindtag."""
+        card_tag = "VirtualCard"
+
+        def _get_target(event):
+            w = event.widget
+            oid = getattr(w, "_card_oid", None)
+            card_body = getattr(w, "_card_body", None)
+            return w, oid, card_body
 
         def _on_enter(event):
+            w, oid, card_body = _get_target(event)
+            if oid is None or card_body is None:
+                return
+            is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
+            hover_bg = "#30354f" if is_dark else "#e8e8e8"
             if oid not in self.selected_iids:
                 self._set_bg_recursive(card_body, hover_bg)
+            self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
         def _on_leave(event):
+            w, oid, card_body = _get_target(event)
+            if oid is None or card_body is None:
+                return
+            is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
+            card_bg = "#24273a" if is_dark else "#f3f3f3"
             if oid not in self.selected_iids:
                 self._set_bg_recursive(card_body, card_bg)
 
-        def _on_card_right_click(e, o=oid):
-            self._on_card_click(o, e)
-            if hasattr(self.main_window, "_show_context_menu"):
-                self.main_window._show_context_menu(e)
+        def _on_card_click(event):
+            _, oid, _ = _get_target(event)
+            if oid is not None:
+                self._on_card_click(oid, event)
 
-        widget.bind_class(card_tag, "<Enter>",           _on_enter,  add="+")
-        widget.bind_class(card_tag, "<Leave>",           _on_leave,  add="+")
-        widget.bind_class(card_tag, "<Button-1>",
-                          lambda e, o=oid: self._on_card_click(o, e),        add="+")
-        widget.bind_class(card_tag, "<Double-Button-1>",
-                          lambda e, o=oid: self._on_card_double_click(o, e), add="+")
-        widget.bind_class(card_tag, "<Button-3>", _on_card_right_click, add="+")
+        def _on_card_double_click(event):
+            _, oid, _ = _get_target(event)
+            if oid is not None:
+                self._on_card_double_click(oid, event)
 
-        # Only pass through non-mouse keyboard bindings from the global list.
-        # Mouse button events (<Button-*>, <Double-*>, <Control-Button-*>) are
-        # already handled explicitly above; including them again would cause the
-        # context-menu to open on left-click and duplicate bindings.
+        def _on_card_right_click(event):
+            _, oid, _ = _get_target(event)
+            if oid is not None:
+                self._on_card_click(oid, event)
+                if hasattr(self.main_window, "_show_context_menu"):
+                    self.main_window._show_context_menu(event)
+
+        self.bind_class(card_tag, "<Enter>",           _on_enter)
+        self.bind_class(card_tag, "<Leave>",           _on_leave)
+        self.bind_class(card_tag, "<Button-1>",        _on_card_click)
+        self.bind_class(card_tag, "<Double-Button-1>", _on_card_double_click)
+        self.bind_class(card_tag, "<Button-3>",        _on_card_right_click)
+
         _skip = {"<Button-1>", "<Button-2>", "<Button-3>",
                  "<Double-Button-1>", "<Double-Button-2>", "<Double-Button-3>",
                  "<Control-Button-1>", "<Control-Button-3>",
@@ -1204,29 +1347,17 @@ class TreeviewListboxWrapper(ttk.Frame):
                 continue
             if seq in _skip or "Button" in seq:
                 continue
-            widget.bind_class(card_tag, seq, lambda e: func(e), add="+")
+            self.bind_class(card_tag, seq, lambda e: func(e))
 
-        # When the mouse moves from canvas background onto a card,
-        # the canvas fires <Leave> → unbind_all(<MouseWheel>).  Re-register it on
-        # every card <Enter> so scrolling works while hovering over card widgets.
-        widget.bind_class(
-            card_tag, "<Enter>",
-            lambda e: self.canvas.bind_all("<MouseWheel>", self._on_mousewheel),
-            add="+"
-        )
-
-        cb_lbl = self.item_data[oid].get("cb_label")
-
-        def _add_tag_recursive(w):
-            if w == cb_lbl:
-                return
-            tags = w.bindtags()
-            if card_tag not in tags:
-                w.bindtags((tags[0], card_tag) + tags[1:])
+    def _bind_card_events(self, widget, card_body, oid):
+        """Assign item context to widget tree so static VirtualCard bindtag works without leaking events."""
+        def _attach_card_context(w):
+            w._card_oid = oid
+            w._card_body = card_body
             for c in w.winfo_children():
-                _add_tag_recursive(c)
+                _attach_card_context(c)
 
-        _add_tag_recursive(widget)
+        _attach_card_context(widget)
 
     def _apply_tags_to_card(self, oid):
         if oid in self.item_data:
@@ -1520,8 +1651,9 @@ class TreeviewListboxWrapper(ttk.Frame):
     def configure(self, **kwargs):
         if "yscrollcommand" in kwargs:
             yscroll = kwargs["yscrollcommand"]
+            self._external_yscrollcommand = yscroll
             self.tree.configure(yscrollcommand=yscroll)
-            self.canvas.configure(yscrollcommand=yscroll)
+            self.canvas.configure(yscrollcommand=self._on_canvas_scroll)
             del kwargs["yscrollcommand"]
         if kwargs:
             super().configure(**kwargs)
