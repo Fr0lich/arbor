@@ -390,6 +390,7 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         self._card_height = None
         self._active_card_windows = {} # Maps idx -> (window_id, frame_widget)
+        self._card_pool = [] # Pool of reusable card widget dictionaries
         self._pending_viewport_update = None
 
         # Keyboard Navigation bindings for Detailed Mode
@@ -815,16 +816,18 @@ class TreeviewListboxWrapper(ttk.Frame):
             del self.item_data[oid]["card_frame"]
 
     def _clear_virtual_cards(self):
-        for win_id, card in list(self._active_card_windows.values()):
+        for win_id, widget_dict in list(self._active_card_windows.values()):
             try:
                 self.canvas.delete(win_id)
-                card.destroy()
+                self._card_pool.append(widget_dict)
             except Exception:
                 pass
         self._active_card_windows.clear()
         for oid in self.item_data:
             if "card_frame" in self.item_data[oid]:
-                del self.item_data[oid]["card_frame"]
+                for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "id_label", "row1"]:
+                    if key in self.item_data[oid]:
+                        del self.item_data[oid][key]
 
     def _schedule_viewport_update(self):
         if self._pending_viewport_update:
@@ -868,26 +871,34 @@ class TreeviewListboxWrapper(ttk.Frame):
         visible_indices = set(range(start_idx, end_idx))
         current_indices = set(self._active_card_windows.keys())
 
-        # Destroy cards scrolled out of view
+        # Recycle cards scrolled out of view into the pool
         for idx in current_indices - visible_indices:
-            win_id, card = self._active_card_windows.pop(idx)
+            win_id, widget_dict = self._active_card_windows.pop(idx)
             try:
                 oid = self.items_list[idx]
                 if oid in self.item_data and "card_frame" in self.item_data[oid]:
-                    del self.item_data[oid]["card_frame"]
+                    for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "id_label", "row1"]:
+                        if key in self.item_data[oid]:
+                            del self.item_data[oid][key]
             except IndexError:
                 pass
             self.canvas.delete(win_id)
-            card.destroy()
+            self._card_pool.append(widget_dict)
 
-        # Create new cards scrolled into view
+        # Create or reuse cards scrolled into view
         for idx in visible_indices - current_indices:
             oid = self.items_list[idx]
-            card = self._create_card_widget(oid, self.canvas)
+
+            if self._card_pool:
+                widget_dict = self._card_pool.pop()
+            else:
+                widget_dict = self._build_empty_card_widget(self.canvas)
+
+            card_frame = self._populate_card_widget(widget_dict, oid)
             y_pos = idx * self._card_height
 
-            win_id = self.canvas.create_window(0, y_pos, window=card, anchor="nw", width=canvas_width)
-            self._active_card_windows[idx] = (win_id, card)
+            win_id = self.canvas.create_window(0, y_pos, window=card_frame, anchor="nw", width=canvas_width)
+            self._active_card_windows[idx] = (win_id, widget_dict)
 
             # Apply initial selection styling if selected
             self._apply_tags_to_card(oid)
@@ -902,23 +913,102 @@ class TreeviewListboxWrapper(ttk.Frame):
                 if accent_strip and accent_strip.winfo_exists():
                     accent_strip.configure(bg=accent_selected)
 
-
-    def _create_card_widget(self, oid, parent):
+    def _build_empty_card_widget(self, parent):
         from config import sc
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-
-        # Color tokens
         canvas_bg      = "#1e1e2e" if is_dark else "#f9f9f9"
         card_bg        = "#24273a" if is_dark else "#f3f3f3"
         text_primary   = "#cad3f5" if is_dark else "#1a1c1c"
         text_secondary = "#a5adcb" if is_dark else "#4c4546"
         family_color   = "#a6e3a1" if is_dark else "#2e6b30"
 
-        # Data
+        outer_frame = tk.Frame(parent, bg=canvas_bg, bd=0, highlightthickness=0, cursor="hand2")
+        outer_frame.pack(fill="x", pady=sc(1))
+
+        accent_strip = tk.Frame(outer_frame, bg=canvas_bg, width=sc(4), bd=0, highlightthickness=0)
+        accent_strip.pack(side="left", fill="y")
+        accent_strip.pack_propagate(False)
+        accent_strip.is_accent_strip = True
+
+        card_body = tk.Frame(outer_frame, bg=card_bg, bd=0, highlightthickness=0,
+                             padx=sc(8), pady=sc(6), cursor="hand2")
+        card_body.pack(side="left", fill="both", expand=True)
+
+        row1 = tk.Frame(card_body, bg=card_bg)
+        row1.pack(fill="x", anchor="w")
+
+        cb_lbl = tk.Label(row1, text="☐", bg=card_bg, fg=text_secondary,
+                          font=("Segoe UI", sc(10), "bold"), cursor="hand2")
+        cb_lbl.pack(side="left", padx=(0, sc(4)))
+
+        tax_lbl = tk.Label(row1, text="", bg=card_bg, fg=text_primary,
+                           font=("Georgia", sc(9), "italic bold"), anchor="w")
+        tax_lbl.pack(side="left", fill="x", expand=True, padx=(0, sc(4)))
+
+        status_badge = self._create_badge(row1, "UKN", "#FBC02D", "#1a1c1c", "#FBC02D")
+        status_badge.pack(side="right", padx=(sc(2), 0))
+
+        loaned_badge = self._create_badge(row1, "Loaned", "#203040" if is_dark else "#e3f2fd", "#64b5f6" if is_dark else "#0d47a1", "#bbdefb" if is_dark else "#90caf9")
+        loaned_badge.pack(side="right", padx=(sc(2), sc(2)))
+        loaned_badge.pack_forget() # Initially hidden
+
+        row2 = tk.Frame(card_body, bg=card_bg)
+        row2.pack(fill="x", anchor="w", pady=(sc(3), 0))
+
+        fam_lbl = tk.Label(row2, text="", bg=card_bg, fg=family_color,
+                           font=("Segoe UI", sc(8), "bold"), anchor="w")
+        fam_lbl.pack(side="left", padx=(sc(18), 0))
+        fam_lbl.pack_forget()
+
+        sep_lbl = tk.Label(row2, text="•", bg=card_bg, fg=text_secondary,
+                           font=("Segoe UI", sc(8)))
+        sep_lbl.pack(side="left", padx=sc(3))
+        sep_lbl.pack_forget()
+
+        id_lbl = tk.Label(row2, text="", bg=card_bg, fg=text_primary,
+                          font=("Consolas", sc(8)))
+        id_lbl.pack(side="left", padx=(sc(18), 0))
+
+        photo_lbl = tk.Label(row2, text="📷 0", bg=card_bg, fg=text_secondary,
+                             font=("Segoe UI", sc(8)))
+        photo_lbl.pack(side="right", padx=(sc(4), 0))
+
+        row3 = tk.Frame(card_body, bg=card_bg)
+        row3.pack(fill="x", anchor="w", pady=(sc(2), 0))
+
+        loc_lbl = tk.Label(row3, text="", bg=card_bg, fg=text_secondary,
+                           font=("Segoe UI", sc(8)), anchor="w", justify="left")
+        loc_lbl.pack(side="left", padx=(sc(18), 0), fill="x", expand=True)
+
+        return {
+            "outer_frame": outer_frame,
+            "accent_strip": accent_strip,
+            "card_body": card_body,
+            "row1": row1,
+            "cb_lbl": cb_lbl,
+            "tax_lbl": tax_lbl,
+            "status_badge": status_badge,
+            "loaned_badge": loaned_badge,
+            "row2": row2,
+            "fam_lbl": fam_lbl,
+            "sep_lbl": sep_lbl,
+            "id_lbl": id_lbl,
+            "photo_lbl": photo_lbl,
+            "row3": row3,
+            "loc_lbl": loc_lbl
+        }
+
+    def _populate_card_widget(self, widgets, oid):
+        from config import sc
+        import utils
+        is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
+        canvas_bg      = "#1e1e2e" if is_dark else "#f9f9f9"
+        card_bg        = "#24273a" if is_dark else "#f3f3f3"
+        text_secondary = "#a5adcb" if is_dark else "#4c4546"
+
         obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else {}
         reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else {}
-        
-        # Safe fallback lookups (tries exact string first, then integer if numeric)
+
         obs_row = obs_dict.get(oid)
         if obs_row is None:
             try:
@@ -935,119 +1025,93 @@ class TreeviewListboxWrapper(ttk.Frame):
             except Exception:
                 reg_row = {}
 
+        if oid not in self.item_data:
+            self.item_data[oid] = {}
+        data = self.item_data[oid]
+
+        data["card_frame"] = widgets["outer_frame"]
+        data["accent_strip"] = widgets["accent_strip"]
+        data["card_body"] = widgets["card_body"]
+        data["cb_label"] = widgets["cb_lbl"]
+        data["tax_label"] = widgets["tax_lbl"]
+        data["status_badge"] = widgets["status_badge"]
+        data["loaned_badge"] = widgets["loaned_badge"]
+        data["id_label"] = widgets["id_lbl"]
+        data["row1"] = widgets["row1"]
+
         has_problem = self.main_window._get_cached_problem(oid) if hasattr(self.main_window, "_get_cached_problem") else (self.main_window._problem_cache.get(oid, False) if hasattr(self.main_window, "_problem_cache") else False)
-        has_history = self.main_window._has_history(oid) if hasattr(self.main_window, "_has_history") else False
         problems_have_history = self.main_window._problems_have_history(oid) if hasattr(self.main_window, "_problems_have_history") else False
-        reviewed    = self.item_data[oid].get("reviewed", False)
+        reviewed = data.get("reviewed", False)
 
         loaned_raw = obs_row.get("Loaned out", False)
         loaned = utils.parse_bool(loaned_raw)
 
-        # Accent strip color (left 4px border)
-
-
         if reviewed:
             accent_color = "#4CAF50" if is_dark else "#2E7D32"  # green
-        elif has_problem and problems_have_history:
-            accent_color = "#BB86FC" if is_dark else "#7B1FA2"  # purple
-        elif has_problem:
-            accent_color = "#f28b82" if is_dark else "#C62828"  # red
-        elif problems_have_history:
-            accent_color = "#5ab0e8" if is_dark else "#0284C7"  # blue
-        else:
-            accent_color = canvas_bg  # visually transparent
-
-
-        # Status badge
-        if reviewed:
             badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
         elif has_problem and problems_have_history:
+            accent_color = "#BB86FC" if is_dark else "#7B1FA2"  # purple
             badge_label, badge_bg, badge_fg = "ERR+HIS", "#7B1FA2", "#ffffff"
         elif has_problem:
+            accent_color = "#f28b82" if is_dark else "#C62828"  # red
             badge_label, badge_bg, badge_fg = "ERR",     "#C62828", "#ffffff"
         elif problems_have_history:
+            accent_color = "#5ab0e8" if is_dark else "#0284C7"  # blue
             badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
         else:
+            accent_color = canvas_bg  # visually transparent
             badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
 
-        # Outer container (canvas-colored so accent strip "floats")
-        outer_frame = tk.Frame(parent, bg=canvas_bg, bd=0, highlightthickness=0, cursor="hand2")
-        outer_frame.pack(fill="x", pady=sc(1))
-        self.item_data[oid]["card_frame"] = outer_frame
-
-        # 4px left accent strip
-        accent_strip = tk.Frame(outer_frame, bg=accent_color, width=sc(4), bd=0, highlightthickness=0)
-        accent_strip.pack(side="left", fill="y")
-        accent_strip.pack_propagate(False)
-        accent_strip.is_accent_strip = True
-        self.item_data[oid]["accent_strip"]        = accent_strip
-        self.item_data[oid]["accent_color_normal"] = accent_color
-
-        # Card body
-        card_body = tk.Frame(outer_frame, bg=card_bg, bd=0, highlightthickness=0,
-                             padx=sc(8), pady=sc(6), cursor="hand2")
-        card_body.pack(side="left", fill="both", expand=True)
-        self.item_data[oid]["card_body"] = card_body
-
-        # Row 1: checkbox · scientific name · status badge
-        row1 = tk.Frame(card_body, bg=card_bg)
-        row1.pack(fill="x", anchor="w")
+        widgets["outer_frame"].configure(bg=canvas_bg)
+        widgets["card_body"].configure(bg=card_bg)
+        widgets["row1"].configure(bg=card_bg)
+        widgets["row2"].configure(bg=card_bg)
+        widgets["row3"].configure(bg=card_bg)
+        widgets["cb_lbl"].configure(bg=card_bg)
+        widgets["tax_lbl"].configure(bg=card_bg)
+        widgets["fam_lbl"].configure(bg=card_bg)
+        widgets["sep_lbl"].configure(bg=card_bg)
+        widgets["id_lbl"].configure(bg=card_bg)
+        widgets["photo_lbl"].configure(bg=card_bg)
+        widgets["loc_lbl"].configure(bg=card_bg)
+        widgets["accent_strip"].configure(bg=accent_color)
+        data["accent_color_normal"] = accent_color
 
         rev_char = "☑" if reviewed else "☐"
         cb_color = "#28a745" if reviewed else text_secondary
-        cb_lbl = tk.Label(row1, text=rev_char, bg=card_bg, fg=cb_color,
-                          font=("Segoe UI", sc(10), "bold"), cursor="hand2")
-        cb_lbl.pack(side="left", padx=(0, sc(4)))
-        cb_lbl.bind("<Button-1>", lambda e, o=oid: self._on_checkbox_click(o, e))
-        self.item_data[oid]["cb_label"] = cb_lbl
+        widgets["cb_lbl"].configure(text=rev_char, fg=cb_color)
+        # Clear previous bindings to avoid buildup if recycled
+        widgets["cb_lbl"].unbind("<Button-1>")
+        widgets["cb_lbl"].bind("<Button-1>", lambda e, o=oid: self._on_checkbox_click(o, e))
 
         genus   = str(reg_row.get("Genus",   "") or "").strip()
         species = str(reg_row.get("Species", "") or "").strip()
         tax_text = f"{genus} {species}".strip() or "Unknown Specimen"
+        widgets["tax_lbl"].configure(text=tax_text)
 
-        tax_lbl = tk.Label(row1, text=tax_text, bg=card_bg, fg=text_primary,
-                           font=("Georgia", sc(9), "italic bold"), anchor="w")
-        tax_lbl.pack(side="left", fill="x", expand=True, padx=(0, sc(4)))
-        self.item_data[oid]["tax_label"] = tax_lbl
-
-        self.item_data[oid]["row1"] = row1
-
-        s_badge = self._create_badge(row1, badge_label, badge_bg, badge_fg, badge_bg)
-        s_badge.pack(side="right", padx=(sc(2), 0))
-        self.item_data[oid]["status_badge"] = s_badge
+        badge_frame = widgets["status_badge"]
+        badge_frame.configure(text=badge_label, bg=badge_bg, fg=badge_fg, highlightbackground=badge_bg)
 
         if loaned:
-            l_bg = "#203040" if is_dark else "#e3f2fd"
-            l_fg = "#64b5f6" if is_dark else "#0d47a1"
-            l_bd = "#bbdefb" if is_dark else "#90caf9"
-            l_badge = self._create_badge(row1, "Loaned", l_bg, l_fg, l_bd)
-            l_badge.pack(side="right", padx=(sc(2), sc(2)))
-            self.item_data[oid]["loaned_badge"] = l_badge
-
-        # Row 2: family · separator · catalog ID · photo count
-        row2 = tk.Frame(card_body, bg=card_bg)
-        row2.pack(fill="x", anchor="w", pady=(sc(3), 0))
+            widgets["loaned_badge"].pack(side="right", padx=(sc(2), sc(2)))
+        else:
+            widgets["loaned_badge"].pack_forget()
 
         family = str(reg_row.get("Family", "") or "").strip()
         if family in ("nan", "None"):
             family = ""
 
-        left_pad = sc(18)
         if family:
-            fam_lbl = tk.Label(row2, text=family.upper(), bg=card_bg, fg=family_color,
-                               font=("Segoe UI", sc(8), "bold"), anchor="w")
-            fam_lbl.pack(side="left", padx=(left_pad, 0))
-            sep_lbl = tk.Label(row2, text="•", bg=card_bg, fg=text_secondary,
-                               font=("Segoe UI", sc(8)))
-            sep_lbl.pack(side="left", padx=sc(3))
-            id_pad = 0
+            widgets["fam_lbl"].configure(text=family.upper())
+            widgets["fam_lbl"].pack(before=widgets["id_lbl"], side="left", padx=(sc(18), 0))
+            widgets["sep_lbl"].pack(before=widgets["id_lbl"], side="left", padx=sc(3))
+            widgets["id_lbl"].pack_configure(padx=(0, 0))
         else:
-            id_pad = left_pad
+            widgets["fam_lbl"].pack_forget()
+            widgets["sep_lbl"].pack_forget()
+            widgets["id_lbl"].pack_configure(padx=(sc(18), 0))
 
-        id_lbl = tk.Label(row2, text=oid, bg=card_bg, fg=text_primary,
-                          font=("Consolas", sc(8)))
-        id_lbl.pack(side="left", padx=(id_pad, 0))
-        self.item_data[oid]["id_label"] = id_lbl
+        widgets["id_lbl"].configure(text=oid)
 
         photo_count = 0
         if self.main_window.app.df_photo is not None:
@@ -1057,7 +1121,6 @@ class TreeviewListboxWrapper(ttk.Frame):
                     self.main_window._cached_photo_counts = photo_df.index.value_counts().to_dict()
                 else:
                     self.main_window._cached_photo_counts = {}
-            # Safe fallback photo count lookup
             photo_count = self.main_window._cached_photo_counts.get(oid)
             if photo_count is None:
                 try:
@@ -1066,7 +1129,6 @@ class TreeviewListboxWrapper(ttk.Frame):
                 except Exception:
                     photo_count = 0
         if hasattr(self.main_window, "image_index"):
-            # Try both string and integer lookup keys
             paths = self.main_window.image_index.get(oid)
             if paths is None:
                 try:
@@ -1076,13 +1138,7 @@ class TreeviewListboxWrapper(ttk.Frame):
                     paths = []
             photo_count = max(photo_count, len(paths or []))
 
-        photo_lbl = tk.Label(row2, text=f"\U0001f4f7 {photo_count}", bg=card_bg, fg=text_secondary,
-                             font=("Segoe UI", sc(8)))
-        photo_lbl.pack(side="right", padx=(sc(4), 0))
-
-        # Row 3: location
-        row3 = tk.Frame(card_body, bg=card_bg)
-        row3.pack(fill="x", anchor="w", pady=(sc(2), 0))
+        widgets["photo_lbl"].configure(text=f"📷 {photo_count}")
 
         def _clean(v):
             s = str(v).strip()
@@ -1102,12 +1158,10 @@ class TreeviewListboxWrapper(ttk.Frame):
         if st: loc_parts.append(st)
         loc_text = " \u2022 ".join(loc_parts) if loc_parts else "No location info"
 
-        loc_lbl = tk.Label(row3, text=loc_text, bg=card_bg, fg=text_secondary,
-                           font=("Segoe UI", sc(8)), anchor="w", justify="left")
-        loc_lbl.pack(side="left", padx=(left_pad, 0), fill="x", expand=True)
+        widgets["loc_lbl"].configure(text=loc_text)
 
-        self._bind_card_events(outer_frame, card_body, oid)
-        return outer_frame
+        self._bind_card_events(widgets["outer_frame"], widgets["card_body"], oid)
+        return widgets["outer_frame"]
 
     def _bind_card_events(self, widget, card_body, oid):
         """Attach hover, click, and context-menu bindings via a shared bindtag."""
