@@ -204,7 +204,7 @@ class LocationPanel(tk.Frame):
         
         apply_btn = tk.Button(
             p_frame,
-            text="Apply (Ctrl+K)",
+            text="Apply Preset(Ctrl+K)",
             font=("JetBrains Mono", sc(9), "bold"),
             fg=c["on_primary"], bg=c["primary"],
             bd=1, relief="solid",
