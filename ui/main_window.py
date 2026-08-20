@@ -510,7 +510,6 @@ class ObjectProgramUI(
         self.root.bind("<Control-l>", self._focus_first_location)
         self.root.bind("<Control-p>", self._focus_first_problem)
         self.root.bind("<Control-i>", self._focus_first_reg)
-        self.root.bind("<Control-o>", self.focus_search)
         self.root.bind("<Control-Shift-P>", self._focus_first_problem)
         self.root.bind("<F3>", self._focus_first_problem)
         self.root.bind("<Control-Shift-L>", self._focus_first_location)
@@ -540,8 +539,10 @@ class ObjectProgramUI(
         self.root.bind("<Control-k>", self._apply_default_data_preset_shortcut)
         self.root.bind("<Control-K>", self._apply_default_data_preset_shortcut)
 
-        for seq in ("<Control-Key-f>", "<Control-Key-F>", "<Control-Key-l>", "<Control-Key-L>", "<Control-f>", "<Control-F>", "<Control-l>", "<Control-L>"):
-            self.root.bind_all(seq, self.toggle_floating_drawer_shortcut)
+        for seq in ("<Control-Key-o>", "<Control-Key-O>", "<Control-o>", "<Control-O>"):
+            self.root.bind_all(seq, self.handle_ctrl_o)
+        for seq in ("<Control-Key-f>", "<Control-Key-F>", "<Control-f>", "<Control-F>"):
+            self.root.bind_all(seq, self.handle_ctrl_f)
 
         # Collapsible Panel Toggles for Laptop Views
         self.root.bind("<F6>", self.toggle_list_panel_shortcut)
@@ -2966,10 +2967,10 @@ class ObjectProgramUI(
         prefs["left_pinned"] = is_pinned
         config.save_prefs(prefs)
         
-        self._apply_pin_state()
+        self._apply_pin_state(animate=True)
         return "break"
 
-    def _apply_pin_state(self):
+    def _apply_pin_state(self, animate=False):
         if not hasattr(self, "left_content_frame") or not hasattr(self, "left_frame"):
             return
             
@@ -2990,9 +2991,13 @@ class ObjectProgramUI(
             self.left_content_frame.pack(in_=self.left_frame, side="left", fill="both", expand=True)
             if hasattr(self, "pin_btn"):
                 self.pin_btn.config(bg=config.RAIL_THEME.get("icon_hover_bg", "#e8e8e8"))
-            if hasattr(self, "panes"):
+            
+            target_sash = sc(300)
+            if animate:
+                self._animate_sash_transition(target_sash)
+            elif hasattr(self, "panes"):
                 try:
-                    self.panes.sashpos(0, sc(300))
+                    self.panes.sashpos(0, target_sash)
                 except Exception:
                     pass
         else:
@@ -3000,40 +3005,116 @@ class ObjectProgramUI(
             self.left_content_frame.pack_forget()
             if hasattr(self, "pin_btn"):
                 self.pin_btn.config(bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"))
-            if hasattr(self, "panes"):
+            
+            target_sash = sc(config.RAIL_THEME.get("rail_width", 40))
+            if animate:
+                self._animate_sash_transition(target_sash)
+            elif hasattr(self, "panes"):
                 try:
-                    self.panes.sashpos(0, sc(config.RAIL_THEME.get("rail_width", 40)))
+                    self.panes.sashpos(0, target_sash)
                 except Exception:
                     pass
 
-    def toggle_floating_drawer_shortcut(self, event=None):
-        return self.toggle_floating_drawer(event)
+    def _animate_sash_transition(self, target_sash):
+        import math
+        if not hasattr(self, "panes"):
+            return
+            
+        try:
+            start_sash = self.panes.sashpos(0)
+        except Exception:
+            start_sash = target_sash
+            
+        distance = float(target_sash - start_sash)
+        if abs(distance) < 2:
+            try:
+                self.panes.sashpos(0, target_sash)
+            except Exception:
+                pass
+            return
+            
+        duration = float(config.DRAWER_THEME.get("anim_duration_ms", 140))
+        step_interval = int(config.DRAWER_THEME.get("anim_step_interval_ms", 8))
+        start_time = time.time() * 1000.0
 
-    def toggle_floating_drawer(self, event=None):
-        if self.left_pinned.get():
-            return self.focus_search(event)
+        def _step():
+            now = time.time() * 1000.0
+            elapsed = now - start_time
+            if elapsed >= duration:
+                try:
+                    self.panes.sashpos(0, target_sash)
+                except Exception:
+                    pass
+            else:
+                progress = max(0.0, min(1.0, elapsed / duration))
+                ease_progress = 0.5 - 0.5 * math.cos(progress * math.pi)
+                current_pos = int(start_sash + distance * ease_progress)
+                try:
+                    self.panes.sashpos(0, current_pos)
+                except Exception:
+                    pass
+                self.root.after(step_interval, _step)
 
+        _step()
+
+    def handle_ctrl_o(self, event=None):
         if self._drawer_is_open:
             self.close_drawer()
         else:
             self.open_drawer()
-            self.focus_search(event)
         return "break"
 
+    def handle_ctrl_l(self, event=None):
+        return self.handle_ctrl_o(event)
+
+    def handle_ctrl_f(self, event=None):
+        if not self._drawer_is_open and self._drawer_current_width <= 0:
+            self.open_drawer()
+        
+        if hasattr(self, "_inline_search_entry"):
+            self._inline_search_entry.focus_set()
+            try:
+                self._inline_search_entry.select_range(0, tk.END)
+                if self._inline_search_var.get() == self._inline_search_placeholder:
+                    self._inline_search_entry.delete(0, tk.END)
+                    self._inline_search_entry.config(foreground="black")
+            except Exception:
+                pass
+        return "break"
+
+    def toggle_floating_drawer_shortcut(self, event=None):
+        return self.handle_ctrl_o(event)
+
+    def toggle_floating_drawer(self, event=None):
+        return self.handle_ctrl_o(event)
+
     def open_drawer(self):
-        if self.left_pinned.get():
-            return
         self._drawer_is_open = True
         if hasattr(self, "left_content_frame") and hasattr(self, "drawer_overlay"):
             self.left_content_frame.pack(in_=self.drawer_overlay, fill="both", expand=True)
             self.drawer_overlay.lift()
+            if hasattr(self, "left_panes"):
+                self.left_panes.pack(fill="both", expand=True)
         
         target_w = sc(config.DRAWER_THEME.get("drawer_width", 300))
         self._animate_drawer(target_w)
 
+        try:
+            self.root.update_idletasks()
+            if hasattr(self, "left_content_frame"):
+                self.left_content_frame.update_idletasks()
+            if hasattr(self, "object_list") and hasattr(self.object_list, "update_idletasks"):
+                self.object_list.update_idletasks()
+            if hasattr(self, "refresh_list"):
+                self.refresh_list()
+        except Exception:
+            pass
+
     def close_drawer(self):
         self._drawer_is_open = False
         self._animate_drawer(0)
+        if hasattr(self, "left_pinned") and self.left_pinned.get():
+            self._apply_pin_state(animate=False)
 
     def _animate_drawer(self, target_width):
         import math
@@ -3581,7 +3662,7 @@ class ObjectProgramUI(
             command=self.toggle_floating_drawer
         )
         self.drawer_btn.pack(side="top", fill="x", pady=sc(4), padx=sc(4))
-        self.add_tooltip(self.drawer_btn, "Open Object Drawer (Ctrl+F)")
+        self.add_tooltip(self.drawer_btn, "Open Object Drawer (Ctrl+O)")
 
         self.filter_indicator = tk.Label(
             rail, text="⚡",

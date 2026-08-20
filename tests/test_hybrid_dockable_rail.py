@@ -64,21 +64,34 @@ class TestHybridDockableRail(unittest.TestCase):
         self.assertFalse(mw._drawer_is_open)
 
     @patch("ui.main_window.ExcelRepository")
-    def test_control_f_and_control_l_shortcuts(self, mock_repo):
+    def test_control_o_toggles_overlay_drawer(self, mock_repo):
         from ui.main_window import ObjectProgramUI
         mw = ObjectProgramUI(self.root, self.app)
-        mw.left_pinned.set(False)
 
-        # Test Ctrl+F (focus_search) opens drawer when unpinned
-        mw.focus_search()
-        self.assertTrue(mw._drawer_is_open)
-
-        # Test toggle_floating_drawer_shortcut closes it when called again
-        mw.toggle_floating_drawer_shortcut()
+        # Test Ctrl+O toggles drawer open and close
+        mw.close_drawer()
         self.assertFalse(mw._drawer_is_open)
 
-        # Test calling toggle_floating_drawer_shortcut again opens drawer
-        mw.toggle_floating_drawer_shortcut()
+        mw.handle_ctrl_o()
+        self.assertTrue(mw._drawer_is_open)
+
+        mw.handle_ctrl_o()
+        self.assertFalse(mw._drawer_is_open)
+
+    @patch("ui.main_window.ExcelRepository")
+    def test_control_f_opens_or_focuses_search_without_closing(self, mock_repo):
+        from ui.main_window import ObjectProgramUI
+        mw = ObjectProgramUI(self.root, self.app)
+
+        # When closed, Ctrl+F opens overlay and focuses search
+        mw.close_drawer()
+        self.assertFalse(mw._drawer_is_open)
+
+        mw.handle_ctrl_f()
+        self.assertTrue(mw._drawer_is_open)
+
+        # When ALREADY open, Ctrl+F keeps overlay OPEN (does not close)
+        mw.handle_ctrl_f()
         self.assertTrue(mw._drawer_is_open)
 
 if __name__ == "__main__":
