@@ -35,6 +35,7 @@ _NORMALIZE_SPACE_PATTERN = re.compile(r'\s+')
 import uuid
 
 from collections import OrderedDict
+import config
 from config import sc
 from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
 from models import AppState
@@ -351,6 +352,11 @@ class ObjectProgramUI(
         import config
         _init_prefs = config.load_prefs() or {}
         
+        self.left_pinned = tk.BooleanVar(value=_init_prefs.get("left_pinned", True))
+        self._drawer_anim_job = None
+        self._drawer_current_width = 0
+        self._drawer_is_open = False
+
         self.show_list_var = tk.BooleanVar(value=_init_prefs.get("show_list", True))
         self.show_search_var = tk.BooleanVar(value=_init_prefs.get("show_search", True))
         self.show_images_var = tk.BooleanVar(value=_init_prefs.get("show_images", True))
@@ -534,6 +540,9 @@ class ObjectProgramUI(
         self.root.bind("<Control-k>", self._apply_default_data_preset_shortcut)
         self.root.bind("<Control-K>", self._apply_default_data_preset_shortcut)
 
+        for seq in ("<Control-Key-f>", "<Control-Key-F>", "<Control-Key-l>", "<Control-Key-L>", "<Control-f>", "<Control-F>", "<Control-l>", "<Control-L>"):
+            self.root.bind_all(seq, self.toggle_floating_drawer_shortcut)
+
         # Collapsible Panel Toggles for Laptop Views
         self.root.bind("<F6>", self.toggle_list_panel_shortcut)
         self.root.bind("<F7>", self.toggle_reg_panel_shortcut)
@@ -598,6 +607,7 @@ class ObjectProgramUI(
 
         # U2-E: Automatically apply hover to all tk.Button elements in main UI
         _apply_hover_to_all_tk_buttons(self.root, self)
+        self._apply_pin_state()
 
 
     def _get_http_session(self):
@@ -2948,6 +2958,178 @@ class ObjectProgramUI(
         self.toggle_images_panel()
         return "break"
 
+    def toggle_left_pin(self, event=None):
+        is_pinned = not self.left_pinned.get()
+        self.left_pinned.set(is_pinned)
+        
+        prefs = config.load_prefs() or {}
+        prefs["left_pinned"] = is_pinned
+        config.save_prefs(prefs)
+        
+        self._apply_pin_state()
+        return "break"
+
+    def _apply_pin_state(self):
+        if not hasattr(self, "left_content_frame") or not hasattr(self, "left_frame"):
+            return
+            
+        if self.left_pinned.get():
+            # Hide overlay if currently active
+            if hasattr(self, "_drawer_anim_job") and self._drawer_anim_job is not None:
+                try:
+                    self.root.after_cancel(self._drawer_anim_job)
+                except Exception:
+                    pass
+                self._drawer_anim_job = None
+            self._drawer_current_width = 0
+            self._drawer_is_open = False
+            if hasattr(self, "drawer_overlay"):
+                self.drawer_overlay.place_forget()
+
+            # Pack content frame directly into left_frame
+            self.left_content_frame.pack(in_=self.left_frame, side="left", fill="both", expand=True)
+            if hasattr(self, "pin_btn"):
+                self.pin_btn.config(bg=config.RAIL_THEME.get("icon_hover_bg", "#e8e8e8"))
+            if hasattr(self, "panes"):
+                try:
+                    self.panes.sashpos(0, sc(300))
+                except Exception:
+                    pass
+        else:
+            # Unpinned mode: forget content frame from left_frame layout
+            self.left_content_frame.pack_forget()
+            if hasattr(self, "pin_btn"):
+                self.pin_btn.config(bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"))
+            if hasattr(self, "panes"):
+                try:
+                    self.panes.sashpos(0, sc(config.RAIL_THEME.get("rail_width", 40)))
+                except Exception:
+                    pass
+
+    def toggle_floating_drawer_shortcut(self, event=None):
+        return self.toggle_floating_drawer(event)
+
+    def toggle_floating_drawer(self, event=None):
+        if self.left_pinned.get():
+            return self.focus_search(event)
+
+        if self._drawer_is_open:
+            self.close_drawer()
+        else:
+            self.open_drawer()
+            self.focus_search(event)
+        return "break"
+
+    def open_drawer(self):
+        if self.left_pinned.get():
+            return
+        self._drawer_is_open = True
+        if hasattr(self, "left_content_frame") and hasattr(self, "drawer_overlay"):
+            self.left_content_frame.pack(in_=self.drawer_overlay, fill="both", expand=True)
+            self.drawer_overlay.lift()
+        
+        target_w = sc(config.DRAWER_THEME.get("drawer_width", 300))
+        self._animate_drawer(target_w)
+
+    def close_drawer(self):
+        self._drawer_is_open = False
+        self._animate_drawer(0)
+
+    def _animate_drawer(self, target_width):
+        import math
+        if hasattr(self, "_drawer_anim_job") and self._drawer_anim_job is not None:
+            try:
+                self.root.after_cancel(self._drawer_anim_job)
+            except Exception:
+                pass
+            self._drawer_anim_job = None
+
+        if not config.DRAWER_THEME.get("enable_animation", True):
+            self._drawer_current_width = float(target_width)
+            self._update_drawer_geometry()
+            if target_width == 0:
+                if hasattr(self, "drawer_overlay"):
+                    self.drawer_overlay.place_forget()
+            return
+
+        duration = float(config.DRAWER_THEME.get("anim_duration_ms", 140))
+        step_interval = int(config.DRAWER_THEME.get("anim_step_interval_ms", 8))
+        start_w = float(self._drawer_current_width)
+        distance = float(target_width - start_w)
+
+        if abs(distance) < 1:
+            self._drawer_current_width = float(target_width)
+            self._update_drawer_geometry()
+            if target_width == 0:
+                if hasattr(self, "drawer_overlay"):
+                    self.drawer_overlay.place_forget()
+            return
+
+        start_time = time.time() * 1000.0
+
+        def _step():
+            now = time.time() * 1000.0
+            elapsed = now - start_time
+            if elapsed >= duration:
+                self._drawer_current_width = float(target_width)
+                self._drawer_anim_job = None
+                self._update_drawer_geometry()
+                if target_width == 0:
+                    if hasattr(self, "drawer_overlay"):
+                        self.drawer_overlay.place_forget()
+            else:
+                progress = max(0.0, min(1.0, elapsed / duration))
+                ease_progress = 0.5 - 0.5 * math.cos(progress * math.pi)
+                self._drawer_current_width = start_w + distance * ease_progress
+                self._update_drawer_geometry()
+                self._drawer_anim_job = self.root.after(step_interval, _step)
+
+        _step()
+
+    def _update_drawer_geometry(self):
+        if not hasattr(self, "drawer_overlay") or not hasattr(self, "left_frame"):
+            return
+        w = int(self._drawer_current_width)
+        if w <= 0:
+            self.drawer_overlay.place_forget()
+            return
+            
+        try:
+            self.root.update_idletasks()
+            rail_x = self.left_frame.winfo_rootx() - self.root.winfo_rootx()
+            rail_w = self.left_frame.winfo_width()
+            top_y = self.left_frame.winfo_rooty() - self.root.winfo_rooty()
+            h = self.left_frame.winfo_height()
+
+            self.drawer_overlay.place(
+                x=rail_x + rail_w,
+                y=top_y,
+                width=w,
+                height=h
+            )
+            self.drawer_overlay.lift()
+        except Exception:
+            pass
+
+    def _on_global_click_for_drawer(self, event):
+        if hasattr(self, "left_pinned") and self.left_pinned.get():
+            return
+        if not hasattr(self, "drawer_overlay") or not self.drawer_overlay.winfo_exists():
+            return
+            
+        if self._drawer_is_open or self._drawer_current_width > 0:
+            try:
+                widget = event.widget
+                curr = widget
+                while curr is not None and curr != self.root:
+                    if curr == self.drawer_overlay or curr == getattr(self, "rail_frame", None):
+                        return
+                    curr = getattr(curr, "master", None)
+                
+                self.close_drawer()
+            except Exception:
+                pass
+
     def toggle_list_panel(self):
         if self.show_list_var.get():
             if str(self.left_frame) not in self.panes.panes():
@@ -3364,26 +3546,79 @@ class ObjectProgramUI(
         panes.add(left, weight=1)
         self.left_frame.bind("<Configure>", self.on_left_frame_configure, add="+")
 
-      
+        # Persistent Action Rail frame on the left edge
+        rail = tk.Frame(
+            left,
+            bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"),
+            highlightthickness=1,
+            highlightbackground=config.RAIL_THEME.get("rail_border", "#d1d1d1"),
+            width=sc(config.RAIL_THEME.get("rail_width", 40))
+        )
+        rail.pack_propagate(False)
+        self.rail_frame = rail
+        rail.pack(side="left", fill="y")
+
+        # Action Rail buttons
+        self.pin_btn = tk.Button(
+            rail, text="📌",
+            font=("Segoe UI Symbol", sc(11)),
+            bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"),
+            fg=config.RAIL_THEME.get("icon_active_fg", "#000000"),
+            activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e8e8e8"),
+            bd=0, relief="flat", cursor="hand2",
+            command=self.toggle_left_pin
+        )
+        self.pin_btn.pack(side="top", fill="x", pady=(sc(6), sc(4)), padx=sc(4))
+        self.add_tooltip(self.pin_btn, "Toggle Docked / Unpinned Focus Mode")
+
+        self.drawer_btn = tk.Button(
+            rail, text="🔍",
+            font=("Segoe UI Symbol", sc(11)),
+            bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"),
+            fg=config.RAIL_THEME.get("icon_active_fg", "#000000"),
+            activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e8e8e8"),
+            bd=0, relief="flat", cursor="hand2",
+            command=self.toggle_floating_drawer
+        )
+        self.drawer_btn.pack(side="top", fill="x", pady=sc(4), padx=sc(4))
+        self.add_tooltip(self.drawer_btn, "Open Object Drawer (Ctrl+F)")
+
+        self.filter_indicator = tk.Label(
+            rail, text="⚡",
+            font=("Segoe UI Symbol", sc(10), "bold"),
+            bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"),
+            fg=config.RAIL_THEME.get("indicator_active_bg", "#C62828"),
+            bd=0
+        )
+        self.filter_indicator.pack(side="top", fill="x", pady=sc(4), padx=sc(4))
+        self.filter_indicator.pack_forget()
+
+        # Content frame holding list, search, and location widgets (master is self.root to allow unclipped reparenting into drawer_overlay)
+        self.left_content_frame = ttk.Frame(self.root)
+        self.left_content_frame.pack(in_=left, side="left", fill="both", expand=True)
+
+        # Floating Overlay Drawer Container (root-level floating frame, zero clipping)
+        self.drawer_overlay = tk.Frame(
+            self.root,
+            bg=config.DRAWER_THEME.get("drawer_bg", "#ffffff"),
+            highlightthickness=1,
+            highlightbackground=config.DRAWER_THEME.get("drawer_border", "#c4c7c7")
+        )
+        self.root.bind_all("<Button-1>", self._on_global_click_for_drawer, add="+")
+
         self.review_progress_label = None
         self.review_progress = None
 
-    
-        # U2-C: Bold weight and slightly larger font make the filter-active
-        # indicator legible at a glance under museum lighting conditions.
         self.filter_status_label = ttk.Label(
-            left,
+            self.left_content_frame,
             text="",
             foreground="#c0392b",
             font=("Segoe UI", sc(8), "bold")
         )
         self.filter_status_label.pack(fill="x", padx=6, pady=(0, 2))
 
-      
-        sort_frame = ttk.Frame(left)
+        sort_frame = ttk.Frame(self.left_content_frame)
         sort_frame.pack(fill="x", padx=4, pady=(0, 2))
-
-       
 
         self.sort_var = tk.StringVar(value="ID")
 
@@ -3402,7 +3637,7 @@ class ObjectProgramUI(
         )
 
         # Create self.left_panes vertical paned window
-        self.left_panes = ttk.Panedwindow(left, orient="vertical")
+        self.left_panes = ttk.Panedwindow(self.left_content_frame, orient="vertical")
         self.left_panes.pack(fill="both", expand=True)
 
         # Bottom container in left column for Location, Settings, and Help
@@ -3545,7 +3780,6 @@ class ObjectProgramUI(
         self.context_menu.add_command(label="Mark Selected as Reviewed", command=lambda: self._context_set_reviewed(True))
         self.context_menu.add_command(label="Mark Selected as Not Reviewed", command=lambda: self._context_set_reviewed(False))
         self.context_menu.add_separator()
-        import config
         advanced_prefs = config.load_prefs().get("advanced", {})
         if advanced_prefs.get("enable_bulk_editor", False):
             self.context_menu.add_command(label="Bulk Edit Selected", command=self.open_bulk_edit_window)
@@ -4026,14 +4260,21 @@ class ObjectProgramUI(
 #------
 
     def focus_search(self, event=None):
-        """Ctrl+F: focus the inline live search bar above the object list."""
+        """Ctrl+F / Ctrl+L: Open drawer if unpinned, then focus the inline live search bar."""
+        if hasattr(self, "left_pinned") and not self.left_pinned.get():
+            if not getattr(self, "_drawer_is_open", False) and getattr(self, "_drawer_current_width", 0) <= 0:
+                self.open_drawer()
+        
         if hasattr(self, "_inline_search_entry"):
             self._inline_search_entry.focus_set()
-            self._inline_search_entry.select_range(0, tk.END)
-            # Clear placeholder so user can start typing immediately
-            if self._inline_search_var.get() == self._inline_search_placeholder:
-                self._inline_search_entry.delete(0, tk.END)
-                self._inline_search_entry.config(foreground="black")
+            try:
+                self._inline_search_entry.select_range(0, tk.END)
+                if self._inline_search_var.get() == self._inline_search_placeholder:
+                    self._inline_search_entry.delete(0, tk.END)
+                    self._inline_search_entry.config(foreground="black")
+            except Exception:
+                pass
+        return "break"
 
 
 
@@ -5000,16 +5241,16 @@ class ObjectProgramUI(
                     self.root.after_cancel(self._nav_idle_job)
                 except Exception:
                     pass
-            self._nav_idle_job = self.root.after(150, self._navigation_finished)
+            self._nav_idle_job = self.root.after(15, self._navigation_finished)
             
-            # Debounce selection changes (150ms)
+            # Fast selection load (15ms)
             if hasattr(self, '_list_select_job') and self._list_select_job:
                 try:
                     self.root.after_cancel(self._list_select_job)
                 except Exception:
                     pass
                 
-            self._list_select_job = self.root.after(150, lambda: self._deferred_list_select(oid))
+            self._list_select_job = self.root.after(15, lambda: self._deferred_list_select(oid))
 
     def _deferred_list_select(self, oid):
         self._list_select_job = None
@@ -5026,6 +5267,9 @@ class ObjectProgramUI(
             
         self.load_object(oid)
         self._fix_listbox_horizontal_scroll()
+
+        if hasattr(self, "left_pinned") and not self.left_pinned.get() and getattr(self, "_drawer_is_open", False):
+            self.close_drawer()
 
 
 
@@ -5804,7 +6048,7 @@ class ObjectProgramUI(
                 self.root.after_cancel(self._nav_idle_job)
             except Exception:
                 pass
-        self._nav_idle_job = self.root.after(150, self._navigation_finished)
+        self._nav_idle_job = self.root.after(15, self._navigation_finished)
 
         if self.app.current_object_id in self.app.active_object_ids:
             current_index = self.app.active_object_ids.index(self.app.current_object_id)
@@ -5823,14 +6067,14 @@ class ObjectProgramUI(
         self.object_list.see(new_idx)
         self.object_list.activate(new_idx)
 
-        # Debounce the load
+        # Fast load (15ms)
         if hasattr(self, '_list_select_job') and self._list_select_job:
             try:
                 self.root.after_cancel(self._list_select_job)
             except Exception:
                 pass
                 
-        self._list_select_job = self.root.after(150, lambda: self._deferred_list_select(oid))
+        self._list_select_job = self.root.after(15, lambda: self._deferred_list_select(oid))
 
 
     def _navigation_finished(self):

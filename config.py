@@ -121,6 +121,29 @@ def sc(n):
 # location fields, and log viewers.  Change here to propagate everywhere.
 FONT_MONO_FAMILY: str = "JetBrains Mono"
 
+# ==============================================================================
+# LEFTPANE & OVERLAY DRAWER THEME TOKENS
+# Modify these values to customize colors, bounds, and animation parameters.
+# ==============================================================================
+RAIL_THEME = {
+    "rail_bg": "#f9f9f9",
+    "rail_border": "#d1d1d1",
+    "rail_width": 40,
+    "icon_hover_bg": "#e8e8e8",
+    "indicator_active_bg": "#C62828",
+}
+
+DRAWER_THEME = {
+    "drawer_bg": "#ffffff",
+    "drawer_border": "#c4c7c7",
+    "drawer_width": 300,
+    "header_bg": "#f3f3f3",
+    "card_hover_bg": "#eeeeee",
+    "enable_animation": True,
+    "anim_duration_ms": 140,
+    "anim_step_interval_ms": 8,
+}
+
 # =====================
 # AUTOSAVE SETTINGS
 # =====================
