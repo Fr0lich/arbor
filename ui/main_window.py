@@ -10,6 +10,7 @@ from ui.widgets import ToggleSwitch, TreeviewListboxWrapper
 from ui.autosave_handler import AutosaveMixin
 from ui.image_handler import ImageHandlerMixin
 from ui.historical_suggestions import HistoricalSuggestionsMixin
+from ui.gbif_mixin import GBIFMixin
 from ui.layout_settings import LayoutSettingsMixin
 from ui.unified_settings import open_unified_settings
 from ui.location_panel import create_location_panel
@@ -257,6 +258,7 @@ class ObjectProgramUI(
     AutosaveMixin,
     ImageHandlerMixin,
     HistoricalSuggestionsMixin,
+    GBIFMixin,
     LayoutSettingsMixin,
     DashboardMixin,
     DatabaseOpsMixin,
@@ -1069,6 +1071,16 @@ class ObjectProgramUI(
             title_lbl = tk.Label(header_frame, text=card_title, font=("Hanken Grotesk", sc(11), "bold"), bg=header_bg, fg=fg_color)
             title_lbl.pack(side="left")
             
+            if card_id == "taxonomy":
+                btn = tk.Button(
+                    header_frame, text="Check Modern Name",
+                    font=("Hanken Grotesk", sc(9)),
+                    bg="#4caf50", fg="#ffffff", activebackground="#45a049",
+                    relief="flat", bd=0, cursor="hand2", padx=6, pady=2,
+                    command=self.check_modern_name_ui
+                )
+                btn.pack(side="right", padx=10)
+
             # Card content area
             body_frame = tk.Frame(card_frame, bg=card_bg, padx=12, pady=12)
             body_frame.pack(fill="x")
@@ -1189,6 +1201,7 @@ class ObjectProgramUI(
                     make_focus_handlers(widget, focus_line, entry_container, card_bg)
 
                     widget.bind("<KeyRelease>", lambda e, n=name, w=widget: self._on_autocomplete_key(e, n, w), add="+")
+                    widget.bind("<KeyRelease>", lambda e, n=name, w=widget: self.handle_gbif_autocomplete(e, n, w), add="+")
                     widget.bind("<KeyRelease>", lambda e: self.root.after(500, self._validate_fields), add="+")
                     widget.bind("<FocusOut>", lambda e, n=name, w=widget: self._run_fuzzy_match(n, w), add="+")
 
