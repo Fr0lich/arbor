@@ -12,7 +12,7 @@ from ui.image_handler import ImageHandlerMixin
 from ui.historical_suggestions import HistoricalSuggestionsMixin
 from ui.layout_settings import LayoutSettingsMixin
 from ui.unified_settings import open_unified_settings
-from ui.location_panel import LocationPanel, create_location_panel
+from ui.location_panel import create_location_panel
 from ui.dashboard import DashboardMixin
 from ui.database_ops import DatabaseOpsMixin
 from ui.log_viewer import LogViewerMixin

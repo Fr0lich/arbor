@@ -1,7 +1,6 @@
-import pytest
 import tkinter as tk
-from unittest.mock import MagicMock, patch
-from ui.advanced_settings import AdvancedSettingsWindow, ADVANCED_SETTINGS_SCHEMA
+from unittest.mock import MagicMock
+from ui.advanced_settings import AdvancedSettingsWindow
 
 def test_advanced_settings_save_with_buttons():
     root = tk.Tk()

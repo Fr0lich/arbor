@@ -1,11 +1,9 @@
 import pytest
 import tkinter as tk
 from unittest.mock import MagicMock, patch
-import os
-import sys
 import config
 from ui.advanced_settings import AdvancedSettingsWindow, ADVANCED_SETTINGS_SCHEMA
-from utils import get_log_level, debug_log, _SESSION_LOG_PATH
+from utils import debug_log
 
 @pytest.fixture
 def root():

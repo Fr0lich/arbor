@@ -12,9 +12,8 @@ Features:
 """
 
 import tkinter as tk
-from tkinter import ttk
 import math
-from typing import Dict, Callable, Optional, Tuple
+from typing import Dict, Callable, Optional
 
 # Design Tokens from AI_UI_GUIDE.md
 COLORS_LIGHT = {

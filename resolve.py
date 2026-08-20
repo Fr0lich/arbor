@@ -1,4 +1,3 @@
-import sys
 
 def resolve_file(filepath):
     with open(filepath, 'r') as f:

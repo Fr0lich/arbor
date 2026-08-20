@@ -1,7 +1,7 @@
 import pytest
 import tkinter as tk
 import pandas as pd
-from ui.recent_activity_dialog import RecentActivityDialog, open_recent_activity_dialog, COLORS_LIGHT, COLORS_DARK
+from ui.recent_activity_dialog import RecentActivityDialog, open_recent_activity_dialog, COLORS_DARK
 
 
 @pytest.fixture

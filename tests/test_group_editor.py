@@ -1,6 +1,4 @@
-import pytest
 import tkinter as tk
-from unittest.mock import MagicMock, patch
 from ui.group_editor import FieldGroupEditorDialog
 
 def test_field_group_editor_dialog_init():

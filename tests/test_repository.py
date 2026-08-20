@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 from unittest import mock
-from repository import ExcelRepository, SQLiteRepository, _normalise_dataframes, _normalise_log_dataframe
+from repository import SQLiteRepository, _normalise_dataframes, _normalise_log_dataframe
 
 class TestRepository:
     def test_normalise_dataframes(self):

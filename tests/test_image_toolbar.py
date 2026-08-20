@@ -1,6 +1,6 @@
 import pytest
 import tkinter as tk
-from ui.image_toolbar import ImageToolbar, create_image_toolbar, SegmentedDesignToggle, ImageToolbarButton
+from ui.image_toolbar import create_image_toolbar
 
 
 @pytest.fixture

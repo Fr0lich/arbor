@@ -175,7 +175,6 @@ def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-from datetime import datetime   # needed by _on_exit above
 
 if __name__ == "__main__":
     try:

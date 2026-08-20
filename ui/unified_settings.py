@@ -21,7 +21,7 @@ if parent_dir not in sys.path:
 
 import config
 from config import sc
-from ui.widgets import ToggleSwitch, create_toggle_row, InfoButton, create_info_badge
+from ui.widgets import ToggleSwitch, create_toggle_row, create_info_badge
 
 SETTING_INFO_TEXTS = {
     "focus_fallback": (

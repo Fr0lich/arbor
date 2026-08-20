@@ -321,7 +321,6 @@ def _LEGACY_open_layout_settings(self):
     import tkinter as tk
     from tkinter import ttk
     from config import sc
-    from ui.widgets import ToggleSwitch
 
     if hasattr(self, "layout_win") and getattr(self.layout_win, "winfo_exists", lambda: False)():
         self.layout_win.lift()
@@ -396,7 +395,6 @@ def _LEGACY_open_focus_settings(self):
     import tkinter as tk
     from tkinter import ttk
     from config import sc
-    from ui.widgets import ToggleSwitch
 
     if hasattr(self, "focus_win") and self.focus_win.winfo_exists():
         self.focus_win.lift()
