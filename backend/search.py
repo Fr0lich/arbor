@@ -20,10 +20,49 @@ class SearchEngine:
             return self._search_index_cache
 
         index = {}
+
+        # If we have a dataframe but no dict, build the index using vectorized Pandas methods
+        if df_reg is not None and not df_reg.empty and not reg_dict:
+            # Vectorized string conversion and filling NA
+            df_str = df_reg.fillna("").astype(str)
+
+            # Helper to safely extract columns or return empty strings
+            def get_col(col):
+                return df_str[col].str.strip().str.lower() if col in df_str.columns else pd.Series("", index=df_str.index)
+
+            genus_s = get_col("Genus")
+            species_s = get_col("Species")
+            family_s = get_col("Family")
+
+            genus_species_s = genus_s + " " + species_s
+            genus_species_s = genus_species_s.str.strip()
+
+            # Replace 'nan', 'none'
+            df_str = df_str.replace(["nan", "none", "NaN", "None"], "")
+
+            # Build the "all" column by joining all columns per row + index
+            index_str = df_str.index.astype(str).str.lower()
+            all_s = df_str.apply(lambda row: " ".join(v.strip().lower() for v in row if v.strip() and v.strip().lower() not in ("nan", "none")), axis=1)
+            all_s = index_str + " " + all_s
+
+            # Construct the dict
+            oids = df_str.index
+            for i in range(len(oids)):
+                oid = oids[i]
+                id_val = index_str.iloc[i]
+                index[oid] = {
+                    "id": id_val,
+                    "genus_species": genus_species_s.iloc[i],
+                    "family": family_s.iloc[i],
+                    "all": all_s.iloc[i]
+                }
+
+            self._search_index_cache = index
+            return index
+
+        # Fallback to dictionary iteration if reg_dict is provided
         if reg_dict:
             items_iter = reg_dict.items()
-        elif df_reg is not None and not df_reg.empty:
-            items_iter = df_reg.to_dict(orient="index").items()
         else:
             return index
 

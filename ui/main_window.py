@@ -7703,10 +7703,12 @@ class ObjectProgramUI(
                     is_visible = field_toggle
                     
             if is_visible:
-                frame.grid()
+                if frame.winfo_manager() != "grid":
+                    frame.grid()
                 visible_count += 1
             else:
-                frame.grid_remove()
+                if frame.winfo_manager() == "grid":
+                    frame.grid_remove()
                 
 
         # Unknown/missing values section
@@ -7717,10 +7719,12 @@ class ObjectProgramUI(
                 is_visible = False
                 
             if is_visible:
-                frame.grid()
+                if frame.winfo_manager() != "grid":
+                    frame.grid()
                 visible_count += 1
             else:
-                frame.grid_remove()
+                if frame.winfo_manager() == "grid":
+                    frame.grid_remove()
             
         # Sjekk om i det hele tatt noe er synlig (only run when Focus Mode is active)
         if focus_active:

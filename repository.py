@@ -24,23 +24,34 @@ def _coerce_bool_series(series: pd.Series, default: bool = False) -> pd.Series:
     if series is None or series.empty:
         return series
 
-    def _to_bool(x):
-        if pd.isna(x) or x is None:
-            return default
-        if isinstance(x, bool):
-            return x
-        if isinstance(x, (int, float)):
-            return bool(x)
-        if isinstance(x, str):
-            clean = x.strip().lower()
-            if clean in _TRUTHY_SET:
-                return True
-            if clean in _FALSY_SET:
-                return False
-            return bool(clean)
-        return bool(x)
+    if pd.api.types.is_bool_dtype(series):
+        return series.fillna(default)
+    if pd.api.types.is_numeric_dtype(series):
+        return series.fillna(default).astype(bool)
 
-    return series.apply(_to_bool).astype(bool)
+    s = series.astype(str).str.strip().str.lower()
+
+    # Vectorized true/false matching
+    is_true = s.isin(_TRUTHY_SET)
+    is_false = s.isin(_FALSY_SET)
+
+    # Elements not found in either set fallback to default if they were originally NaN, otherwise standard truthiness.
+    # To handle the truthiness correctly for the fallback case:
+    # We will construct the boolean series using numpy/pandas operations.
+
+    # Create the result series, initializing with the default value
+    res = pd.Series(default, index=series.index, dtype=bool)
+
+    res.loc[is_true] = True
+    res.loc[is_false] = False
+
+    # For anything else (neither in truthy nor falsy set):
+    # If the original was not NaN/None, apply standard boolean casting.
+    mask_other = ~is_true & ~is_false & ~series.isna() & (series.astype(str) != 'None')
+    if mask_other.any():
+        res.loc[mask_other] = series.loc[mask_other].astype(bool)
+
+    return res
 
 
 def _normalize_object_id_series(series: pd.Series) -> pd.Series:
@@ -48,19 +59,17 @@ def _normalize_object_id_series(series: pd.Series) -> pd.Series:
     if series is None or series.empty:
         return series
 
-    def _clean_val(val):
-        if pd.isna(val) or val is None or val == "":
-            return ""
-        if isinstance(val, float):
-            if val.is_integer():
-                return str(int(val))
-            return str(val)
-        val_str = str(val).strip()
-        if val_str.endswith(".0") and val_str[:-2].lstrip("-").isdigit():
-            return val_str[:-2]
-        return val_str
+    # Convert to string and handle standard missing values.
+    # fillna("") first so np.nan doesn't become the string "nan".
+    s = series.fillna("").astype(str).str.strip()
+    s = s.replace(['nan', 'None', '<NA>'], '')
 
-    return series.apply(_clean_val)
+    # Vectorized stripping of .0 if it represents an integer
+    # e.g. "123.0" -> "123", but "12.0.0" shouldn't be altered here
+    mask_dot_zero = s.str.endswith(".0") & s.str.slice(0, -2).str.lstrip("-").str.isdigit()
+    s.loc[mask_dot_zero] = s.loc[mask_dot_zero].str.slice(0, -2)
+
+    return s
 
 
 def _open_excel_reader(path: str) -> pd.ExcelFile:
