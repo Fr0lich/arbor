@@ -552,13 +552,11 @@ class GroupEditorWindow:
             # Find other tabs
             choices = [g["name"] for i, g in enumerate(self.groups) if i != g_idx]
             if choices:
+                group_map = {g["name"]: g for g in self.groups}
                 for dest_name in choices:
                     def do_move(dest=dest_name):
                         field_name = self.groups[g_idx]["fields"].pop(f_idx)
-                        for g in self.groups:
-                            if g["name"] == dest:
-                                g.setdefault("fields", []).append(field_name)
-                                break
+                        group_map[dest].setdefault("fields", []).append(field_name)
                         self.on_tab_select(None)
                         
                     move_submenu.add_command(label=dest_name, command=do_move)
