@@ -4,7 +4,6 @@ import pandas as pd
 import config
 from config import sc
 import uuid
-import pandas as pd
 
 REVIEWED_COLUMN = "Reviewed"
 
@@ -233,7 +232,7 @@ class AddObjectsWizard:
 
         # LEFT PANE: Tools
         left_frame = tk.Frame(pane, bg=self.colors["surface"])
-        pane.add(left_frame, minsize=sc(300), weight=1)
+        pane.add(left_frame, minsize=sc(300), sticky="nsew")
 
         # Auto Generation Card
         auto_card = tk.LabelFrame(left_frame, text="Auto-Generate IDs", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["card_bg"], fg=self.colors["on_surface"], padx=sc(10), pady=sc(10))
@@ -274,7 +273,7 @@ class AddObjectsWizard:
 
         # RIGHT PANE: Staged IDs List
         right_frame = tk.Frame(pane, bg=self.colors["surface"])
-        pane.add(right_frame, minsize=sc(200), weight=1)
+        pane.add(right_frame, minsize=sc(200), sticky="nsew")
 
         tk.Label(right_frame, text="Staged IDs to Create", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, sc(4)))
 
@@ -352,7 +351,7 @@ class AddObjectsWizard:
 
         # LEFT PANE: Select ID
         left_frame = tk.Frame(pane, bg=self.colors["surface"])
-        pane.add(left_frame, minsize=sc(150), weight=0)
+        pane.add(left_frame, minsize=sc(150), sticky="nsew")
 
         tk.Label(left_frame, text="Select Object", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, sc(4)))
 
@@ -376,7 +375,7 @@ class AddObjectsWizard:
 
         # RIGHT PANE: Edit Form
         right_frame = tk.Frame(pane, bg=self.colors["surface"])
-        pane.add(right_frame, weight=1)
+        pane.add(right_frame, minsize=sc(300), sticky="nsew")
 
         tk.Label(right_frame, text="Set Initial Values", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, sc(4)))
 
@@ -397,7 +396,10 @@ class AddObjectsWizard:
         self.form_canvas.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
-        self.form_canvas.bind_all("<MouseWheel>", lambda e: self.form_canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+        def _on_form_scroll(event):
+            self.form_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        self.form_canvas.bind("<Enter>", lambda e: self.form_canvas.bind_all("<MouseWheel>", _on_form_scroll))
+        self.form_canvas.bind("<Leave>", lambda e: self.form_canvas.unbind_all("<MouseWheel>"))
 
         # Build Fields based on config
         self.field_vars = {}
@@ -492,10 +494,6 @@ class AddObjectsWizard:
             self.goto_step(1)
         elif self.current_step == 1:
             self._save_current_staged_data()
-            try:
-                self.form_canvas.unbind_all("<MouseWheel>")
-            except Exception:
-                pass
             self.goto_step(2)
         elif self.current_step == 2:
             self._create_objects()
@@ -515,6 +513,8 @@ class AddObjectsWizard:
         location_fields = self.app.config.get("ui_sections", {}).get("location", [])
         location_columns = [f["name"] for f in location_fields]
         checkbox_loc_cols = {f["name"] for f in location_fields if f.get("type") == "checkbox"}
+        bool_cols = set(problem_columns) | {"Images_Problem", "Images_Wrong", REVIEWED_COLUMN, "Online_Images_Exist"}
+        all_obs_cols = list(self.app.df_obs.columns) if self.app.df_obs is not None else []
 
         new_reg_dict = {}
         new_obs_dict = {}
@@ -533,7 +533,18 @@ class AddObjectsWizard:
             new_reg_dict[oid] = reg_row
 
             # df_obs row
-            obs_row = {col: False for col in problem_columns}
+            obs_row = {}
+            for col in all_obs_cols:
+                if col in bool_cols:
+                    obs_row[col] = False
+                elif col == "Images_Missing":
+                    obs_row[col] = True
+                elif col in checkbox_loc_cols:
+                    obs_row[col] = "False"
+                else:
+                    obs_row[col] = ""
+            
+            # Guarantee core required columns
             obs_row["Images_Missing"] = True
             obs_row["Images_Problem"] = False
             obs_row["Images_Wrong"] = False
@@ -546,8 +557,6 @@ class AddObjectsWizard:
                     obs_row[col] = updates[col]
                 elif col in checkbox_loc_cols:
                     obs_row[col] = "False"
-                else:
-                    obs_row[col] = ""
                 
             new_obs_dict[oid] = obs_row
 
@@ -603,6 +612,10 @@ class AddObjectsWizard:
         self.app.dirty = True
         if hasattr(self.main_window, 'update_dirty_ui'):
             self.main_window.update_dirty_ui()
+        if hasattr(self.main_window, 'update_object_count'):
+            self.main_window.update_object_count()
+        if hasattr(self.main_window, 'update_review_progress'):
+            self.main_window.update_review_progress()
 
         messagebox.showinfo("Success", f"Successfully created {len(oids)} object(s).", parent=self.main_window.root)
         self.win.destroy()
@@ -611,10 +624,6 @@ class AddObjectsWizard:
         if self.current_step > 0:
             if self.current_step == 1:
                 self._save_current_staged_data()
-                try:
-                    self.form_canvas.unbind_all("<MouseWheel>")
-                except Exception:
-                    pass
             self.goto_step(self.current_step - 1)
 
     def _on_cancel(self):
