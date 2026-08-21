@@ -439,11 +439,15 @@ class SQLiteRepository:
                     if table_name in existing_tables:
                         # Table exists, check if columns match (so we don't break on schema changes)
                         cursor = conn.cursor()
-                        cursor.execute(f"PRAGMA table_info({table_name});")
+
+                        if not table_name.isidentifier():
+                            raise ValueError(f"Invalid table name: {table_name}")
+
+                        cursor.execute(f'PRAGMA table_info("{table_name}");')  # nosec B608
                         db_cols = {row[1] for row in cursor.fetchall()}
                         df_cols = set(df_save.columns)
                         if df_cols.issubset(db_cols):
-                            cursor.execute(f"DELETE FROM {table_name};")
+                            cursor.execute(f'DELETE FROM "{table_name}";')  # nosec B608
                             df_save.to_sql(table_name, conn, if_exists="append", index=False)
                         else:
                             # Fallback if columns differ (e.g. schema migration)
