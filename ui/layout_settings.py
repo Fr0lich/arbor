@@ -792,7 +792,7 @@ class LayoutSettingsMixin:
                     lbl.configure(bg=statusbar_bg, fg=statusbar_fg)
 
             for w in self.reg_entries.values():
-                if isinstance(w, (tk.Text, tk.Entry)):
+                if isinstance(w, tk.Text) or (isinstance(w, tk.Entry) and not isinstance(w, ttk.Entry)):
                     w.configure(background=field_bg, foreground=fg_color,
                                 insertbackground=fg_color, highlightbackground=border_color)
 
@@ -980,7 +980,7 @@ class LayoutSettingsMixin:
                     lbl.configure(bg=statusbar_bg, fg=statusbar_fg)
 
             for w in self.reg_entries.values():
-                if isinstance(w, (tk.Text, tk.Entry)):
+                if isinstance(w, tk.Text) or (isinstance(w, tk.Entry) and not isinstance(w, ttk.Entry)):
                     w.configure(background="white", foreground="black",
                                 insertbackground="black", highlightbackground="#d0d0d0")
 
@@ -1051,7 +1051,7 @@ class LayoutSettingsMixin:
 
         # Update entry widgets
         for w in getattr(self, "location_entries", []):
-            if isinstance(w, tk.Entry) and w.winfo_exists():
+            if isinstance(w, tk.Entry) and not isinstance(w, ttk.Entry) and w.winfo_exists():
                 w.configure(background=entry_bg, foreground=entry_fg,
                             insertbackground=entry_insert, highlightbackground=border_col)
 
