@@ -189,9 +189,10 @@ class LocationPanel(tk.Frame):
         )
         self.preset_combobox.pack(side="left", padx=sc(2))
         
+        save_text = "Save..." if is_horiz else "Save Preset..."
         save_btn = tk.Button(
             p_frame,
-            text="Save Preset...",
+            text=save_text,
             font=("JetBrains Mono", sc(9), "bold"),
             fg=c["text"], bg=c["surface"],
             bd=1, relief="solid",
@@ -202,9 +203,10 @@ class LocationPanel(tk.Frame):
         )
         save_btn.pack(side="left", padx=sc(2))
         
+        apply_text = "Apply" if is_horiz else "Apply Preset(Ctrl+K)"
         apply_btn = tk.Button(
             p_frame,
-            text="Apply Preset(Ctrl+K)",
+            text=apply_text,
             font=("JetBrains Mono", sc(9), "bold"),
             fg=c["on_primary"], bg=c["primary"],
             bd=1, relief="solid",
@@ -214,6 +216,25 @@ class LocationPanel(tk.Frame):
             command=self.apply_active_preset
         )
         apply_btn.pack(side="left", padx=sc(2))
+        
+        # Tooltip status bindings for horizontal mode
+        def _on_enter_save(e):
+            if not self.toast_var.get().startswith("[PRESET"):
+                self.toast_var.set("[Save current location preset]")
+        def _on_leave_save(e):
+            if not self.toast_var.get().startswith("[PRESET"):
+                self.toast_var.set("")
+        save_btn.bind("<Enter>", _on_enter_save)
+        save_btn.bind("<Leave>", _on_leave_save)
+
+        def _on_enter_apply(e):
+            if not self.toast_var.get().startswith("[PRESET"):
+                self.toast_var.set("[Apply selected preset (Ctrl+K)]")
+        def _on_leave_apply(e):
+            if not self.toast_var.get().startswith("[PRESET"):
+                self.toast_var.set("")
+        apply_btn.bind("<Enter>", _on_enter_apply)
+        apply_btn.bind("<Leave>", _on_leave_apply)
         
         return p_frame
 
@@ -553,47 +574,39 @@ class LocationPanel(tk.Frame):
         content = tk.Frame(self, bg=c["bg"])
         content.pack(fill="x", padx=sc(8), pady=sc(6))
         
-        # Row 1: Stored as (weight 2), Building (weight 1), Floor (weight 1)
-        r1_frame = tk.Frame(content, bg=c["bg"])
-        r1_frame.pack(fill="x", pady=(0, sc(6)))
-        r1_frame.columnconfigure(0, weight=2, uniform="r1")
-        r1_frame.columnconfigure(1, weight=1, uniform="r1")
-        r1_frame.columnconfigure(2, weight=1, uniform="r1")
+        content.columnconfigure(0, weight=1, uniform="loc_col")
+        content.columnconfigure(1, weight=1, uniform="loc_col")
+        content.columnconfigure(2, weight=1, uniform="loc_col")
         
-        c0 = tk.Frame(r1_frame, bg=c["bg"])
-        c0.grid(row=0, column=0, sticky="nsew", padx=sc(4))
+        # Row 0: Stored as, Building, Floor
+        c0 = tk.Frame(content, bg=c["bg"])
+        c0.grid(row=0, column=0, sticky="nsew", padx=sc(4), pady=(0, sc(6)))
         if field_defs.get("Stored as"):
             self._create_field_widget(c0, "Stored as", field_defs["Stored as"], is_horiz=True).pack(fill="x")
             
-        c1 = tk.Frame(r1_frame, bg=c["bg"])
-        c1.grid(row=0, column=1, sticky="nsew", padx=sc(4))
+        c1 = tk.Frame(content, bg=c["bg"])
+        c1.grid(row=0, column=1, sticky="nsew", padx=sc(4), pady=(0, sc(6)))
         if field_defs.get("Building"):
             self._create_field_widget(c1, "Building", field_defs["Building"], is_horiz=True).pack(fill="x")
             
-        c2 = tk.Frame(r1_frame, bg=c["bg"])
-        c2.grid(row=0, column=2, sticky="nsew", padx=sc(4))
+        c2 = tk.Frame(content, bg=c["bg"])
+        c2.grid(row=0, column=2, sticky="nsew", padx=sc(4), pady=(0, sc(6)))
         if field_defs.get("Floor"):
             self._create_field_widget(c2, "Floor", field_defs["Floor"], is_horiz=True).pack(fill="x")
 
-        # Row 2: Cabinet (weight 1), Extra (weight 1), Loan status card (weight 1)
-        r2_frame = tk.Frame(content, bg=c["bg"])
-        r2_frame.pack(fill="x")
-        r2_frame.columnconfigure(0, weight=1, uniform="r2")
-        r2_frame.columnconfigure(1, weight=1, uniform="r2")
-        r2_frame.columnconfigure(2, weight=1, uniform="r2")
-        
-        c3 = tk.Frame(r2_frame, bg=c["bg"])
-        c3.grid(row=0, column=0, sticky="nsew", padx=sc(4))
+        # Row 1: Cabinet, Extra, Loan status
+        c3 = tk.Frame(content, bg=c["bg"])
+        c3.grid(row=1, column=0, sticky="nsew", padx=sc(4))
         if field_defs.get("Cabinet"):
             self._create_field_widget(c3, "Cabinet", field_defs["Cabinet"], is_horiz=True).pack(fill="x")
             
-        c4 = tk.Frame(r2_frame, bg=c["bg"])
-        c4.grid(row=0, column=1, sticky="nsew", padx=sc(4))
+        c4 = tk.Frame(content, bg=c["bg"])
+        c4.grid(row=1, column=1, sticky="nsew", padx=sc(4))
         if field_defs.get("Extra"):
             self._create_field_widget(c4, "Extra", field_defs["Extra"], is_horiz=True).pack(fill="x")
             
-        c5 = tk.Frame(r2_frame, bg=c["bg"])
-        c5.grid(row=0, column=2, sticky="nsew", padx=sc(4))
+        c5 = tk.Frame(content, bg=c["bg"])
+        c5.grid(row=1, column=2, sticky="nsew", padx=sc(4))
         
         loan_lbl = tk.Label(
             c5, text="LOAN STATUS",

@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
-
 import tkinter.font as tkFont
+from config import sc
 
 FONT_UI = ("sans-serif", 10)
 FONT_UI_BOLD = ("sans-serif", 10, "bold")
@@ -18,12 +18,12 @@ def init_fonts():
     ui_family = "Hanken Grotesk" if "Hanken Grotesk" in families else "Helvetica" if "Helvetica" in families else "Segoe UI" if "Segoe UI" in families else "sans-serif"
     mono_family = "JetBrains Mono" if "JetBrains Mono" in families else "Consolas" if "Consolas" in families else "Courier New"
     
-    FONT_UI = (ui_family, 10)
-    FONT_UI_BOLD = (ui_family, 10, "bold")
-    FONT_UI_LG = (ui_family, 12, "bold")
-    FONT_UI_XL = (ui_family, 16, "bold")
-    FONT_MONO = (mono_family, 10)
-    FONT_MONO_SM = (mono_family, 8)
+    FONT_UI = (ui_family, sc(10))
+    FONT_UI_BOLD = (ui_family, sc(10), "bold")
+    FONT_UI_LG = (ui_family, sc(12), "bold")
+    FONT_UI_XL = (ui_family, sc(16), "bold")
+    FONT_MONO = (mono_family, sc(10))
+    FONT_MONO_SM = (mono_family, sc(8))
     _fonts_initialized = True
 
 COLORS = {
@@ -54,8 +54,10 @@ class HistoricalConflictResolverWindow:
         
         self.win = tk.Toplevel(main_app.root)
         self.win.title("Historical Database Conflict Resolver")
-        self.win.geometry("1100x700")
         self.win.configure(bg=COLORS["bg"])
+        
+        import utils
+        utils.center_and_fit_toplevel(self.win, sc(1100), sc(700))
         
         # State
         self.initial_suggestions = suggestions
@@ -68,28 +70,28 @@ class HistoricalConflictResolverWindow:
         
     def build_ui(self):
         # Header
-        header = tk.Frame(self.win, bg=COLORS["surface"], height=48)
+        header = tk.Frame(self.win, bg=COLORS["surface"], height=sc(48))
         header.pack(fill="x", side="top")
-        tk.Frame(header, bg=COLORS["border"], height=1).pack(fill="x", side="bottom")
+        tk.Frame(header, bg=COLORS["border"], height=sc(1)).pack(fill="x", side="bottom")
         
-        tk.Label(header, text="HISTORICAL_DATABASE_CONFLICT_RESOLVER", font=FONT_UI_LG, fg=COLORS["primary"], bg=COLORS["surface"]).pack(side="left", padx=16, pady=12)
+        tk.Label(header, text="HISTORICAL_DATABASE_CONFLICT_RESOLVER", font=FONT_UI_LG, fg=COLORS["primary"], bg=COLORS["surface"]).pack(side="left", padx=sc(16), pady=sc(12))
         
         # Main content area
         main_area = tk.Frame(self.win, bg=COLORS["bg"])
         main_area.pack(fill="both", expand=True)
         
         # Left Sidebar (Field Directory)
-        sidebar = tk.Frame(main_area, width=280, bg=COLORS["surface_dim"])
+        sidebar = tk.Frame(main_area, width=sc(280), bg=COLORS["surface_dim"])
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
-        tk.Frame(sidebar, bg=COLORS["border"], width=1).pack(side="right", fill="y")
+        tk.Frame(sidebar, bg=COLORS["border"], width=sc(1)).pack(side="right", fill="y")
         
-        dir_header = tk.Frame(sidebar, bg=COLORS["border"], height=40)
+        dir_header = tk.Frame(sidebar, bg=COLORS["border"], height=sc(40))
         dir_header.pack(fill="x")
-        tk.Label(dir_header, text="FIELD_DIRECTORY", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["border"]).pack(side="left", padx=12, pady=12)
+        tk.Label(dir_header, text="FIELD_DIRECTORY", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["border"]).pack(side="left", padx=sc(12), pady=sc(12))
         
         # Bottom toggle
-        sidebar_bottom = tk.Frame(sidebar, bg=COLORS["border"], height=48)
+        sidebar_bottom = tk.Frame(sidebar, bg=COLORS["border"], height=sc(48))
         sidebar_bottom.pack(side="bottom", fill="x")
         sidebar_bottom.pack_propagate(False)
         self.show_all_var = tk.BooleanVar(value=False)
@@ -98,7 +100,7 @@ class HistoricalConflictResolverWindow:
                              activebackground=COLORS["surface"], activeforeground=COLORS["primary"],
                              selectcolor=COLORS["surface"], relief="flat", bd=0,
                              command=self.reload_suggestions)
-        chk.pack(fill="both", expand=True, padx=1, pady=1) # 1px border visually
+        chk.pack(fill="both", expand=True, padx=sc(1), pady=sc(1)) # 1px border visually
         
         self.dir_canvas = tk.Canvas(sidebar, bg=COLORS["surface_dim"], highlightthickness=0)
         dir_scrollbar = ttk.Scrollbar(sidebar, orient="vertical", command=self.dir_canvas.yview)
@@ -124,13 +126,13 @@ class HistoricalConflictResolverWindow:
         right_area.pack(side="left", fill="both", expand=True)
         
         # Context Header
-        ctx_header = tk.Frame(right_area, bg=COLORS["surface"], height=80)
+        ctx_header = tk.Frame(right_area, bg=COLORS["surface"], height=sc(80))
         ctx_header.pack(fill="x")
-        tk.Frame(ctx_header, bg=COLORS["border"], height=1).pack(side="bottom", fill="x")
+        tk.Frame(ctx_header, bg=COLORS["border"], height=sc(1)).pack(side="bottom", fill="x")
         
         self.issue_count_label = tk.Label(ctx_header, text=f"RECORD REVIEW: {len(self.fields)} ISSUES", font=FONT_UI_XL, fg=COLORS["primary"], bg=COLORS["surface"])
-        self.issue_count_label.pack(anchor="w", padx=24, pady=(16, 4))
-        tk.Label(ctx_header, text="Review and resolve outstanding conflicts and data problems in the fields below. Scroll to view all issues.", font=FONT_UI, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", padx=24, pady=(0, 16))
+        self.issue_count_label.pack(anchor="w", padx=sc(24), pady=(sc(16), sc(4)))
+        tk.Label(ctx_header, text="Review and resolve outstanding conflicts and data problems in the fields below. Scroll to view all issues.", font=FONT_UI, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", padx=sc(24), pady=(0, sc(16)))
         
         # Scrollable Canvas for cards
         self.canvas = tk.Canvas(right_area, bg=COLORS["bg"], highlightthickness=0)
@@ -141,7 +143,8 @@ class HistoricalConflictResolverWindow:
             "<Configure>",
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")) if e.widget == self.scrollable_frame else None
         )
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw", width=800)
+        canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.bind("<Configure>", lambda e, cw=canvas_window: self.canvas.itemconfig(cw, width=e.width))
         
         self.canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -159,15 +162,15 @@ class HistoricalConflictResolverWindow:
         self.populate_fields()
         
         # Footer
-        footer = tk.Frame(self.win, bg=COLORS["surface_dim"], height=48)
+        footer = tk.Frame(self.win, bg=COLORS["surface_dim"], height=sc(48))
         footer.pack(fill="x", side="bottom")
-        tk.Frame(footer, bg=COLORS["border"], height=1).pack(side="top", fill="x")
+        tk.Frame(footer, bg=COLORS["border"], height=sc(1)).pack(side="top", fill="x")
         
         self.stats_label = tk.Label(footer, text="", font=FONT_MONO, fg=COLORS["text_muted"], bg=COLORS["surface_dim"])
-        self.stats_label.pack(side="left", padx=24, pady=12)
+        self.stats_label.pack(side="left", padx=sc(24), pady=sc(12))
         
-        btn_apply_all = tk.Button(footer, text="APPLY ALL RESOLVED (CTRL+A)", font=FONT_UI_BOLD, fg=COLORS["on_success"], bg=COLORS["success"], relief="flat", bd=0, padx=16, pady=8, command=self.apply_all)
-        btn_apply_all.pack(side="right", padx=16, pady=6)
+        btn_apply_all = tk.Button(footer, text="APPLY ALL RESOLVED (CTRL+A)", font=FONT_UI_BOLD, fg=COLORS["on_success"], bg=COLORS["success"], relief="flat", bd=0, padx=sc(16), pady=sc(8), command=self.apply_all)
+        btn_apply_all.pack(side="right", padx=sc(16), pady=sc(6))
         
         # Cleanup routine
         def _cleanup(event=None):
@@ -181,11 +184,11 @@ class HistoricalConflictResolverWindow:
                 self.dir_canvas.unbind_all("<MouseWheel>")
             except Exception:
                 pass
-
+ 
         self.win.bind("<Destroy>", _cleanup)
-
-        btn_close = tk.Button(footer, text="CLOSE", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=16, pady=8, command=self.win.destroy)
-        btn_close.pack(side="right", padx=8, pady=6)
+ 
+        btn_close = tk.Button(footer, text="CLOSE", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(16), pady=sc(8), command=self.win.destroy)
+        btn_close.pack(side="right", padx=sc(8), pady=sc(6))
 
         # Tutorial IDs
         sidebar.tutorial_id = "hr_sidebar"
@@ -269,13 +272,13 @@ class HistoricalConflictResolverWindow:
         
         item = tk.Frame(self.dir_list, bg=COLORS["surface"], cursor="hand2")
         item.pack(fill="x")
-        tk.Frame(item, bg=COLORS["border"], height=1).pack(fill="x", side="bottom")
+        tk.Frame(item, bg=COLORS["border"], height=sc(1)).pack(fill="x", side="bottom")
         
         # Indicator bar
-        tk.Frame(item, bg=color, width=4).pack(side="left", fill="y")
+        tk.Frame(item, bg=color, width=sc(4)).pack(side="left", fill="y")
         
-        tk.Label(item, text=field.upper(), font=FONT_MONO, fg=color, bg=COLORS["surface"]).pack(side="left", padx=12, pady=12)
-        tk.Label(item, text=status_code, font=FONT_MONO_SM, fg=color, bg=COLORS["surface"]).pack(side="right", padx=12, pady=12)
+        tk.Label(item, text=field.upper(), font=FONT_MONO, fg=color, bg=COLORS["surface"]).pack(side="left", padx=sc(12), pady=sc(12))
+        tk.Label(item, text=status_code, font=FONT_MONO_SM, fg=color, bg=COLORS["surface"]).pack(side="right", padx=sc(12), pady=sc(12))
         
         def _scroll_to_card(event, f=field):
             if f in self.card_frames:
@@ -295,16 +298,16 @@ class HistoricalConflictResolverWindow:
         status_code, bg_color, fg_color = self.get_field_status(field)
         
         card = tk.Frame(self.scrollable_frame, bg=COLORS["surface"], highlightbackground=bg_color, highlightthickness=1)
-        card.pack(fill="x", padx=24, pady=(24, 0))
+        card.pack(fill="x", padx=sc(24), pady=(sc(24), 0))
         
         # Header
         header = tk.Frame(card, bg=bg_color)
         header.pack(fill="x")
-        tk.Label(header, text=f"FIELD: {field.upper()}", font=FONT_UI_BOLD, fg=fg_color, bg=bg_color).pack(side="left", padx=16, pady=10)
-        tk.Label(header, text=status_code, font=FONT_MONO_SM, fg=fg_color, bg=bg_color).pack(side="right", padx=16, pady=10)
+        tk.Label(header, text=f"FIELD: {field.upper()}", font=FONT_UI_BOLD, fg=fg_color, bg=bg_color).pack(side="left", padx=sc(16), pady=sc(10))
+        tk.Label(header, text=status_code, font=FONT_MONO_SM, fg=fg_color, bg=bg_color).pack(side="right", padx=sc(16), pady=sc(10))
         
         content = tk.Frame(card, bg=COLORS["surface"])
-        content.pack(fill="x", padx=20, pady=20)
+        content.pack(fill="x", padx=sc(20), pady=sc(20))
         
         reg_dict = self.main_app._get_reg_dict() if hasattr(self.main_app, "_get_reg_dict") else {}
         reg_row = reg_dict.get(self.oid) or self.main_app.app.df_reg.loc[self.oid]
@@ -313,19 +316,19 @@ class HistoricalConflictResolverWindow:
         
         # Current Value
         cv_frame = tk.Frame(content, bg=COLORS["surface"], highlightbackground=COLORS["border"], highlightthickness=1)
-        cv_frame.pack(fill="x", pady=(10, 16))
+        cv_frame.pack(fill="x", pady=(sc(10), sc(16)))
         
-        tk.Label(content, text="CURRENT_VALUE", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).place(x=12, y=-4) # fake overlap
+        tk.Label(content, text="CURRENT_VALUE", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).place(x=sc(12), y=-sc(4)) # fake overlap
         
         disp_val = current_val if current_val else "[BLANK]"
         disp_color = COLORS["text"] if current_val else COLORS["text_muted"]
-        tk.Label(cv_frame, text=disp_val, font=FONT_MONO, fg=disp_color, bg=COLORS["surface"]).pack(anchor="w", padx=16, pady=12)
+        tk.Label(cv_frame, text=disp_val, font=FONT_MONO, fg=disp_color, bg=COLORS["surface"]).pack(anchor="w", padx=sc(16), pady=sc(12))
         
         # Suggestions
         values_map = self.suggestions.get(field, {})
         unique_vals = [v for v in values_map if v != "(No data found)"]
         
-        tk.Label(content, text="HISTORICAL_SUGGESTIONS", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, 8))
+        tk.Label(content, text="HISTORICAL_SUGGESTIONS", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, sc(8)))
         
         import config
         prefs = config.load_prefs() or {}
@@ -343,14 +346,14 @@ class HistoricalConflictResolverWindow:
         if unique_vals:
             for val in unique_vals:
                 sug_frame = tk.Frame(content, bg=COLORS["surface"], highlightbackground=COLORS["border"], highlightthickness=1, cursor="hand2")
-                sug_frame.pack(fill="x", pady=(0, 8))
+                sug_frame.pack(fill="x", pady=(0, sc(8)))
                 
                 sources = values_map.get(val, set())
                 src_str = f"[{', '.join(sorted(sources))}]" if sources else ""
                 
                 # We need it to be focusable for keyboard nav
                 sug_btn = tk.Button(sug_frame, text=f"{val}\n{src_str}", font=FONT_MONO, justify="left", bg=COLORS["surface"], fg=COLORS["text"], relief="flat", bd=0, anchor="w")
-                sug_btn.pack(fill="both", expand=True, padx=8, pady=8)
+                sug_btn.pack(fill="both", expand=True, padx=sc(8), pady=sc(8))
                 
                 def _populate(v=val, rv=res_var):
                     rv.set(v)
@@ -359,17 +362,17 @@ class HistoricalConflictResolverWindow:
                 sug_btn.bind("<Return>", lambda e, f=_populate: f())
                 sug_btn.bind("<space>", lambda e, f=_populate: f())
         else:
-            tk.Label(content, text="No suggestions found.", font=FONT_MONO, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, 16))
+            tk.Label(content, text="No suggestions found.", font=FONT_MONO, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, sc(16)))
             
         # Manual Entry
-        tk.Frame(content, bg=COLORS["border"], height=1).pack(fill="x", pady=(8, 16))
-        tk.Label(content, text="MANUAL_ENTRY", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, 8))
+        tk.Frame(content, bg=COLORS["border"], height=sc(1)).pack(fill="x", pady=(sc(8), sc(16)))
+        tk.Label(content, text="MANUAL_ENTRY", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, sc(8)))
         
         entry_frame = tk.Frame(content, bg=COLORS["surface"])
         entry_frame.pack(fill="x")
         
         entry = tk.Entry(entry_frame, textvariable=res_var, font=FONT_MONO, bg=COLORS["surface"], fg=COLORS["text"], highlightbackground=COLORS["border"], highlightthickness=1, relief="flat")
-        entry.pack(side="left", fill="x", expand=True, ipady=4)
+        entry.pack(side="left", fill="x", expand=True, ipady=sc(4))
         
         def _apply(f=field, rv=res_var, cv=current_val, c=card, h=header):
             new_val = rv.get().strip()
@@ -378,7 +381,7 @@ class HistoricalConflictResolverWindow:
                 reg_changed_values = [f'{f}: "{cv}"  "{new_val}"']
                 prob_changed_fields = []
                 prob_changed_values = []
-
+ 
                 self.main_app.app.df_reg.loc[self.oid, f] = new_val
                 if f in self.main_app.reg_vars:
                     self.main_app.reg_vars[f].set(new_val)
@@ -389,7 +392,7 @@ class HistoricalConflictResolverWindow:
                         w.insert("1.0", str(new_val))
                 if getattr(self.main_app, "_cached_reg_dict", None) is not None and self.oid in self.main_app._cached_reg_dict:
                     self.main_app._cached_reg_dict[self.oid][f] = new_val
-
+ 
                 for pc, mf in self.main_app.problem_to_field.items():
                     if mf == f and pc in self.main_app.problem_vars:
                         old_prob = bool(self.main_app.app.df_obs.loc[self.oid].get(pc, False))
@@ -405,7 +408,7 @@ class HistoricalConflictResolverWindow:
                 
                 self.main_app._row_cache_dirty = True
                 self.main_app.commit_current_object()
-
+ 
                 self.main_app.log_action(
                     "RESOLVE_HISTORICAL_CONFLICT",
                     changed_fields=reg_changed_fields,
@@ -413,7 +416,7 @@ class HistoricalConflictResolverWindow:
                     prob_fields=prob_changed_fields,
                     prob_values=prob_changed_values
                 )
-
+ 
                 self.main_app.update_dirty_ui()
                 self.update_stats()
                 
@@ -423,8 +426,8 @@ class HistoricalConflictResolverWindow:
                     w.configure(bg=COLORS["success"])
                 h.configure(bg=COLORS["success"])
                 
-        btn_apply = tk.Button(entry_frame, text="APPLY", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=16, command=_apply)
-        btn_apply.pack(side="right", padx=(8, 0))
+        btn_apply = tk.Button(entry_frame, text="APPLY", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), command=_apply)
+        btn_apply.pack(side="right", padx=(sc(8), 0))
         
         entry.bind("<Return>", lambda e, f=_apply: f())
         

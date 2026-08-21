@@ -1136,7 +1136,7 @@ class ObjectProgramUI(
                     spacer_lbl.pack(side="left")
 
                 # Col 1: Label with bold clean typography
-                lbl = tk.Label(frame, text=name, width=22, anchor="w", font=("Hanken Grotesk", sc(10), "bold"), bg=card_bg, fg=fg_color)
+                lbl = tk.Label(frame, text=name, width=15, anchor="w", font=("Hanken Grotesk", sc(10), "bold"), bg=card_bg, fg=fg_color)
                 lbl.grid(row=0, column=1, sticky="w", padx=(0, 6))
                 if prob_col:
                     self.prob_label_widgets[name] = lbl
@@ -1229,7 +1229,7 @@ class ObjectProgramUI(
                     widget.bind("<Return>", self._reg_nav_down)
 
                 frame.columnconfigure(0, minsize=sc(28), weight=0)
-                frame.columnconfigure(1, minsize=sc(180), weight=0)
+                frame.columnconfigure(1, minsize=sc(120), weight=0)
                 frame.columnconfigure(2, weight=1)
 
                 frame.grid(row=current_row, column=0, sticky="ew", pady=4)
@@ -2996,6 +2996,8 @@ class ObjectProgramUI(
             if hasattr(self, "pin_btn"):
                 self.pin_btn.config(bg=config.RAIL_THEME.get("icon_hover_bg", "#e8e8e8"))
             
+
+
             target_sash = sc(300)
             if animate:
                 self._animate_sash_transition(target_sash)
@@ -3010,6 +3012,8 @@ class ObjectProgramUI(
             if hasattr(self, "pin_btn"):
                 self.pin_btn.config(bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"))
             
+
+
             target_sash = sc(config.RAIL_THEME.get("rail_width", 40))
             if animate:
                 self._animate_sash_transition(target_sash)
@@ -3243,15 +3247,15 @@ class ObjectProgramUI(
         # Re-add visible panes in order: images at top, location at bottom
         if self.show_images_var.get():
             # U2-A: 200px minimum keeps image panel usable when sash is dragged left
-            self.middle_panes.add(self.right_frame, weight=3)
+            self.middle_panes.add(self.right_frame, weight=3, minsize=sc(200))
             self.refresh_image_view()
 
         focus_active = hasattr(self, "focus_mode_var") and self.focus_mode_var.get()
         show_loc = not (focus_active and not self.focus_visibility_vars.get("Location", tk.BooleanVar(value=True)).get())
 
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get() and show_loc:
-            # U2-A: 150px minimum keeps location rows readable
-            self.middle_panes.add(self.loc_frame_horizontal, weight=1)
+            # U2-A: 130px minimum keeps location rows readable
+            self.middle_panes.add(self.loc_frame_horizontal, weight=1, minsize=sc(130))
 
     def toggle_location_panel(self):
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
@@ -3628,7 +3632,7 @@ class ObjectProgramUI(
       
         left = ttk.Frame(panes)
         self.left_frame = left
-        panes.add(left, weight=1)
+        panes.add(left, weight=0)
         self.left_frame.bind("<Configure>", self.on_left_frame_configure, add="+")
 
         # Persistent Action Rail frame on the left edge
@@ -3951,7 +3955,7 @@ class ObjectProgramUI(
         self.view_btn = ttk.Button(
             header,
             text="View: Gallery",
-            style="Tool.TButton",
+            style="Nav.TButton",
             command=self.toggle_image_view
         )
         self.view_btn.pack(side="right")
@@ -3960,7 +3964,7 @@ class ObjectProgramUI(
         self.source_btn = ttk.Button(
             header,
             text="Source...",
-            style="Tool.TButton",
+            style="Nav.TButton",
             command=self.open_image_menu
         )
         self.source_btn.pack(side="right", padx=(0, 4))
@@ -4153,9 +4157,13 @@ class ObjectProgramUI(
         fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
         bg_pane = "#181825" if is_dark else "#f9f9f9"
 
+        # Grid frame for checkboxes (prevents horizontal overflow)
+        grid_frame = ttk.Frame(action_row1b, style="RightPane.TFrame")
+        grid_frame.pack(side="left", fill="both", expand=True)
+
         self.clear_problems_var = tk.BooleanVar(value=False)
         self.clear_problems_cb = tk.Checkbutton(
-            action_row1b,
+            grid_frame,
             text="Clear Problems & Mark Reviewed",
             variable=self.clear_problems_var,
             command=self._clear_problems_and_mark_reviewed,
@@ -4167,14 +4175,14 @@ class ObjectProgramUI(
             cursor="hand2",
             padx=sc(4), pady=sc(3)  # U2-B: explicit padding for larger click target
         )
-        self.clear_problems_cb.pack(side="left", padx=4)
+        self.clear_problems_cb.grid(row=0, column=0, sticky="w", padx=2, pady=1)
         self.add_tooltip(
             self.clear_problems_cb,
             "Uncheck all problem flags and mark this object as reviewed (stays on current object)"
         )
 
         self.auto_next_cb = tk.Checkbutton(
-            action_row1b,
+            grid_frame,
             text="Auto-next after review",
             variable=self.auto_advance_var,
             font=("Segoe UI", sc(9.5)),
@@ -4185,14 +4193,14 @@ class ObjectProgramUI(
             cursor="hand2",
             padx=sc(4), pady=sc(3)  # U2-B: explicit padding for larger click target
         )
-        self.auto_next_cb.pack(side="left", padx=4)
+        self.auto_next_cb.grid(row=0, column=1, sticky="w", padx=2, pady=1)
         self.add_tooltip(
             self.auto_next_cb,
             "Automatically advance to the next item when marked as reviewed"
         )
 
         self.auto_next_history_cb = tk.Checkbutton(
-            action_row1b,
+            grid_frame,
             text="Auto-next with Historical Suggestion",
             variable=self.auto_advance_history_var,
             font=("Segoe UI", sc(9.5)),
@@ -4203,28 +4211,32 @@ class ObjectProgramUI(
             cursor="hand2",
             padx=sc(4), pady=sc(3)
         )
-        self.auto_next_history_cb.pack(side="left", padx=4)
+        self.auto_next_history_cb.grid(row=1, column=0, columnspan=2, sticky="w", padx=2, pady=1)
         self.add_tooltip(
             self.auto_next_history_cb,
             "Automatically advance to the next unreviewed item with historical suggestions when marked as reviewed"
         )
 
+        # Status frame for labels (stacked vertically on the right)
+        status_frame = ttk.Frame(action_row1b, style="RightPane.TFrame")
+        status_frame.pack(side="right", fill="y", padx=4)
+
         self.reviewed_time_label = ttk.Label(
-            action_row1b,
+            status_frame,
             text="",
             foreground="gray",
             font=("Segoe UI", sc(8))
         )
-        self.reviewed_time_label.pack(side="left", padx=(10, 0))
+        self.reviewed_time_label.pack(side="bottom", anchor="e")
 
         # Unsaved indicator dot on the right
         self.data_status_action = ttk.Label(
-            action_row1b,
+            status_frame,
             text="",
             foreground="gray",
             font=("Segoe UI", sc(8))
         )
-        self.data_status_action.pack(side="right", padx=4)
+        self.data_status_action.pack(side="top", anchor="e")
 
         # Notebook (tabbed) registration body - packed LAST so it fills the middle of reg_data_frame
         self.reg_notebook = ttk.Notebook(self.reg_data_frame)

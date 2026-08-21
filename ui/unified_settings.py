@@ -284,15 +284,15 @@ class UnifiedSettingsWindow:
         show_imgs = _get_val("show_images_var", p.get("show_images", True))
         loc_center = _get_val("location_in_center_var", p.get("location_in_center", False))
         
-        loc_2r = False
+        loc_2r = True
         if app and hasattr(app, "location_panel_horiz") and getattr(app, "location_panel_horiz", None) is not None:
             mode_val = getattr(app.location_panel_horiz, "layout_mode", None)
             if isinstance(mode_val, str):
                 loc_2r = (mode_val == "horizontal_2row")
             else:
-                loc_2r = p.get("location_2row", False)
+                loc_2r = p.get("location_2row", True)
         else:
-            loc_2r = p.get("location_2row", False)
+            loc_2r = p.get("location_2row", True)
             
         show_img_tls = _get_val("show_image_tools_var", p.get("show_image_tools", True))
         show_blk = _get_val("show_bulk_edit_var", p.get("show_bulk_edit", True))
