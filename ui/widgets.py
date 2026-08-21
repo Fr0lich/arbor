@@ -793,6 +793,13 @@ class TreeviewListboxWrapper(ttk.Frame):
             self.item_data[oid]["reviewed"] = reviewed
             self.item_data[oid]["values"] = [rev_char, oid, genus, species]
 
+            parts = [str(oid)]
+            if genus:
+                parts.append(genus)
+            if species:
+                parts.append(species)
+            self.item_data[oid]["title"] = " ".join(parts)
+
         oid_key = oid
         if getattr(self, "_oid_to_index", None):
             if oid_key not in self._oid_to_index and str(oid) in self._oid_to_index:
