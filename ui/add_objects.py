@@ -1,364 +1,306 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import config
+from config import sc
 import uuid
+import pandas as pd
 
 REVIEWED_COLUMN = "Reviewed"
 
-# Local scale helper
-def sc(n):
-    return config.sc(n)
+# Design tokens matching AI_UI_GUIDE.md & Arbor theme
+COLORS_LIGHT = {
+    "surface": "#f9f9f9",
+    "surface_dim": "#dadada",
+    "surface_container_low": "#f3f3f3",
+    "surface_container": "#eeeeee",
+    "surface_container_high": "#e8e8e8",
+    "surface_container_highest": "#e2e2e2",
+    "on_surface": "#1a1c1c",
+    "on_surface_variant": "#4c4546",
+    "outline": "#7e7576",
+    "outline_variant": "#cfc4c5",
+    "primary": "#000000",
+    "on_primary": "#ffffff",
+    "primary_container": "#1b1b1b",
+    "on_primary_container": "#848484",
+    "secondary": "#2e6b30",
+    "on_secondary": "#ffffff",
+    "secondary_container": "#adf0a6",
+    "on_secondary_container": "#326f34",
+    "error": "#C62828",
+    "on_error": "#ffffff",
+    "error_container": "#ffebeb",
+    "warning": "#FBC02D",
+    "header_bg": "#f3f3f3",
+    "card_bg": "#ffffff",
+    "chip_bg": "#e2e2e2",
+    "chip_active_bg": "#000000",
+    "chip_active_fg": "#ffffff",
+    "row_even": "#ffffff",
+    "row_odd": "#f8f9fa",
+    "select_bg": "#e2e2e2",
+    "select_fg": "#000000",
+    "step_active": "#2e6b30",
+    "step_complete": "#2e6b30",
+    "step_inactive": "#7e7576",
+    "card_border": "#d1d1d1"
+}
 
-class AddObjectsWindow:
+COLORS_DARK = {
+    "surface": "#1e1e2e",
+    "surface_dim": "#181825",
+    "surface_container_low": "#181825",
+    "surface_container": "#1e1e2e",
+    "surface_container_high": "#252538",
+    "surface_container_highest": "#313244",
+    "on_surface": "#cdd6f4",
+    "on_surface_variant": "#bac2de",
+    "outline": "#45475a",
+    "outline_variant": "#585b70",
+    "primary": "#cdd6f4",
+    "on_primary": "#1e1e2e",
+    "primary_container": "#313244",
+    "on_primary_container": "#a6adc8",
+    "secondary": "#a6e3a1",
+    "on_secondary": "#1e1e2e",
+    "secondary_container": "#252538",
+    "on_secondary_container": "#a6e3a1",
+    "error": "#f38ba8",
+    "on_error": "#1e1e2e",
+    "error_container": "#4c1414",
+    "warning": "#f9e2af",
+    "header_bg": "#181825",
+    "card_bg": "#252538",
+    "chip_bg": "#313244",
+    "chip_active_bg": "#a6e3a1",
+    "chip_active_fg": "#1e1e2e",
+    "row_even": "#1e1e2e",
+    "row_odd": "#181825",
+    "select_bg": "#313244",
+    "select_fg": "#cdd6f4",
+    "step_active": "#a6e3a1",
+    "step_complete": "#a6e3a1",
+    "step_inactive": "#585b70",
+    "card_border": "#45475a"
+}
+
+class AddObjectsWizard:
+    STEP_NAMES = [
+        "1. Object IDs",
+        "2. Initial Metadata",
+        "3. Review & Create"
+    ]
+
     def __init__(self, parent, app, main_window):
         self.parent = parent
         self.app = app
         self.main_window = main_window
 
-        if self.app.df_reg is None:
+        if getattr(self.app, 'df_reg', None) is None:
             messagebox.showwarning("No data", "Initialize a database first.")
             return
 
-        self.win = tk.Toplevel(parent)
-        self.win.title("Create New Objects")
-        self.win.configure(bg="#f9f9f9")
-        self.win.bind("<Escape>", lambda e: self.win.destroy())
-        self.win.transient(parent)
-        self.win.resizable(True, True)
+        self.is_dark = config.load_prefs().get("dark_mode", False)
+        self.colors = COLORS_DARK if self.is_dark else COLORS_LIGHT
 
-        # Staged object data
+        self.current_step = 0
         self.staged_data = {}
         self.current_selected_id = None
-
-        # Style initializations
-        self.setup_styles()
-
-        self._build_ui()
-
-        # Auto-detect layout
-        self.win.update_idletasks()
-        screen_h = self.win.winfo_screenheight()
-        # If screen is too small for the vertical layout, default to 2-columns
-        if screen_h * 0.9 < sc(700):
-            self.two_col_mode = True
-        else:
-            self.two_col_mode = False
-            
-        self._apply_layout()
-
-    def setup_styles(self):
-        style = ttk.Style()
-        # Flat, sharp layout frames
-        style.configure("Flat.TFrame", background="#f9f9f9")
-        style.configure("FlatCard.TLabelframe", background="#ffffff", bordercolor="#d1d1d1", borderwidth=1, relief="solid")
-        style.configure("FlatCard.TLabelframe.Label", font=("Hanken Grotesk", sc(11), "bold"), background="#ffffff", foreground="#1a1c1c")
-
-    def _toggle_layout(self):
-        self.two_col_mode = not getattr(self, "two_col_mode", False)
-        self._apply_layout()
-        
-    def _apply_layout(self):
-        self.id_frame.pack_forget()
-        self.edit_frame.pack_forget()
-        
-        if self.two_col_mode:
-            self.id_frame.pack(side="left", fill="both", expand=True, padx=(0, sc(5)))
-            self.edit_frame.pack(side="right", fill="both", expand=True, padx=(sc(5), 0))
-            w, h = sc(1100), sc(600)
-            if hasattr(self, "toggle_btn"):
-                self.toggle_btn.config(text="⊟ Switch to Single Column")
-        else:
-            self.id_frame.pack(side="top", fill="x", pady=(0, sc(10)))
-            self.edit_frame.pack(side="top", fill="both", expand=True, pady=sc(5))
-            w, h = sc(600), sc(800)
-            if hasattr(self, "toggle_btn"):
-                self.toggle_btn.config(text="⊞ Switch to 2-Column")
-            
-        import utils
-        utils.center_and_fit_toplevel(self.win, w, h)
-
-    def _create_location_style_card(self, parent, title):
-        main_box = tk.Frame(parent, bg="#ffffff", highlightthickness=1, highlightbackground="#d1d1d1")
-        
-        hdr = tk.Frame(main_box, bg="#f3f3f3", highlightthickness=0)
-        hdr.pack(fill="x", side="top")
-        
-        lbl = tk.Label(
-            hdr, text=title.upper(), 
-            font=("Hanken Grotesk", sc(11), "bold"), 
-            bg="#f3f3f3", fg="#000000",
-            anchor="w", padx=sc(10), pady=sc(6)
-        )
-        lbl.pack(side="left", fill="both", expand=True)
-        
-        sep = tk.Frame(main_box, bg="#d1d1d1", height=1)
-        sep.pack(fill="x", side="top")
-        
-        content = tk.Frame(main_box, bg="#ffffff", padx=sc(10), pady=sc(10))
-        content.pack(fill="both", expand=True, side="top")
-        
-        return main_box, content
-
-    def _build_ui(self):
-        main_frame = tk.Frame(self.win, bg="#f9f9f9", padx=sc(12), pady=sc(12))
-        main_frame.pack(fill="both", expand=True)
-        
-        # Header for Layout Toggle
-        header = tk.Frame(main_frame, bg="#f9f9f9")
-        header.pack(fill="x", pady=(0, sc(8)))
-        
-        self.toggle_btn = tk.Button(
-            header, text="⊞ Switch to 2-Column", 
-            font=("Hanken Grotesk", sc(9.5)),
-            bg="#ffffff", fg="#1a1c1c", 
-            activebackground="#e2e2e2", activeforeground="#1a1c1c",
-            relief="solid", bd=1, cursor="hand2", padx=sc(8), pady=sc(3),
-            command=self._toggle_layout
-        )
-        self.toggle_btn.pack(side="right")
-        
-        self.content_frame = tk.Frame(main_frame, bg="#f9f9f9")
-        self.content_frame.pack(fill="both", expand=True)
-
-        # 1. Target IDs
-        self.id_frame, id_content = self._create_location_style_card(self.content_frame, "Object IDs")
-        
-        lbl_n = tk.Label(id_content, text="Generate Next N IDs:", font=("Hanken Grotesk", sc(9.5)), bg="#ffffff", fg="#1a1c1c")
-        lbl_n.grid(row=0, column=0, sticky="w", pady=sc(4))
-        
-        self.auto_n_var = tk.IntVar(value=1)
-        spin = ttk.Spinbox(id_content, from_=1, to=1000, textvariable=self.auto_n_var, width=5, font=("JetBrains Mono", sc(9.5)))
-        spin.grid(row=0, column=1, sticky="w", padx=sc(6))
-        
-        gen_btn = tk.Button(
-            id_content, text="Generate",
-            font=("Hanken Grotesk", sc(9.5)),
-            bg="#ffffff", fg="#1a1c1c",
-            activebackground="#e2e2e2", activeforeground="#1a1c1c",
-            relief="solid", bd=1, cursor="hand2", padx=sc(8), pady=sc(2),
-            command=self._generate_auto_ids
-        )
-        gen_btn.grid(row=0, column=2, sticky="w", padx=sc(6))
- 
-        lbl_manual = tk.Label(id_content, text="Or manually enter IDs (comma-separated):", font=("Hanken Grotesk", sc(9.5)), bg="#ffffff", fg="#1a1c1c")
-        lbl_manual.grid(row=1, column=0, columnspan=3, sticky="w", pady=(sc(12), sc(4)))
-        
-        self.manual_ids_var = tk.StringVar()
-        ent_manual = tk.Entry(
-            id_content, textvariable=self.manual_ids_var,
-            font=("JetBrains Mono", sc(9.5)), relief="flat", bd=0,
-            highlightthickness=1, highlightbackground="#d1d1d1",
-            highlightcolor="#000000", insertbackground="#000000",
-            bg="#ffffff", fg="#1a1c1c"
-        )
-        ent_manual.grid(row=2, column=0, columnspan=3, sticky="ew", pady=sc(4))
-        id_content.columnconfigure(1, weight=1)
-
-        self.target_listbox = tk.Listbox(
-            id_content, height=4,
-            font=("JetBrains Mono", sc(10)),
-            bg="#ffffff", fg="#1a1c1c",
-            relief="flat", bd=0, highlightthickness=1,
-            highlightbackground="#d1d1d1", highlightcolor="#000000"
-        )
-        self.target_listbox.grid(row=3, column=0, columnspan=3, sticky="ew", pady=sc(8))
-        self.target_listbox.bind("<<ListboxSelect>>", self._on_listbox_select)
-        
-        btn_frame = tk.Frame(id_content, bg="#ffffff")
-        btn_frame.grid(row=4, column=0, columnspan=3, sticky="ew")
-        
-        add_btn = tk.Button(
-            btn_frame, text="Add Manual IDs",
-            font=("Hanken Grotesk", sc(9.5)),
-            bg="#ffffff", fg="#1a1c1c",
-            activebackground="#e2e2e2", activeforeground="#1a1c1c",
-            relief="solid", bd=1, cursor="hand2", padx=sc(8), pady=sc(3),
-            command=self._add_manual_ids
-        )
-        add_btn.pack(side="left")
-        
-        clear_btn = tk.Button(
-            btn_frame, text="Clear List",
-            font=("Hanken Grotesk", sc(9.5)),
-            bg="#ffffff", fg="#ba1a1a",
-            activebackground="#ffdad6", activeforeground="#ba1a1a",
-            relief="solid", bd=1, cursor="hand2", padx=sc(8), pady=sc(3),
-            command=lambda: self.target_listbox.delete(0, tk.END)
-        )
-        clear_btn.pack(side="right")
-
-        # 2. Edit Fields
-        self.edit_frame, edit_content = self._create_location_style_card(self.content_frame, "Default Data to Apply")
-        
-        canvas = tk.Canvas(edit_content, bg="#ffffff", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(edit_content, orient="vertical", command=canvas.yview)
-        
-        # Ensure flat container inside canvas
-        self.inner_edit = tk.Frame(canvas, bg="#ffffff")
-
-        self.inner_edit.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas_window = canvas.create_window((0, 0), window=self.inner_edit, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_window, width=e.width))
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
         self.field_vars = {}
 
-        row = 0
-        
-        # Registration Section Header
-        lbl_reg_hdr = tk.Label(self.inner_edit, text="Registration", font=("Hanken Grotesk", sc(11), "bold"), bg="#ffffff", fg="#1a1c1c")
-        lbl_reg_hdr.grid(row=row, column=0, columnspan=4, sticky="w", pady=(sc(10), sc(6)))
-        row += 1
-        
-        reg_fields = self.app.config["ui_sections"].get("registration", [])
-        col_idx = 0
-        for field in reg_fields:
-            name = field["name"]
-            if name == "UID" or field.get("readonly", False):
-                continue
-                
-            ftype = field.get("type", "text")
-            val_var = tk.StringVar()
-            self.field_vars[name] = val_var
+        self.manual_ids_var = tk.StringVar()
+        self.auto_n_var = tk.IntVar(value=1)
 
-            lbl_f = tk.Label(self.inner_edit, text=name, font=("Hanken Grotesk", sc(9.5)), bg="#ffffff", fg="#444748")
-            lbl_f.grid(row=row, column=col_idx*2, sticky="w", padx=sc(5), pady=sc(4))
-            
-            if ftype == "choice":
-                choices = field.get("choices", [])
-                if "" not in choices:
-                    choices = [""] + choices
-                cb = ttk.Combobox(self.inner_edit, textvariable=val_var, values=choices, font=("JetBrains Mono", sc(9.5)), state="readonly")
-                cb.grid(row=row, column=col_idx*2 + 1, sticky="ew", padx=sc(5), pady=sc(4))
-            elif ftype == "checkbox":
-                cb = ttk.Checkbutton(self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False")
-                cb.grid(row=row, column=col_idx*2 + 1, sticky="w", padx=sc(5), pady=sc(4))
+        self._setup_window()
+        self._build_shell()
+        self.goto_step(0)
+
+    def _setup_window(self):
+        self.win = tk.Toplevel(self.parent)
+        self.win.title("Create New Objects")
+        self.win.configure(bg=self.colors["surface"])
+        self.win.grab_set()
+        self.win.transient(self.parent)
+
+        import utils
+        utils.center_and_fit_toplevel(self.win, sc(780), sc(650))
+        self.win.minsize(sc(640), sc(540))
+
+        self.win.bind("<Escape>", lambda e: self._on_cancel())
+        self.win.protocol("WM_DELETE_WINDOW", self._on_cancel)
+
+    def _build_shell(self):
+        # Header banner
+        header_frame = tk.Frame(self.win, bg=self.colors["surface_container_low"], padx=sc(16), pady=sc(10))
+        header_frame.pack(fill="x", side="top")
+
+        title_row = tk.Frame(header_frame, bg=self.colors["surface_container_low"])
+        title_row.pack(fill="x")
+
+        title_lbl = tk.Label(title_row, text="Create New Objects", font=("Hanken Grotesk", sc(16), "bold"), bg=self.colors["surface_container_low"], fg=self.colors["on_surface"])
+        title_lbl.pack(side="left")
+
+        self.subtitle_lbl = tk.Label(title_row, text="Step 1", font=("Hanken Grotesk", sc(11)), bg=self.colors["surface_container_low"], fg=self.colors["on_surface_variant"])
+        self.subtitle_lbl.pack(side="left", padx=(sc(10), 0), pady=(sc(4), 0))
+
+        # Stepper
+        self.stepper_frame = tk.Frame(header_frame, bg=self.colors["surface_container_low"])
+        self.stepper_frame.pack(fill="x", pady=(sc(10), 0))
+        self._build_stepper()
+
+        # Main content area
+        self.content_frame = tk.Frame(self.win, bg=self.colors["surface"], padx=sc(20), pady=sc(20))
+        self.content_frame.pack(fill="both", expand=True)
+
+        # Footer
+        footer_frame = tk.Frame(self.win, bg=self.colors["surface_container"], padx=sc(16), pady=sc(12))
+        footer_frame.pack(fill="x", side="bottom")
+
+        self.cancel_btn = tk.Button(
+            footer_frame, text="Cancel", font=("Hanken Grotesk", sc(10)),
+            bg=self.colors["surface"], fg=self.colors["on_surface"],
+            activebackground=self.colors["surface_container_high"], activeforeground=self.colors["on_surface"],
+            relief="solid", bd=1, cursor="hand2", padx=sc(12), pady=sc(4),
+            command=self._on_cancel
+        )
+        self.cancel_btn.pack(side="left")
+
+        self.next_btn = tk.Button(
+            footer_frame, text="Next  →", font=("Hanken Grotesk", sc(10), "bold"),
+            bg=self.colors["primary"], fg=self.colors["on_primary"],
+            activebackground=self.colors["on_surface_variant"], activeforeground=self.colors["on_primary"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(16), pady=sc(4),
+            command=self._on_next
+        )
+        self.next_btn.pack(side="right")
+
+        self.back_btn = tk.Button(
+            footer_frame, text="←  Back", font=("Hanken Grotesk", sc(10)),
+            bg=self.colors["surface"], fg=self.colors["on_surface"],
+            activebackground=self.colors["surface_container_high"], activeforeground=self.colors["on_surface"],
+            relief="solid", bd=1, cursor="hand2", padx=sc(12), pady=sc(4),
+            command=self._on_back
+        )
+        self.back_btn.pack(side="right", padx=(0, sc(10)))
+
+    def _build_stepper(self):
+        for widget in self.stepper_frame.winfo_children():
+            widget.destroy()
+
+        self.step_labels = []
+        for i, name in enumerate(self.STEP_NAMES):
+            lbl = tk.Label(self.stepper_frame, text=name, font=("Hanken Grotesk", sc(9), "bold"), bg=self.colors["surface_container_low"], fg=self.colors["step_inactive"])
+            lbl.pack(side="left", padx=(0, sc(16)))
+            self.step_labels.append(lbl)
+
+    def goto_step(self, step_num):
+        # Clear content
+        for widget in self.content_frame.winfo_children():
+            widget.destroy()
+
+        self.current_step = step_num
+        self.subtitle_lbl.config(text=self.STEP_NAMES[step_num])
+
+        for i, lbl in enumerate(self.step_labels):
+            if i < step_num:
+                lbl.config(fg=self.colors["step_complete"])
+            elif i == step_num:
+                lbl.config(fg=self.colors["step_active"])
             else:
-                ent = tk.Entry(
-                    self.inner_edit, textvariable=val_var, 
-                    font=("JetBrains Mono", sc(9.5)), relief="flat", bd=0, 
-                    highlightthickness=1, highlightbackground="#d1d1d1",
-                    highlightcolor="#000000", insertbackground="#000000",
-                    bg="#ffffff", fg="#1a1c1c"
-                )
-                ent.grid(row=row, column=col_idx*2 + 1, sticky="ew", padx=sc(5), pady=sc(4))
-                
-            col_idx += 1
-            if col_idx == 2:
-                col_idx = 0
-                row += 1
-                
-        if col_idx > 0:
-            col_idx = 0
-            row += 1
+                lbl.config(fg=self.colors["step_inactive"])
 
-        # Location Section Header
-        loc_fields = self.app.config["ui_sections"].get("location", [])
-        if loc_fields:
-            lbl_loc_hdr = tk.Label(self.inner_edit, text="Location", font=("Hanken Grotesk", sc(11), "bold"), bg="#ffffff", fg="#1a1c1c")
-            lbl_loc_hdr.grid(row=row, column=0, columnspan=4, sticky="w", pady=(sc(16), sc(6)))
-            row += 1
-            
-            col_idx = 0
-            for field in loc_fields:
-                name = field["name"]
-                if field.get("readonly", False):
-                    continue
-                    
-                ftype = field.get("type", "text")
-                val_var = tk.StringVar()
-                self.field_vars[name] = val_var
+        self.back_btn.pack(side="right", padx=(0, sc(10)))
+        if step_num == 0:
+            self.back_btn.pack_forget()
+            self.next_btn.config(text="Next  →")
+        elif step_num == len(self.STEP_NAMES) - 1:
+            self.next_btn.config(text="Create Objects")
+        else:
+            self.next_btn.config(text="Next  →")
 
-                lbl_lf = tk.Label(self.inner_edit, text=name, font=("Hanken Grotesk", sc(9.5)), bg="#ffffff", fg="#444748")
-                lbl_lf.grid(row=row, column=col_idx*2, sticky="w", padx=sc(5), pady=sc(4))
-                
-                if ftype == "choice":
-                    choices = field.get("choices", [])
-                    if "" not in choices:
-                        choices = [""] + choices
-                    cb = ttk.Combobox(self.inner_edit, textvariable=val_var, values=choices, font=("JetBrains Mono", sc(9.5)), state="readonly")
-                    cb.grid(row=row, column=col_idx*2 + 1, sticky="ew", padx=sc(5), pady=sc(4))
-                elif ftype == "checkbox":
-                    cb = ttk.Checkbutton(self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False")
-                    cb.grid(row=row, column=col_idx*2 + 1, sticky="w", padx=sc(5), pady=sc(4))
-                else:
-                    ent = tk.Entry(
-                        self.inner_edit, textvariable=val_var, 
-                        font=("JetBrains Mono", sc(9.5)), relief="flat", bd=0, 
-                        highlightthickness=1, highlightbackground="#d1d1d1",
-                        highlightcolor="#000000", insertbackground="#000000",
-                        bg="#ffffff", fg="#1a1c1c"
-                    )
-                    ent.grid(row=row, column=col_idx*2 + 1, sticky="ew", padx=sc(5), pady=sc(4))
-                    
-                col_idx += 1
-                if col_idx == 2:
-                    col_idx = 0
-                    row += 1
-                    
-            if col_idx > 0:
-                col_idx = 0
-                row += 1
+        if step_num == 0:
+            self._render_step1()
+        elif step_num == 1:
+            self._render_step2()
+        elif step_num == 2:
+            self._render_step3()
 
-        self.inner_edit.columnconfigure(1, weight=1)
-        self.inner_edit.columnconfigure(3, weight=1)
+    def _render_step1(self):
+        # Two pane layout: Left for tools, Right for list
+        pane = tk.PanedWindow(self.content_frame, orient="horizontal", bd=0, sashwidth=sc(4), bg=self.colors["surface"])
+        pane.pack(fill="both", expand=True)
 
-        # 3. Actions
-        action_frame = tk.Frame(main_frame, bg="#f9f9f9")
-        action_frame.pack(fill="x", pady=(sc(10), 0))
+        # LEFT PANE: Tools
+        left_frame = tk.Frame(pane, bg=self.colors["surface"])
+        pane.add(left_frame, minsize=sc(300), weight=1)
 
-        create_btn = tk.Button(
-            action_frame, text="Create Objects", 
-            font=("Hanken Grotesk", sc(10), "bold"),
-            bg="#1a1c1c", fg="#ffffff",
-            activebackground="#333333", activeforeground="#ffffff",
-            relief="flat", bd=0, cursor="hand2", padx=sc(16), pady=sc(6),
-            command=self._create_objects
+        # Auto Generation Card
+        auto_card = tk.LabelFrame(left_frame, text="Auto-Generate IDs", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["card_bg"], fg=self.colors["on_surface"], padx=sc(10), pady=sc(10))
+        auto_card.pack(fill="x", pady=(0, sc(16)))
+
+        tk.Label(auto_card, text="Finds the highest numeric ID and adds N new IDs.", font=("Inter", sc(9)), bg=self.colors["card_bg"], fg=self.colors["on_surface_variant"], wraplength=sc(250), justify="left").pack(anchor="w", pady=(0, sc(8)))
+
+        auto_row = tk.Frame(auto_card, bg=self.colors["card_bg"])
+        auto_row.pack(fill="x")
+        tk.Label(auto_row, text="Count:", font=("Inter", sc(9.5)), bg=self.colors["card_bg"], fg=self.colors["on_surface"]).pack(side="left")
+        
+        spin = ttk.Spinbox(auto_row, from_=1, to=1000, textvariable=self.auto_n_var, width=sc(8), font=("JetBrains Mono", sc(10)))
+        spin.pack(side="left", padx=sc(8))
+
+        tk.Button(
+            auto_row, text="Generate", font=("Hanken Grotesk", sc(9)),
+            bg=self.colors["select_bg"], fg=self.colors["select_fg"], relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(2),
+            command=self._generate_auto_ids
+        ).pack(side="left")
+
+        # Manual Entry Card
+        manual_card = tk.LabelFrame(left_frame, text="Manual Entry", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["card_bg"], fg=self.colors["on_surface"], padx=sc(10), pady=sc(10))
+        manual_card.pack(fill="x")
+
+        tk.Label(manual_card, text="Comma separated IDs (e.g. A1, A2, B_100):", font=("Inter", sc(9)), bg=self.colors["card_bg"], fg=self.colors["on_surface_variant"]).pack(anchor="w", pady=(0, sc(4)))
+
+        man_ent = tk.Entry(
+            manual_card, textvariable=self.manual_ids_var, font=("JetBrains Mono", sc(10)),
+            bg=self.colors["surface_container_low"], fg=self.colors["on_surface"], relief="flat", highlightthickness=1, highlightbackground=self.colors["card_border"]
         )
-        create_btn.pack(side="right", padx=sc(5))
-        
-        cancel_btn = tk.Button(
-            action_frame, text="Cancel", 
-            font=("Hanken Grotesk", sc(10)),
-            bg="#ffffff", fg="#1a1c1c",
-            activebackground="#e2e2e2", activeforeground="#1a1c1c",
-            relief="solid", bd=1, cursor="hand2", padx=sc(12), pady=sc(5),
-            command=self.win.destroy
+        man_ent.pack(fill="x", pady=(0, sc(8)))
+
+        tk.Button(
+            manual_card, text="Add IDs", font=("Hanken Grotesk", sc(9)),
+            bg=self.colors["select_bg"], fg=self.colors["select_fg"], relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(2),
+            command=self._add_manual_ids
+        ).pack(anchor="e")
+
+        # RIGHT PANE: Staged IDs List
+        right_frame = tk.Frame(pane, bg=self.colors["surface"])
+        pane.add(right_frame, minsize=sc(200), weight=1)
+
+        tk.Label(right_frame, text="Staged IDs to Create", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, sc(4)))
+
+        list_frame = tk.Frame(right_frame, bg=self.colors["surface"], highlightthickness=1, highlightbackground=self.colors["card_border"])
+        list_frame.pack(fill="both", expand=True)
+
+        self.target_listbox = tk.Listbox(
+            list_frame, font=("JetBrains Mono", sc(10)),
+            bg=self.colors["card_bg"], fg=self.colors["on_surface"],
+            selectbackground=self.colors["select_bg"], selectforeground=self.colors["select_fg"],
+            relief="flat", bd=0, highlightthickness=0
         )
-        cancel_btn.pack(side="left", padx=sc(5))
-
-    def _save_current_staged_data(self):
-        if self.current_selected_id is not None:
-            data = {}
-            for k, v in self.field_vars.items():
-                data[k] = v.get()
-            self.staged_data[self.current_selected_id] = data
-
-    def _load_staged_data(self, oid):
-        data = self.staged_data.get(oid, {})
-        for k, v in self.field_vars.items():
-            v.set(data.get(k, ""))
-
-    def _on_listbox_select(self, event):
-        sel = self.target_listbox.curselection()
-        if not sel:
-            return
-        new_id = self.target_listbox.get(sel[0])
+        self.target_listbox.pack(side="left", fill="both", expand=True)
         
-        # Save old
-        self._save_current_staged_data()
+        sb = ttk.Scrollbar(list_frame, orient="vertical", command=self.target_listbox.yview)
+        sb.pack(side="right", fill="y")
+        self.target_listbox.config(yscrollcommand=sb.set)
         
-        # Initialize if not present (starts blank)
-        if new_id not in self.staged_data:
-            self.staged_data[new_id] = {k: "" for k in self.field_vars.keys()}
-            
-        # Load new
-        self._load_staged_data(new_id)
-        self.current_selected_id = new_id
+        tk.Button(
+            right_frame, text="Remove Selected", font=("Hanken Grotesk", sc(9)),
+            bg=self.colors["error_container"], fg=self.colors["error"], relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(4),
+            command=self._remove_selected_id
+        ).pack(anchor="e", pady=(sc(8), 0))
+
+        # Repopulate list if returning
+        for oid in self.staged_data.keys():
+            self.target_listbox.insert(tk.END, oid)
 
     def _get_target_oids(self):
         return list(self.target_listbox.get(0, tk.END))
@@ -377,7 +319,7 @@ class AddObjectsWindow:
             new_id = str(start_id + i)
             if new_id not in self._get_target_oids() and new_id not in self.app.df_reg.index:
                 self.target_listbox.insert(tk.END, new_id)
-                self.staged_data[new_id] = {k: "" for k in self.field_vars.keys()}
+                self.staged_data[new_id] = {}
 
     def _add_manual_ids(self):
         raw = self.manual_ids_var.get()
@@ -390,11 +332,175 @@ class AddObjectsWindow:
                     messagebox.showwarning("Exists", f"ObjectID {p} already exists in database.", parent=self.win)
                 else:
                     self.target_listbox.insert(tk.END, p)
-                    self.staged_data[p] = {k: "" for k in self.field_vars.keys()}
+                    self.staged_data[p] = {}
         self.manual_ids_var.set("")
 
+    def _remove_selected_id(self):
+        sel = self.target_listbox.curselection()
+        if not sel: return
+
+        idx = sel[0]
+        oid = self.target_listbox.get(idx)
+        self.target_listbox.delete(idx)
+        if oid in self.staged_data:
+            del self.staged_data[oid]
+
+    def _render_step2(self):
+        pane = tk.PanedWindow(self.content_frame, orient="horizontal", bd=0, sashwidth=sc(4), bg=self.colors["surface"])
+        pane.pack(fill="both", expand=True)
+
+        # LEFT PANE: Select ID
+        left_frame = tk.Frame(pane, bg=self.colors["surface"])
+        pane.add(left_frame, minsize=sc(150), weight=0)
+
+        tk.Label(left_frame, text="Select Object", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, sc(4)))
+
+        list_frame = tk.Frame(left_frame, bg=self.colors["surface"], highlightthickness=1, highlightbackground=self.colors["card_border"])
+        list_frame.pack(fill="both", expand=True)
+
+        self.edit_listbox = tk.Listbox(
+            list_frame, font=("JetBrains Mono", sc(10)),
+            bg=self.colors["card_bg"], fg=self.colors["on_surface"],
+            selectbackground=self.colors["select_bg"], selectforeground=self.colors["select_fg"],
+            relief="flat", bd=0, highlightthickness=0, exportselection=False
+        )
+        self.edit_listbox.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(list_frame, orient="vertical", command=self.edit_listbox.yview)
+        sb.pack(side="right", fill="y")
+        self.edit_listbox.config(yscrollcommand=sb.set)
+        self.edit_listbox.bind("<<ListboxSelect>>", self._on_edit_listbox_select)
+
+        for oid in sorted(self.staged_data.keys()):
+            self.edit_listbox.insert(tk.END, oid)
+
+        # RIGHT PANE: Edit Form
+        right_frame = tk.Frame(pane, bg=self.colors["surface"])
+        pane.add(right_frame, weight=1)
+
+        tk.Label(right_frame, text="Set Initial Values", font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(anchor="w", pady=(0, sc(4)))
+
+        # Create Scrollable Canvas for form
+        canvas_frame = tk.Frame(right_frame, bg=self.colors["surface"], highlightthickness=1, highlightbackground=self.colors["card_border"])
+        canvas_frame.pack(fill="both", expand=True)
+
+        self.form_canvas = tk.Canvas(canvas_frame, bg=self.colors["card_bg"], highlightthickness=0)
+        vsb = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.form_canvas.yview)
+
+        self.inner_form = tk.Frame(self.form_canvas, bg=self.colors["card_bg"], padx=sc(10), pady=sc(10))
+        self.form_window = self.form_canvas.create_window((0, 0), window=self.inner_form, anchor="nw")
+
+        self.inner_form.bind("<Configure>", lambda e: self.form_canvas.configure(scrollregion=self.form_canvas.bbox("all")))
+        self.form_canvas.bind("<Configure>", lambda e: self.form_canvas.itemconfig(self.form_window, width=e.width))
+        self.form_canvas.configure(yscrollcommand=vsb.set)
+
+        self.form_canvas.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+        self.form_canvas.bind_all("<MouseWheel>", lambda e: self.form_canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+
+        # Build Fields based on config
+        self.field_vars = {}
+        row = 0
+
+        def _build_section(title, fields):
+            nonlocal row
+            if not fields: return
+
+            tk.Label(self.inner_form, text=title.upper(), font=("Hanken Grotesk", sc(11), "bold"), bg=self.colors["surface_container_low"], fg=self.colors["on_surface"], anchor="w", padx=sc(6), pady=sc(4)).grid(row=row, column=0, columnspan=2, sticky="ew", pady=(sc(10) if row > 0 else 0, sc(8)))
+            row += 1
+
+            for field in fields:
+                name = field["name"]
+                if field.get("readonly", False): continue
+
+                ftype = field.get("type", "text")
+                var = tk.StringVar()
+                self.field_vars[name] = var
+
+                tk.Label(self.inner_form, text=name, font=("Inter", sc(9.5)), bg=self.colors["card_bg"], fg=self.colors["on_surface_variant"], width=sc(15), anchor="w").grid(row=row, column=0, sticky="w", padx=sc(4), pady=sc(4))
+
+                if ftype == "choice":
+                    choices = [""] + field.get("choices", [])
+                    cb = ttk.Combobox(self.inner_form, textvariable=var, values=choices, font=("Inter", sc(10)), state="readonly")
+                    cb.grid(row=row, column=1, sticky="ew", padx=sc(4), pady=sc(4))
+                elif ftype == "checkbox":
+                    cb = ttk.Checkbutton(self.inner_form, text="Enable", variable=var, onvalue="True", offvalue="False")
+                    cb.grid(row=row, column=1, sticky="w", padx=sc(4), pady=sc(4))
+                else:
+                    ent = tk.Entry(self.inner_form, textvariable=var, font=("Inter", sc(10)), bg=self.colors["surface_container_low"], fg=self.colors["on_surface"], relief="flat", highlightthickness=1, highlightbackground=self.colors["card_border"])
+                    ent.grid(row=row, column=1, sticky="ew", padx=sc(4), pady=sc(4))
+                row += 1
+
+        self.inner_form.columnconfigure(1, weight=1)
+
+        reg_fields = self.app.config.get("ui_sections", {}).get("registration", [])
+        loc_fields = self.app.config.get("ui_sections", {}).get("location", [])
+
+        _build_section("Registration", reg_fields)
+        _build_section("Location", loc_fields)
+
+        # Ensure all staged data dicts have keys for all active fields
+        for oid in self.staged_data:
+            for k in self.field_vars:
+                if k not in self.staged_data[oid]:
+                    self.staged_data[oid][k] = ""
+
+        # Auto-select first item
+        self.current_selected_id = None
+        if self.edit_listbox.size() > 0:
+            self.edit_listbox.selection_set(0)
+            self._on_edit_listbox_select(None)
+
+    def _save_current_staged_data(self):
+        if self.current_selected_id is not None and self.current_selected_id in self.staged_data:
+            for k, v in self.field_vars.items():
+                self.staged_data[self.current_selected_id][k] = v.get()
+
+    def _load_staged_data(self, oid):
+        if oid in self.staged_data:
+            for k, v in self.field_vars.items():
+                v.set(self.staged_data[oid].get(k, ""))
+
+    def _on_edit_listbox_select(self, event):
+        sel = self.edit_listbox.curselection()
+        if not sel: return
+
+        new_id = self.edit_listbox.get(sel[0])
+        if new_id == self.current_selected_id: return
+
+        self._save_current_staged_data()
+        self._load_staged_data(new_id)
+        self.current_selected_id = new_id
+
+    def _render_step3(self):
+        container = tk.Frame(self.content_frame, bg=self.colors["surface"])
+        container.place(relx=0.5, rely=0.5, anchor="center")
+
+        n_objects = len(self.staged_data)
+
+        tk.Label(container, text="Ready to create", font=("Hanken Grotesk", sc(14)), bg=self.colors["surface"], fg=self.colors["on_surface_variant"]).pack(pady=(0, sc(4)))
+        tk.Label(container, text=f"{n_objects} Object{'s' if n_objects != 1 else ''}", font=("Hanken Grotesk", sc(24), "bold"), bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(pady=(0, sc(16)))
+
+        tk.Label(container, text="Click 'Create Objects' below to commit these to your database.", font=("Inter", sc(10)), bg=self.colors["surface"], fg=self.colors["on_surface_variant"]).pack(pady=(0, sc(20)))
+
+    def _on_next(self):
+        if self.current_step == 0:
+            if not self.staged_data:
+                messagebox.showwarning("No IDs", "Please add at least one Object ID to continue.", parent=self.win)
+                return
+            self.goto_step(1)
+        elif self.current_step == 1:
+            self._save_current_staged_data()
+            try:
+                self.form_canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+            self.goto_step(2)
+        elif self.current_step == 2:
+            self._create_objects()
+
     def _create_objects(self):
-        oids = self._get_target_oids()
+        oids = list(self.staged_data.keys())
         if not oids:
             messagebox.showwarning("No IDs", "Add at least one target Object ID to create.", parent=self.win)
             return
@@ -404,11 +510,8 @@ class AddObjectsWindow:
                 messagebox.showerror("Conflict", f"Object {oid} already exists!", parent=self.win)
                 return
 
-        # Save current edits first
-        self._save_current_staged_data()
-        
-        problem_columns = [f["name"] for f in self.app.config["ui_sections"].get("problems", [])]
-        location_fields = self.app.config["ui_sections"].get("location", [])
+        problem_columns = [f["name"] for f in self.app.config.get("ui_sections", {}).get("problems", [])]
+        location_fields = self.app.config.get("ui_sections", {}).get("location", [])
         location_columns = [f["name"] for f in location_fields]
         checkbox_loc_cols = {f["name"] for f in location_fields if f.get("type") == "checkbox"}
 
@@ -447,43 +550,71 @@ class AddObjectsWindow:
                 
             new_obs_dict[oid] = obs_row
 
-            if not self.app.df_photo.empty:
+            if getattr(self.app, 'df_photo', None) is not None and not self.app.df_photo.empty:
                 new_photo_dict[oid] = {col: "" for col in self.app.df_photo.columns}
 
-            self.app.active_object_ids.append(oid)
+            if not hasattr(self.app, 'active_object_ids'):
+                self.app.active_object_ids = []
+            if oid not in self.app.active_object_ids:
+                self.app.active_object_ids.append(oid)
             
-            self.main_window.log_action(
-                "CREATE_OBJECT",
-                ["ObjectID"],
-                [f"Created {oid}"]
-            )
+            if hasattr(self.main_window, 'log_action'):
+                self.main_window.log_action(
+                    "CREATE_OBJECT",
+                    ["ObjectID"],
+                    [f"Created {oid}"]
+                )
 
         # Batch append to dataframes (zero fragmentation)
         if new_reg_dict:
             new_reg_df = pd.DataFrame.from_dict(new_reg_dict, orient="index")
+            new_reg_df.index.name = self.app.df_reg.index.name
             self.app.df_reg = pd.concat([self.app.df_reg, new_reg_df])
 
         if new_obs_dict:
             new_obs_df = pd.DataFrame.from_dict(new_obs_dict, orient="index")
+            new_obs_df.index.name = self.app.df_obs.index.name
             self.app.df_obs = pd.concat([self.app.df_obs, new_obs_df])
 
-        if new_photo_dict:
+        if new_photo_dict and getattr(self.app, 'df_photo', None) is not None:
             new_photo_df = pd.DataFrame.from_dict(new_photo_dict, orient="index")
+            new_photo_df.index.name = self.app.df_photo.index.name
             self.app.df_photo = pd.concat([self.app.df_photo, new_photo_df])
 
-        self.main_window._invalidate_row_cache()
-        self.main_window.invalidate_search_index()
-        self.main_window.refresh_list()
+        if hasattr(self.main_window, '_invalidate_row_cache'):
+            self.main_window._invalidate_row_cache()
+        if hasattr(self.main_window, 'invalidate_search_index'):
+            self.main_window.invalidate_search_index()
+        if hasattr(self.main_window, 'refresh_list'):
+            self.main_window.refresh_list()
         
         # Select the first created object
-        idx = self.app.active_object_ids.index(oids[0])
-        self.main_window.object_list.selection_clear(0, tk.END)
-        self.main_window.object_list.selection_set(idx)
-        self.main_window.object_list.see(idx)
-        self.main_window.load_object(oids[0])
+        if hasattr(self.main_window, 'object_list') and hasattr(self.main_window, 'load_object'):
+            try:
+                idx = self.app.active_object_ids.index(oids[0])
+                self.main_window.object_list.selection_clear(0, tk.END)
+                self.main_window.object_list.selection_set(idx)
+                self.main_window.object_list.see(idx)
+                self.main_window.load_object(oids[0])
+            except Exception:
+                pass
 
         self.app.dirty = True
-        self.main_window.update_dirty_ui()
+        if hasattr(self.main_window, 'update_dirty_ui'):
+            self.main_window.update_dirty_ui()
 
         messagebox.showinfo("Success", f"Successfully created {len(oids)} object(s).", parent=self.main_window.root)
+        self.win.destroy()
+
+    def _on_back(self):
+        if self.current_step > 0:
+            if self.current_step == 1:
+                self._save_current_staged_data()
+                try:
+                    self.form_canvas.unbind_all("<MouseWheel>")
+                except Exception:
+                    pass
+            self.goto_step(self.current_step - 1)
+
+    def _on_cancel(self):
         self.win.destroy()
