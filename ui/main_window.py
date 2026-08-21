@@ -767,7 +767,7 @@ class ObjectProgramUI(
                 activeforeground=cb_active_fg,
                 selectcolor=bg_col,
                 highlightthickness=0, bd=0
-            )
+            , cursor="hand2")
             cb.pack(side="left")
             widget = cb
         else:
@@ -791,7 +791,7 @@ class ObjectProgramUI(
                     values=choices,
                     state="readonly" if name != "Stored as" else "normal",
                     font=(font_family, sc(font_size))
-                )
+                , cursor="hand2")
                 widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
                 if is_horiz:
                     widget.pack(fill="x", expand=True, ipady=sc(3))
@@ -860,7 +860,7 @@ class ObjectProgramUI(
             values=preset_names, 
             state="normal", 
             width=8 if is_horiz else 12
-        )
+        , cursor="hand2")
         self.active_preset_cb.pack(side="left", padx=4)
         self.add_tooltip(self.active_preset_cb, "The preset that will be applied when you press Ctrl+K")
         
@@ -1120,7 +1120,7 @@ class ObjectProgramUI(
                             self._update_problem_row_style(n, self.problem_vars[pc].get()),
                             self.commit_current_object()
                         )
-                    )
+                    , cursor="hand2")
                     cb.pack(side="left")
                     self.add_tooltip(cb, f"Flag as having a problem ({prob_col.replace('_', ' ')}). Tab + Space to toggle.")
 
@@ -1146,7 +1146,7 @@ class ObjectProgramUI(
                     choices = field.get("choices", [])
                     if "" not in choices:
                         choices = [""] + choices
-                    widget = ttk.Combobox(frame, textvariable=var, values=choices)
+                    widget = ttk.Combobox(frame, textvariable=var, values=choices, cursor="hand2")
                     widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
                 elif ftype == "checkbox":
                     widget = ttk.Checkbutton(
@@ -1156,7 +1156,7 @@ class ObjectProgramUI(
                         onvalue="True",
                         offvalue="False",
                         command=lambda n=name, v=var: self._on_checkbox_change(n, v)
-                    )
+                    , cursor="hand2")
                 elif ftype == "multiline" or name in ("Conservation Status", "Observation", "Comment", "ProblemDescription", "Problem Description"):
                     widget = tk.Text(
                         frame, height=3,
@@ -1284,7 +1284,7 @@ class ObjectProgramUI(
                     self.update_reg_fields_visibility(skip_snap=True),
                     self.commit_current_object()
                 )
-            )
+            , cursor="hand2")
             row = i // 2
             col = i % 2
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=6)
@@ -3717,7 +3717,7 @@ class ObjectProgramUI(
             values=["ID", "Genus A-Z", "Reviewed first", "Problems first"],
             state="readonly",
             width=16
-        )
+        , cursor="hand2")
         sort_cb.pack(side="left", padx=(4, 0))
 
         sort_cb.bind(
@@ -4488,7 +4488,7 @@ class ObjectProgramUI(
             text="Show all historical data",
             variable=self.show_all_history_var,
             command=self._on_history_toggle
-        ).pack(anchor="w")
+        , cursor="hand2").pack(anchor="w")
 
 
 
@@ -6320,13 +6320,13 @@ class ObjectProgramUI(
                     grid_frame, textvariable=var,
                     values=choices,
                     state="readonly" if name != "Stored as" else "normal"
-                )
+                , cursor="hand2")
             elif ftype == "checkbox":
                 widget = ttk.Checkbutton(
                     grid_frame, text="", variable=var,
                     onvalue="True", offvalue="False",
                     command=lambda n=name, v=var: self._on_checkbox_change(n, v)
-                )
+                , cursor="hand2")
             else:
                 widget = ttk.Entry(
                     grid_frame, textvariable=var,
@@ -6545,7 +6545,7 @@ class ObjectProgramUI(
                     self.update_reg_fields_visibility(skip_snap=True),
                     self.commit_current_object()
                 )
-            )
+            , cursor="hand2")
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=8)
             self.problem_checkbuttons.append(cb)
 
@@ -6713,7 +6713,7 @@ class ObjectProgramUI(
         current_mode = self.filter_mode.get()
         cb_val = "All selected (AND)" if current_mode == "AND" else "Any selected (OR)"
 
-        global_mode_cb = ttk.Combobox(global_mode_frame, values=["All selected (AND)", "Any selected (OR)"], state="readonly", width=18, style="GlobalMode.TCombobox")
+        global_mode_cb = ttk.Combobox(global_mode_frame, values=["All selected (AND)", "Any selected (OR)"], state="readonly", width=18, style="GlobalMode.TCombobox", cursor="hand2")
         global_mode_cb.set(cb_val)
         global_mode_cb.pack(side="left", pady=sc(8))
         global_mode_cb.bind("<<ComboboxSelected>>", on_global_mode_change)
@@ -6768,7 +6768,7 @@ class ObjectProgramUI(
         def make_chk(parent, text, var, color_bar=None):
             f = tk.Frame(parent, bg=COLORS["surface"])
             f.pack(fill="x", pady=sc(2))
-            chk = tk.Checkbutton(f, variable=var, bg=COLORS["surface"], activebackground=COLORS["surface"], selectcolor=COLORS["surface"], bd=0, highlightthickness=0, command=self.update_filter_button_text)
+            chk = tk.Checkbutton(f, variable=var, bg=COLORS["surface"], activebackground=COLORS["surface"], selectcolor=COLORS["surface"], bd=0, highlightthickness=0, command=self.update_filter_button_text, cursor="hand2")
             chk.pack(side="left")
             if color_bar:
                 tk.Frame(f, bg=color_bar, width=4, height=sc(12)).pack(side="left", padx=(sc(4), sc(8)))
@@ -6780,7 +6780,7 @@ class ObjectProgramUI(
         def make_rad(parent, text, var, val):
             f = tk.Frame(parent, bg=COLORS["surface"])
             f.pack(fill="x", pady=sc(2))
-            rad = tk.Radiobutton(f, variable=var, value=val, bg=COLORS["surface"], activebackground=COLORS["surface"], bd=0, highlightthickness=0)
+            rad = tk.Radiobutton(f, variable=var, value=val, bg=COLORS["surface"], activebackground=COLORS["surface"], bd=0, highlightthickness=0, cursor="hand2")
             rad.pack(side="left")
             lbl = tk.Label(f, text=text, font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"])
             lbl.pack(side="left", padx=sc(8))
@@ -6899,7 +6899,7 @@ class ObjectProgramUI(
             
             if ftype in ("choice", "checkbox"):
                 vals = [""] + list(field.get("choices", [])) if ftype == "choice" else ["", "True", "False"]
-                cb = ttk.Combobox(ent_frame, textvariable=self.filter_location_vars[name], values=vals, state="readonly", style="Flat.TCombobox")
+                cb = ttk.Combobox(ent_frame, textvariable=self.filter_location_vars[name], values=vals, state="readonly", style="Flat.TCombobox", cursor="hand2")
                 cb.pack(fill="x", expand=True, padx=sc(2), pady=sc(2))
                 cb.bind("<BackSpace>", lambda e, w=cb: (w.set(""), self.update_filter_button_text()))
                 cb.bind("<Delete>", lambda e, w=cb: (w.set(""), self.update_filter_button_text()))
@@ -9102,7 +9102,7 @@ class ObjectProgramUI(
             vars_frame, 
             text="Include variations (ignore capitalization, punctuation, extra spacing)",
             variable=local_vars_var
-        )
+        , cursor="hand2")
         cb.pack(anchor="w")
         
         btn_frame = ttk.Frame(win, padding=10)

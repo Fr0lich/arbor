@@ -163,7 +163,7 @@ def _LEGACY_open_settings_window(self):
     chk_frame.pack(fill="x", pady=sc(2))
     chk = tk.Checkbutton(chk_frame, variable=tutorials_var, bg=COLORS["surface"],
                          activebackground=COLORS["surface"], selectcolor=COLORS["surface"],
-                         bd=0, highlightthickness=0)
+                         bd=0, highlightthickness=0, cursor="hand2")
     chk.pack(side="left")
     tk.Label(chk_frame, text="Enable Interactive Tutorials", font=FONT_DATA,
              fg=COLORS["on_surface"], bg=COLORS["surface"]).pack(side="left", padx=sc(8))
@@ -197,7 +197,7 @@ def _LEGACY_open_settings_window(self):
         f_rad = tk.Frame(target_col, bg=COLORS["surface"])
         f_rad.pack(fill="x", pady=sc(2))
         rad = tk.Radiobutton(f_rad, variable=scale_var, value=val, bg=COLORS["surface"],
-                             activebackground=COLORS["surface"], bd=0, highlightthickness=0)
+                             activebackground=COLORS["surface"], bd=0, highlightthickness=0, cursor="hand2")
         rad.pack(side="left")
         lbl_rad = tk.Label(f_rad, text=lbl, font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"])
         lbl_rad.pack(side="left", padx=sc(8))
@@ -354,7 +354,7 @@ def _LEGACY_open_layout_settings(self):
 
     dyn_cb = ttk.Checkbutton(dyn_frame, text="Update dynamically",
                               variable=self.layout_dynamic_update_var,
-                              command=toggle_dynamic_update)
+                              command=toggle_dynamic_update, cursor="hand2")
     dyn_cb.pack(side="left")
 
     scroll_container = self._build_layout_options_section(main_frame, win, bg_color)
@@ -434,7 +434,7 @@ def _LEGACY_open_focus_settings(self):
     preset_row1 = ttk.Frame(preset_lf)
     preset_row1.pack(fill="x", pady=2)
     ttk.Label(preset_row1, text="Load Preset:").pack(side="left", padx=2)
-    self.focus_dialog_preset_cb = ttk.Combobox(preset_row1, state="readonly", width=18)
+    self.focus_dialog_preset_cb = ttk.Combobox(preset_row1, state="readonly", width=18, cursor="hand2")
     self.focus_dialog_preset_cb.pack(side="left", fill="x", expand=True, padx=4)
 
     def on_load_preset(event=None):
@@ -517,7 +517,7 @@ def _LEGACY_open_focus_settings(self):
 
     dyn_cb = ttk.Checkbutton(dyn_frame, text="Update dynamically",
                               variable=self.focus_dynamic_update_var,
-                              command=toggle_dynamic_update)
+                              command=toggle_dynamic_update, cursor="hand2")
     dyn_cb.pack(side="left")
 
     btn_row = ttk.Frame(main_frame, padding=(0, 6, 0, 0))

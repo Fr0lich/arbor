@@ -472,7 +472,7 @@ class AdvancedSettingsWindow:
             desc = tk.Label(left_pane, text=desc_text, font=("Segoe UI", sc(9)), fg=self.COLORS["on_surface_variant"], bg=self.COLORS["surface"])
             desc.pack(anchor="w", pady=(sc(2), 0))
 
-        cb = ttk.Combobox(row, textvariable=var, values=choices, state="readonly", width=25, font=self.FONT_DATA)
+        cb = ttk.Combobox(row, textvariable=var, values=choices, state="readonly", width=25, font=self.FONT_DATA, cursor="hand2")
         cb.pack(side="right", padx=sc(8), pady=sc(4), anchor="center")
         return row
 

@@ -1,3 +1,3 @@
-## 2024-05-18 - [Make ToggleSwitch Keyboard Accessible]
-**Learning:** Custom Tkinter canvas-based widgets (like ToggleSwitch) are completely skipped by keyboard navigation (Tab key) by default. They require explicit focus management using `takefocus=1`, keyboard binding for `<space>`/`<Return>`, and `<FocusIn>`/`<FocusOut>` bindings for visible accessibility cues.
-**Action:** Always check interactive canvas-based components for focus indicators and `takefocus` flags, and bind keyboard interactions directly to their click handlers to support screen readers and keyboard users.
+## 2024-08-21 - Interactive Widget Cursors
+**Learning:** Tkinter native widgets like `Checkbutton`, `Radiobutton`, and `Combobox` do not default to a pointer cursor on hover, which can make them feel less interactive or clickable compared to standard web or modern desktop patterns. Adding `cursor="hand2"` makes the desktop UI feel significantly more intuitive.
+**Action:** Always add `cursor="hand2"` when instantiating interactive widgets in Tkinter to provide standard visual feedback.

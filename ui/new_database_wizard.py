@@ -669,7 +669,7 @@ class NewDatabaseWizard:
 
             tk.Label(prof_card, text="📁 Load Schema from Existing Profile:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(side="left", padx=(0, sc(8)))
             self.profile_cb_var = tk.StringVar(value=existing_profiles[0])
-            cb = ttk.Combobox(prof_card, textvariable=self.profile_cb_var, values=existing_profiles, state="readonly", width=26)
+            cb = ttk.Combobox(prof_card, textvariable=self.profile_cb_var, values=existing_profiles, state="readonly", width=26, cursor="hand2")
             cb.pack(side="left", padx=(0, sc(8)))
 
             tk.Button(
@@ -829,7 +829,7 @@ class NewDatabaseWizard:
         entry.bind("<Return>", lambda e: self._add_field())
 
         self.new_field_type_var = tk.StringVar(value="text")
-        cb = ttk.Combobox(add_bar, textvariable=self.new_field_type_var, values=["text", "multiline", "choice", "checkbox"], state="readonly", width=11)
+        cb = ttk.Combobox(add_bar, textvariable=self.new_field_type_var, values=["text", "multiline", "choice", "checkbox"], state="readonly", width=11, cursor="hand2")
         cb.pack(side="left", padx=(0, sc(6)))
 
         btn_add = tk.Button(
@@ -925,7 +925,7 @@ class NewDatabaseWizard:
             def _on_type_change(e, f_idx=idx, var=type_var):
                 self.fields[f_idx]["type"] = var.get()
                 self._refresh_fields_table()
-            cb = ttk.Combobox(self.fields_container, textvariable=type_var, values=["text", "multiline", "choice", "checkbox"], state="readonly", width=11)
+            cb = ttk.Combobox(self.fields_container, textvariable=type_var, values=["text", "multiline", "choice", "checkbox"], state="readonly", width=11, cursor="hand2")
             cb.grid(row=row_idx, column=2, sticky="w", padx=sc(6), pady=sc(3))
             cb.bind("<<ComboboxSelected>>", _on_type_change)
 
@@ -946,7 +946,7 @@ class NewDatabaseWizard:
             ro_var = tk.BooleanVar(value=f.get("readonly", False))
             def _on_ro_change(f_idx=idx, var=ro_var):
                 self.fields[f_idx]["readonly"] = var.get()
-            chk = ttk.Checkbutton(self.fields_container, variable=ro_var, command=_on_ro_change)
+            chk = ttk.Checkbutton(self.fields_container, variable=ro_var, command=_on_ro_change, cursor="hand2")
             chk.grid(row=row_idx, column=4, sticky="n", padx=sc(6), pady=sc(3))
 
             # Col 5: Actions (Up, Down, Duplicate, Delete)
@@ -1105,7 +1105,7 @@ class NewDatabaseWizard:
         type_row.pack(fill="x")
         tk.Label(type_row, text="Default Type:", font=self.FONT_LABEL_BOLD, bg=self.colors["surface"], fg=self.colors["on_surface"]).pack(side="left", padx=(0, sc(6)))
         batch_type_var = tk.StringVar(value="text")
-        cb = ttk.Combobox(type_row, textvariable=batch_type_var, values=["text", "multiline", "choice", "checkbox"], state="readonly", width=12)
+        cb = ttk.Combobox(type_row, textvariable=batch_type_var, values=["text", "multiline", "choice", "checkbox"], state="readonly", width=12, cursor="hand2")
         cb.pack(side="left")
 
         btn_bar = tk.Frame(dlg, bg=self.colors["surface"], padx=sc(16), pady=sc(10))
@@ -1299,7 +1299,7 @@ class NewDatabaseWizard:
             self.pull_field_var = tk.StringVar()
             if all_other_fields:
                 self.pull_field_var.set(all_other_fields[0])
-            cb = ttk.Combobox(add_frame, textvariable=self.pull_field_var, values=all_other_fields, state="readonly", width=20)
+            cb = ttk.Combobox(add_frame, textvariable=self.pull_field_var, values=all_other_fields, state="readonly", width=20, cursor="hand2")
             cb.pack(side="left", padx=(0, config.sc(6)))
 
             tk.Button(add_frame, text="Pull into Category", font=self.FONT_SMALL, bg=self.colors["card_bg"], command=self._pull_field).pack(side="left")
@@ -1522,7 +1522,7 @@ class NewDatabaseWizard:
             url_entry.config(state="normal" if self.has_images else "disabled")
             self._update_url_preview()
 
-        ttk.Checkbutton(img_box, text="Enable Online Image URL Resolution", variable=self.has_images_var, command=_on_img_toggle).pack(anchor="w", pady=sc(4))
+        ttk.Checkbutton(img_box, text="Enable Online Image URL Resolution", variable=self.has_images_var, command=_on_img_toggle, cursor="hand2").pack(anchor="w", pady=sc(4))
 
         # URL Preset Buttons
         preset_row = tk.Frame(img_box, bg=self.colors["surface_container_low"])
@@ -1587,13 +1587,13 @@ class NewDatabaseWizard:
         tk.Label(mod_box, text="Integrated Modules & Sub-Tables", font=self.FONT_HEADER, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(anchor="w")
 
         self.loc_var = tk.BooleanVar(value=self.include_location)
-        ttk.Checkbutton(mod_box, text="Include Standard Location Module (Building, Floor, Room, Cabinet, Shelf, Stored as)", variable=self.loc_var, command=lambda: setattr(self, "include_location", self.loc_var.get())).pack(anchor="w", pady=sc(4))
+        ttk.Checkbutton(mod_box, text="Include Standard Location Module (Building, Floor, Room, Cabinet, Shelf, Stored as)", variable=self.loc_var, command=lambda: setattr(self, "include_location", self.loc_var.get()), cursor="hand2").pack(anchor="w", pady=sc(4))
 
         self.loan_var = tk.BooleanVar(value=self.include_loan)
-        ttk.Checkbutton(mod_box, text="Include Outbound Loan Module (Borrower, Loan Date, Due Date, Return Date, Status)", variable=self.loan_var, command=lambda: setattr(self, "include_loan", self.loan_var.get())).pack(anchor="w", pady=sc(2))
+        ttk.Checkbutton(mod_box, text="Include Outbound Loan Module (Borrower, Loan Date, Due Date, Return Date, Status)", variable=self.loan_var, command=lambda: setattr(self, "include_loan", self.loan_var.get()), cursor="hand2").pack(anchor="w", pady=sc(2))
 
         self.cond_var = tk.BooleanVar(value=self.include_condition)
-        ttk.Checkbutton(mod_box, text="Include Condition & Conservation Module (Condition Status, Conservation Notes, Examined Date)", variable=self.cond_var, command=lambda: setattr(self, "include_condition", self.cond_var.get())).pack(anchor="w", pady=sc(2))
+        ttk.Checkbutton(mod_box, text="Include Condition & Conservation Module (Condition Status, Conservation Notes, Examined Date)", variable=self.cond_var, command=lambda: setattr(self, "include_condition", self.cond_var.get()), cursor="hand2").pack(anchor="w", pady=sc(2))
 
     def _apply_url_preset(self, pattern):
         self.url_var.set(pattern)

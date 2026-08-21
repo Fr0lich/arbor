@@ -159,12 +159,12 @@ class BulkEditWindow:
             self.bulk_enable_vars[name] = enable_var
             self.bulk_vars[name] = val_var
 
-            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var).grid(row=row, column=0, sticky="w", padx=sc(5))
+            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var, cursor="hand2").grid(row=row, column=0, sticky="w", padx=sc(5))
             
             if ftype == "choice":
-                ttk.Combobox(self.inner_edit, textvariable=val_var, values=field.get("choices", [])).grid(row=row, column=1, sticky="ew", padx=sc(5))
+                ttk.Combobox(self.inner_edit, textvariable=val_var, values=field.get("choices", []), cursor="hand2").grid(row=row, column=1, sticky="ew", padx=sc(5))
             elif ftype == "checkbox":
-                ttk.Checkbutton(self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False").grid(row=row, column=1, sticky="w", padx=sc(5))
+                ttk.Checkbutton(self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False", cursor="hand2").grid(row=row, column=1, sticky="w", padx=sc(5))
             else:
                 tk.Entry(
                     self.inner_edit, textvariable=val_var,
@@ -192,12 +192,12 @@ class BulkEditWindow:
             self.bulk_enable_vars[name] = enable_var
             self.bulk_vars[name] = val_var
 
-            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var).grid(row=row, column=0, sticky="w", padx=sc(5))
+            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var, cursor="hand2").grid(row=row, column=0, sticky="w", padx=sc(5))
             
             if ftype == "choice":
-                ttk.Combobox(self.inner_edit, textvariable=val_var, values=field.get("choices", [])).grid(row=row, column=1, sticky="ew", padx=sc(5))
+                ttk.Combobox(self.inner_edit, textvariable=val_var, values=field.get("choices", []), cursor="hand2").grid(row=row, column=1, sticky="ew", padx=sc(5))
             elif ftype == "checkbox":
-                ttk.Checkbutton(self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False").grid(row=row, column=1, sticky="w", padx=sc(5))
+                ttk.Checkbutton(self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False", cursor="hand2").grid(row=row, column=1, sticky="w", padx=sc(5))
             else:
                 tk.Entry(
                     self.inner_edit, textvariable=val_var,
@@ -223,8 +223,8 @@ class BulkEditWindow:
             self.bulk_enable_vars[name] = enable_var
             self.bulk_vars[name] = val_var
             
-            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var).grid(row=row, column=0, sticky="w", padx=sc(5))
-            cb = ttk.Combobox(self.inner_edit, textvariable=val_var, values=["True", "False"], state="readonly", width=8)
+            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var, cursor="hand2").grid(row=row, column=0, sticky="w", padx=sc(5))
+            cb = ttk.Combobox(self.inner_edit, textvariable=val_var, values=["True", "False"], state="readonly", width=8, cursor="hand2")
             cb.grid(row=row, column=1, sticky="w", padx=sc(5))
             row += 1
 
@@ -253,7 +253,7 @@ class BulkEditWindow:
         ttk.Checkbutton(
             destructive_frame, text="I understand this is a destructive action",
             variable=self.understand_var, command=self._toggle_destructive_button
-        ).pack(side="right", padx=sc(5), pady=(0, sc(5)))
+        , cursor="hand2").pack(side="right", padx=sc(5), pady=(0, sc(5)))
 
         count = len(self.app.active_object_ids) if hasattr(self.app, 'active_object_ids') else 0
         self.destructive_btn = tk.Button(
