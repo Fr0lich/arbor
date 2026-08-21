@@ -20,6 +20,7 @@ from ui.log_viewer import LogViewerMixin
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
+import sys
 import re
 import time
 import math
@@ -402,7 +403,11 @@ class ObjectProgramUI(
 
         self.image_render_cache = OrderedDict()
         self.dark_mode_active = False
-        self.ignored_words_file = "ignored_words.json"
+        if getattr(sys, 'frozen', False):
+            _app_base_dir = os.path.dirname(sys.executable)
+        else:
+            _app_base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.ignored_words_file = os.path.join(_app_base_dir, "ignored_words.json")
         self.ignored_words = []
         self.ignored_words_variations = tk.BooleanVar(value=True)
         self.load_ignored_words()
@@ -8994,9 +8999,19 @@ class ObjectProgramUI(
 
     def load_ignored_words(self):
         import json
-        if os.path.exists(self.ignored_words_file):
+        read_path = self.ignored_words_file
+        if not os.path.exists(read_path):
             try:
-                with open(self.ignored_words_file, "r", encoding="utf-8") as f:
+                from utils import get_resource_path
+                bundled = get_resource_path("ignored_words.json")
+                if os.path.exists(bundled):
+                    read_path = bundled
+            except Exception:
+                pass
+
+        if os.path.exists(read_path):
+            try:
+                with open(read_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self.ignored_words = data.get("words", [])
                     self.ignored_words_variations.set(data.get("variations", True))
@@ -9006,7 +9021,10 @@ class ObjectProgramUI(
         else:
             self.ignored_words = []
             self.ignored_words_variations.set(True)
-            self.save_ignored_words()
+            try:
+                self.save_ignored_words()
+            except Exception:
+                pass
 
     def save_ignored_words(self):
         import json

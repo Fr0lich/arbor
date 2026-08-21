@@ -2,6 +2,8 @@ import tkinter as tk
 import sys
 import os
 import ctypes
+import backend.search
+import backend.filter
 
 # ── User preferences file ────────────────────────────────────────────────────
 # When frozen as a PyInstaller exe, __file__ points to a temp extraction folder
@@ -173,6 +175,19 @@ def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
     thread.start()
 
 
+# ── Ensure stdout/stderr safety for windowed / frozen execution ──────────────
+if sys.stdout is None:
+    class _NullWriter:
+        def write(self, s): pass
+        def flush(self): pass
+    sys.stdout = _NullWriter()
+if sys.stderr is None:
+    class _NullWriterErr:
+        def write(self, s): pass
+        def flush(self): pass
+    sys.stderr = _NullWriterErr()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -182,14 +197,12 @@ if __name__ == "__main__":
         from models import AppState
         from ui.main_window import ObjectProgramUI
         from ui.dialogs import StartupDialog
+        import backend.search
+        import backend.filter
         import config
 
         app = AppState()
         root = tk.Tk()
-        try:
-            root.attributes("-alpha", 0.0)
-        except Exception as e:
-            pass
 
         # ── Detect DPI scale factor (stored for info display only) ──────────────
         # winfo_fpixels('1i') returns pixels-per-inch on this screen.
@@ -227,7 +240,7 @@ if __name__ == "__main__":
         _install_exception_hooks(root, ui_ref)
         _install_atexit_crash_reporter()
 
-        # Hide main window initially
+        # Hide main window initially while startup dialog runs
         root.withdraw()
 
         # We do not pass ui to StartupDialog yet, because ui has not been created.
@@ -236,7 +249,6 @@ if __name__ == "__main__":
         # Ensure startup dialog is forcefully brought to the front
         dialog.win.attributes("-topmost", True)
         dialog.win.update()
-        # You can turn off topmost after it's shown if you don't want it permanently stuck above other apps
         dialog.win.attributes("-topmost", False)
         dialog.win.focus_force()
 
@@ -303,16 +315,24 @@ if __name__ == "__main__":
             from utils import debug_error
             debug_error("Application Error", str(e))
         except Exception as import_err:
-            print(f"Could not import utils to log crash: {import_err}")
+            pass
 
-        # Guarantee that a GUI message box is shown for startup/runtime crashes so they are never silent
+        # Guarantee that a GUI message box is shown for startup/runtime crashes so they are never silent or invisible
         try:
             import traceback as _tb
             tb_text = _tb.format_exc()
             from tkinter import messagebox
+            # Restore root if it exists so messagebox is visible
+            if 'root' in locals() and root and root.winfo_exists():
+                try:
+                    root.attributes("-alpha", 1.0)
+                    root.deiconify()
+                except Exception:
+                    pass
             messagebox.showerror(
                 "Application Startup Error",
                 f"A critical error occurred during startup or execution:\n\n{e}\n\nTraceback:\n{tb_text}"
             )
         except Exception as e:
             pass
+

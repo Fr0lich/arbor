@@ -182,8 +182,38 @@ def debug_error(context: str, extra: str = "", is_crash: bool = False) -> None:
         pass
 
 
+# -- Canonical resource path resolver -----------------------------------------
+def get_resource_path(relative_path: str) -> str:
+    """
+    Resolve absolute path to a resource file.
+    Checks:
+    1. PyInstaller extraction temp dir (sys._MEIPASS)
+    2. Next to the executable (sys.executable dir)
+    3. Source repository root
+    """
+    if getattr(sys, "frozen", False):
+        # 1. Check bundled in PyInstaller _MEIPASS
+        meipass_dir = getattr(sys, "_MEIPASS", "")
+        if meipass_dir:
+            cand = os.path.join(meipass_dir, relative_path)
+            if os.path.exists(cand):
+                return cand
+
+        # 2. Check next to the executable
+        exe_dir = os.path.dirname(sys.executable)
+        cand = os.path.join(exe_dir, relative_path)
+        if os.path.exists(cand):
+            return cand
+        return cand  # Return expected path even if missing so errors are clear
+
+    # 3. Development mode: relative to project root
+    here = os.path.dirname(os.path.abspath(__file__))
+    cand = os.path.join(here, relative_path)
+    return cand
+
+
 def fade_in_toplevel(win, target_alpha=1.0, duration_ms=120, step_ms=15):
-    """Animate window opacity from 0.0 to target_alpha over duration_ms using wm_attributes."""
+    """Animate window opacity from 0.0 to target_alpha over duration_ms with failsafe visibility guarantee."""
     try:
         win.attributes("-alpha", 0.0)
     except Exception:
@@ -192,15 +222,20 @@ def fade_in_toplevel(win, target_alpha=1.0, duration_ms=120, step_ms=15):
     steps = max(1, duration_ms // step_ms)
     alpha_step = target_alpha / steps
 
+    def ensure_visible():
+        """Failsafe to ensure window is never left in an invisible state."""
+        try:
+            if win.winfo_exists():
+                win.attributes("-alpha", target_alpha)
+        except Exception:
+            pass
+
     def step(current_step=0):
         if not win.winfo_exists():
             return
 
         if current_step >= steps:
-            try:
-                win.attributes("-alpha", target_alpha)
-            except Exception:
-                pass
+            ensure_visible()
             return
 
         next_alpha = min(alpha_step * (current_step + 1), target_alpha)
@@ -208,14 +243,12 @@ def fade_in_toplevel(win, target_alpha=1.0, duration_ms=120, step_ms=15):
             win.attributes("-alpha", next_alpha)
             win.after(step_ms, lambda: step(current_step + 1))
         except Exception:
-            # Fallback to fully visible in case of error
-            try:
-                win.attributes("-alpha", target_alpha)
-            except Exception:
-                pass
+            ensure_visible()
 
     # Delay by 10ms to let the window draw its geometry first to avoid flash/flicker
     win.after(10, step)
+    # Guaranteed visibility fallback in case timer chain is blocked
+    win.after(duration_ms + 100, ensure_visible)
 
 
 def center_and_fit_toplevel(win, base_w=None, base_h=None):
@@ -227,17 +260,19 @@ def center_and_fit_toplevel(win, base_w=None, base_h=None):
     screen_w = win.winfo_screenwidth()
     screen_h = win.winfo_screenheight()
 
-    max_w = int(screen_w * 0.9)
-    max_h = int(screen_h * 0.9)
+    # Restrict maximum size to leave room for Windows taskbar and window borders on laptops
+    max_w = max(400, int(screen_w * 0.92))
+    max_h = max(450, int(screen_h * 0.88))
 
     w = min(req_w, max_w)
     h = min(req_h, max_h)
 
-    x = (screen_w // 2) - (w // 2)
-    y = (screen_h // 2) - (h // 2)
+    x = max(0, (screen_w // 2) - (w // 2))
+    y = max(0, (screen_h // 2) - (h // 2))
 
     win.geometry(f"{w}x{h}+{x}+{y}")
     fade_in_toplevel(win)
+
 
 
 

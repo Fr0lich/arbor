@@ -25,19 +25,30 @@ class TutorialManager:
             self.pending_main_tutorial = False
 
     def load_tutorials(self):
-        if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            
-        tut_path = os.path.join(base_dir, "tutorials.json")
         try:
-            with open(tut_path, "r", encoding="utf-8") as f:
-                self.tutorials = json.load(f)
-        except Exception as e:
-            import tkinter.messagebox as mb
-            mb.showerror("Tutorial Load Error", f"Could not load {tut_path}\nError: {e}")
+            from utils import get_resource_path, debug_error
+            tut_path = get_resource_path("tutorials.json")
+        except Exception:
+            if getattr(sys, 'frozen', False):
+                base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+            else:
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            tut_path = os.path.join(base_dir, "tutorials.json")
+            
+        if os.path.exists(tut_path):
+            try:
+                with open(tut_path, "r", encoding="utf-8") as f:
+                    self.tutorials = json.load(f)
+            except Exception as e:
+                try:
+                    from utils import debug_error
+                    debug_error("Tutorial Load Error", f"Could not parse {tut_path}: {e}")
+                except Exception:
+                    pass
+                self.tutorials = {}
+        else:
             self.tutorials = {}
+
 
     def start_tutorial(self, tutorial_name, root, on_complete=None):
         import tkinter.messagebox as mb

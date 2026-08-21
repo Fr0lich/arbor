@@ -14,12 +14,17 @@ echo.
 echo Building EXE...
 python -m PyInstaller --onefile --windowed ^
 --collect-submodules ui ^
+--collect-submodules backend ^
 --add-data "ui;ui" ^
+--add-data "backend;backend" ^
+--add-data "tutorials.json;." ^
+--add-data "ignored_words.json;." ^
 main.py
 
 echo.
 echo Copying external resources...
 copy /Y tutorials.json dist\tutorials.json
+copy /Y ignored_words.json dist\ignored_words.json
 
 echo.
 echo ===============================

@@ -241,7 +241,12 @@ class StartupDialog:
         self.win = tk.Toplevel(parent)
         self.win.title("arbor — Project Setup")
         self.win.resizable(True, True)
-        self.win.minsize(500, 680)
+
+        screen_w = self.win.winfo_screenwidth()
+        screen_h = self.win.winfo_screenheight()
+        min_w = min(480, max(360, screen_w - 40))
+        min_h = min(540, max(420, screen_h - 80))
+        self.win.minsize(min_w, min_h)
         self.win.configure(bg=self.C_BG)
 
         self.win.bind("<Configure>", self._on_resize)
