@@ -22,7 +22,9 @@ from tkinter import ttk, filedialog, messagebox
 import os
 import re
 import time
+import math
 from datetime import datetime
+
 import pandas as pd
 import getpass
 import utils
@@ -5150,17 +5152,17 @@ class ObjectProgramUI(
             close_btn.pack(side="right")
 
     def show_banner(self, text, banner_type="info", duration_ms=4000, action_callback=None):
-        """Displays an inline notification banner at the top of the workspace."""
+        """Displays an inline notification banner at the top of the workspace with a slide-in transition."""
         if not hasattr(self, "_inline_banner_frame"):
             return
 
-        # Configure colors based on type
-        colors = {
+        # Configure colors based on type from config.BANNER_THEME
+        colors = getattr(config, "BANNER_THEME", {
             "success": {"bg": "#dcfce7", "border": "#22c55e", "fg": "#14532d", "icon": "✔"},
             "warning": {"bg": "#fef9c3", "border": "#eab308", "fg": "#713f12", "icon": "⚠"},
             "error":   {"bg": "#fee2e2", "border": "#ef4444", "fg": "#7f1d1d", "icon": "✘"},
             "info":    {"bg": "#dbeafe", "border": "#3b82f6", "fg": "#1e3a8a", "icon": "ℹ"},
-        }
+        })
         cfg = colors.get(banner_type, colors["info"])
 
         # Update banner styles
@@ -5236,24 +5238,90 @@ class ObjectProgramUI(
         close_btn.bind("<Enter>", _on_enter)
         close_btn.bind("<Leave>", _on_leave)
 
-        # Floating toast notification overlay
-        self._inline_banner_frame.place(relx=0.5, y=10, anchor="n")
+        # Cancel any ongoing animations and auto-dismiss timer
+        if hasattr(self, "_banner_anim_id") and self._banner_anim_id:
+            self.root.after_cancel(self._banner_anim_id)
+            self._banner_anim_id = None
 
-        # Auto-dismiss timer
         if hasattr(self, "_banner_timer_id") and self._banner_timer_id:
             self.root.after_cancel(self._banner_timer_id)
             self._banner_timer_id = None
+
+        # Measure dimensions
+        self._inline_banner_frame.update_idletasks()
+        h = max(self._inline_banner_frame.winfo_reqheight(), 40)
+
+        # Slide-in animation from top (-h) to 10
+        start_y = -h
+        end_y = 10
+        steps = 8
+        interval = 10
+
+        def animate_show(step_idx=0):
+            if not self.root.winfo_exists() or not self._inline_banner_frame.winfo_exists():
+                self._banner_anim_id = None
+                return
+            if step_idx > steps:
+                self._inline_banner_frame.place(relx=0.5, y=end_y, anchor="n")
+                self._banner_anim_id = None
+                return
+            p = step_idx / steps
+            # Cosine ease-out: math.sin(p * pi / 2)
+            p_eased = math.sin(p * (math.pi / 2))
+            curr_y = start_y + (end_y - start_y) * p_eased
+            self._inline_banner_frame.place(relx=0.5, y=int(curr_y), anchor="n")
+            self._banner_anim_id = self.root.after(interval, lambda: animate_show(step_idx + 1))
+
+        # Start sliding in
+        animate_show(0)
 
         if duration_ms > 0:
             self._banner_timer_id = self.root.after(duration_ms, self.hide_banner)
 
     def hide_banner(self):
-        """Hides the inline notification banner."""
+        """Hides the inline notification banner with a slide-out animation."""
         if hasattr(self, "_banner_timer_id") and self._banner_timer_id:
             self.root.after_cancel(self._banner_timer_id)
             self._banner_timer_id = None
-        if hasattr(self, "_inline_banner_frame"):
+
+        if hasattr(self, "_banner_anim_id") and self._banner_anim_id:
+            self.root.after_cancel(self._banner_anim_id)
+            self._banner_anim_id = None
+
+        if not hasattr(self, "_inline_banner_frame") or not self._inline_banner_frame.winfo_exists():
+            return
+
+        try:
+            info = self._inline_banner_frame.place_info()
+            if not info:
+                return  # Not placed
+            current_y = int(info.get("y", 10))
+        except Exception:
             self._inline_banner_frame.place_forget()
+            return
+
+        h = max(self._inline_banner_frame.winfo_reqheight(), 40)
+        start_y = current_y
+        end_y = -h
+        steps = 8
+        interval = 10
+
+        def animate_hide(step_idx=0):
+            if not self.root.winfo_exists() or not self._inline_banner_frame.winfo_exists():
+                self._banner_anim_id = None
+                return
+            if step_idx > steps:
+                self._inline_banner_frame.place_forget()
+                self._banner_anim_id = None
+                return
+            p = step_idx / steps
+            # Cosine ease-out for slide-out
+            p_eased = math.sin(p * (math.pi / 2))
+            curr_y = start_y + (end_y - start_y) * p_eased
+            self._inline_banner_frame.place(relx=0.5, y=int(curr_y), anchor="n")
+            self._banner_anim_id = self.root.after(interval, lambda: animate_hide(step_idx + 1))
+
+        animate_hide(0)
 
 
 
@@ -8428,6 +8496,76 @@ class ObjectProgramUI(
         """Mark as reviewed and automatically advance if autoAdvanceOnReview is enabled."""
         self.mark_current_as_reviewed()
 
+    def _animate_reviewed_button(self, target_bg, target_fg, duration_ms=80):
+        # Cancel any previous animation
+        if hasattr(self, "_btn_anim_id") and self._btn_anim_id:
+            try:
+                self.root.after_cancel(self._btn_anim_id)
+            except Exception:
+                pass
+            self._btn_anim_id = None
+        
+        try:
+            start_bg = self.reviewed_button.cget("bg")
+            start_fg = self.reviewed_button.cget("fg")
+        except Exception:
+            start_bg = target_bg
+            start_fg = target_fg
+            
+        def parse_color(c):
+            try:
+                r_16, g_16, b_16 = self.reviewed_button.winfo_rgb(c)
+                return (r_16 // 256, g_16 // 256, b_16 // 256)
+            except Exception:
+                c_hex = str(c).lstrip('#')
+                if len(c_hex) == 3:
+                    c_hex = "".join(x*2 for x in c_hex)
+                try:
+                    return (int(c_hex[0:2], 16), int(c_hex[2:4], 16), int(c_hex[4:6], 16))
+                except Exception:
+                    return (128, 128, 128)
+
+        start_bg_rgb = parse_color(start_bg)
+        start_fg_rgb = parse_color(start_fg)
+        target_bg_rgb = parse_color(target_bg)
+        target_fg_rgb = parse_color(target_fg)
+        
+        steps = 8
+        interval = 10
+        
+        def step(current_step):
+            if not self.root.winfo_exists() or not self.reviewed_button.winfo_exists():
+                self._btn_anim_id = None
+                return
+            if current_step > steps:
+                try:
+                    self.reviewed_button.config(bg=target_bg, fg=target_fg)
+                except Exception:
+                    pass
+                self._btn_anim_id = None
+                return
+            
+            p = current_step / steps
+            bg_r = int(start_bg_rgb[0] + (target_bg_rgb[0] - start_bg_rgb[0]) * p)
+            bg_g = int(start_bg_rgb[1] + (target_bg_rgb[1] - start_bg_rgb[1]) * p)
+            bg_b = int(start_bg_rgb[2] + (target_bg_rgb[2] - start_bg_rgb[2]) * p)
+            
+            fg_r = int(start_fg_rgb[0] + (target_fg_rgb[0] - start_fg_rgb[0]) * p)
+            fg_g = int(start_fg_rgb[1] + (target_fg_rgb[1] - start_fg_rgb[1]) * p)
+            fg_b = int(start_fg_rgb[2] + (target_fg_rgb[2] - start_fg_rgb[2]) * p)
+            
+            color_bg = f"#{bg_r:02x}{bg_g:02x}{bg_b:02x}"
+            color_fg = f"#{fg_r:02x}{fg_g:02x}{fg_b:02x}"
+            
+            try:
+                self.reviewed_button.config(bg=color_bg, fg=color_fg)
+            except Exception:
+                pass
+                
+            self._btn_anim_id = self.root.after(interval, lambda: step(current_step + 1))
+            
+        step(0)
+
     def update_reviewed_button_state(self):
         oid = self.app.current_object_id
         large_size = self.large_reviewed_button_var.get()
@@ -8438,13 +8576,12 @@ class ObjectProgramUI(
             self.reviewed_button.config(
                 text="✓ Mark as Reviewed",
                 state="disabled",
-                bg="#f3f3f3",
-                fg="gray",
                 activebackground="#f3f3f3",
                 activeforeground="gray",
                 highlightbackground="gray",
                 padx=padx_val, pady=pady_val
             )
+            self._animate_reviewed_button("#f3f3f3", "gray")
             return
 
         self.reviewed_button.config(state="normal")
@@ -8473,27 +8610,31 @@ class ObjectProgramUI(
             btn_text = f"✓ REVIEWED – {time_str}" if time_str else "✓ REVIEWED"
             self.reviewed_button.config(
                 text=btn_text,
-                bg="#ffffff",
-                fg="#3b6934",
                 activebackground="#f3f3f3",
                 activeforeground="#3b6934",
                 highlightbackground="#3b6934",
                 padx=padx_val, pady=pady_val
             )
+            self._animate_reviewed_button("#ffffff", "#3b6934")
         else:
             self.reviewed_button.config(
                 text="✓ MARK AS REVIEWED",
-                bg="#3b6934",
-                fg="#ffffff",
                 activebackground="#2e5228",
                 activeforeground="#ffffff",
                 highlightbackground="#3b6934",
                 padx=padx_val, pady=pady_val
             )
+            self._animate_reviewed_button("#3b6934", "#ffffff")
 
     def _on_reviewed_btn_enter(self, event):
         if not self.app.current_object_id:
             return
+        if hasattr(self, "_btn_anim_id") and self._btn_anim_id:
+            try:
+                self.root.after_cancel(self._btn_anim_id)
+            except Exception:
+                pass
+            self._btn_anim_id = None
         if bool(self.reviewed_var.get()):
             self.reviewed_button.config(bg="#f3f3f3")
         else:
@@ -8502,6 +8643,12 @@ class ObjectProgramUI(
     def _on_reviewed_btn_leave(self, event):
         if not self.app.current_object_id:
             return
+        if hasattr(self, "_btn_anim_id") and self._btn_anim_id:
+            try:
+                self.root.after_cancel(self._btn_anim_id)
+            except Exception:
+                pass
+            self._btn_anim_id = None
         if bool(self.reviewed_var.get()):
             self.reviewed_button.config(bg="#ffffff")
         else:
@@ -8510,6 +8657,12 @@ class ObjectProgramUI(
     def _on_reviewed_btn_press(self, event):
         if not self.app.current_object_id:
             return
+        if hasattr(self, "_btn_anim_id") and self._btn_anim_id:
+            try:
+                self.root.after_cancel(self._btn_anim_id)
+            except Exception:
+                pass
+            self._btn_anim_id = None
         if bool(self.reviewed_var.get()):
             self.reviewed_button.config(bg="#dcdcdc")
         else:
@@ -8518,6 +8671,12 @@ class ObjectProgramUI(
     def _on_reviewed_btn_release(self, event):
         if not self.app.current_object_id:
             return
+        if hasattr(self, "_btn_anim_id") and self._btn_anim_id:
+            try:
+                self.root.after_cancel(self._btn_anim_id)
+            except Exception:
+                pass
+            self._btn_anim_id = None
         x = event.x
         y = event.y
         w = event.widget.winfo_width()

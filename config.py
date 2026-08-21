@@ -471,4 +471,12 @@ BUILTIN_TEMPLATES = {
         "badge": "Minimal & Custom",
         "config_key": "Blank Minimal"
     }
-}
+}
+
+# Banner theme configurations
+BANNER_THEME = {
+    "success": {"bg": "#dcfce7", "border": "#22c55e", "fg": "#14532d", "icon": "✔"},
+    "warning": {"bg": "#fef9c3", "border": "#eab308", "fg": "#713f12", "icon": "⚠"},
+    "error":   {"bg": "#fee2e2", "border": "#ef4444", "fg": "#7f1d1d", "icon": "✘"},
+    "info":    {"bg": "#dbeafe", "border": "#3b82f6", "fg": "#1e3a8a", "icon": "ℹ"},
+}

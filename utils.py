@@ -182,6 +182,42 @@ def debug_error(context: str, extra: str = "", is_crash: bool = False) -> None:
         pass
 
 
+def fade_in_toplevel(win, target_alpha=1.0, duration_ms=120, step_ms=15):
+    """Animate window opacity from 0.0 to target_alpha over duration_ms using wm_attributes."""
+    try:
+        win.attributes("-alpha", 0.0)
+    except Exception:
+        return  # If attributes -alpha is not supported, just exit
+
+    steps = max(1, duration_ms // step_ms)
+    alpha_step = target_alpha / steps
+
+    def step(current_step=0):
+        if not win.winfo_exists():
+            return
+
+        if current_step >= steps:
+            try:
+                win.attributes("-alpha", target_alpha)
+            except Exception:
+                pass
+            return
+
+        next_alpha = min(alpha_step * (current_step + 1), target_alpha)
+        try:
+            win.attributes("-alpha", next_alpha)
+            win.after(step_ms, lambda: step(current_step + 1))
+        except Exception:
+            # Fallback to fully visible in case of error
+            try:
+                win.attributes("-alpha", target_alpha)
+            except Exception:
+                pass
+
+    # Delay by 10ms to let the window draw its geometry first to avoid flash/flicker
+    win.after(10, step)
+
+
 def center_and_fit_toplevel(win, base_w=None, base_h=None):
     win.update_idletasks()
 
@@ -201,6 +237,8 @@ def center_and_fit_toplevel(win, base_w=None, base_h=None):
     y = (screen_h // 2) - (h // 2)
 
     win.geometry(f"{w}x{h}+{x}+{y}")
+    fade_in_toplevel(win)
+
 
 
 def debug_log(level: str, context: str, extra: str = "") -> None:

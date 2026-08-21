@@ -9,7 +9,7 @@ from PIL import Image, ImageTk
 from io import BytesIO
 import requests
 from config import DATABASE_CONFIGS, sc, get_recent_files, add_recent_file
-from utils import debug_error
+from utils import debug_error, fade_in_toplevel
 
 class ZoomableImagePopup:
     def __init__(self, parent, tk_img, source=None, is_online=False):
@@ -51,6 +51,9 @@ class ZoomableImagePopup:
         if self.source:
             self.top.title("Loading full resolution...")
             threading.Thread(target=self._load_full_res, daemon=True).start()
+
+        fade_in_toplevel(self.top)
+
 
     def _on_close(self, event=None):
         if hasattr(self, "_zoom_job") and self._zoom_job:

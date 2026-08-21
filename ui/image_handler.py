@@ -62,15 +62,28 @@ class ImageHandlerMixin:
 
 
     def _on_canvas_resize(self, event):
+        import time
         self._last_canvas_width = event.width
 
-        # Debounce image container resizing and image refresh on resize so it doesn't lag while dragging sashes
+        # Debounce/throttle image container resizing and image refresh on resize so it doesn't lag while dragging sashes
+        now = time.time()
+        last_time = getattr(self, "_last_resize_time", 0.0)
+        elapsed = (now - last_time) * 1000.0  # ms
+
         if hasattr(self, "_image_resize_job") and self._image_resize_job:
             try:
                 self.root.after_cancel(self._image_resize_job)
             except Exception:
                 pass
-        self._image_resize_job = self.root.after(150, self._refresh_images_on_resize)
+            self._image_resize_job = None
+
+        if elapsed >= 16.6:  # 60fps throttle limit
+            self._last_resize_time = now
+            self._refresh_images_on_resize()
+
+        # Always schedule a final debounce at 80ms to ensure correct layout at the end of dragging
+        self._image_resize_job = self.root.after(80, self._refresh_images_on_resize)
+
 
 
     def _refresh_images_on_resize(self):
