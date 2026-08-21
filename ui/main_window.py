@@ -8341,14 +8341,20 @@ class ObjectProgramUI(
                     return (1, str(oid))
             sorted_ids = sorted(ids, key=id_key, reverse=not ascending)
         elif col == "Genus":
+            genus_dict = getattr(self, "_cached_genus_dict", None)
             def get_genus(oid):
+                if genus_dict is not None and oid in genus_dict:
+                    return str(genus_dict[oid] or "").lower()
                 val = self.app.df_reg.loc[oid]
                 if isinstance(val, pd.DataFrame):
                     val = val.iloc[0]
                 return str(val.get("Genus", "")).lower()
             sorted_ids = sorted(ids, key=get_genus, reverse=not ascending)
         elif col == "Species":
+            species_dict = getattr(self, "_cached_species_dict", None)
             def get_species(oid):
+                if species_dict is not None and oid in species_dict:
+                    return str(species_dict[oid] or "").lower()
                 val = self.app.df_reg.loc[oid]
                 if isinstance(val, pd.DataFrame):
                     val = val.iloc[0]
