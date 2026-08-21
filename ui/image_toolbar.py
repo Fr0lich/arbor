@@ -17,73 +17,73 @@ from typing import Dict, Callable, Optional
 
 # Design Tokens from AI_UI_GUIDE.md
 COLORS_LIGHT = {
-    "surface": "#f9f9f9",
-    "surface_container_low": "#f3f3f3",
-    "surface_container": "#eeeeee",
-    "surface_container_high": "#e8e8e8",
-    "surface_container_highest": "#e2e2e2",
+    "surface": "#fbfaf8",
+    "surface_container_low": "#f2f5f1",
+    "surface_container": "#e9ece5",
+    "surface_container_high": "#e9ece5",
+    "surface_container_highest": "#e9ece5",
     "card_bg": "#ffffff",
-    "on_surface": "#1a1c1c",
+    "on_surface": "#2c302e",
     "on_surface_variant": "#4c4546",
     "outline": "#7e7576",
     "outline_variant": "#cfc4c5",
     "primary": "#000000",
     "on_primary": "#ffffff",
     "primary_container": "#1b1b1b",
-    "secondary": "#2e6b30",
+    "secondary": "#3a7d44",
     "on_secondary": "#ffffff",
     "secondary_container": "#adf0a6",
     "on_secondary_container": "#326f34",
-    "badge_bg": "#e8e8e8",
-    "badge_fg": "#1a1c1c",
-    "btn_bg": "#f3f3f3",
-    "btn_fg": "#1a1c1c",
+    "badge_bg": "#e9ece5",
+    "badge_fg": "#2c302e",
+    "btn_bg": "#f2f5f1",
+    "btn_fg": "#2c302e",
     "btn_border": "#cfc4c5",
-    "btn_hover_bg": "#e2e2e2",
+    "btn_hover_bg": "#e9ece5",
     "btn_hover_border": "#7e7576",
-    "btn_active_bg": "#2e6b30",
+    "btn_active_bg": "#3a7d44",
     "btn_active_fg": "#ffffff",
-    "toggle_bg": "#e2e2e2",
+    "toggle_bg": "#e9ece5",
     "toggle_active_bg": "#000000",
     "toggle_active_fg": "#ffffff",
     "toggle_inactive_fg": "#4c4546",
-    "tooltip_bg": "#1a1c1c",
+    "tooltip_bg": "#2c302e",
     "tooltip_fg": "#ffffff"
 }
 
 COLORS_DARK = {
-    "surface": "#1e1e2e",
-    "surface_container_low": "#181825",
-    "surface_container": "#1e1e2e",
-    "surface_container_high": "#252538",
-    "surface_container_highest": "#313244",
-    "card_bg": "#252538",
-    "on_surface": "#cdd6f4",
+    "surface": "#181c19",
+    "surface_container_low": "#212622",
+    "surface_container": "#181c19",
+    "surface_container_high": "#1e221f",
+    "surface_container_highest": "#141715",
+    "card_bg": "#1e221f",
+    "on_surface": "#e8ebe9",
     "on_surface_variant": "#bac2de",
     "outline": "#45475a",
     "outline_variant": "#585b70",
-    "primary": "#cdd6f4",
-    "on_primary": "#1e1e2e",
-    "primary_container": "#313244",
+    "primary": "#e8ebe9",
+    "on_primary": "#181c19",
+    "primary_container": "#141715",
     "secondary": "#a6e3a1",
-    "on_secondary": "#1e1e2e",
-    "secondary_container": "#252538",
+    "on_secondary": "#181c19",
+    "secondary_container": "#1e221f",
     "on_secondary_container": "#a6e3a1",
-    "badge_bg": "#313244",
-    "badge_fg": "#cdd6f4",
-    "btn_bg": "#252538",
-    "btn_fg": "#cdd6f4",
+    "badge_bg": "#141715",
+    "badge_fg": "#e8ebe9",
+    "btn_bg": "#1e221f",
+    "btn_fg": "#e8ebe9",
     "btn_border": "#45475a",
-    "btn_hover_bg": "#313244",
+    "btn_hover_bg": "#141715",
     "btn_hover_border": "#a6e3a1",
     "btn_active_bg": "#a6e3a1",
-    "btn_active_fg": "#1e1e2e",
-    "toggle_bg": "#313244",
+    "btn_active_fg": "#181c19",
+    "toggle_bg": "#141715",
     "toggle_active_bg": "#a6e3a1",
-    "toggle_active_fg": "#1e1e2e",
+    "toggle_active_fg": "#181c19",
     "toggle_inactive_fg": "#bac2de",
-    "tooltip_bg": "#cdd6f4",
-    "tooltip_fg": "#1e1e2e"
+    "tooltip_bg": "#e8ebe9",
+    "tooltip_fg": "#181c19"
 }
 
 
@@ -508,7 +508,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.title("Arbor Image Toolbar - Standalone Test Harness")
     root.geometry("920x650")
-    root.configure(bg="#f9f9f9")
+    root.configure(bg="#fbfaf8")
 
     # State variables for simulator
     state = {
@@ -522,7 +522,7 @@ if __name__ == "__main__":
     header_card = tk.Frame(root, bg="#ffffff", highlightthickness=1, highlightbackground="#cfc4c5", padx=16, pady=12)
     header_card.pack(fill="x", padx=16, pady=(16, 8))
 
-    tk.Label(header_card, text="Image Tool Buttons Redesign", font=("Lora", 16, "bold"), bg="#ffffff", fg="#1a1c1c").pack(anchor="w")
+    tk.Label(header_card, text="Image Tool Buttons Redesign", font=("Lora", 16, "bold"), bg="#ffffff", fg="#2c302e").pack(anchor="w")
     tk.Label(header_card, text="Interactive preview testing Compact vs Large button styles, hover micro-interactions, dark mode, and live callbacks.", font=("Segoe UI", 9), bg="#ffffff", fg="#4c4546").pack(anchor="w")
 
     # Callback implementations for simulation
@@ -579,7 +579,7 @@ if __name__ == "__main__":
     }
 
     # Embed Toolbar Component
-    toolbar_frame = tk.Frame(root, bg="#f9f9f9")
+    toolbar_frame = tk.Frame(root, bg="#fbfaf8")
     toolbar_frame.pack(fill="x", padx=16, pady=4)
 
     toolbar = create_image_toolbar(
@@ -594,7 +594,7 @@ if __name__ == "__main__":
     canvas_container = tk.Frame(root, bg="#ffffff", highlightthickness=1, highlightbackground="#cfc4c5")
     canvas_container.pack(fill="both", expand=True, padx=16, pady=8)
 
-    canvas = tk.Canvas(canvas_container, bg="#181825" if state["dark"] else "#eeeeee", highlightthickness=0)
+    canvas = tk.Canvas(canvas_container, bg="#212622" if state["dark"] else "#e9ece5", highlightthickness=0)
     canvas.pack(fill="both", expand=True)
 
     def redraw_specimen():
@@ -603,13 +603,13 @@ if __name__ == "__main__":
         ch = canvas.winfo_height() or 300
         cx, cy = cw / 2, ch / 2
 
-        bg_color = "#181825" if state["dark"] else "#eeeeee"
+        bg_color = "#212622" if state["dark"] else "#e9ece5"
         canvas.config(bg=bg_color)
 
         # Draw grid
         grid_step = int(30 * state["zoom"])
         if grid_step > 5:
-            grid_color = "#313244" if state["dark"] else "#e2e2e2"
+            grid_color = "#141715" if state["dark"] else "#e9ece5"
             for x in range(0, cw, grid_step):
                 canvas.create_line(x, 0, x, ch, fill=grid_color)
             for y in range(0, ch, grid_step):
@@ -622,7 +622,7 @@ if __name__ == "__main__":
         # Main stem line
         dx = r * math.sin(rad)
         dy = -r * math.cos(rad)
-        stem_color = "#a6e3a1" if state["dark"] else "#2e6b30"
+        stem_color = "#a6e3a1" if state["dark"] else "#3a7d44"
         canvas.create_line(cx - dx, cy - dy, cx + dx, cy + dx, fill=stem_color, width=max(2, int(4 * state["zoom"])))
 
         # Specimen Oval / Leaf body
@@ -631,7 +631,7 @@ if __name__ == "__main__":
         canvas.create_oval(lx1, ly1, lx2, ly2, outline=stem_color, width=max(1, int(3 * state["zoom"])))
 
         # Specimen Label Text inside Canvas
-        lbl_color = "#cdd6f4" if state["dark"] else "#1a1c1c"
+        lbl_color = "#e8ebe9" if state["dark"] else "#2c302e"
         canvas.create_text(
             cx, cy,
             text=f"🌿 Botanical Specimen #O-V-OE-0042\nZoom: {int(state['zoom']*100)}% | Angle: {state['rotation']}°",
@@ -643,19 +643,19 @@ if __name__ == "__main__":
     canvas.bind("<Configure>", lambda e: redraw_specimen())
 
     # Bottom Control Bar & Log Output
-    bottom_frame = tk.Frame(root, bg="#f9f9f9")
+    bottom_frame = tk.Frame(root, bg="#fbfaf8")
     bottom_frame.pack(fill="x", padx=16, pady=(0, 16))
 
     def toggle_theme():
         state["dark"] = not state["dark"]
         toolbar.set_dark_mode(state["dark"])
-        root.config(bg="#1e1e2e" if state["dark"] else "#f9f9f9")
-        header_card.config(bg="#252538" if state["dark"] else "#ffffff", highlightbackground="#45475a" if state["dark"] else "#cfc4c5")
+        root.config(bg="#181c19" if state["dark"] else "#fbfaf8")
+        header_card.config(bg="#1e221f" if state["dark"] else "#ffffff", highlightbackground="#45475a" if state["dark"] else "#cfc4c5")
         for child in header_card.winfo_children():
-            child.config(bg="#252538" if state["dark"] else "#ffffff", fg="#cdd6f4" if state["dark"] else "#1a1c1c")
-        toolbar_frame.config(bg="#1e1e2e" if state["dark"] else "#f9f9f9")
-        canvas_container.config(bg="#252538" if state["dark"] else "#ffffff", highlightbackground="#45475a" if state["dark"] else "#cfc4c5")
-        bottom_frame.config(bg="#1e1e2e" if state["dark"] else "#f9f9f9")
+            child.config(bg="#1e221f" if state["dark"] else "#ffffff", fg="#e8ebe9" if state["dark"] else "#2c302e")
+        toolbar_frame.config(bg="#181c19" if state["dark"] else "#fbfaf8")
+        canvas_container.config(bg="#1e221f" if state["dark"] else "#ffffff", highlightbackground="#45475a" if state["dark"] else "#cfc4c5")
+        bottom_frame.config(bg="#181c19" if state["dark"] else "#fbfaf8")
         dark_btn.config(text="☀️ Light Theme" if state["dark"] else "🌙 Dark Theme")
         redraw_specimen()
         log_event(f"Theme: Switched to {'Dark' if state['dark'] else 'Light'} mode")
@@ -665,7 +665,7 @@ if __name__ == "__main__":
         text="🌙 Dark Theme",
         command=toggle_theme,
         font=("Segoe UI", 9, "bold"),
-        bg="#2e6b30",
+        bg="#3a7d44",
         fg="#ffffff",
         activebackground="#326f34",
         activeforeground="#ffffff",
@@ -676,7 +676,7 @@ if __name__ == "__main__":
     )
     dark_btn.pack(side="left")
 
-    log_label = tk.Label(bottom_frame, text="Status: Ready", font=("Consolas", 9), bg="#f9f9f9", fg="#4c4546")
+    log_label = tk.Label(bottom_frame, text="Status: Ready", font=("Consolas", 9), bg="#fbfaf8", fg="#4c4546")
     log_label.pack(side="right", padx=8)
 
     def log_event(msg: str):

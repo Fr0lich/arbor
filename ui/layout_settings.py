@@ -257,10 +257,10 @@ class LayoutSettingsMixin:
                 content_frame.pack(fill="x")
 
             arrow_var = tk.StringVar(value="▾" if is_expanded else "▸")
-            arrow_lbl = tk.Label(header_frame, textvariable=arrow_var, font=("Segoe UI", sc(10)), bg=bg_color, fg="#444748" if not getattr(self, "dark_mode_active", False) else "#cdd6f4")
+            arrow_lbl = tk.Label(header_frame, textvariable=arrow_var, font=("Segoe UI", sc(10)), bg=bg_color, fg="#444748" if not getattr(self, "dark_mode_active", False) else "#e8ebe9")
             arrow_lbl.pack(side="left", padx=(0, sc(4)))
 
-            title_lbl = tk.Label(header_frame, text=title, font=("Hanken Grotesk", sc(10), "bold"), bg=bg_color, fg="#444748" if not getattr(self, "dark_mode_active", False) else "#cdd6f4")
+            title_lbl = tk.Label(header_frame, text=title, font=("Hanken Grotesk", sc(10), "bold"), bg=bg_color, fg="#444748" if not getattr(self, "dark_mode_active", False) else "#e8ebe9")
             title_lbl.pack(side="left")
 
             def toggle_section(event=None):
@@ -621,42 +621,42 @@ class LayoutSettingsMixin:
             self.image_toolbar.set_dark_mode(self.dark_mode_active)
 
         if self.dark_mode_active:
-            bg_color = "#1e1e2e"
-            fg_color = "#cdd6f4"
-            field_bg = "#181825"
-            select_bg = "#45475a"
-            select_fg = "#cdd6f4"
+            bg_color = "#181c19"
+            fg_color = "#e8ebe9"
+            field_bg = "#212622"
+            select_bg = "#3a7d44"
+            select_fg = "#e8ebe9"
             border_color = "#313244"
-            nav_bg = "#181825"
-            nav_active_fg = "#cdd6f4"
-            statusbar_bg = "#181825"
-            statusbar_fg = "#cdd6f4"
-            reviewed_fg = "#a6e3a1"   # green (dark mode)
-            problem_fg  = "#f38ba8"   # red (dark mode)
+            nav_bg = "#141715"
+            nav_active_fg = "#e8ebe9"
+            statusbar_bg = "#141715"
+            statusbar_fg = "#e8ebe9"
+            reviewed_fg = "#3a7d44"   # green (dark mode)
+            problem_fg  = "#c93a40"   # red (dark mode)
 
             style.configure(".", background=bg_color, foreground=fg_color, bordercolor=border_color)
             style.configure("TFrame", background=bg_color)
             style.configure("TLabel", background=bg_color, foreground=fg_color)
-            style.configure("LeftPane.TFrame", background="#1e1e2e")
-            style.configure("MiddlePane.TFrame", background="#181825")
-            style.configure("RightPane.TFrame", background="#1e1e2e")
-            style.configure("LeftPane.TLabel", background="#1e1e2e", foreground=fg_color)
+            style.configure("LeftPane.TFrame", background="#181c19")
+            style.configure("MiddlePane.TFrame", background="#212622")
+            style.configure("RightPane.TFrame", background="#181c19")
+            style.configure("LeftPane.TLabel", background="#181c19", foreground=fg_color)
             cb_opts = {
                 "indicatorbackground": field_bg,
                 "indicatorforeground": fg_color,
                 "upperbordercolor": border_color,
                 "lowerbordercolor": border_color
             }
-            style.configure("LeftPane.TCheckbutton", background="#1e1e2e", foreground=fg_color, **cb_opts)
+            style.configure("LeftPane.TCheckbutton", background="#181c19", foreground=fg_color, **cb_opts)
             style.map("LeftPane.TCheckbutton",
-                      background=[("active", "#1e1e2e")],
+                      background=[("active", "#181c19")],
                       indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
-            style.configure("RightPane.TLabel", background="#1e1e2e", foreground=fg_color)
-            style.configure("RightPane.TCheckbutton", background="#1e1e2e", foreground=fg_color, **cb_opts)
+            style.configure("RightPane.TLabel", background="#181c19", foreground=fg_color)
+            style.configure("RightPane.TCheckbutton", background="#181c19", foreground=fg_color, **cb_opts)
             style.map("RightPane.TCheckbutton",
-                      background=[("active", "#1e1e2e")],
+                      background=[("active", "#181c19")],
                       indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
-            style.configure("MiddlePane.TLabel", background="#181825", foreground=fg_color)
+            style.configure("MiddlePane.TLabel", background="#212622", foreground=fg_color)
             style.configure("TButton", background=field_bg, foreground=fg_color,
                             bordercolor=border_color, lightcolor=border_color, darkcolor=border_color,
                             relief="flat", borderwidth=1)
@@ -704,8 +704,8 @@ class LayoutSettingsMixin:
                             fieldbackground=field_bg, bordercolor=border_color, rowheight=28)
             style.map("Treeview", background=[("selected", select_bg)])
 
-            self.object_list.tag_configure("odd", background="#181825")
-            self.object_list.tag_configure("even", background="#1e1e2e")
+            self.object_list.tag_configure("odd", background="#212622")
+            self.object_list.tag_configure("even", background="#181c19")
             # Stitch row status tags
             self.object_list.tag_configure("reviewed", foreground=reviewed_fg)
             self.object_list.tag_configure("problem",  foreground=problem_fg)
@@ -724,7 +724,7 @@ class LayoutSettingsMixin:
             hl_color_name = color_override if color_override is not None else prefs.get("problem_highlight_color", advanced_prefs.get("problem_highlight_color", "Default (Red)"))
             
             if not enable_hl:
-                problem_bg = "#181825"
+                problem_bg = "#212622"
                 problem_fg = fg_color
             else:
                 if "Yellow" in hl_color_name:
@@ -744,24 +744,24 @@ class LayoutSettingsMixin:
             style.configure("Problem.TCombobox", fieldbackground=problem_bg, foreground=problem_fg)
 
             style.configure("Dirty.TButton", foreground="#f38ba8", background=field_bg)
-            style.configure("HistoryHighlight.TLabel", background="#f9e2af", foreground="#1e1e2e",
+            style.configure("HistoryHighlight.TLabel", background="#f9e2af", foreground="#181c19",
                             font=("Segoe UI", sc(10), "bold"))
-            style.configure("Highlight.TEntry", fieldbackground="#f9e2af", foreground="#1e1e2e")
+            style.configure("Highlight.TEntry", fieldbackground="#f9e2af", foreground="#181c19")
             style.configure("Hover.TLabel", background="#313244")
             style.configure("Hover.TFrame", background="#313244")
-            style.configure("Success.TEntry", fieldbackground="#a6e3a1", foreground="#1e1e2e")
-            style.configure("Success.TCombobox", fieldbackground="#a6e3a1", foreground="#1e1e2e")
+            style.configure("Success.TEntry", fieldbackground="#a6e3a1", foreground="#181c19")
+            style.configure("Success.TCombobox", fieldbackground="#a6e3a1", foreground="#181c19")
 
             self.status_badge_colors = {
-                "saved":     {"bg": "#2e3f2f", "fg": "#a6e3a1"},
-                "autosaved": {"bg": "#1e2e3e", "fg": "#89b4fa"},
-                "unsaved":   {"bg": "#3e3f2f", "fg": "#f9e2af"},
-                "error":     {"bg": "#3e1e1e", "fg": "#f38ba8"}
+                "saved":     {"bg": "#1d2e20", "fg": "#3a7d44"},
+                "autosaved": {"bg": "#1a2c3a", "fg": "#4a7b9d"},
+                "unsaved":   {"bg": "#362b16", "fg": "#d9a036"},
+                "error":     {"bg": "#381a1c", "fg": "#c93a40"}
             }
 
             self.root.configure(background=bg_color)
             if hasattr(self, "title_problem_count_label"):
-                self.title_problem_count_label.configure(bg="#181825")
+                self.title_problem_count_label.configure(bg="#212622")
             if hasattr(self, "image_canvas"):
                 self.image_canvas.configure(background=field_bg, highlightbackground=border_color)
             if hasattr(self, "problem_canvas"):
@@ -819,53 +819,53 @@ class LayoutSettingsMixin:
 
         else:
             # --- Stitch light mode palette (ui_palette/DESIGN.md) ---
-            bg_color    = "#f3f3f3"   # surface-container-low
-            fg_color    = "#1a1c1c"   # on-surface
+            bg_color    = "#f2f5f1"   # surface-container-low
+            fg_color    = "#2c302e"   # on-surface
             field_bg    = "#ffffff"   # surface-container-lowest
-            select_bg   = "#e2e2e2"   # surface-variant
-            select_fg   = "#1a1c1c"
-            border_color = "#c4c7c7"  # outline-variant
-            nav_bg      = "#f9f9f9"   # surface
-            primary_btn_bg  = "#000000"  # primary
+            select_bg   = "#e9ece5"   # surface-variant
+            select_fg   = "#2c302e"
+            border_color = "#8b948d"  # outline-variant
+            nav_bg      = "#e9ece5"   # surface
+            primary_btn_bg  = "#2c302e"  # primary
             primary_btn_fg  = "#ffffff"  # on-primary
-            statusbar_bg    = "#1c1b1b"  # primary-container (dark)
-            statusbar_fg    = "#e2e2e2"  # on-primary-container
-            reviewed_fg = "#3b6934"   # secondary (green) — reviewed rows
-            problem_fg  = "#ba1a1a"   # error (red)       — problem rows
+            statusbar_bg    = "#2c302e"  # primary-container (dark)
+            statusbar_fg    = "#e9ece5"  # on-primary-container
+            reviewed_fg = "#3a7d44"   # secondary (green) — reviewed rows
+            problem_fg  = "#c93a40"   # error (red)       — problem rows
 
             style.configure(".", background=bg_color, foreground=fg_color,
                             bordercolor=border_color, lightcolor=border_color, darkcolor=border_color)
             style.configure("TFrame", background=bg_color)
             style.configure("TLabel", background=bg_color, foreground=fg_color)
-            style.configure("LeftPane.TFrame", background="#f5f5f5")
+            style.configure("LeftPane.TFrame", background="#f2f5f1")
             style.configure("MiddlePane.TFrame", background="#ffffff")
-            style.configure("RightPane.TFrame", background="#f5f5f5")
-            style.configure("LeftPane.TLabel", background="#f5f5f5", foreground=fg_color)
+            style.configure("RightPane.TFrame", background="#f2f5f1")
+            style.configure("LeftPane.TLabel", background="#f2f5f1", foreground=fg_color)
             cb_opts = {
                 "indicatorbackground": field_bg,
                 "indicatorforeground": fg_color,
                 "upperbordercolor": border_color,
                 "lowerbordercolor": border_color
             }
-            style.configure("LeftPane.TCheckbutton", background="#f5f5f5", foreground=fg_color, **cb_opts)
+            style.configure("LeftPane.TCheckbutton", background="#f2f5f1", foreground=fg_color, **cb_opts)
             style.map("LeftPane.TCheckbutton",
-                      background=[("active", "#f5f5f5")],
+                      background=[("active", "#f2f5f1")],
                       indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
-            style.configure("RightPane.TLabel", background="#f5f5f5", foreground=fg_color)
-            style.configure("RightPane.TCheckbutton", background="#f5f5f5", foreground=fg_color, **cb_opts)
+            style.configure("RightPane.TLabel", background="#f2f5f1", foreground=fg_color)
+            style.configure("RightPane.TCheckbutton", background="#f2f5f1", foreground=fg_color, **cb_opts)
             style.map("RightPane.TCheckbutton",
-                      background=[("active", "#f5f5f5")],
+                      background=[("active", "#f2f5f1")],
                       indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
             style.configure("MiddlePane.TLabel", background="#ffffff", foreground=fg_color)
-            style.configure("TButton", background="#e8e8e8", foreground=fg_color,
-                            bordercolor=border_color, lightcolor="#e8e8e8", darkcolor="#c4c7c7",
+            style.configure("TButton", background="#e9ece5", foreground=fg_color,
+                            bordercolor=border_color, lightcolor="#e9ece5", darkcolor=border_color,
                             relief="flat", borderwidth=1)
-            style.map("TButton", background=[("active", select_bg), ("pressed", "#cccccc")])
+            style.map("TButton", background=[("active", select_bg), ("pressed", "#d1d1d1")])
 
             style.configure("Tool.TButton", font=("Segoe UI", sc(9)), padding=2,
-                            background="#e8e8e8", foreground=fg_color, bordercolor=border_color,
+                            background="#e9ece5", foreground=fg_color, bordercolor=border_color,
                             relief="flat", borderwidth=1)
-            style.map("Tool.TButton", background=[("active", select_bg), ("pressed", "#cccccc")])
+            style.map("Tool.TButton", background=[("active", select_bg), ("pressed", "#d1d1d1")])
 
             # Stitch: Nav links — flat, no border, text-only
             style.configure("Nav.TButton", font=("Segoe UI", sc(9), "bold"), padding=(8, 6),
@@ -883,7 +883,7 @@ class LayoutSettingsMixin:
             # Stitch: Section headers — bold uppercase, muted foreground, separated by bottom border
             style.configure("SectionHeader.TLabel",
                             font=("Segoe UI", sc(9), "bold"),
-                            background="#f5f5f5", foreground="#444748", padding=(0, 4))
+                            background="#f2f5f1", foreground="#444748", padding=(0, 4))
 
             # Stitch: Status bar labels — monospace, dark bar background
             style.configure("StatusBar.TLabel", font=("Courier New", sc(9)),
@@ -906,7 +906,7 @@ class LayoutSettingsMixin:
             style.configure("Treeview", background=field_bg, foreground=fg_color,
                             fieldbackground=field_bg, bordercolor=border_color, rowheight=28)
             style.map("Treeview", background=[("selected", select_bg)])
-            style.configure("Treeview.Heading", background="#e8e8e8", foreground=fg_color, bordercolor=border_color)
+            style.configure("Treeview.Heading", background="#e9ece5", foreground=fg_color, bordercolor=border_color)
             style.map("Treeview.Heading", background=[("active", select_bg)])
 
             self.object_list.tag_configure("odd",  background="#f3f3f3")
@@ -916,15 +916,15 @@ class LayoutSettingsMixin:
             self.object_list.tag_configure("problem",  foreground=problem_fg)
 
             style.configure("TNotebook", background=bg_color, bordercolor=border_color)
-            style.configure("TNotebook.Tab", background="#e8e8e8", foreground=fg_color, bordercolor=border_color)
+            style.configure("TNotebook.Tab", background="#e9ece5", foreground=fg_color, bordercolor=border_color)
             style.map("TNotebook.Tab", background=[("selected", bg_color)])
 
-            style.configure("Dirty.TButton", foreground="red", background="#e8e8e8")
+            style.configure("Dirty.TButton", foreground="#c93a40", background="#e9ece5")
             style.configure("HistoryHighlight.TLabel", background="#fff3a3", foreground="black",
                             font=("Segoe UI", sc(10), "bold"))
             style.configure("Highlight.TEntry", fieldbackground="#fff3a3", foreground="black")
-            style.configure("Hover.TLabel", background="#eeeeee")
-            style.configure("Hover.TFrame", background="#eeeeee")
+            style.configure("Hover.TLabel", background="#ffffff")
+            style.configure("Hover.TFrame", background="#ffffff")
             # Get advanced settings for highlights
             prefs = config.load_prefs() or {}
             advanced_prefs = prefs.get("advanced", {})
@@ -937,13 +937,13 @@ class LayoutSettingsMixin:
             else:
                 if "Yellow" in hl_color_name:
                     problem_bg = "#fff9c4"
-                    problem_fg = "#1a1c1c"
+                    problem_fg = "#2c302e"
                 elif "Orange" in hl_color_name:
                     problem_bg = "#ffe0b2"
-                    problem_fg = "#1a1c1c"
+                    problem_fg = "#2c302e"
                 elif "Blue" in hl_color_name:
                     problem_bg = "#e3f2fd"
-                    problem_fg = "#1a1c1c"
+                    problem_fg = "#2c302e"
                 else:  # Default (Red)
                     problem_bg = "#ffdad6"
                     problem_fg = "#ba1a1a"
@@ -952,10 +952,10 @@ class LayoutSettingsMixin:
             style.configure("Problem.TCombobox", fieldbackground=problem_bg, foreground=problem_fg)
 
             self.status_badge_colors = {
-                "saved":     {"bg": "#d4edda", "fg": "#155724"},
-                "autosaved": {"bg": "#e2f0fe", "fg": "#0a58ca"},
-                "unsaved":   {"bg": "#fff3cd", "fg": "#856404"},
-                "error":     {"bg": "#f8d7da", "fg": "#721c24"}
+                "saved":     {"bg": "#eef8f0", "fg": "#214a27"},
+                "autosaved": {"bg": "#e9f0f5", "fg": "#264154"},
+                "unsaved":   {"bg": "#fcf5e3", "fg": "#5e4311"},
+                "error":     {"bg": "#f9e6e7", "fg": "#6e1d21"}
             }
 
             self.root.configure(background=bg_color)
@@ -963,7 +963,7 @@ class LayoutSettingsMixin:
                 self.title_problem_count_label.configure(bg="#ffffff")
 
             if hasattr(self, "image_canvas"):
-                self.image_canvas.configure(background="#f5f5f5", highlightbackground="#d0d0d0")
+                self.image_canvas.configure(background="#f2f5f1", highlightbackground="#d0d0d0")
             if hasattr(self, "problem_canvas"):
                 self.problem_canvas.configure(background=bg_color, highlightbackground="#d0d0d0")
             if getattr(self, "reg_canvas", None):
@@ -1018,13 +1018,13 @@ class LayoutSettingsMixin:
                 self.dark_mode_btn.config(text="Dark Mode")
 
         # --- Update Location Widgets Theme dynamically ---
-        loc_bg = "#1e1e2e" if self.dark_mode_active else "#f5f5f5"
-        loc_horiz_bg = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
+        loc_bg = "#181c19" if self.dark_mode_active else "#f2f5f1"
+        loc_horiz_bg = "#181c19" if self.dark_mode_active else "#f3f3f3"
         lbl_fg = "#a6adc8" if self.dark_mode_active else "#444748"
-        title_fg = "#cdd6f4" if self.dark_mode_active else "#1a1c1c"
+        title_fg = "#e8ebe9" if self.dark_mode_active else "#2c302e"
         entry_bg = "#2a2b3c" if self.dark_mode_active else "#ffffff"
-        entry_fg = "#cdd6f4" if self.dark_mode_active else "#000000"
-        entry_insert = "#cdd6f4" if self.dark_mode_active else "#000000"
+        entry_fg = "#e8ebe9" if self.dark_mode_active else "#000000"
+        entry_insert = "#e8ebe9" if self.dark_mode_active else "#000000"
         border_col = "#313244" if self.dark_mode_active else "#c4c7c7"
 
         # Update vertical location background

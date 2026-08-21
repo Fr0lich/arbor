@@ -31,17 +31,17 @@ class DashboardMixin:
         FONT_MONO_SM = (mono_family, sc(8))
 
         COLORS = {
-            "bg": "#f9f9f9",
+            "bg": "#fbfaf8",
             "surface": "#ffffff",
-            "surface_dim": "#e8e8e8",
+            "surface_dim": "#e9ece5",
             "border": "#d1d1d1",
-            "text": "#1a1c1c",
+            "text": "#2c302e",
             "text_muted": "#444748",
             "primary": "#000000",
             "on_primary": "#ffffff",
-            "success": "#3b6934",
+            "success": "#3a7d44",
             "warning": "#f59e0b",
-            "error": "#ba1a1a",
+            "error": "#c93a40",
         }
 
         win.configure(bg=COLORS["bg"])

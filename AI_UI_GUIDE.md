@@ -1,27 +1,27 @@
 ---
 name: Arbor
 colors:
-  surface: '#f9f9f9'
+  surface: '#fbfaf8'
   surface-dim: '#dadada'
-  surface-bright: '#f9f9f9'
+  surface-bright: '#fbfaf8'
   surface-container-lowest: '#ffffff'
-  surface-container-low: '#f3f3f3'
-  surface-container: '#eeeeee'
-  surface-container-high: '#e8e8e8'
-  surface-container-highest: '#e2e2e2'
-  on-surface: '#1a1c1c'
-  on-surface-variant: '#4c4546'
-  inverse-surface: '#2f3131'
-  inverse-on-surface: '#f1f1f1'
-  outline: '#7e7576'
-  outline-variant: '#cfc4c5'
+  surface-container-low: '#f2f5f1'
+  surface-container: '#e9ece5'
+  surface-container-high: '#e9ece5'
+  surface-container-highest: '#e9ece5'
+  on-surface: '#2c302e'
+  on-surface-variant: '#757d77'
+  inverse-surface: '#181c19'
+  inverse-on-surface: '#e8ebe9'
+  outline: '#757d77'
+  outline-variant: '#8b948d'
   surface-tint: '#5e5e5e'
-  primary: '#000000'
+  primary: '#2c302e'
   on-primary: '#ffffff'
   primary-container: '#1b1b1b'
   on-primary-container: '#848484'
   inverse-primary: '#c6c6c6'
-  secondary: '#2e6b30'
+  secondary: '#3a7d44'
   on-secondary: '#ffffff'
   secondary-container: '#adf0a6'
   on-secondary-container: '#326f34'
@@ -45,14 +45,14 @@ colors:
   tertiary-fixed-dim: '#c9c6c5'
   on-tertiary-fixed: '#1c1b1b'
   on-tertiary-fixed-variant: '#484646'
-  background: '#f9f9f9'
-  on-background: '#1a1c1c'
+  background: '#fbfaf8'
+  on-background: '#2c302e'
   surface-variant: '#e2e2e2'
-  status-red: '#C62828'
-  status-green: '#2E7D32'
-  status-yellow: '#FBC02D'
-  status-blue: '#0284C7'
-  search-orange: '#D9480F'
+  status-red: '#c93a40'
+  status-green: '#3a7d44'
+  status-yellow: '#d9a036'
+  status-blue: '#4a7b9d'
+  search-orange: '#d95c14'
   border-hairline: '#C4C7C7'
   surface-header: '#F3F3F3'
 typography:
@@ -132,13 +132,13 @@ Arbor is frequently utilized in professional environments on **laptops and small
 Arbor's aesthetic is **Modern, Simple, Clean, and Professional**. Use the following tokens explicitly when writing code or configuring styles.
 
 ### A. Color Palette
-- **Primary & Neutral Canvas:** Core commands and structural headers use solid Black (`#000000`). The general workspace uses a soft, non-glare off-white (`#f9f9f9`) to reduce fatigue, while the active workspace cards use pure White (`#ffffff`) to stand out.
+- **Primary & Neutral Canvas:** Core commands and structural headers use Charcoal (`#2c302e`). The general workspace uses Warm Alabaster (`#fbfaf8`) to reduce fatigue, while the active workspace cards use pure White (`#ffffff`) to stand out.
 - **Semantic Indicators (Validation & Alerts):**
-  - **Red (`#C62828`):** Critical errors, missing mandatory values, or flagged problems.
-  - **Green (`#2E7D32`):** Verified data, completed audits, or successful reviewed states.
-  - **Yellow (`#FBC02D`):** Warning states, pending discrepancies, or unsaved drafts.
-  - **Blue (`#0284C7`):** Versioning conflicts, historical discrepancies, or external database queries.
-- **Accents:** Secondary branding utilizes a deep Botanical Green (`#2e6b30`), and a sharp Search Orange (`#D9480F`) is reserved exclusively for query highlighters and active search states.
+  - **Brick Red (`#c93a40`):** Critical errors, missing mandatory values, or flagged problems.
+  - **Vibrant Fern (`#3a7d44`):** Verified data, completed audits, or successful reviewed states.
+  - **Mustard Yellow (`#d9a036`):** Warning states, pending discrepancies, or unsaved drafts.
+  - **Slate Blue (`#4a7b9d`):** Versioning conflicts, historical discrepancies, or external database queries.
+- **Accents:** Secondary branding utilizes a Vibrant Fern (`#3a7d44`), and an Ember Orange (`#d95c14`) is reserved exclusively for query highlighters and active search states.
 
 ### B. Typography
 Arbor utilizes a **tri-font strategy** to clearly distinguish between literary nomenclature, systematic data, and technical metadata:

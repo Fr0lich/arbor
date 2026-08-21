@@ -210,18 +210,18 @@ class StartupDialog:
     # ------------------------------------------------------------------
     # Stitch palette tokens (raw tk — not ttk.Style dependent)
     # ------------------------------------------------------------------
-    C_BG          = "#f9f9f9"   # surface / window background
+    C_BG          = "#fbfaf8"   # surface / window background
     C_CARD        = "#ffffff"   # surface-container-lowest
-    C_HEADER_BG   = "#f9f9f9"   # surface
-    C_FOOTER_BG   = "#f3f3f3"   # surface-container-low
-    C_SURFACE_LOW = "#f3f3f3"   # section header rows
+    C_HEADER_BG   = "#fbfaf8"   # surface
+    C_FOOTER_BG   = "#f2f5f1"   # surface-container-low
+    C_SURFACE_LOW = "#f2f5f1"   # section header rows
     C_OUTLINE     = "#747878"   # outline — field borders, card border
     C_OUTLINE_VAR = "#c4c7c7"   # outline-variant — separator lines
-    C_ON_SURFACE  = "#1a1c1c"   # primary text
+    C_ON_SURFACE  = "#2c302e"   # primary text
     C_ON_VARIANT  = "#444748"   # secondary text / labels
     C_PRIMARY     = "#000000"   # black — title, active toggle, LAUNCH bg
     C_ON_PRIMARY  = "#ffffff"   # white — LAUNCH text
-    C_HOVER       = "#e2e2e2"   # surface-container-highest — hover state
+    C_HOVER       = "#e9ece5"   # surface-container-highest — hover state
 
     # ------------------------------------------------------------------
 
@@ -495,10 +495,10 @@ class StartupDialog:
         badge_color = ""
         if status_type == "required":
             badge_text = " REQUIRED "
-            badge_color = "#ba1a1a" # Red
+            badge_color = "#c93a40" # Red
         elif status_type == "recommended":
             badge_text = " RECOMMENDED "
-            badge_color = "#3b6934" # Green
+            badge_color = "#3a7d44" # Green
         elif status_type == "optional":
             badge_text = " OPTIONAL "
             badge_color = "#747878" # Gray
@@ -960,11 +960,11 @@ class StartupDialog:
         if valid:
             self.continue_btn.config(bg=self.C_PRIMARY)
             if hasattr(self, "ready_status_label"):
-                self.ready_status_label.config(text="Ready to launch!", fg="#3b6934")
+                self.ready_status_label.config(text="Ready to launch!", fg="#3a7d44")
         else:
             self.continue_btn.config(bg="#888888")
             if hasattr(self, "ready_status_label"):
-                self.ready_status_label.config(text="Please select a database file.", fg="#ba1a1a")
+                self.ready_status_label.config(text="Please select a database file.", fg="#c93a40")
 
     def _show_progress(self, show=True):
         if show:
@@ -1532,16 +1532,16 @@ class LoadingWindow:
         is_dark = getattr(self.ui, "dark_mode_active", False)
 
         if is_dark:
-            bg_color = "#1e1e2e"
-            fg_title = "#cdd6f4"
+            bg_color = "#181c19"
+            fg_title = "#e8ebe9"
             fg_status = "#a6adc8"
-            bar_trough = "#313244"
+            bar_trough = "#141715"
             bar_color = "#cba6f7"
         else:
-            bg_color = "#f9f9f9"
-            fg_title = "#1a1c1c"
+            bg_color = "#fbfaf8"
+            fg_title = "#2c302e"
             fg_status = "#444748"
-            bar_trough = "#e2e2e2"
+            bar_trough = "#e9ece5"
             bar_color = "#000000"
 
         self.win.configure(bg=bg_color)

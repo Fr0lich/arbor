@@ -127,19 +127,19 @@ FONT_MONO_FAMILY: str = "JetBrains Mono"
 # Modify these values to customize colors, bounds, and animation parameters.
 # ==============================================================================
 RAIL_THEME = {
-    "rail_bg": "#146143",
-    "rail_border": "#d1d1d1",
+    "rail_bg": "#e9ece5",
+    "rail_border": "#c4c7c7",
     "rail_width": 40,
-    "icon_hover_bg": "#e8e8e8",
-    "indicator_active_bg": "#C62828",
+    "icon_hover_bg": "#ffffff",
+    "indicator_active_bg": "#c93a40",
 }
 
 DRAWER_THEME = {
-    "drawer_bg": "#ffffff",
+    "drawer_bg": "#f2f5f1",
     "drawer_border": "#c4c7c7",
     "drawer_width": 300,
-    "header_bg": "#f3f3f3",
-    "card_hover_bg": "#eeeeee",
+    "header_bg": "#e9ece5",
+    "card_hover_bg": "#ffffff",
     "enable_animation": True,
     "anim_duration_ms": 140,
     "anim_step_interval_ms": 8,
@@ -475,8 +475,8 @@ BUILTIN_TEMPLATES = {
 
 # Banner theme configurations
 BANNER_THEME = {
-    "success": {"bg": "#dcfce7", "border": "#22c55e", "fg": "#14532d", "icon": "✔"},
-    "warning": {"bg": "#fef9c3", "border": "#eab308", "fg": "#713f12", "icon": "⚠"},
-    "error":   {"bg": "#fee2e2", "border": "#ef4444", "fg": "#7f1d1d", "icon": "✘"},
-    "info":    {"bg": "#dbeafe", "border": "#3b82f6", "fg": "#1e3a8a", "icon": "ℹ"},
+    "success": {"bg": "#eef8f0", "border": "#3a7d44", "fg": "#214a27", "icon": "✔"},
+    "warning": {"bg": "#fcf5e3", "border": "#d9a036", "fg": "#5e4311", "icon": "⚠"},
+    "error":   {"bg": "#f9e6e7", "border": "#c93a40", "fg": "#6e1d21", "icon": "✘"},
+    "info":    {"bg": "#e9f0f5", "border": "#4a7b9d", "fg": "#264154", "icon": "ℹ"},
 }

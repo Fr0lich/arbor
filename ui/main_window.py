@@ -235,7 +235,7 @@ class ToolTipManager:
         self.tooltip.wm_geometry(f"+{x}+{y}")
 
         from config import sc
-        bg_col = "#1e1e2d" if is_dark else "#f3f3f3"
+        bg_col = "#1e1e2d" if is_dark else "#f2f5f1"
         fg_col = "#ffffff" if is_dark else "#000000"
         border_col = "#444748" if is_dark else "#cccccc"
 
@@ -742,11 +742,11 @@ class ObjectProgramUI(
         # Determine theme colors
         lbl_fg = "#a6adc8" if is_dark else "#444748"
         entry_bg = "#2a2b3c" if is_dark else "#ffffff"
-        entry_fg = "#cdd6f4" if is_dark else "#000000"
-        entry_insert = "#cdd6f4" if is_dark else "#000000"
-        cb_fg = "#cdd6f4" if is_dark else "#000000"
-        cb_active_bg = "#1e1e2e" if is_dark else bg_col
-        cb_active_fg = "#cdd6f4" if is_dark else "#000000"
+        entry_fg = "#e8ebe9" if is_dark else "#000000"
+        entry_insert = "#e8ebe9" if is_dark else "#000000"
+        cb_fg = "#e8ebe9" if is_dark else "#000000"
+        cb_active_bg = "#181c19" if is_dark else bg_col
+        cb_active_fg = "#e8ebe9" if is_dark else "#000000"
         
         container = tk.Frame(parent, bg=bg_col)
         
@@ -816,7 +816,7 @@ class ObjectProgramUI(
                 def make_focus_handlers(w, fl, ec, default_bg):
                     def on_focus_in(e):
                         is_dark = self.dark_mode_active if hasattr(self, "dark_mode_active") else False
-                        fl.configure(bg="#a6e3a1" if is_dark else "#3b6934")
+                        fl.configure(bg="#a6e3a1" if is_dark else "#3a7d44")
                     def on_focus_out(e):
                         fl.configure(bg=default_bg)
                     w.bind("<FocusIn>", on_focus_in, add="+")
@@ -1011,13 +1011,13 @@ class ObjectProgramUI(
         card_bg = "#1e1e2d" if is_dark else "#ffffff"
         header_bg = "#252538" if is_dark else "#f5f5f5"
         border_color = "#313244" if is_dark else "#e2e2e2"
-        fg_color = "#cdd6f4" if is_dark else "#1a1c1c"
+        fg_color = "#e8ebe9" if is_dark else "#2c302e"
         
         # Create a single tab container for Specimen Audit
         tab_container = ttk.Frame(self.reg_notebook)
         
         # Scrollable canvas inside the tab container
-        tab_canvas = tk.Canvas(tab_container, highlightthickness=0, bg="#1e1e2d" if is_dark else "#f9f9f9")
+        tab_canvas = tk.Canvas(tab_container, highlightthickness=0, bg="#1e1e2d" if is_dark else "#fbfaf8")
         tab_scroll = ttk.Scrollbar(tab_container, orient="vertical", command=tab_canvas.yview)
         tab_frame = ttk.Frame(tab_canvas, style="RightPane.TFrame")
 
@@ -1162,10 +1162,10 @@ class ObjectProgramUI(
                         frame, height=3,
                         relief="flat", bd=0,
                         highlightthickness=1, highlightbackground=border_color,
-                        highlightcolor="#000000" if not is_dark else "#cdd6f4",
-                        insertbackground="#000000" if not is_dark else "#cdd6f4",
-                        bg="#ffffff" if not is_dark else "#181825",
-                        fg="#1a1c1c" if not is_dark else "#cdd6f4",
+                        highlightcolor="#000000" if not is_dark else "#e8ebe9",
+                        insertbackground="#000000" if not is_dark else "#e8ebe9",
+                        bg="#ffffff" if not is_dark else "#212622",
+                        fg="#2c302e" if not is_dark else "#e8ebe9",
                         font=("Hanken Grotesk", sc(10)),
                         undo=True, maxundo=-1, autoseparators=True
                     )
@@ -1179,10 +1179,10 @@ class ObjectProgramUI(
                         entry_container, textvariable=var,
                         relief="flat", bd=0,
                         highlightthickness=1, highlightbackground=border_color,
-                        highlightcolor="#ffffff" if is_dark else "#f3f3f3",
-                        insertbackground="#000000" if not is_dark else "#cdd6f4",
-                        bg="#ffffff" if not is_dark else "#181825",
-                        fg="#1a1c1c" if not is_dark else "#cdd6f4",
+                        highlightcolor="#ffffff" if is_dark else "#f2f5f1",
+                        insertbackground="#000000" if not is_dark else "#e8ebe9",
+                        bg="#ffffff" if not is_dark else "#212622",
+                        fg="#2c302e" if not is_dark else "#e8ebe9",
                         font=("Hanken Grotesk", sc(10))
                     )
                     widget.pack(fill="x", expand=True, ipady=sc(3))
@@ -1193,7 +1193,7 @@ class ObjectProgramUI(
                     def make_focus_handlers(w, fl, ec, default_bg):
                         def on_focus_in(e):
                             is_dark = getattr(self, "dark_mode_active", False)
-                            fl.configure(bg="#a6e3a1" if is_dark else "#3b6934")
+                            fl.configure(bg="#a6e3a1" if is_dark else "#3a7d44")
                         def on_focus_out(e):
                             fl.configure(bg=default_bg)
                         w.bind("<FocusIn>", on_focus_in, add="+")
@@ -1836,7 +1836,7 @@ class ObjectProgramUI(
         
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2d" if is_dark else "#ffffff"
-        fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
+        fg_col = "#e8ebe9" if is_dark else "#2c302e"
         border_col = "#313244" if is_dark else "#c4c7c7"
         hover_col = "#313244" if is_dark else "#e2e2e2"
         
@@ -2321,7 +2321,7 @@ class ObjectProgramUI(
         w_height = sc(320)
         utils.center_and_fit_toplevel(win, w_width, w_height)
         
-        bg_color = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
+        bg_color = "#181c19" if self.dark_mode_active else "#f2f5f1"
         win.configure(background=bg_color)
         win.bind("<Escape>", lambda e: win.destroy())
         
@@ -2334,7 +2334,7 @@ class ObjectProgramUI(
             frame,
             text="HELP CENTER",
             font=("Segoe UI", sc(12), "bold"),
-            foreground="#1a1c1c" if not self.dark_mode_active else "#cdd6f4"
+            foreground="#2c302e" if not self.dark_mode_active else "#e8ebe9"
         )
         lbl_header.pack(anchor="w", pady=(0, 10))
         
@@ -2994,7 +2994,7 @@ class ObjectProgramUI(
             # Pack content frame directly into left_frame
             self.left_content_frame.pack(in_=self.left_frame, side="left", fill="both", expand=True)
             if hasattr(self, "pin_btn"):
-                self.pin_btn.config(bg=config.RAIL_THEME.get("icon_hover_bg", "#e8e8e8"))
+                self.pin_btn.config(bg=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"))
             
 
 
@@ -3010,7 +3010,7 @@ class ObjectProgramUI(
             # Unpinned mode: forget content frame from left_frame layout
             self.left_content_frame.pack_forget()
             if hasattr(self, "pin_btn"):
-                self.pin_btn.config(bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"))
+                self.pin_btn.config(bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"))
             
 
 
@@ -3436,8 +3436,8 @@ class ObjectProgramUI(
         # Replaces the old 2-row raw-grid toolbar.
         # Structure: [TITLE] [FILE|DATA|PROBLEMS|CREATE|HISTORY] ... [STATUS]
         # ----------------------------------------------------------------
-        nav_bar_bg = "#f9f9f9"
-        nav_border = "#c4c7c7"
+        nav_bar_bg = "#e9ece5"
+        nav_border = "#8b948d"
 
         nav_bar = tk.Frame(self.root, bg=nav_bar_bg, height=48,
                            highlightthickness=1, highlightbackground=nav_border,
@@ -3568,7 +3568,7 @@ class ObjectProgramUI(
         status_dot_frame.pack(anchor="center", side="right")
         self._online_dot = tk.Canvas(status_dot_frame, width=8, height=8,
                                      highlightthickness=0, bg=nav_bar_bg)
-        self._online_dot.create_oval(1, 1, 7, 7, fill="#3b6934", outline="")
+        self._online_dot.create_oval(1, 1, 7, 7, fill="#3a7d44", outline="")
         self._online_dot.pack(side="left", padx=(0, 4))
         tk.Label(status_dot_frame, text="STATUS: ONLINE", bg=nav_bar_bg,
                  fg="#444748", font=("Courier New", sc(9))).pack(side="left")
@@ -3638,7 +3638,7 @@ class ObjectProgramUI(
         # Persistent Action Rail frame on the left edge
         rail = tk.Frame(
             left,
-            bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"),
+            bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
             highlightthickness=1,
             highlightbackground=config.RAIL_THEME.get("rail_border", "#d1d1d1"),
             width=sc(config.RAIL_THEME.get("rail_width", 40))
@@ -3651,9 +3651,9 @@ class ObjectProgramUI(
         self.pin_btn = tk.Button(
             rail, text="📌",
             font=("Segoe UI Symbol", sc(11)),
-            bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"),
+            bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
             fg=config.RAIL_THEME.get("icon_active_fg", "#000000"),
-            activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e8e8e8"),
+            activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"),
             bd=0, relief="flat", cursor="hand2",
             command=self.toggle_left_pin
         )
@@ -3663,9 +3663,9 @@ class ObjectProgramUI(
         self.drawer_btn = tk.Button(
             rail, text="🔍",
             font=("Segoe UI Symbol", sc(11)),
-            bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"),
+            bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
             fg=config.RAIL_THEME.get("icon_active_fg", "#000000"),
-            activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e8e8e8"),
+            activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"),
             bd=0, relief="flat", cursor="hand2",
             command=self.toggle_floating_drawer
         )
@@ -3675,7 +3675,7 @@ class ObjectProgramUI(
         self.filter_indicator = tk.Label(
             rail, text="⚡",
             font=("Segoe UI Symbol", sc(10), "bold"),
-            bg=config.RAIL_THEME.get("rail_bg", "#f9f9f9"),
+            bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
             fg=config.RAIL_THEME.get("indicator_active_bg", "#C62828"),
             bd=0
         )
@@ -3781,7 +3781,7 @@ class ObjectProgramUI(
             search_container,
             textvariable=self._inline_search_var,
             font=("Hanken Grotesk", sc(10)),
-            bg="#ffffff", fg="#1a1c1c",
+            bg="#ffffff", fg="#2c302e",
             relief="flat", bd=0,
             insertbackground="#000000"
         )
@@ -3814,7 +3814,7 @@ class ObjectProgramUI(
             text="✕",
             font=("Hanken Grotesk", sc(9.5), "bold"),
             bg="#ffffff", fg="gray",
-            activebackground="#ffffff", activeforeground="#ba1a1a",
+            activebackground="#ffffff", activeforeground="#c93a40",
             relief="flat", bd=0, cursor="hand2",
             command=self._clear_inline_search
         )
@@ -3904,7 +3904,7 @@ class ObjectProgramUI(
         self.title_problem_count_label = tk.Label(
             center_header,
             font=("Segoe UI", sc(12), "bold"),
-            fg="#ba1a1a",
+            fg="#c93a40",
             bg="#ffffff"
         )
         self.title_problem_count_label.pack(side="left", anchor="center", padx=(6, 0), pady=6)
@@ -3972,7 +3972,7 @@ class ObjectProgramUI(
         self.images_missing_label = ttk.Label(
             header,
             text="",
-            foreground="#ba1a1a",
+            foreground="#c93a40",
             font=("Segoe UI", sc(9), "bold"),
             style="MiddlePane.TLabel"
         )
@@ -4072,7 +4072,7 @@ class ObjectProgramUI(
             reg_header,
             text="History",
             font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c",
+            bg="#ffffff", fg="#2c302e",
             relief="solid", bd=1, cursor="hand2",
             padx=sc(8), pady=sc(2),
             command=self.open_historical_suggestions
@@ -4154,8 +4154,8 @@ class ObjectProgramUI(
 
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2d" if is_dark else "#ffffff"
-        fg_col = "#cdd6f4" if is_dark else "#1a1c1c"
-        bg_pane = "#181825" if is_dark else "#f9f9f9"
+        fg_col = "#e8ebe9" if is_dark else "#2c302e"
+        bg_pane = "#212622" if is_dark else "#fbfaf8"
 
         # Grid frame for checkboxes (prevents horizontal overflow)
         grid_frame = ttk.Frame(action_row1b, style="RightPane.TFrame")
@@ -4442,7 +4442,7 @@ class ObjectProgramUI(
         win.resizable(True, True)
         win.transient(self.root)
 
-        bg_color = "#1e1e2e" if self.dark_mode_active else "#f3f3f3"
+        bg_color = "#181c19" if self.dark_mode_active else "#f2f5f1"
         win.configure(background=bg_color)
 
         import utils
@@ -4458,7 +4458,7 @@ class ObjectProgramUI(
             frame,
             text="DATA OPTIONS",
             font=("Segoe UI", sc(12), "bold"),
-            foreground="#1a1c1c" if not self.dark_mode_active else "#cdd6f4"
+            foreground="#2c302e" if not self.dark_mode_active else "#e8ebe9"
         )
         lbl_header.pack(anchor="w", pady=(0, 10))
 
@@ -4537,10 +4537,10 @@ class ObjectProgramUI(
         utils.center_and_fit_toplevel(win, 800, 650)
 
         is_dark = getattr(self, "dark_mode_active", False)
-        bg_color = "#1e1e2e" if is_dark else "#f3f3f3"
-        fg_title = "#cdd6f4" if is_dark else "#1a1c1c"
+        bg_color = "#181c19" if is_dark else "#f2f5f1"
+        fg_title = "#e8ebe9" if is_dark else "#2c302e"
         fg_label = "#a6adc8" if is_dark else "#444748"
-        fg_nomatch = "#f38ba8" if is_dark else "#d32f2f"
+        fg_nomatch = "#c93a40" if is_dark else "#c93a40"
         fg_cat = "#89b4fa" if is_dark else "#1976d2"
         bg_key = "#11111b" if is_dark else "#e0e0e0"
         fg_key = "#f9e2af" if is_dark else "#000000"
@@ -6291,7 +6291,7 @@ class ObjectProgramUI(
             frame,
             text="EDIT LOCATION",
             font=("Segoe UI", sc(11), "bold"),
-            fg="#1a1c1c"
+            fg="#2c302e"
         ).pack(anchor="w", pady=(0, 15))
 
         # Input Grid container
@@ -6356,7 +6356,7 @@ class ObjectProgramUI(
         # DONE Button (Primary)
         done_btn = tk.Button(
             footer, text="DONE",
-            bg="#1a1c1c", fg="#ffffff",
+            bg="#2c302e", fg="#ffffff",
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0, cursor="hand2",
             padx=16, pady=6,
@@ -6364,12 +6364,12 @@ class ObjectProgramUI(
         )
         done_btn.pack(side="right")
         done_btn.bind("<Enter>", lambda e: done_btn.config(bg="#333333"))
-        done_btn.bind("<Leave>", lambda e: done_btn.config(bg="#1a1c1c"))
+        done_btn.bind("<Leave>", lambda e: done_btn.config(bg="#2c302e"))
 
         # CANCEL Button (Secondary outline style)
         cancel_btn = tk.Button(
             footer, text="CANCEL",
-            bg=win.cget("bg"), fg="#1a1c1c",
+            bg=win.cget("bg"), fg="#2c302e",
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0, cursor="hand2",
             padx=12, pady=5,
@@ -6436,14 +6436,14 @@ class ObjectProgramUI(
             row_frame.pack(fill="x", pady=4, padx=6)
             
             lbl_icon = tk.Label(
-                row_frame, text="✔", fg="#3b6934", bg=self.root.cget("bg"),
+                row_frame, text="✔", fg="#3a7d44", bg=self.root.cget("bg"),
                 font=("Segoe UI", sc(11), "bold")
             )
             lbl_icon.pack(side="left", padx=(0, 6))
             
             lbl_text = ttk.Label(
                 row_frame, text="No active problems flagged.",
-                foreground="#3b6934",
+                foreground="#3a7d44",
                 font=("Segoe UI", sc(9.5), "bold")
             )
             lbl_text.pack(side="left")
@@ -6453,14 +6453,14 @@ class ObjectProgramUI(
                 row_frame.pack(fill="x", pady=2, padx=4)
                 
                 lbl_icon = tk.Label(
-                    row_frame, text="⚠", fg="#ba1a1a", bg=self.root.cget("bg"),
+                    row_frame, text="⚠", fg="#c93a40", bg=self.root.cget("bg"),
                     font=("Segoe UI", sc(10), "bold")
                 )
                 lbl_icon.pack(side="left", padx=(0, 6))
                 
                 lbl_text = ttk.Label(
                     row_frame, text=prob_name.replace("_", " "),
-                    foreground="#ba1a1a",
+                    foreground="#c93a40",
                     font=("Segoe UI", sc(9.5), "bold")
                 )
                 lbl_text.pack(side="left")
@@ -6516,7 +6516,7 @@ class ObjectProgramUI(
             header_frame,
             text="⚠ EDIT PROBLEM FLAGS",
             font=("Segoe UI", sc(11), "bold"),
-            fg="#ba1a1a"
+            fg="#c93a40"
         ).pack(side="left")
 
         # Checkbutton Grid container
@@ -6565,7 +6565,7 @@ class ObjectProgramUI(
         lbl = ttk.Label(
             frame,
             textvariable=self.images_missing_var,
-            foreground="#ba1a1a",
+            foreground="#c93a40",
             font=("Segoe UI", sc(9.5), "bold")
         )
         lbl.pack(anchor="w", pady=(0, 10))
@@ -6581,7 +6581,7 @@ class ObjectProgramUI(
         # DONE Button (Primary)
         done_btn = tk.Button(
             footer, text="DONE",
-            bg="#1a1c1c", fg="#ffffff",
+            bg="#2c302e", fg="#ffffff",
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0, cursor="hand2",
             padx=16, pady=6,
@@ -6589,12 +6589,12 @@ class ObjectProgramUI(
         )
         done_btn.pack(side="right")
         done_btn.bind("<Enter>", lambda e: done_btn.config(bg="#333333"))
-        done_btn.bind("<Leave>", lambda e: done_btn.config(bg="#1a1c1c"))
+        done_btn.bind("<Leave>", lambda e: done_btn.config(bg="#2c302e"))
 
         # CANCEL Button (Secondary outline)
         cancel_btn = tk.Button(
             footer, text="CANCEL",
-            bg=win.cget("bg"), fg="#1a1c1c",
+            bg=win.cget("bg"), fg="#2c302e",
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0, cursor="hand2",
             padx=12, pady=5,
@@ -6627,18 +6627,18 @@ class ObjectProgramUI(
         import utils
         
         COLORS = {
-            "surface": "#f9f9f9",
+            "surface": "#fbfaf8",
             "surface_dim": "#dadada",
-            "surface_container_low": "#f3f3f3",
+            "surface_container_low": "#f2f5f1",
             "surface_container_highest": "#e2e2e2",
-            "on_surface": "#1a1c1c",
+            "on_surface": "#2c302e",
             "on_surface_variant": "#444748",
             "outline": "#747878",
             "outline_variant": "#c4c7c7",
             "primary": "#000000",
             "on_primary": "#ffffff",
-            "secondary": "#3b6934",
-            "error": "#ba1a1a",
+            "secondary": "#3a7d44",
+            "error": "#c93a40",
             "botanical_green": "#3e7b3e",
             "search_orange": "#d9480f",
             "surface_tint": "#5f5e5e"
@@ -8246,7 +8246,7 @@ class ObjectProgramUI(
             return
 
         is_dark = getattr(self, "dark_mode_active", self.app.config.get("theme", "dark") == "dark")
-        norm_bg = "#181825" if is_dark else "#ffffff"
+        norm_bg = "#212622" if is_dark else "#ffffff"
         warn_bg = "#5c4d00" if is_dark else "#fff3cd"
         err_bg = "#5c1e1e" if is_dark else "#f8d7da"
         unknown_bg = "#5c461a" if is_dark else "#ffe4b3"
@@ -8600,12 +8600,12 @@ class ObjectProgramUI(
             self.reviewed_button.config(
                 text="✓ Mark as Reviewed",
                 state="disabled",
-                activebackground="#f3f3f3",
+                activebackground="#f2f5f1",
                 activeforeground="gray",
                 highlightbackground="gray",
                 padx=padx_val, pady=pady_val
             )
-            self._animate_reviewed_button("#f3f3f3", "gray")
+            self._animate_reviewed_button("#f2f5f1", "gray")
             return
 
         self.reviewed_button.config(state="normal")
@@ -8634,21 +8634,21 @@ class ObjectProgramUI(
             btn_text = f"✓ REVIEWED – {time_str}" if time_str else "✓ REVIEWED"
             self.reviewed_button.config(
                 text=btn_text,
-                activebackground="#f3f3f3",
-                activeforeground="#3b6934",
-                highlightbackground="#3b6934",
+                activebackground="#f2f5f1",
+                activeforeground="#3a7d44",
+                highlightbackground="#3a7d44",
                 padx=padx_val, pady=pady_val
             )
-            self._animate_reviewed_button("#ffffff", "#3b6934")
+            self._animate_reviewed_button("#ffffff", "#3a7d44")
         else:
             self.reviewed_button.config(
                 text="✓ MARK AS REVIEWED",
                 activebackground="#2e5228",
                 activeforeground="#ffffff",
-                highlightbackground="#3b6934",
+                highlightbackground="#3a7d44",
                 padx=padx_val, pady=pady_val
             )
-            self._animate_reviewed_button("#3b6934", "#ffffff")
+            self._animate_reviewed_button("#3a7d44", "#ffffff")
 
     def _on_reviewed_btn_enter(self, event):
         if not self.app.current_object_id:
@@ -8660,7 +8660,7 @@ class ObjectProgramUI(
                 pass
             self._btn_anim_id = None
         if bool(self.reviewed_var.get()):
-            self.reviewed_button.config(bg="#f3f3f3")
+            self.reviewed_button.config(bg="#f2f5f1")
         else:
             self.reviewed_button.config(bg="#2e5228")
 
@@ -8676,7 +8676,7 @@ class ObjectProgramUI(
         if bool(self.reviewed_var.get()):
             self.reviewed_button.config(bg="#ffffff")
         else:
-            self.reviewed_button.config(bg="#3b6934")
+            self.reviewed_button.config(bg="#3a7d44")
 
     def _on_reviewed_btn_press(self, event):
         if not self.app.current_object_id:
@@ -8708,14 +8708,14 @@ class ObjectProgramUI(
         inside = (0 <= x <= w) and (0 <= y <= h)
         if inside:
             if bool(self.reviewed_var.get()):
-                self.reviewed_button.config(bg="#f3f3f3")
+                self.reviewed_button.config(bg="#f2f5f1")
             else:
                 self.reviewed_button.config(bg="#2e5228")
         else:
             if bool(self.reviewed_var.get()):
                 self.reviewed_button.config(bg="#ffffff")
             else:
-                self.reviewed_button.config(bg="#3b6934")
+                self.reviewed_button.config(bg="#3a7d44")
 
     def mark_reviewed_and_next(self, event=None):
         """Mark as reviewed and automatically advance if autoAdvanceOnReview is enabled."""
@@ -8782,9 +8782,9 @@ class ObjectProgramUI(
         
         # Determine colors
         if not enable_hl:
-            err_fg = "#cdd6f4" if is_dark else "#1a1c1c"
-            bar_active = "#1e1e2e" if is_dark else "#f3f3f3"
-            tint = "#1e1e2e" if is_dark else "#ffffff"
+            err_fg = "#e8ebe9" if is_dark else "#2c302e"
+            bar_active = "#181c19" if is_dark else "#f2f5f1"
+            tint = "#181c19" if is_dark else "#ffffff"
         else:
             if "Yellow" in hl_color_name:
                 err_fg = "#f9e2af" if is_dark else "#b28000"
@@ -8799,12 +8799,12 @@ class ObjectProgramUI(
                 bar_active = "#89b4fa" if is_dark else "#0066b2"
                 tint = "#203a5f" if is_dark else "#e3f2fd"
             else:  # Default (Red)
-                err_fg = "#f38ba8" if is_dark else "#ba1a1a"
-                bar_active = "#ba1a1a" if not is_dark else "#f38ba8"
+                err_fg = "#c93a40" if is_dark else "#c93a40"
+                bar_active = "#c93a40" if not is_dark else "#c93a40"
                 tint = "#5c1e1e" if is_dark else "#ffdad6"
 
-        norm_fg     = "#cdd6f4" if is_dark else "#1a1c1c"
-        bar_normal  = "#1e1e2e" if is_dark else "#f3f3f3"  # matches ttk.Frame bg — invisible
+        norm_fg     = "#e8ebe9" if is_dark else "#2c302e"
+        bar_normal  = "#181c19" if is_dark else "#f2f5f1"  # matches ttk.Frame bg — invisible
 
         # 1. Border bar
         bar = self.prob_border_bars.get(field_name)
@@ -9052,9 +9052,9 @@ class ObjectProgramUI(
         win.grab_set()
         win.bind("<Escape>", lambda e: win.destroy())
         
-        bg_color = "#1e1e2e" if self.dark_mode_active else "#f0f0f0"
-        fg_color = "#cdd6f4" if self.dark_mode_active else "black"
-        field_bg = "#181825" if self.dark_mode_active else "white"
+        bg_color = "#181c19" if self.dark_mode_active else "#f0f0f0"
+        fg_color = "#e8ebe9" if self.dark_mode_active else "black"
+        field_bg = "#212622" if self.dark_mode_active else "white"
         border_color = "#313244" if self.dark_mode_active else "#d0d0d0"
         
         win.configure(background=bg_color)
