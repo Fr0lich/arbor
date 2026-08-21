@@ -501,6 +501,7 @@ class ObjectProgramUI(
         self.root.bind("<Control-f>", self.focus_search)
         self.root.bind("<Control-q>", self.toggle_focus_mode_shortcut)
         self.root.bind("<Control-h>", self.open_history_shortcut)
+        self.root.bind("<Control-t>", self.verify_taxonomy_gbif)
 
         self.root.bind("<Control-e>", self._focus_first_reg)
         self.root.bind("<Control-Prior>", lambda e: self._switch_reg_tab(-1))
@@ -3874,6 +3875,8 @@ class ObjectProgramUI(
             self.context_menu.add_command(label="Bulk Edit Selected", command=self.open_bulk_edit_window)
         self.context_menu.add_command(label="Duplicate Object", command=lambda: self._shortcut_duplicate_object(None))
         self.context_menu.add_command(label="Delete Object", command=self.delete_current_object)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Verify Taxonomy via GBIF", command=self.verify_taxonomy_gbif)
 
         self.bulk_edit_btn = ttk.Button(list_container, text="Bulk Edit Selected", state="disabled", command=self.open_bulk_edit_window)
         self.toggle_bulk_edit_btn()
@@ -3977,6 +3980,14 @@ class ObjectProgramUI(
             style="MiddlePane.TLabel"
         )
         self.images_missing_label.pack(side="right", padx=(0, 8))
+        self.gbif_btn = ttk.Button(
+            header,
+            text="Verify Taxonomy (GBIF)",
+            style="Nav.TButton",
+            command=self.verify_taxonomy_gbif
+        )
+        self.gbif_btn.pack(side="right", padx=(0, 4))
+
 
         # Image Control Overlay Toolbar
         from ui.image_toolbar import create_image_toolbar
@@ -4640,6 +4651,7 @@ class ObjectProgramUI(
             ("OBJECT MANAGEMENT", "Ctrl+Delete", "Delete current object"),
             ("HISTORY & TOOLS", "Ctrl+H", "Open historical suggestions resolver"),
             ("HISTORY & TOOLS", "Ctrl+G", "Open location/problem filter menu"),
+            ("HISTORY & TOOLS", "Ctrl+T", "Verify Taxonomy via GBIF"),
             ("HISTORY & RESOLVER", "Ctrl+A", "Apply resolved changes (resolver window only)"),
             ("IMAGE NAVIGATION", "Shift+-- / Shift+--", "Previous / Next image in gallery"),
             ("IMAGE NAVIGATION", "Double-click", "Open current image in external browser"),
@@ -5731,6 +5743,71 @@ class ObjectProgramUI(
 
 
 
+
+
+
+    def verify_taxonomy_gbif(self, _=None):
+        if not self.app.current_object_id:
+            messagebox.showinfo("GBIF Taxonomy", "No object loaded.")
+            return
+
+        genus = self.reg_vars.get("Genus", tk.StringVar()).get().strip()
+        species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
+
+        if not genus and not species:
+            messagebox.showinfo("GBIF Taxonomy", "Genus and Species are empty.")
+            return
+
+        import utils
+        res = utils.check_gbif_taxonomy(genus, species)
+        status = res.get('status')
+
+        if status == 'offline' or status == 'error':
+            err_msg = res.get('error', 'Unknown')
+            messagebox.showerror("GBIF Taxonomy", "Could not connect to GBIF API. Please check your internet connection.\n\nError: " + err_msg)
+        elif status == 'not_found':
+            messagebox.showinfo("GBIF Taxonomy", f"The name '{genus} {species}' was not found in the GBIF backbone taxonomy.")
+        elif status == 'accepted':
+            messagebox.showinfo("GBIF Taxonomy", f"'{genus} {species}' is an accepted name in GBIF.")
+        elif status == 'synonym':
+            accepted_name = res.get('accepted_name')
+            accepted_genus = res.get('accepted_genus')
+            accepted_species = res.get('accepted_species')
+
+            msg = f"'{genus} {species}' is listed as a SYNONYM.\n\nThe accepted name is:\n{accepted_name}\n\nDo you want to update the Genus and Species fields to this accepted name? (The original name will be added to the Comment field as a synonym note.)"
+
+            if messagebox.askyesno("GBIF Taxonomy Synonym Found", msg):
+                self.push_undo_state()
+
+                # Set new taxonomy
+                if "Genus" in self.reg_vars and accepted_genus:
+                    self.reg_vars["Genus"].set(accepted_genus)
+                if "Species" in self.reg_vars and accepted_species:
+                    self.reg_vars["Species"].set(accepted_species)
+
+                # Add synonym note to Comment or Observation
+                note = f"[Synonym: {genus} {species}]"
+                target_field = None
+                if "Comment" in self.reg_vars:
+                    target_field = "Comment"
+                elif "Observation" in self.reg_vars:
+                    target_field = "Observation"
+                elif "Notes" in self.reg_vars:
+                    target_field = "Notes"
+
+                if target_field:
+                    w = self.reg_entries.get(target_field)
+                    if isinstance(w, tk.Text):
+                        current_text = w.get("1.0", tk.END).strip()
+                        new_text = current_text + ("\n" + note if current_text else note)
+                        w.delete("1.0", tk.END)
+                        w.insert("1.0", new_text)
+                    elif hasattr(w, "set"):
+                        current_text = w.get().strip()
+                        w.set(current_text + (" " + note if current_text else note))
+
+                self.commit_current_object()
+                self.show_banner("Taxonomy updated from GBIF.", "success")
 
     def on_close(self):
         if self.app.dirty:
