@@ -476,6 +476,8 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         # Mousewheel on canvas
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind("<Button-4>", self._on_mousewheel)
+        self.canvas.bind("<Button-5>", self._on_mousewheel)
 
         self._card_height = None
         self._active_card_windows = {} # Maps idx -> (window_id, frame_widget)
@@ -615,7 +617,18 @@ class TreeviewListboxWrapper(ttk.Frame):
                 pass
 
     def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        if hasattr(event, "delta") and event.delta:
+            scroll_units = int(-1 * (event.delta / 120))
+        elif hasattr(event, "num"):
+            if event.num == 4:
+                scroll_units = -1
+            elif event.num == 5:
+                scroll_units = 1
+            else:
+                return
+        else:
+            return
+        self.canvas.yview_scroll(scroll_units, "units")
         self._schedule_viewport_update()
 
     def _on_tree_motion(self, event):
@@ -1414,7 +1427,12 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.bind_class(card_tag, "<Double-Button-1>", _on_card_double_click)
         self.bind_class(card_tag, "<Button-3>",        _on_card_right_click)
 
+        self.bind_class(card_tag, "<MouseWheel>", self._on_mousewheel)
+        self.bind_class(card_tag, "<Button-4>", self._on_mousewheel)
+        self.bind_class(card_tag, "<Button-5>", self._on_mousewheel)
+
         _skip = {"<Button-1>", "<Button-2>", "<Button-3>",
+                 "<Button-4>", "<Button-5>",
                  "<Double-Button-1>", "<Double-Button-2>", "<Double-Button-3>",
                  "<Control-Button-1>", "<Control-Button-3>",
                  "<MouseWheel>"}
