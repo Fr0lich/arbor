@@ -99,7 +99,7 @@ class HistoricalConflictResolverWindow:
                              font=FONT_UI_BOLD, bg=COLORS["surface"], fg=COLORS["primary"],
                              activebackground=COLORS["surface"], activeforeground=COLORS["primary"],
                              selectcolor=COLORS["surface"], relief="flat", bd=0,
-                             command=self.reload_suggestions)
+                             command=self.reload_suggestions, cursor="hand2")
         chk.pack(fill="both", expand=True, padx=sc(1), pady=sc(1)) # 1px border visually
         
         self.dir_canvas = tk.Canvas(sidebar, bg=COLORS["surface_dim"], highlightthickness=0)

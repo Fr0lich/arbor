@@ -318,7 +318,7 @@ class GroupEditorWindow:
         tk.Label(dest_row, text="Move into tab:", font=("Hanken Grotesk", sc(9.5)), bg="#f9f9f9", fg="#444748").pack(side="left")
         dest_var = tk.StringVar(value=dest_choices[0])
         dest_cb = ttk.Combobox(dest_row, textvariable=dest_var, values=dest_choices, state="readonly",
-                               font=("Hanken Grotesk", sc(10)), width=20)
+                               font=("Hanken Grotesk", sc(10)), width=20, cursor="hand2")
         dest_cb.pack(side="left", padx=sc(8))
 
         # --- Fields list with reorder ---
@@ -480,7 +480,7 @@ class GroupEditorWindow:
             return
             
         choice_var = tk.StringVar(value=choices[0])
-        cb = ttk.Combobox(dest_win, textvariable=choice_var, values=choices, font=("Hanken Grotesk", sc(10)), state="readonly")
+        cb = ttk.Combobox(dest_win, textvariable=choice_var, values=choices, font=("Hanken Grotesk", sc(10)), state="readonly", cursor="hand2")
         cb.pack(pady=sc(6), padx=sc(12))
         
         def do_move():

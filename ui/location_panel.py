@@ -186,7 +186,7 @@ class LocationPanel(tk.Frame):
             values=preset_names,
             state="normal",
             width=sc(10) if is_horiz else sc(12)
-        )
+        , cursor="hand2")
         self.preset_combobox.pack(side="left", padx=sc(2))
         
         save_text = "Save..." if is_horiz else "Save Preset..."
@@ -366,7 +366,7 @@ class LocationPanel(tk.Frame):
                 values=choices,
                 state="readonly" if name != "Stored as" else "normal",
                 font=("JetBrains Mono", sc(10))
-            )
+            , cursor="hand2")
             widget.bind("<<ComboboxSelected>>", lambda e: self._trigger_commit())
             if is_horiz:
                 widget.pack(fill="x", expand=True, ipady=sc(2))
@@ -676,16 +676,16 @@ if __name__ == "__main__":
     
     tk.Label(ctrl_bar, text="LAYOUT MODE:", font=("JetBrains Mono", 10, "bold"), bg="#eaeaea").pack(side="left", padx=(0, 6))
     
-    rb_vert = tk.Radiobutton(ctrl_bar, text="Vertical (Left)", variable=mode_var, value="vertical", bg="#eaeaea")
+    rb_vert = tk.Radiobutton(ctrl_bar, text="Vertical (Left)", variable=mode_var, value="vertical", bg="#eaeaea", cursor="hand2")
     rb_vert.pack(side="left", padx=4)
     
-    rb_h1 = tk.Radiobutton(ctrl_bar, text="Middle (1-Row Default)", variable=mode_var, value="horizontal_1row", bg="#eaeaea")
+    rb_h1 = tk.Radiobutton(ctrl_bar, text="Middle (1-Row Default)", variable=mode_var, value="horizontal_1row", bg="#eaeaea", cursor="hand2")
     rb_h1.pack(side="left", padx=4)
     
-    rb_h2 = tk.Radiobutton(ctrl_bar, text="Middle (2-Row Alternate)", variable=mode_var, value="horizontal_2row", bg="#eaeaea")
+    rb_h2 = tk.Radiobutton(ctrl_bar, text="Middle (2-Row Alternate)", variable=mode_var, value="horizontal_2row", bg="#eaeaea", cursor="hand2")
     rb_h2.pack(side="left", padx=4)
     
-    chk_dark = tk.Checkbutton(ctrl_bar, text="Dark Mode", variable=dark_var, bg="#eaeaea")
+    chk_dark = tk.Checkbutton(ctrl_bar, text="Dark Mode", variable=dark_var, bg="#eaeaea", cursor="hand2")
     chk_dark.pack(side="right", padx=12)
     
     tk.Frame(root, bg="#d1d1d1", height=1).pack(fill="x")

@@ -424,10 +424,10 @@ class AddObjectsWizard:
 
                 if ftype == "choice":
                     choices = [""] + field.get("choices", [])
-                    cb = ttk.Combobox(self.inner_form, textvariable=var, values=choices, font=("Inter", sc(10)), state="readonly")
+                    cb = ttk.Combobox(self.inner_form, textvariable=var, values=choices, font=("Inter", sc(10)), state="readonly", cursor="hand2")
                     cb.grid(row=row, column=1, sticky="ew", padx=sc(4), pady=sc(4))
                 elif ftype == "checkbox":
-                    cb = ttk.Checkbutton(self.inner_form, text="Enable", variable=var, onvalue="True", offvalue="False")
+                    cb = ttk.Checkbutton(self.inner_form, text="Enable", variable=var, onvalue="True", offvalue="False", cursor="hand2")
                     cb.grid(row=row, column=1, sticky="w", padx=sc(4), pady=sc(4))
                 else:
                     ent = tk.Entry(self.inner_form, textvariable=var, font=("Inter", sc(10)), bg=self.colors["surface_container_low"], fg=self.colors["on_surface"], relief="flat", highlightthickness=1, highlightbackground=self.colors["card_border"])

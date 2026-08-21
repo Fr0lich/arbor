@@ -1167,7 +1167,7 @@ class StartupDialog:
         db_names = list(DATABASE_CONFIGS.keys())
         db_names.append("<Create New Database...>")
         self.db_dropdown = ttk.Combobox(frame, textvariable=self.db_var,
-                                        values=db_names, state="readonly")
+                                        values=db_names, state="readonly", cursor="hand2")
         if db_names and len(db_names) > 1:
             self.db_var.set(db_names[0])
         self.db_dropdown.pack(fill="x", pady=(2, 10))

@@ -75,7 +75,7 @@ class LayoutSettingsMixin:
         preset_row1.pack(fill="x", pady=2)
         ttk.Label(preset_row1, text="Load Preset:").pack(side="left", padx=2)
 
-        self.layout_dialog_preset_cb = ttk.Combobox(preset_row1, state="readonly", width=18)
+        self.layout_dialog_preset_cb = ttk.Combobox(preset_row1, state="readonly", width=18, cursor="hand2")
         self.layout_dialog_preset_cb.pack(side="left", fill="x", expand=True, padx=4)
 
         def on_load_preset(event=None):

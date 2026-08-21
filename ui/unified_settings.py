@@ -524,7 +524,7 @@ class UnifiedSettingsWindow:
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
         create_info_badge(f2, SETTING_INFO_TEXTS["autosave_archive_limit"], ui_ref=self.app or self).pack(side="left", padx=(sc(6), sc(8)))
         ttk.Combobox(f2, textvariable=self.var_archive_limit, values=["5", "10", "20", "50"],
-                     state="readonly", width=8).pack(side="left", padx=sc(4))
+                     state="readonly", width=8, cursor="hand2").pack(side="left", padx=sc(4))
 
         create_toggle_row(card1, "Enable Backup on Excel Import", self.var_excel_backup,
                           ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["enable_excel_import_backup"])
@@ -543,7 +543,7 @@ class UnifiedSettingsWindow:
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
         ttk.Combobox(f3, textvariable=self.var_log_verbosity,
                      values=["ERROR", "WARNING", "INFO", "DEBUG"],
-                     state="readonly", width=12).pack(side="left", padx=sc(12))
+                     state="readonly", width=12, cursor="hand2").pack(side="left", padx=sc(12))
 
         # Card 3: Workflow & Auto-Advance
         card3 = self._create_card(c, "Workflow & Navigation")
@@ -588,7 +588,7 @@ class UnifiedSettingsWindow:
             f_r.pack(fill="x", pady=1)
             tk.Radiobutton(f_r, variable=self.var_ui_scale, value=val,
                            bg=self.COLORS["card_bg"],
-                           activebackground=self.COLORS["card_bg"]).pack(side="left")
+                           activebackground=self.COLORS["card_bg"], cursor="hand2").pack(side="left")
             tk.Label(f_r, text=lbl, font=self.FONT_DATA, fg=self.COLORS["on_surface"],
                      bg=self.COLORS["card_bg"]).pack(side="left", padx=4)
 
@@ -611,7 +611,7 @@ class UnifiedSettingsWindow:
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
         cb_hl = ttk.Combobox(f_clr, textvariable=self.var_highlight_color,
                              values=["Default (Red)", "Yellow", "Orange", "Blue"],
-                             state="readonly", width=16)
+                             state="readonly", width=16, cursor="hand2")
         cb_hl.pack(side="left", padx=sc(12))
         cb_hl.bind("<<ComboboxSelected>>", lambda e: self._notify_live("problem_highlight_color", self.var_highlight_color.get()))
 
@@ -867,7 +867,7 @@ class UnifiedSettingsWindow:
         tk.Label(r1, text="Saved Layout Presets:", font=self.FONT_DATA,
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
 
-        cb_layout = ttk.Combobox(r1, state="readonly", width=20)
+        cb_layout = ttk.Combobox(r1, state="readonly", width=20, cursor="hand2")
         cb_layout.pack(side="left", padx=sc(8))
 
         def _refresh_layouts():
@@ -1009,7 +1009,7 @@ class UnifiedSettingsWindow:
         tk.Label(rf1, text="Saved Focus Presets:", font=self.FONT_DATA,
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
 
-        cb_focus = ttk.Combobox(rf1, state="readonly", width=20)
+        cb_focus = ttk.Combobox(rf1, state="readonly", width=20, cursor="hand2")
         cb_focus.pack(side="left", padx=sc(8))
 
         def _refresh_focus():
@@ -1095,7 +1095,7 @@ class UnifiedSettingsWindow:
         ttk.Combobox(f_res, textvariable=self.var_resampling,
                      values=["LANCZOS (High Quality)", "BILINEAR (Balanced)",
                              "NEAREST (Fast draft / Pixelated)"],
-                     state="readonly", width=28).pack(side="left", padx=sc(4))
+                     state="readonly", width=28, cursor="hand2").pack(side="left", padx=sc(4))
 
         f_url = tk.Frame(card1, bg=self.COLORS["card_bg"])
         f_url.pack(fill="x", pady=sc(6))
