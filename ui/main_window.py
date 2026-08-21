@@ -196,7 +196,7 @@ class ProgressbarWrapper:
     def __getattr__(self, name):
         return getattr(self.real, name)
 
-# BulkEditWindow, NewDatabaseWizard, AddObjectsWindow, ZoomableImagePopup, and
+# BulkEditWindow, NewDatabaseWizard, AddObjectsWizard, ZoomableImagePopup, and
 # requests are imported lazily inside the methods that need them so that startup
 # time is not spent loading unused subsystems.
 
@@ -1816,8 +1816,8 @@ class ObjectProgramUI(
     def add_new_object(self):
         if self.app.df_reg is None:
             return
-        from ui.add_objects import AddObjectsWindow
-        AddObjectsWindow(self.root, self.app, self)
+        from ui.add_objects import AddObjectsWizard
+        AddObjectsWizard(self.root, self.app, self)
         
     def show_create_dropdown(self):
         btn = self.toolbar_buttons["CREATE"]
