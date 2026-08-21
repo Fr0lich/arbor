@@ -525,7 +525,7 @@ class ObjectProgramUI(
         self.root.bind("<Control-plus>", lambda e: self.zoom_image_in())
         self.root.bind("<Control-equal>", lambda e: self.zoom_image_in())
         self.root.bind("<Control-minus>", lambda e: self.zoom_image_out())
-        self.root.bind("<Control-r>", lambda e: self.rotate_image())
+        self.root.bind("<Alt-r>", lambda e: self.rotate_image())
         self.root.bind("<Control-R>", lambda e: self.rotate_image())
         self.root.bind("<Control-Key-0>", lambda e: self.reset_image_view())
 
