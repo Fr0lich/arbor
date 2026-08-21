@@ -504,7 +504,7 @@ class ObjectProgramUI(
         self.root.bind("<Control-Prior>", lambda e: self._switch_reg_tab(-1))
         self.root.bind("<Control-Next>", lambda e: self._switch_reg_tab(1))
 
-        self.root.bind("<Shift-E>", lambda e: self.focus_first_empty_reg())
+        
 
 
         self.root.bind("<Control-l>", self._focus_first_location)
