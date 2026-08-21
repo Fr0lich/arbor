@@ -341,31 +341,14 @@ class StartupDialog:
         self._build_body(card)
         self._build_footer(card)
 
-        # Bind mouse wheel recursively to scroll canvas
-        self._bind_mousewheel_recursive(self.win, canvas)
+        # Bind mouse wheel to canvas
+        self._bind_canvas_mousewheel(canvas)
 
-    def _bind_mousewheel_recursive(self, widget, canvas):
+    def _bind_canvas_mousewheel(self, canvas):
+        """Bind mousewheel to a canvas without touching any child bindtags."""
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        tag = f"MW_Tag_{id(widget)}"
-
-        def _apply_tag(w):
-            w.bindtags((tag,) + w.bindtags())
-            for child in w.winfo_children():
-                _apply_tag(child)
-
-        _apply_tag(widget)
-        widget.bind_class(tag, "<MouseWheel>", _on_mousewheel)
-
-        def _on_destroy(event):
-            if event.widget is widget:
-                try:
-                    widget.unbind_class(tag, "<MouseWheel>")
-                except Exception:
-                    pass
-
-        widget.bind("<Destroy>", _on_destroy, add="+")
+        canvas.bind("<MouseWheel>", _on_mousewheel)
 
 
     def _sep(self, parent, color=None, vertical=False):

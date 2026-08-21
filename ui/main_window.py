@@ -6832,7 +6832,7 @@ class ObjectProgramUI(
         
         def _on_prob_scroll(event):
             probs_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        self.root.after(100, lambda: self._bind_mousewheel_recursive(win, _on_prob_scroll))
+        self.root.after(100, lambda: self._bind_canvas_mousewheel(probs_canvas, _on_prob_scroll))
 
         p_list = create_group(probs_inner, "Problems Checklist")
         normal_problems = [p for p in self.problem_columns if "Image" not in p]
@@ -8484,25 +8484,9 @@ class ObjectProgramUI(
         self.system_status.config(text=f"Sorted by {col} {dir_char}")
 
 
-    def _bind_mousewheel_recursive(self, widget, handler):
-        tag = f"MW_Tag_{id(widget)}"
-
-        def _apply_tag(w):
-            w.bindtags((tag,) + w.bindtags())
-            for child in w.winfo_children():
-                _apply_tag(child)
-
-        _apply_tag(widget)
-        widget.bind_class(tag, "<MouseWheel>", handler)
-
-        def _on_destroy(event):
-            if event.widget is widget:
-                try:
-                    widget.unbind_class(tag, "<MouseWheel>")
-                except Exception:
-                    pass
-
-        widget.bind("<Destroy>", _on_destroy, add="+")
+    def _bind_canvas_mousewheel(self, canvas, handler):
+        """Bind mousewheel to a canvas without touching any child bindtags."""
+        canvas.bind("<MouseWheel>", handler)
 
 
 
