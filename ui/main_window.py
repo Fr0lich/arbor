@@ -1577,6 +1577,8 @@ class ObjectProgramUI(
 
     def _toggle_problem_checkbox(self, event):
         widget = self.root.focus_get()
+        if isinstance(widget, (tk.Entry, ttk.Entry, tk.Text, ttk.Combobox)):
+            return
 
         if widget in self.problem_checkbuttons:
             try:

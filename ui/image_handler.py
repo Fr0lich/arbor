@@ -13,12 +13,16 @@ MAX_IMAGE_CACHE = 40
 
 class ImageHandlerMixin:
     def _next_image_shortcut(self, event=None):
+        if hasattr(self, "root") and isinstance(self.root.focus_get(), (tk.Entry, ttk.Entry, tk.Text, ttk.Combobox)):
+            return
         if self.image_mode != "folder":
             return
         self._next_image()
 
 
     def _prev_image_shortcut(self, event=None):
+        if hasattr(self, "root") and isinstance(self.root.focus_get(), (tk.Entry, ttk.Entry, tk.Text, ttk.Combobox)):
+            return
         if self.image_mode != "folder":
             return
         self._prev_image()
