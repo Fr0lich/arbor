@@ -3247,7 +3247,7 @@ class ObjectProgramUI(
         # Re-add visible panes in order: images at top, location at bottom
         if self.show_images_var.get():
             # U2-A: 200px minimum keeps image panel usable when sash is dragged left
-            self.middle_panes.add(self.right_frame, weight=3, minsize=sc(200))
+            self.middle_panes.add(self.right_frame, weight=3)
             self.refresh_image_view()
 
         focus_active = hasattr(self, "focus_mode_var") and self.focus_mode_var.get()
@@ -3255,7 +3255,7 @@ class ObjectProgramUI(
 
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get() and show_loc:
             # U2-A: 130px minimum keeps location rows readable
-            self.middle_panes.add(self.loc_frame_horizontal, weight=1, minsize=sc(130))
+            self.middle_panes.add(self.loc_frame_horizontal, weight=1)
 
     def toggle_location_panel(self):
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():

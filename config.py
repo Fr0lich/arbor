@@ -127,7 +127,7 @@ FONT_MONO_FAMILY: str = "JetBrains Mono"
 # Modify these values to customize colors, bounds, and animation parameters.
 # ==============================================================================
 RAIL_THEME = {
-    "rail_bg": "#f9f9f9",
+    "rail_bg": "#146143",
     "rail_border": "#d1d1d1",
     "rail_width": 40,
     "icon_hover_bg": "#e8e8e8",

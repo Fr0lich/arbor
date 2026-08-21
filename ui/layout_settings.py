@@ -793,12 +793,24 @@ class LayoutSettingsMixin:
 
             for w in self.reg_entries.values():
                 if isinstance(w, (tk.Text, tk.Entry)):
-                    w.configure(background=field_bg, foreground=fg_color,
-                                insertbackground=fg_color, highlightbackground=border_color)
+                    try:
+                        w.configure(background=field_bg, foreground=fg_color,
+                                    insertbackground=fg_color, highlightbackground=border_color)
+                    except Exception:
+                        try:
+                            w.configure(background=field_bg, foreground=fg_color)
+                        except Exception:
+                            pass
 
             if hasattr(self, "_inline_search_entry"):
                 self.search_bar_frame.configure(bg=field_bg, highlightbackground=border_color)
-                self._inline_search_entry.configure(bg=field_bg, fg=fg_color if self._inline_search_var.get() != self._inline_search_placeholder else "gray", insertbackground=fg_color)
+                try:
+                    self._inline_search_entry.configure(bg=field_bg, fg=fg_color if self._inline_search_var.get() != self._inline_search_placeholder else "gray", insertbackground=fg_color)
+                except Exception:
+                    try:
+                        self._inline_search_entry.configure(bg=field_bg, fg=fg_color if self._inline_search_var.get() != self._inline_search_placeholder else "gray")
+                    except Exception:
+                        pass
                 self.toolbar_buttons['X'].configure(bg=field_bg, fg=fg_color, activebackground=field_bg, activeforeground=reviewed_fg)
                 self._search_count_label.configure(bg=field_bg, fg="gray")
 
@@ -981,12 +993,24 @@ class LayoutSettingsMixin:
 
             for w in self.reg_entries.values():
                 if isinstance(w, (tk.Text, tk.Entry)):
-                    w.configure(background="white", foreground="black",
-                                insertbackground="black", highlightbackground="#d0d0d0")
+                    try:
+                        w.configure(background="white", foreground="black",
+                                    insertbackground="black", highlightbackground="#d0d0d0")
+                    except Exception:
+                        try:
+                            w.configure(background="white", foreground="black")
+                        except Exception:
+                            pass
 
             if hasattr(self, "_inline_search_entry"):
                 self.search_bar_frame.configure(bg="white", highlightbackground="#d0d0d0")
-                self._inline_search_entry.configure(bg="white", fg="black" if self._inline_search_var.get() != self._inline_search_placeholder else "gray", insertbackground="black")
+                try:
+                    self._inline_search_entry.configure(bg="white", fg="black" if self._inline_search_var.get() != self._inline_search_placeholder else "gray", insertbackground="black")
+                except Exception:
+                    try:
+                        self._inline_search_entry.configure(bg="white", fg="black" if self._inline_search_var.get() != self._inline_search_placeholder else "gray")
+                    except Exception:
+                        pass
                 self.toolbar_buttons['X'].configure(bg="white", fg="black", activebackground="white", activeforeground="#ba1a1a")
                 self._search_count_label.configure(bg="white", fg="gray")
 
@@ -1052,8 +1076,14 @@ class LayoutSettingsMixin:
         # Update entry widgets
         for w in getattr(self, "location_entries", []):
             if isinstance(w, tk.Entry) and w.winfo_exists():
-                w.configure(background=entry_bg, foreground=entry_fg,
-                            insertbackground=entry_insert, highlightbackground=border_col)
+                try:
+                    w.configure(background=entry_bg, foreground=entry_fg,
+                                insertbackground=entry_insert, highlightbackground=border_col)
+                except Exception:
+                    try:
+                        w.configure(background=entry_bg, foreground=entry_fg)
+                    except Exception:
+                        pass
 
         if hasattr(self, "title_problem_count_label") and self.title_problem_count_label is not None:
             try:
