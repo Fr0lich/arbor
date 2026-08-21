@@ -5811,6 +5811,8 @@ class ObjectProgramUI(
 
                 # Sanitize the argument to prevent argument injection.
                 # Valid existing Windows paths cannot contain double quotes or other malicious injection characters.
+                if '"' in path:
+                    return
                 if os.path.exists(path):
                     subprocess.Popen(["explorer", "/select,", path])
                 else:
