@@ -302,58 +302,69 @@ class StartupDialog:
     def _build_window(self):
         s = self._scale
 
-        # Create container frame to house Canvas and Scrollbar
-        container = tk.Frame(self.win, bg=self.C_BG)
-        container.pack(fill="both", expand=True)
-
-        # Create Canvas and Scrollbar
-        canvas = tk.Canvas(container, bg=self.C_BG, highlightthickness=0, bd=0)
-        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-        scrollbar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Outer padding frame (bg = surface)
-        outer = tk.Frame(canvas, bg=self.C_BG)
-        self._outer = outer  
-
-        # Create window inside canvas
-        canvas_win_id = canvas.create_window((0, 0), window=outer, anchor="nw")
-
-        # Keep outer width dynamically sized to match canvas width
-        def _on_canvas_configure(event):
-            canvas.itemconfig(canvas_win_id, width=event.width)
-        canvas.bind("<Configure>", _on_canvas_configure)
-
-        # Update scrollregion when outer size changes
-        def _on_outer_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        outer.bind("<Configure>", _on_outer_configure)
-
         # Card frame (white, 1px outline border)
         card = tk.Frame(
-            outer,
+            self.win,
             bg=self.C_CARD,
             highlightthickness=1,
             highlightbackground=self.C_OUTLINE,
             highlightcolor=self.C_OUTLINE,
         )
         self._card = card
-        card.pack(fill="both", expand=True, padx=20, pady=20)
+        card.pack(fill="both", expand=True, padx=int(12*s), pady=int(12*s))
 
+        # 1. Pinned Header at top (always visible)
         self._build_header(card)
-        self._build_body(card)
+
+        # 2. Pinned Footer at bottom (always visible)
         self._build_footer(card)
 
-        # Bind mouse wheel to canvas
-        self._bind_canvas_mousewheel(canvas)
+        # 3. Middle Scrollable Container for Body
+        container = tk.Frame(card, bg=self.C_CARD)
+        container.pack(side="top", fill="both", expand=True)
 
-    def _bind_canvas_mousewheel(self, canvas):
-        """Bind mousewheel to a canvas without touching any child bindtags."""
+        canvas = tk.Canvas(container, bg=self.C_CARD, highlightthickness=0, bd=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Scrollable inner frame (bg = white)
+        outer = tk.Frame(canvas, bg=self.C_CARD)
+        self._outer = outer  
+
+        canvas_win_id = canvas.create_window((0, 0), window=outer, anchor="nw")
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(canvas_win_id, width=event.width)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        def _on_outer_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        outer.bind("<Configure>", _on_outer_configure)
+
+        # Build body inside the scrollable inner frame
+        self._build_body(outer)
+
+        # Bind mousewheel recursively to canvas and all child widgets
+        self._bind_canvas_mousewheel(canvas, outer)
+
+    def _bind_canvas_mousewheel(self, canvas, frame=None):
+        """Bind mousewheel recursively to canvas and all child widgets so trackpads scroll anywhere."""
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind("<MouseWheel>", _on_mousewheel)
+
+        def _bind_recursive(w):
+            w.bind("<MouseWheel>", _on_mousewheel, add="+")
+            for child in w.winfo_children():
+                _bind_recursive(child)
+
+        canvas.bind("<MouseWheel>", _on_mousewheel, add="+")
+        if frame:
+            _bind_recursive(frame)
+            self.win.after(100, lambda: _bind_recursive(frame))
+
 
 
     def _sep(self, parent, color=None, vertical=False):
@@ -877,10 +888,11 @@ class StartupDialog:
 
     def _build_footer(self, card):
         s = self._scale
-        self._sep(card, self.C_OUTLINE_VAR)
-
         footer = tk.Frame(card, bg=self.C_FOOTER_BG, padx=int(16*s), pady=int(10*s))
-        footer.pack(fill="x", expand=False)
+        footer.pack(side="bottom", fill="x", expand=False)
+
+        sep = tk.Frame(card, bg=self.C_OUTLINE_VAR, height=1)
+        sep.pack(side="bottom", fill="x")
 
         # Ready status label above buttons (aligned right, inside footer)
         self.ready_status_label = tk.Label(

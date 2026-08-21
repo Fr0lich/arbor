@@ -12,14 +12,7 @@ rmdir /s /q dist 2>nul
 
 echo.
 echo Building EXE...
-python -m PyInstaller --onefile --windowed ^
---collect-submodules ui ^
---collect-submodules backend ^
---add-data "ui;ui" ^
---add-data "backend;backend" ^
---add-data "tutorials.json;." ^
---add-data "ignored_words.json;." ^
-main.py
+python -m PyInstaller --clean -y main.spec
 
 echo.
 echo Copying external resources...

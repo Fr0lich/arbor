@@ -213,42 +213,14 @@ def get_resource_path(relative_path: str) -> str:
 
 
 def fade_in_toplevel(win, target_alpha=1.0, duration_ms=120, step_ms=15):
-    """Animate window opacity from 0.0 to target_alpha over duration_ms with failsafe visibility guarantee."""
+    """Ensure window opacity is set to target_alpha immediately and safely."""
     try:
-        win.attributes("-alpha", 0.0)
+        if win.winfo_exists():
+            win.attributes("-alpha", target_alpha)
+            win.deiconify()
     except Exception:
-        return  # If attributes -alpha is not supported, just exit
+        pass
 
-    steps = max(1, duration_ms // step_ms)
-    alpha_step = target_alpha / steps
-
-    def ensure_visible():
-        """Failsafe to ensure window is never left in an invisible state."""
-        try:
-            if win.winfo_exists():
-                win.attributes("-alpha", target_alpha)
-        except Exception:
-            pass
-
-    def step(current_step=0):
-        if not win.winfo_exists():
-            return
-
-        if current_step >= steps:
-            ensure_visible()
-            return
-
-        next_alpha = min(alpha_step * (current_step + 1), target_alpha)
-        try:
-            win.attributes("-alpha", next_alpha)
-            win.after(step_ms, lambda: step(current_step + 1))
-        except Exception:
-            ensure_visible()
-
-    # Delay by 10ms to let the window draw its geometry first to avoid flash/flicker
-    win.after(10, step)
-    # Guaranteed visibility fallback in case timer chain is blocked
-    win.after(duration_ms + 100, ensure_visible)
 
 
 def center_and_fit_toplevel(win, base_w=None, base_h=None):
