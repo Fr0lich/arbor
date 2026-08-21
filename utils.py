@@ -268,3 +268,47 @@ def debug_log(level: str, context: str, extra: str = "") -> None:
         _log_queue.append(msg)
 
     _ensure_flush_thread()
+
+import requests
+
+def check_gbif_taxonomy(genus: str, species: str) -> dict:
+    """
+    Checks the GBIF taxonomy API to verify the scientific name.
+    Returns a dict with 'status' as one of:
+    - 'offline' / 'error'
+    - 'not_found'
+    - 'accepted'
+    - 'synonym' (with keys 'accepted_name', 'accepted_genus', 'accepted_species')
+    """
+    if not genus and not species:
+         return {'status': 'not_found'}
+
+    name = f"{genus} {species}".strip()
+
+    try:
+        resp = requests.get(
+            'https://api.gbif.org/v1/species/match',
+            params={'name': name},
+            timeout=5
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        if data.get('matchType') == 'NONE':
+            return {'status': 'not_found'}
+
+        status = data.get('status')
+        if status == 'SYNONYM':
+            return {
+                'status': 'synonym',
+                'accepted_name': data.get('species', data.get('scientificName', '')),
+                'accepted_genus': data.get('genus', ''),
+                'accepted_species': data.get('species', '').replace(data.get('genus', '') + ' ', '', 1) if data.get('genus') else ''
+            }
+        elif status == 'ACCEPTED':
+            return {'status': 'accepted'}
+        else:
+            return {'status': 'not_found'}
+
+    except requests.RequestException as e:
+        return {'status': 'offline', 'error': str(e)}
