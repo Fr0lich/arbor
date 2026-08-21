@@ -8,6 +8,7 @@ ENABLE_TUTORIALS = True
 _detected_scale = 1.0  # Overwritten at startup with the actual detected DPI ratio
 _PREFS_PATH = "user_prefs.json"  # Overwritten at startup with the correct exe-relative path
 
+import tkinter as tk
 import os
 import json
 import sys
@@ -53,7 +54,7 @@ def save_prefs(prefs):
     global _prefs_cache, _save_job_id
     _prefs_cache = prefs  # keep cache in sync before writing
     
-    import tkinter as tk
+
     root = getattr(tk, "_default_root", None)
 
     def _do_write():
