@@ -361,7 +361,19 @@ class HistoricalSuggestionsMixin:
 
     def _prescan_suggestions_worker(self):
         suggestions_set = set()
+        presence_set = set()
         total = len(self.app.active_object_ids)
+
+        # Populate presence_set from historical_dbs
+        for db in getattr(self.app, "historical_dbs", []):
+            reg_by_id = db.get("reg_by_id")
+            if reg_by_id is not None:
+                for hist_id in reg_by_id.index:
+                    presence_set.add(hist_id)
+                    s_id = str(hist_id)
+                    presence_set.add(s_id)
+                    if s_id.isdigit():
+                        presence_set.add(int(s_id))
 
         for i, oid in enumerate(self.app.active_object_ids):
             # Update progress bar
@@ -379,12 +391,17 @@ class HistoricalSuggestionsMixin:
                         break
             if has_valid:
                 suggestions_set.add(oid)
-                suggestions_set.add(str(oid))
+                s_oid = str(oid)
+                suggestions_set.add(s_oid)
+                if s_oid.isdigit():
+                    suggestions_set.add(int(s_oid))
 
-        self.root.after(0, lambda: self._finish_prescan(suggestions_set))
+        self.root.after(0, lambda: self._finish_prescan(suggestions_set, presence_set))
 
-    def _finish_prescan(self, suggestions_set):
+    def _finish_prescan(self, suggestions_set, presence_set=None):
         self._has_suggestions_set = suggestions_set
+        if presence_set is not None:
+            self._history_presence_set = presence_set
         self._list_dirty = True
         self.refresh_list()
 

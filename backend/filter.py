@@ -35,7 +35,32 @@ class FilterManager:
         include_image_problems = (image_mode == "folder")
 
         def fast_has_history(oid):
-            return oid in history_set
+            if oid in history_set:
+                return True
+            s_oid = str(oid)
+            if s_oid in history_set:
+                return True
+            if s_oid.isdigit() and int(s_oid) in history_set:
+                return True
+            return False
+
+        def get_obs_row(oid):
+            row = obs_dict.get(oid)
+            if row is None:
+                s_oid = str(oid)
+                row = obs_dict.get(s_oid)
+                if row is None and s_oid.isdigit():
+                    row = obs_dict.get(int(s_oid), {})
+            return row if row is not None else {}
+
+        def get_reg_row(oid):
+            row = reg_dict.get(oid)
+            if row is None:
+                s_oid = str(oid)
+                row = reg_dict.get(s_oid)
+                if row is None and s_oid.isdigit():
+                    row = reg_dict.get(int(s_oid), {})
+            return row if row is not None else {}
 
         def fast_is_problem_active(oid, prob_col, obs_row, reg_row):
             if prob_col == "Other_problem":
@@ -44,16 +69,17 @@ class FilterManager:
             if prob_col == "Reviewed":
                 return bool(obs_row.get(REVIEWED_COLUMN, False))
 
-            if oid not in obs_dict:
-                return False
-
             if prob_col == "Has_Images":
-                return not obs_row.get("Images_Missing", False)
+                if image_mode == "online":
+                    return True
+                elif image_mode == "offline":
+                    return False
+                return not bool(obs_row.get("Images_Missing", False))
 
             if prob_col == "Images_Missing":
                 if image_mode in ("online", "offline"):
                     return False
-                return obs_row.get("Images_Missing", False)
+                return bool(obs_row.get("Images_Missing", False))
 
             obs_val = bool(obs_row.get(prob_col, False))
             auto_val = False
@@ -103,7 +129,9 @@ class FilterManager:
                 if p == "Any_Problem":
                     val = fast_has_any_problem(oid, obs_row, reg_row)
                 elif p == "Has_Images":
-                    if oid not in obs_dict:
+                    if image_mode == "online":
+                        val = True
+                    elif image_mode == "offline":
                         val = False
                     else:
                         val = not bool(obs_row.get("Images_Missing", False))
@@ -129,7 +157,7 @@ class FilterManager:
                 elif p == "Reviewed_With_Problem":
                     val = (bool(obs_row.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs_row, reg_row))
                 elif p == "Problem_With_History":
-                    val = fast_get_cached_problem(oid, obs_row, reg_row) and fast_has_history(oid)
+                    val = fast_has_history(oid)
                 elif p == "Has_History":
                     val = fast_has_history(oid)
                 else:
@@ -140,7 +168,7 @@ class FilterManager:
             return all(results) if mode == "AND" else any(results)
 
         for oid in df_reg.index:
-            obs_row = obs_dict.get(oid, {})
+            obs_row = get_obs_row(oid)
 
             if not_reviewed_only:
                 if obs_row.get(REVIEWED_COLUMN):
@@ -158,7 +186,7 @@ class FilterManager:
                 if clean_cabinet_filter not in cabinet_val.replace(" ", ""):
                     continue
 
-            reg_row = reg_dict.get(oid, {})
+            reg_row = get_reg_row(oid)
             all_items = []
             for group_name, items in groups.items():
                 if items:

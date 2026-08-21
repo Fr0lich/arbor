@@ -292,6 +292,12 @@ class DatabaseOpsMixin:
                 daemon=True
             ).start()
 
+        if getattr(self.app, "historical_dbs", None) and hasattr(self, "_prescan_suggestions_worker"):
+            threading.Thread(
+                target=self._prescan_suggestions_worker,
+                daemon=True
+            ).start()
+
         # Detect whether we are in startup (LoadingWindow is active) or a
         # mid-session file reload triggered from the menu.
         in_startup = (getattr(self, '_loading_window', None) is not None)

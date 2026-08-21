@@ -7110,6 +7110,10 @@ class ObjectProgramUI(
             return False
 
         if prob_col == "Has_Images":
+            if self.image_mode == "online":
+                return True
+            elif self.image_mode == "offline":
+                return False
             val = self.app.df_obs.loc[oid, "Images_Missing"]
             if isinstance(val, pd.Series):
                 return not bool(val.iloc[0])
@@ -7205,11 +7209,14 @@ class ObjectProgramUI(
             if not var.get():
                 continue
 
-            if key in self.problem_columns:
-                groups["Problems"].append(key)
-
-            elif key in ["Images_Missing", "Has_Images"]:
+            if key in ["Images_Missing", "Has_Images"]:
                 groups["Images"].append(key)
+
+            elif key in self.problem_columns:
+                if "Image" in key:
+                    groups["Images"].append(key)
+                else:
+                    groups["Problems"].append(key)
 
             elif key in ["Reviewed", "Not_Reviewed",
                          "Reviewed_With_Problem", "Problem_With_History", "Has_History"]:
@@ -7231,8 +7238,19 @@ class ObjectProgramUI(
         obs_dict = self._get_obs_dict()
 
         # Pre-populate a set of IDs that exist in historical databases to make fast_has_history O(1) set lookup
-        history_set = getattr(self, "_has_suggestions_set", set())
-        if history_set is None:
+        history_set = getattr(self, "_has_suggestions_set", None)
+        if (history_set is None or len(history_set) == 0) and getattr(self.app, "historical_dbs", None) and hasattr(self, "collect_historical_suggestions"):
+            history_set = set()
+            for oid in getattr(self.app, "active_object_ids", []):
+                sug = self.collect_historical_suggestions(oid, show_all_override=False)
+                if sug and any(list(v.keys()) != ["(No data found)"] for v in sug.values()):
+                    history_set.add(oid)
+                    s_oid = str(oid)
+                    history_set.add(s_oid)
+                    if s_oid.isdigit():
+                        history_set.add(int(s_oid))
+            self._has_suggestions_set = history_set
+        elif history_set is None:
             history_set = set()
 
         building_var = self.filter_location_vars.get("Building")
@@ -7305,8 +7323,10 @@ class ObjectProgramUI(
     def get_object_status(self, oid):
 
  
-        if self.image_mode in ("online", "offline"):
+        if self.image_mode == "online":
             has_images = True
+        elif self.image_mode == "offline":
+            has_images = False
         else:
             val = self.app.df_obs.loc[oid, "Images_Missing"]
             if isinstance(val, pd.Series):
@@ -7760,6 +7780,12 @@ class ObjectProgramUI(
 
         if getattr(self, "filter_unknown_var", None) and self.filter_unknown_var.get():
             active.append("Unknown")
+
+        if hasattr(self, "filter_location_vars"):
+            for loc_k, loc_v in self.filter_location_vars.items():
+                val = loc_v.get().strip() if hasattr(loc_v, "get") else ""
+                if val:
+                    active.append(f"{loc_k}:{val}")
 
         if active:
             short = ", ".join(active[:3])

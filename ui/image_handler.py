@@ -352,6 +352,8 @@ class ImageHandlerMixin:
         self.app.dirty = True
 
         def _notify_ui():
+            if hasattr(self, "_invalidate_row_cache"):
+                self._invalidate_row_cache()
             self._problem_cache.clear()
             self.refresh_list()
             # Use _on_startup_ready() instead of _hide_progress("Ready") directly.
