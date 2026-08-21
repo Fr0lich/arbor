@@ -475,8 +475,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.canvas.yview_moveto = self.custom_yview_moveto
 
         # Mousewheel on canvas
-        self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_mousewheel))
-        self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
 
         self._card_height = None
         self._active_card_windows = {} # Maps idx -> (window_id, frame_widget)
@@ -990,8 +989,8 @@ class TreeviewListboxWrapper(ttk.Frame):
     def _clear_virtual_cards(self):
         for win_id, widget_dict in list(self._active_card_windows.values()):
             try:
-                self.canvas.delete(win_id)
-                self._card_pool.append(widget_dict)
+                self.canvas.coords(win_id, -9999, -9999) # move offscreen
+                self._card_pool.append((win_id, widget_dict))
             except Exception:
                 pass
         self._active_card_windows.clear()
@@ -1054,22 +1053,25 @@ class TreeviewListboxWrapper(ttk.Frame):
                             del self.item_data[oid][key]
             except IndexError:
                 pass
-            self.canvas.delete(win_id)
-            self._card_pool.append(widget_dict)
+            self.canvas.coords(win_id, -9999, -9999) # Move offscreen
+            self._card_pool.append((win_id, widget_dict))
 
         # Create or reuse cards scrolled into view
         for idx in visible_indices - current_indices:
             oid = self.items_list[idx]
 
             if self._card_pool:
-                widget_dict = self._card_pool.pop()
+                win_id, widget_dict = self._card_pool.pop()
+                card_frame = self._populate_card_widget(widget_dict, oid)
+                y_pos = idx * self._card_height
+                self.canvas.coords(win_id, 0, y_pos)
+                self.canvas.itemconfig(win_id, window=card_frame, width=canvas_width)
             else:
                 widget_dict = self._build_empty_card_widget(self.canvas)
+                card_frame = self._populate_card_widget(widget_dict, oid)
+                y_pos = idx * self._card_height
+                win_id = self.canvas.create_window(0, y_pos, window=card_frame, anchor="nw", width=canvas_width)
 
-            card_frame = self._populate_card_widget(widget_dict, oid)
-            y_pos = idx * self._card_height
-
-            win_id = self.canvas.create_window(0, y_pos, window=card_frame, anchor="nw", width=canvas_width)
             self._active_card_windows[idx] = (win_id, widget_dict)
 
             # Apply initial selection styling if selected
@@ -1287,9 +1289,11 @@ class TreeviewListboxWrapper(ttk.Frame):
         badge_frame.configure(text=badge_label, bg=badge_bg, fg=badge_fg, highlightbackground=badge_bg)
 
         if loaned:
-            widgets["loaned_badge"].pack(side="right", padx=(sc(2), sc(2)))
+            if widgets["loaned_badge"].winfo_manager() != 'pack':
+                widgets["loaned_badge"].pack(side="right", padx=(sc(2), sc(2)))
         else:
-            widgets["loaned_badge"].pack_forget()
+            if widgets["loaned_badge"].winfo_manager() == 'pack':
+                widgets["loaned_badge"].pack_forget()
 
         family = str(reg_row.get("Family", "") or "").strip()
         if family in ("nan", "None"):
@@ -1297,13 +1301,15 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         if family:
             widgets["fam_lbl"].configure(text=family.upper())
-            widgets["fam_lbl"].pack(before=widgets["id_lbl"], side="left", padx=(sc(18), 0))
-            widgets["sep_lbl"].pack(before=widgets["id_lbl"], side="left", padx=sc(3))
-            widgets["id_lbl"].pack_configure(padx=(0, 0))
+            if widgets["fam_lbl"].winfo_manager() != 'pack':
+                widgets["fam_lbl"].pack(before=widgets["id_lbl"], side="left", padx=(sc(18), 0))
+                widgets["sep_lbl"].pack(before=widgets["id_lbl"], side="left", padx=sc(3))
+                widgets["id_lbl"].pack_configure(padx=(0, 0))
         else:
-            widgets["fam_lbl"].pack_forget()
-            widgets["sep_lbl"].pack_forget()
-            widgets["id_lbl"].pack_configure(padx=(sc(18), 0))
+            if widgets["fam_lbl"].winfo_manager() == 'pack':
+                widgets["fam_lbl"].pack_forget()
+                widgets["sep_lbl"].pack_forget()
+                widgets["id_lbl"].pack_configure(padx=(sc(18), 0))
 
         widgets["id_lbl"].configure(text=oid)
 
@@ -1375,7 +1381,6 @@ class TreeviewListboxWrapper(ttk.Frame):
             hover_bg = "#30354f" if is_dark else "#e8e8e8"
             if oid not in self.selected_iids:
                 self._set_bg_recursive(card_body, hover_bg)
-            self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
         def _on_leave(event):
             w, oid, card_body = _get_target(event)
