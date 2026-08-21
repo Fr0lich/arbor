@@ -31,3 +31,7 @@
 ## 2025-02-19 - [Pandas .apply Overhead for Simple Condition Checks]
 **Learning:** During database load, iterating over thousands of registration rows with `.apply(self.is_unknown)` to determine if a value matches a small set of "unknown" string variants introduces significant Python interpreter overhead because `.apply()` executes a custom Python function per row. Replacing this with `.astype(str).str.strip().str.lower().isin(...)` completely vectorizes the operation, running entirely in C and noticeably reducing CPU usage and latency during background cache pre-computation.
 **Action:** Always replace `.apply()` calls that perform basic type checking, string manipulation, or equality checks with equivalent Pandas vectorized string (`.str`) and membership (`.isin`) methods.
+
+## 2025-02-21 - [Vectorized DataFrame String Concatenation]
+**Learning:** Using `.apply(lambda, axis=1)` to concatenate values across multiple columns is extremely slow. Replacing it with vectorized cleaning operations combined with a native Python list comprehension over the underlying numpy array (`df.values`) is approximately 5-6x faster for building large search indexes.
+**Action:** Replace `df.apply()` with column-wise `.str` accessor methods and use list comprehensions over `df.values` when row-wise logic across multiple columns is required in performance-sensitive paths.

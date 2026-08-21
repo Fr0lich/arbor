@@ -37,12 +37,18 @@ class SearchEngine:
             genus_species_s = genus_s + " " + species_s
             genus_species_s = genus_species_s.str.strip()
 
-            # Replace 'nan', 'none'
-            df_str = df_str.replace(["nan", "none", "NaN", "None"], "")
-
             # Build the "all" column by joining all columns per row + index
             index_str = df_str.index.astype(str).str.lower()
-            all_s = df_str.apply(lambda row: " ".join(v.strip().lower() for v in row if v.strip() and v.strip().lower() not in ("nan", "none")), axis=1)
+
+            # Clean all string columns efficiently
+            for col in df_str.columns:
+                df_str[col] = df_str[col].str.strip().str.lower()
+            df_str = df_str.replace(["nan", "none", "nan ", "none "], "")
+
+            # PERFORMANCE OPTIMIZATION (Bolt): Replaced slow row-by-row .apply(lambda...) with
+            # faster list comprehension over numpy values for joining row strings
+            vals = df_str.values
+            all_s = pd.Series([" ".join([v for v in row if v]) for row in vals], index=df_str.index)
             all_s = index_str + " " + all_s
 
             # Construct the dict efficiently bypassing pandas .iloc overhead
