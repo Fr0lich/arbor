@@ -268,8 +268,7 @@ class HistoricalSuggestionsMixin:
                         df = pd.read_excel(
                             xls,
                             sheet_name=sheet_name,
-                            usecols=lambda x: x in allowed_cols,
-                            engine='calamine'
+                            usecols=lambda x: x in allowed_cols
                         )
 
                         if "ObjectID" not in df.columns:
