@@ -178,13 +178,17 @@ def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
 # ── Ensure stdout/stderr safety for windowed / frozen execution ──────────────
 if sys.stdout is None:
     class _NullWriter:
+        encoding = "utf-8"
         def write(self, s): pass
         def flush(self): pass
+        def isatty(self): return False
     sys.stdout = _NullWriter()
 if sys.stderr is None:
     class _NullWriterErr:
+        encoding = "utf-8"
         def write(self, s): pass
         def flush(self): pass
+        def isatty(self): return False
     sys.stderr = _NullWriterErr()
 
 
