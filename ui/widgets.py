@@ -110,15 +110,15 @@ class InfoButton(tk.Canvas):
         try:
             bg_canvas = self.master.cget("bg")
         except Exception:
-            bg_canvas = "#1e1e2e" if is_dark else "#ffffff"
+            bg_canvas = "#181c19" if is_dark else "#ffffff"
 
         if is_dark:
-            fg_icon = "#cdd6f4" if (self._is_hovered or self._is_focused) else "#9399b2"
-            circle_fill = "#313244" if (self._is_hovered or self._is_focused) else bg_canvas
+            fg_icon = "#e8ebe9" if (self._is_hovered or self._is_focused) else "#9399b2"
+            circle_fill = "#141715" if (self._is_hovered or self._is_focused) else bg_canvas
             circle_outline = "#89b4fa" if self._is_focused else ("#585b70" if self._is_hovered else "#45475a")
         else:
-            fg_icon = "#1a1c1c" if (self._is_hovered or self._is_focused) else "#747878"
-            circle_fill = "#e2e2e2" if (self._is_hovered or self._is_focused) else bg_canvas
+            fg_icon = "#2c302e" if (self._is_hovered or self._is_focused) else "#747878"
+            circle_fill = "#e9ece5" if (self._is_hovered or self._is_focused) else bg_canvas
             circle_outline = "#0058a3" if self._is_focused else ("#747878" if self._is_hovered else "#c4c7c7")
 
         self.configure(bg=bg_canvas)
@@ -180,11 +180,11 @@ class InfoButton(tk.Canvas):
 
         is_dark = self.is_dark_mode()
         if is_dark:
-            bg_color = "#181825"
-            fg_color = "#cdd6f4"
+            bg_color = "#212622"
+            fg_color = "#e8ebe9"
             border_color = "#45475a"
         else:
-            bg_color = "#1a1c1c"
+            bg_color = "#2c302e"
             fg_color = "#ffffff"
             border_color = "#4c4546"
 
@@ -287,14 +287,14 @@ class ToggleSwitch(tk.Canvas):
         val = self.variable.get()
 
         if is_dark:
-            bg_canvas = "#1e1e2e"
+            bg_canvas = "#181c19"
             bg_active = "#a6e3a1"
-            bg_inactive = "#313244"
+            bg_inactive = "#141715"
             fg_knob_active = "#11111b"
-            fg_knob_inactive = "#cdd6f4"
+            fg_knob_inactive = "#e8ebe9"
         else:
-            bg_canvas = "#f3f3f3"
-            bg_active = "#3b6934"
+            bg_canvas = "#f2f5f1"
+            bg_active = "#3a7d44"
             bg_inactive = "#c4c7c7"
             fg_knob_active = "#ffffff"
             fg_knob_inactive = "#ffffff"
@@ -333,7 +333,7 @@ class SleekScrollbar(tk.Canvas):
         self._dragging = False
         self._hover = False
 
-        bg_color = "#1e1e2e" if is_dark else "#f3f3f3"
+        bg_color = "#181c19" if is_dark else "#f2f5f1"
         super().__init__(parent, width=width, bg=bg_color, highlightthickness=0, bd=0, **kwargs)
 
         self._update_colors()
@@ -345,7 +345,7 @@ class SleekScrollbar(tk.Canvas):
         self.bind("<ButtonRelease-1>", self._on_release)
 
     def _update_colors(self):
-        self.track_bg = "#1e1e2e" if self.is_dark else "#f3f3f3"
+        self.track_bg = "#181c19" if self.is_dark else "#f2f5f1"
         self.thumb_normal = "#45475a" if self.is_dark else "#cccccc"
         self.thumb_hover = "#585b70" if self.is_dark else "#aaaaaa"
         self.thumb_active = "#89b4fa" if self.is_dark else "#0058a3"
@@ -565,7 +565,7 @@ class TreeviewListboxWrapper(ttk.Frame):
     def update_view_visibility(self):
         focus_active = self.focus_mode_var.get() if self.focus_mode_var else False
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-        canvas_bg = "#1e1e2e" if is_dark else "#f3f3f3"
+        canvas_bg = "#181c19" if is_dark else "#f2f5f1"
         self.canvas.configure(bg=canvas_bg)
 
         if focus_active:
@@ -655,7 +655,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             self._last_hovered_iid = iid
             
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-        hover_bg = "#313244" if is_dark else "#eeeeee"
+        hover_bg = "#141715" if is_dark else "#e9ece5"
         try:
             self.tree.tag_configure("hover", background=hover_bg)
         except Exception:
@@ -702,8 +702,8 @@ class TreeviewListboxWrapper(ttk.Frame):
     def redraw_cards_highlights(self):
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
         bg_selected = "#ffffff" if not is_dark else "#2d3149"
-        accent_selected = "#2e6b30" if not is_dark else "#a6e3a1"
-        bg_normal = "#f3f3f3" if not is_dark else "#24273a"
+        accent_selected = "#3a7d44" if not is_dark else "#a6e3a1"
+        bg_normal = "#f2f5f1" if not is_dark else "#24273a"
 
         # Only update active virtual cards on screen for instant O(1) response
         for idx in list(self._active_card_windows.keys()):
@@ -851,7 +851,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             return
 
         is_dark = getattr(self.main_window, "dark_mode_active", False)
-        canvas_bg = "#1e1e2e" if is_dark else "#f9f9f9"
+        canvas_bg = "#181c19" if is_dark else "#fbfaf8"
 
         reviewed = self.item_data[oid].get("reviewed", False)
         if hasattr(self.main_window, "_get_cached_problem"):
@@ -883,7 +883,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
         elif has_unknown:
             new_color = "#f59e0b" if is_dark else "#FBC02D"
-            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
+            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#2c302e"
         else:
             new_color = canvas_bg
             badge_label, badge_bg, badge_fg = "UNREV",   "#6c757d" if not is_dark else "#45475a", "#ffffff"
@@ -1092,7 +1092,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             if oid in self.selected_iids:
                 is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
                 bg_selected = "#ffffff" if not is_dark else "#2d3149"
-                accent_selected = "#2e6b30" if not is_dark else "#a6e3a1"
+                accent_selected = "#3a7d44" if not is_dark else "#a6e3a1"
                 card_body = self.item_data[oid].get("card_body")
                 accent_strip = self.item_data[oid].get("accent_strip")
                 if card_body and card_body.winfo_exists():
@@ -1103,11 +1103,11 @@ class TreeviewListboxWrapper(ttk.Frame):
     def _build_empty_card_widget(self, parent):
         from config import sc
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-        canvas_bg      = "#1e1e2e" if is_dark else "#f9f9f9"
-        card_bg        = "#24273a" if is_dark else "#f3f3f3"
-        text_primary   = "#cad3f5" if is_dark else "#1a1c1c"
+        canvas_bg      = "#181c19" if is_dark else "#fbfaf8"
+        card_bg        = "#24273a" if is_dark else "#f2f5f1"
+        text_primary   = "#cad3f5" if is_dark else "#2c302e"
         text_secondary = "#a5adcb" if is_dark else "#4c4546"
-        family_color   = "#a6e3a1" if is_dark else "#2e6b30"
+        family_color   = "#a6e3a1" if is_dark else "#3a7d44"
 
         outer_frame = tk.Frame(parent, bg=canvas_bg, bd=0, highlightthickness=0, cursor="hand2")
         outer_frame.pack(fill="x", pady=sc(1))
@@ -1132,7 +1132,7 @@ class TreeviewListboxWrapper(ttk.Frame):
                            font=("Georgia", sc(9), "italic bold"), anchor="w")
         tax_lbl.pack(side="left", fill="x", expand=True, padx=(0, sc(4)))
 
-        status_badge = self._create_badge(row1, "UKN", "#FBC02D", "#1a1c1c", "#FBC02D")
+        status_badge = self._create_badge(row1, "UKN", "#FBC02D", "#2c302e", "#FBC02D")
         status_badge.pack(side="right", padx=(sc(2), 0))
 
         loaned_badge = self._create_badge(row1, "Loaned", "#203040" if is_dark else "#e3f2fd", "#64b5f6" if is_dark else "#0d47a1", "#bbdefb" if is_dark else "#90caf9")
@@ -1201,8 +1201,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         from config import sc
         import utils
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-        canvas_bg      = "#1e1e2e" if is_dark else "#f9f9f9"
-        card_bg        = "#24273a" if is_dark else "#f3f3f3"
+        canvas_bg      = "#181c19" if is_dark else "#fbfaf8"
+        card_bg        = "#24273a" if is_dark else "#f2f5f1"
         text_secondary = "#a5adcb" if is_dark else "#4c4546"
 
         obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else {}
@@ -1266,7 +1266,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
         elif has_unknown:
             accent_color = "#f59e0b" if is_dark else "#FBC02D"
-            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#1a1c1c"
+            badge_label, badge_bg, badge_fg = "UKN",     "#FBC02D", "#2c302e"
         else:
             accent_color = canvas_bg  # visually transparent
             badge_label, badge_bg, badge_fg = "UNREV",   "#6c757d" if not is_dark else "#45475a", "#ffffff"
@@ -1391,7 +1391,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             if oid is None or card_body is None:
                 return
             is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-            hover_bg = "#30354f" if is_dark else "#e8e8e8"
+            hover_bg = "#30354f" if is_dark else "#e9ece5"
             if oid not in self.selected_iids:
                 self._set_bg_recursive(card_body, hover_bg)
 
@@ -1400,7 +1400,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             if oid is None or card_body is None:
                 return
             is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-            card_bg = "#24273a" if is_dark else "#f3f3f3"
+            card_bg = "#24273a" if is_dark else "#f2f5f1"
             if oid not in self.selected_iids:
                 self._set_bg_recursive(card_body, card_bg)
 

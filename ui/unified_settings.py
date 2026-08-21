@@ -82,19 +82,19 @@ class UnifiedSettingsWindow:
     """
 
     COLORS = {
-        "surface": "#f9f9f9",
-        "surface_container_low": "#f3f3f3",
-        "surface_container_highest": "#e2e2e2",
+        "surface": "#fbfaf8",
+        "surface_container_low": "#f2f5f1",
+        "surface_container_highest": "#e9ece5",
         "card_bg": "#ffffff",
-        "on_surface": "#1a1c1c",
+        "on_surface": "#2c302e",
         "on_surface_variant": "#4c4546",
         "outline": "#747878",
         "outline_variant": "#c4c7c7",
         "primary": "#000000",
         "on_primary": "#ffffff",
-        "secondary": "#2e6b30",
-        "error": "#ba1a1a",
-        "search_orange": "#d9480f",
+        "secondary": "#3a7d44",
+        "error": "#c93a40",
+        "search_orange": "#d95c14",
         "surface_tint": "#5e5e5e",
         "sidebar_bg": "#ebebeb",
         "sidebar_active": "#ffffff"
@@ -1471,7 +1471,7 @@ if __name__ == "__main__":
              font=("Lora", 14, "bold")).pack(pady=20)
     tk.Button(
         root, text="Open Unified Settings", font=("Inter", 11, "bold"),
-        bg="#2e6b30", fg="#ffffff", padx=16, pady=8, bd=0, relief="flat", cursor="hand2",
+        bg="#3a7d44", fg="#ffffff", padx=16, pady=8, bd=0, relief="flat", cursor="hand2",
         command=lambda: open_unified_settings(
             root, initial_tab="general",
             live_callbacks={"dark_mode": lambda v: _on_live("dark_mode", v)}

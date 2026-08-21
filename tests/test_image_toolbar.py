@@ -97,8 +97,8 @@ def test_dark_mode_switch(tk_root):
 
     toolbar.set_dark_mode(True)
     assert toolbar.dark_mode is True
-    assert toolbar.colors["surface"] == "#1e1e2e"
+    assert toolbar.colors["surface"] == "#181c19"
 
     toolbar.set_dark_mode(False)
     assert toolbar.dark_mode is False
-    assert toolbar.colors["surface"] == "#f9f9f9"
+    assert toolbar.colors["surface"] == "#fbfaf8"

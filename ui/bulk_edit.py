@@ -18,7 +18,7 @@ class BulkEditWindow:
 
         self.win = tk.Toplevel(parent)
         self.win.title("Bulk Edit Objects")
-        self.win.configure(bg="#f9f9f9")
+        self.win.configure(bg="#fbfaf8")
         self.win.bind("<Escape>", lambda e: self.win.destroy())
         self.win.bind("<Control-z>", self.undo_target_remove)
         self.win.transient(parent)
@@ -58,32 +58,32 @@ class BulkEditWindow:
 
     def _create_card(self, parent, title):
         outer = tk.Frame(parent, bg="#ffffff", highlightthickness=1, highlightbackground="#d1d1d1")
-        hdr   = tk.Frame(outer, bg="#f3f3f3")
+        hdr   = tk.Frame(outer, bg="#f2f5f1")
         hdr.pack(fill="x", side="top")
         tk.Label(hdr, text=title.upper(), font=("Hanken Grotesk", sc(11), "bold"),
-                 bg="#f3f3f3", fg="#000000", anchor="w", padx=sc(10), pady=sc(6)).pack(fill="x")
+                 bg="#f2f5f1", fg="#000000", anchor="w", padx=sc(10), pady=sc(6)).pack(fill="x")
         tk.Frame(outer, bg="#d1d1d1", height=1).pack(fill="x", side="top")          # separator
         content = tk.Frame(outer, bg="#ffffff", padx=sc(10), pady=sc(10))
         content.pack(fill="both", expand=True, side="top")
         return outer, content
 
     def _build_ui(self):
-        main_frame = tk.Frame(self.win, bg="#f9f9f9", padx=sc(10), pady=sc(10))
+        main_frame = tk.Frame(self.win, bg="#fbfaf8", padx=sc(10), pady=sc(10))
         main_frame.pack(fill="both", expand=True)
 
         # Header for Layout Toggle
-        header = tk.Frame(main_frame, bg="#f9f9f9")
+        header = tk.Frame(main_frame, bg="#fbfaf8")
         header.pack(fill="x", pady=(0, sc(5)))
         
         tk.Button(
             header, text="Toggle Layout (1-Col / 2-Col)", 
             font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2",
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2",
             padx=sc(10), pady=sc(3),
             command=self._toggle_layout
         ).pack(side="right")
         
-        self.content_frame = tk.Frame(main_frame, bg="#f9f9f9")
+        self.content_frame = tk.Frame(main_frame, bg="#fbfaf8")
         self.content_frame.pack(fill="both", expand=True)
 
         # 1. Manual Object Selection
@@ -91,7 +91,7 @@ class BulkEditWindow:
 
         search_frame = tk.Frame(selection_content, bg="#ffffff")
         search_frame.pack(fill="x", pady=(0, sc(5)))
-        tk.Label(search_frame, text="Add Object ID: ", font=("Hanken Grotesk", sc(10)), bg="#ffffff", fg="#1a1c1c").pack(side="left")
+        tk.Label(search_frame, text="Add Object ID: ", font=("Hanken Grotesk", sc(10)), bg="#ffffff", fg="#2c302e").pack(side="left")
         
         self.search_var = tk.StringVar()
         self.search_entry = tk.Entry(
@@ -99,14 +99,14 @@ class BulkEditWindow:
             relief="flat", bd=0,
             highlightthickness=1, highlightbackground="#d1d1d1",
             highlightcolor="#000000", insertbackground="#000000",
-            bg="#ffffff", fg="#1a1c1c"
+            bg="#ffffff", fg="#2c302e"
         )
         self.search_entry.pack(side="left", fill="x", expand=True, padx=sc(4))
         self.search_entry.bind("<Return>", self._on_add_object)
 
         tk.Button(
             search_frame, text="Add", font=("Hanken Grotesk", sc(9), "bold"),
-            bg="#1a1c1c", fg="#ffffff", relief="flat", bd=0, cursor="hand2",
+            bg="#2c302e", fg="#ffffff", relief="flat", bd=0, cursor="hand2",
             padx=sc(10), pady=sc(3),
             command=self._on_add_object
         ).pack(side="left", padx=sc(5))
@@ -117,7 +117,7 @@ class BulkEditWindow:
             relief="flat", bd=0,
             highlightthickness=1, highlightbackground="#d1d1d1",
             highlightcolor="#000000",
-            bg="#ffffff", fg="#1a1c1c"
+            bg="#ffffff", fg="#2c302e"
         )
         self.target_listbox.pack(fill="x", pady=sc(5))
         self.target_listbox.bind("<Double-Button-1>", self._on_remove_target)
@@ -171,7 +171,7 @@ class BulkEditWindow:
                     relief="flat", bd=0,
                     highlightthickness=1, highlightbackground="#d1d1d1",
                     highlightcolor="#000000", insertbackground="#000000",
-                    bg="#ffffff", fg="#1a1c1c"
+                    bg="#ffffff", fg="#2c302e"
                 ).grid(row=row, column=1, sticky="ew", padx=sc(5))
             
             row += 1
@@ -204,7 +204,7 @@ class BulkEditWindow:
                     relief="flat", bd=0,
                     highlightthickness=1, highlightbackground="#d1d1d1",
                     highlightcolor="#000000", insertbackground="#000000",
-                    bg="#ffffff", fg="#1a1c1c"
+                    bg="#ffffff", fg="#2c302e"
                 ).grid(row=row, column=1, sticky="ew", padx=sc(5))
             
             row += 1
@@ -229,16 +229,16 @@ class BulkEditWindow:
             row += 1
 
         # 3. Actions
-        action_frame = tk.Frame(main_frame, bg="#f9f9f9")
+        action_frame = tk.Frame(main_frame, bg="#fbfaf8")
         action_frame.pack(fill="x", pady=sc(10))
 
         # Target list actions
-        target_frame = tk.Frame(action_frame, bg="#f9f9f9")
+        target_frame = tk.Frame(action_frame, bg="#fbfaf8")
         target_frame.pack(fill="x", pady=(0, sc(10)))
 
         tk.Button(
             target_frame, text="Apply to Target List", font=("Hanken Grotesk", sc(10), "bold"),
-            bg="#1a1c1c", fg="#ffffff", relief="flat", bd=0, cursor="hand2",
+            bg="#2c302e", fg="#ffffff", relief="flat", bd=0, cursor="hand2",
             padx=sc(16), pady=sc(6),
             command=self.apply_to_targets
         ).pack(side="left", padx=sc(5))
@@ -246,7 +246,7 @@ class BulkEditWindow:
         ttk.Separator(action_frame, orient="horizontal").pack(fill="x", pady=sc(10))
 
         # Destructive action frame
-        destructive_frame = tk.Frame(action_frame, bg="#f9f9f9")
+        destructive_frame = tk.Frame(action_frame, bg="#fbfaf8")
         destructive_frame.pack(fill="x", pady=(0, sc(5)))
 
         self.understand_var = tk.BooleanVar(value=False)
@@ -258,7 +258,7 @@ class BulkEditWindow:
         count = len(self.app.active_object_ids) if hasattr(self.app, 'active_object_ids') else 0
         self.destructive_btn = tk.Button(
             destructive_frame, text=f"⚠ Apply to ALL {count} filtered objects", font=("Hanken Grotesk", sc(10), "bold"),
-            bg="#ffbf00", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2",
+            bg="#ffbf00", fg="#2c302e", relief="solid", bd=1, cursor="hand2",
             padx=sc(16), pady=sc(6),
             command=self.apply_to_all_filtered,
             state="disabled"

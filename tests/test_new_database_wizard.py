@@ -59,7 +59,7 @@ def test_wizard_init_and_dark_mode(tk_root, dummy_app):
     dummy_app.dark_mode_active = True
     wiz_dark = NewDatabaseWizard(tk_root, dummy_app)
     assert wiz_dark.dark_mode is True
-    assert wiz_dark.colors["surface"] == "#1e1e2e"
+    assert wiz_dark.colors["surface"] == "#181c19"
     wiz_dark.win.destroy()
 
 

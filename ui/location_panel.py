@@ -5,41 +5,41 @@ from config import sc
 
 # Color scheme definitions matching Filter menu & Historical Conflict Resolver (Zero emojis/symbols)
 COLORS_LIGHT = {
-    "bg": "#f9f9f9",
+    "bg": "#fbfaf8",
     "surface": "#ffffff",
-    "surface_dim": "#f3f3f3",
+    "surface_dim": "#f2f5f1",
     "header_bg": "#eaeaea",
     "border": "#d1d1d1",
-    "text": "#1a1c1c",
+    "text": "#2c302e",
     "text_muted": "#444748",
     "primary": "#000000",
     "on_primary": "#ffffff",
-    "success": "#3b6934",
+    "success": "#3a7d44",
     "on_success": "#ffffff",
-    "warning": "#ba1a1a",
+    "warning": "#c93a40",
     "on_warning": "#ffffff",
     "accent_bar": "#3e7b3e",
-    "focus_line": "#3b6934",
-    "badge_bg": "#e2e2e2",
+    "focus_line": "#3a7d44",
+    "badge_bg": "#e9ece5",
 }
 
 COLORS_DARK = {
-    "bg": "#1e1e2d",
-    "surface": "#2a2b3c",
-    "surface_dim": "#252538",
-    "header_bg": "#181825",
-    "border": "#313244",
-    "text": "#cdd6f4",
+    "bg": "#181c19",
+    "surface": "#212622",
+    "surface_dim": "#1e221f",
+    "header_bg": "#212622",
+    "border": "#141715",
+    "text": "#e8ebe9",
     "text_muted": "#a6adc8",
     "primary": "#ffffff",
     "on_primary": "#11111b",
     "success": "#a6e3a1",
     "on_success": "#11111b",
-    "warning": "#f38ba8",
+    "warning": "#c93a40",
     "on_warning": "#11111b",
     "accent_bar": "#a6e3a1",
     "focus_line": "#a6e3a1",
-    "badge_bg": "#313244",
+    "badge_bg": "#141715",
 }
 
 # Configured default fields and choices
@@ -691,11 +691,11 @@ if __name__ == "__main__":
     tk.Frame(root, bg="#d1d1d1", height=1).pack(fill="x")
     
     # Main content container
-    panel_container = tk.Frame(root, bg="#f9f9f9")
+    panel_container = tk.Frame(root, bg="#fbfaf8")
     panel_container.pack(fill="both", expand=True, padx=12, pady=12)
     
     # Bottom Event Log Box
-    log_frame = tk.LabelFrame(root, text="LIVE CALLBACK EVENT LOG", font=("JetBrains Mono", 9, "bold"), bg="#f3f3f3", padx=8, pady=6)
+    log_frame = tk.LabelFrame(root, text="LIVE CALLBACK EVENT LOG", font=("JetBrains Mono", 9, "bold"), bg="#f2f5f1", padx=8, pady=6)
     log_frame.pack(fill="x", side="bottom", padx=12, pady=(0, 12))
     
     log_text = tk.Text(log_frame, height=5, font=("JetBrains Mono", 9), bg="#1e1e1e", fg="#00ff00")
@@ -728,7 +728,7 @@ if __name__ == "__main__":
         
     def _on_dark_change(*_):
         is_dark = dark_var.get()
-        bg_col = "#1e1e2d" if is_dark else "#f9f9f9"
+        bg_col = "#181c19" if is_dark else "#fbfaf8"
         panel_container.configure(bg=bg_col)
         loc_panel.set_dark_mode(is_dark)
         

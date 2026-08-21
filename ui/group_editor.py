@@ -13,7 +13,7 @@ class GroupEditorWindow:
 
         self.win = tk.Toplevel(parent)
         self.win.title("Configure Registration Tabs")
-        self.win.configure(bg="#f9f9f9")
+        self.win.configure(bg="#fbfaf8")
         self.win.bind("<Escape>", lambda e: self.win.destroy())
         self.win.transient(parent)
 
@@ -31,7 +31,7 @@ class GroupEditorWindow:
     def setup_styles(self):
         style = ttk.Style()
         style.configure("FlatCard.TLabelframe", background="#ffffff", bordercolor="#d1d1d1", borderwidth=1, relief="solid")
-        style.configure("FlatCard.TLabelframe.Label", font=("Hanken Grotesk", sc(11), "bold"), background="#ffffff", foreground="#1a1c1c")
+        style.configure("FlatCard.TLabelframe.Label", font=("Hanken Grotesk", sc(11), "bold"), background="#ffffff", foreground="#2c302e")
 
     def load_tabs(self):
         prefs = config.load_prefs() or {}
@@ -59,17 +59,17 @@ class GroupEditorWindow:
 
     def _create_card_frame(self, parent, title):
         outer = tk.Frame(parent, bg="#ffffff", highlightthickness=1, highlightbackground="#d1d1d1")
-        hdr   = tk.Frame(outer, bg="#f3f3f3")
+        hdr   = tk.Frame(outer, bg="#f2f5f1")
         hdr.pack(fill="x", side="top")
         tk.Label(hdr, text=title.upper(), font=("Hanken Grotesk", sc(11), "bold"),
-                 bg="#f3f3f3", fg="#000000", anchor="w", padx=sc(10), pady=sc(6)).pack(fill="x")
+                 bg="#f2f5f1", fg="#000000", anchor="w", padx=sc(10), pady=sc(6)).pack(fill="x")
         tk.Frame(outer, bg="#d1d1d1", height=1).pack(fill="x", side="top")          # separator
         content = tk.Frame(outer, bg="#ffffff", padx=sc(10), pady=sc(10))
         content.pack(fill="both", expand=True, side="top")
         return outer, content
 
     def _build_ui(self):
-        main_frame = tk.Frame(self.win, bg="#f9f9f9", padx=sc(12), pady=sc(12))
+        main_frame = tk.Frame(self.win, bg="#fbfaf8", padx=sc(12), pady=sc(12))
         main_frame.pack(fill="both", expand=True)
 
         # Split Left/Right panes
@@ -82,7 +82,7 @@ class GroupEditorWindow:
 
         self.tabs_listbox = tk.Listbox(
             left_content, font=("Hanken Grotesk", sc(10)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, highlightthickness=0,
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, highlightthickness=0,
             exportselection=False
         )
         self.tabs_listbox.pack(fill="both", expand=True, pady=(0, sc(8)))
@@ -95,21 +95,21 @@ class GroupEditorWindow:
 
         add_tab_btn = tk.Button(
             btn_tab_row, text="Add Tab", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=self.add_tab
         )
         add_tab_btn.pack(side="left", padx=(0, sc(4)))
 
         rename_tab_btn = tk.Button(
             btn_tab_row, text="Rename", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=self.rename_tab
         )
         rename_tab_btn.pack(side="left", padx=sc(4))
 
         del_tab_btn = tk.Button(
             btn_tab_row, text="Delete", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#ba1a1a", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#c93a40", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=self.delete_tab
         )
         del_tab_btn.pack(side="right")
@@ -120,7 +120,7 @@ class GroupEditorWindow:
 
         self.fields_listbox = tk.Listbox(
             right_content, font=("JetBrains Mono", sc(10)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, highlightthickness=0
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, highlightthickness=0
         )
         self.fields_listbox.pack(fill="both", expand=True, pady=(0, sc(8)))
         self.fields_listbox.bind("<Button-3>", self.show_fields_context_menu)
@@ -131,21 +131,21 @@ class GroupEditorWindow:
 
         move_up_btn = tk.Button(
             btn_field_row, text="Move Up", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=lambda: self.move_field_order(-1)
         )
         move_up_btn.pack(side="left", padx=(0, sc(4)))
 
         move_down_btn = tk.Button(
             btn_field_row, text="Move Down", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=lambda: self.move_field_order(1)
         )
         move_down_btn.pack(side="left", padx=sc(4))
 
         move_to_btn = tk.Button(
             btn_field_row, text="Move to Tab...", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=self.move_field_to_tab
         )
         move_to_btn.pack(side="right")
@@ -155,39 +155,39 @@ class GroupEditorWindow:
 
         add_field_btn = tk.Button(
             edit_field_row, text="Add Field", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=self.add_field
         )
         add_field_btn.pack(side="left", padx=(0, sc(4)))
 
         rename_field_btn = tk.Button(
             edit_field_row, text="Rename Field", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=self.rename_field
         )
         rename_field_btn.pack(side="left", padx=sc(4))
 
         del_field_btn = tk.Button(
             edit_field_row, text="Delete Field", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#ba1a1a", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#c93a40", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=self.delete_field
         )
         del_field_btn.pack(side="right")
 
         # Pinned Actions at the bottom
-        actions = tk.Frame(main_frame, bg="#f9f9f9")
+        actions = tk.Frame(main_frame, bg="#fbfaf8")
         actions.pack(fill="x")
 
         save_btn = tk.Button(
             actions, text="Save Settings", font=("Hanken Grotesk", sc(10), "bold"),
-            bg="#1a1c1c", fg="#ffffff", relief="flat", bd=0, cursor="hand2", padx=sc(16), pady=sc(6),
+            bg="#2c302e", fg="#ffffff", relief="flat", bd=0, cursor="hand2", padx=sc(16), pady=sc(6),
             command=self.save_settings
         )
         save_btn.pack(side="right", padx=sc(4))
 
         cancel_btn = tk.Button(
             actions, text="Cancel", font=("Hanken Grotesk", sc(10)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(12), pady=sc(5),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(12), pady=sc(5),
             command=self.win.destroy
         )
         cancel_btn.pack(side="left")
@@ -297,7 +297,7 @@ class GroupEditorWindow:
 
         dialog = tk.Toplevel(self.win)
         dialog.title(f"Delete Tab: {src_group['name']}")
-        dialog.configure(bg="#f9f9f9")
+        dialog.configure(bg="#fbfaf8")
         dialog.transient(self.win)
         dialog.grab_set()
 
@@ -305,17 +305,17 @@ class GroupEditorWindow:
         utils.center_and_fit_toplevel(dialog, sc(420), sc(380))
 
         # --- Header ---
-        hdr = tk.Frame(dialog, bg="#f9f9f9")
+        hdr = tk.Frame(dialog, bg="#fbfaf8")
         hdr.pack(fill="x", padx=sc(14), pady=(sc(12), sc(4)))
         tk.Label(
             hdr, text=f"Move fields from  \"{src_group['name']}\"  before deleting",
-            font=("Hanken Grotesk", sc(10)), bg="#f9f9f9", fg="#1a1c1c", anchor="w"
+            font=("Hanken Grotesk", sc(10)), bg="#fbfaf8", fg="#2c302e", anchor="w"
         ).pack(fill="x")
 
         # --- Destination selector ---
-        dest_row = tk.Frame(dialog, bg="#f9f9f9")
+        dest_row = tk.Frame(dialog, bg="#fbfaf8")
         dest_row.pack(fill="x", padx=sc(14), pady=(sc(4), sc(8)))
-        tk.Label(dest_row, text="Move into tab:", font=("Hanken Grotesk", sc(9.5)), bg="#f9f9f9", fg="#444748").pack(side="left")
+        tk.Label(dest_row, text="Move into tab:", font=("Hanken Grotesk", sc(9.5)), bg="#fbfaf8", fg="#444748").pack(side="left")
         dest_var = tk.StringVar(value=dest_choices[0])
         dest_cb = ttk.Combobox(dest_row, textvariable=dest_var, values=dest_choices, state="readonly",
                                font=("Hanken Grotesk", sc(10)), width=20)
@@ -325,10 +325,10 @@ class GroupEditorWindow:
         list_frame = tk.Frame(dialog, bg="#ffffff", highlightthickness=1, highlightbackground="#d1d1d1")
         list_frame.pack(fill="both", expand=True, padx=sc(14), pady=(0, sc(8)))
 
-        list_hdr = tk.Frame(list_frame, bg="#f3f3f3")
+        list_hdr = tk.Frame(list_frame, bg="#f2f5f1")
         list_hdr.pack(fill="x")
         tk.Label(list_hdr, text="FIELD ORDER (will be appended to destination)", font=("Hanken Grotesk", sc(9), "bold"),
-                 bg="#f3f3f3", fg="#444748", anchor="w", padx=sc(8), pady=sc(5)).pack(fill="x")
+                 bg="#f2f5f1", fg="#444748", anchor="w", padx=sc(8), pady=sc(5)).pack(fill="x")
         tk.Frame(list_frame, bg="#d1d1d1", height=1).pack(fill="x")
 
         inner = tk.Frame(list_frame, bg="#ffffff")
@@ -339,8 +339,8 @@ class GroupEditorWindow:
 
         lbox = tk.Listbox(
             inner, font=("JetBrains Mono", sc(10)),
-            bg="#ffffff", fg="#1a1c1c", relief="flat", bd=0,
-            highlightthickness=0, selectbackground="#e2e2e2", selectforeground="#1a1c1c"
+            bg="#ffffff", fg="#2c302e", relief="flat", bd=0,
+            highlightthickness=0, selectbackground="#e9ece5", selectforeground="#2c302e"
         )
         lbox.pack(side="left", fill="both", expand=True)
 
@@ -356,10 +356,10 @@ class GroupEditorWindow:
         refresh_lbox()
 
         # Reorder buttons
-        btn_col = tk.Frame(list_frame, bg="#f3f3f3")
+        btn_col = tk.Frame(list_frame, bg="#f2f5f1")
         btn_col.pack(fill="x")
         tk.Frame(btn_col, bg="#d1d1d1", height=1).pack(fill="x")
-        btn_inner = tk.Frame(btn_col, bg="#f3f3f3")
+        btn_inner = tk.Frame(btn_col, bg="#f2f5f1")
         btn_inner.pack(fill="x", padx=sc(6), pady=sc(4))
 
         def move_item(direction):
@@ -375,18 +375,18 @@ class GroupEditorWindow:
 
         tk.Button(
             btn_inner, text="▲ Move Up", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=lambda: move_item(-1)
         ).pack(side="left", padx=(0, sc(4)))
 
         tk.Button(
             btn_inner, text="▼ Move Down", font=("Hanken Grotesk", sc(9)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(6), pady=sc(2),
             command=lambda: move_item(1)
         ).pack(side="left")
 
         # --- Footer buttons ---
-        footer = tk.Frame(dialog, bg="#f9f9f9")
+        footer = tk.Frame(dialog, bg="#fbfaf8")
         footer.pack(fill="x", padx=sc(14), pady=(0, sc(12)))
 
         def commit():
@@ -408,14 +408,14 @@ class GroupEditorWindow:
 
         tk.Button(
             footer, text="Move & Delete Tab", font=("Hanken Grotesk", sc(10), "bold"),
-            bg="#ba1a1a", fg="#ffffff", activebackground="#8b1313", activeforeground="#ffffff",
+            bg="#c93a40", fg="#ffffff", activebackground="#8b1313", activeforeground="#ffffff",
             relief="flat", bd=0, cursor="hand2", padx=sc(14), pady=sc(6),
             command=commit
         ).pack(side="right", padx=sc(4))
 
         tk.Button(
             footer, text="Cancel", font=("Hanken Grotesk", sc(10)),
-            bg="#ffffff", fg="#1a1c1c", relief="solid", bd=1, cursor="hand2", padx=sc(12), pady=sc(5),
+            bg="#ffffff", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(12), pady=sc(5),
             command=dialog.destroy
         ).pack(side="left")
 
@@ -465,12 +465,12 @@ class GroupEditorWindow:
         # Choose destination tab via temporary Top dialog
         dest_win = tk.Toplevel(self.win)
         dest_win.title("Move Field")
-        dest_win.configure(bg="#f9f9f9")
+        dest_win.configure(bg="#fbfaf8")
         dest_win.transient(self.win)
         
         tk.Label(
             dest_win, text=f"Move field '{field_name}' to tab:",
-            font=("Hanken Grotesk", sc(10)), bg="#f9f9f9", fg="#1a1c1c"
+            font=("Hanken Grotesk", sc(10)), bg="#fbfaf8", fg="#2c302e"
         ).pack(pady=sc(8), padx=sc(12))
         
         choices = [g["name"] for i, g in enumerate(self.groups) if i != g_idx]
@@ -497,7 +497,7 @@ class GroupEditorWindow:
             
         tk.Button(
             dest_win, text="Move", font=("Hanken Grotesk", sc(10), "bold"),
-            bg="#1a1c1c", fg="#ffffff", relief="flat", bd=0, cursor="hand2", padx=sc(12), pady=sc(4),
+            bg="#2c302e", fg="#ffffff", relief="flat", bd=0, cursor="hand2", padx=sc(12), pady=sc(4),
             command=do_move
         ).pack(pady=sc(8))
         
@@ -683,7 +683,7 @@ class FieldGroupEditorDialog(GroupEditorWindow):
 
         self.win = tk.Toplevel(parent)
         self.win.title("Configure Field Groups")
-        self.win.configure(bg="#f9f9f9")
+        self.win.configure(bg="#fbfaf8")
         self.win.bind("<Escape>", lambda e: self.win.destroy())
         self.win.transient(parent)
 
