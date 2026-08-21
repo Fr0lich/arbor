@@ -5817,7 +5817,7 @@ class ObjectProgramUI(
                     subprocess.Popen(["explorer", "/select,", path])
                 else:
                     parent_dir = os.path.dirname(path)
-                    if os.path.exists(parent_dir):
+                    if os.path.isdir(parent_dir):
                         subprocess.Popen(["explorer", parent_dir])
             except Exception:
                 pass
