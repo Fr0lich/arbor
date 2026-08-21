@@ -3101,6 +3101,7 @@ class ObjectProgramUI(
         if hasattr(self, "left_content_frame") and hasattr(self, "drawer_overlay"):
             self.left_content_frame.pack(in_=self.drawer_overlay, fill="both", expand=True)
             self.drawer_overlay.lift()
+            self.left_content_frame.lift()
             if hasattr(self, "left_panes"):
                 self.left_panes.pack(fill="both", expand=True)
         
