@@ -3428,7 +3428,7 @@ class ObjectProgramUI(
             lbl.bind("<Leave>", lambda e: lbl.config(fg="#c8c8c8"))
             return lbl
 
-        _sb_link(sb_right, "DB_STATUS",  self.open_show_statistics)   # placeholder — connect later
+        _sb_link(sb_right, "DB_STATUS",  self.show_statistics)   # placeholder — connect later
         _sb_link(sb_right, "LOG_VIEWER", self.open_log_viewer_window)
 
         # ----------------------------------------------------------------
