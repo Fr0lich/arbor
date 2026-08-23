@@ -5895,18 +5895,33 @@ class ObjectProgramUI(
         def _open_in_explorer():
             try:
                 import subprocess
+                import sys
                 path = os.path.abspath(log_path)
 
                 # Sanitize the argument to prevent argument injection.
                 # Valid existing Windows paths cannot contain double quotes or other malicious injection characters.
                 if '"' in path:
                     return
-                if os.path.exists(path):
-                    subprocess.Popen(["explorer", "/select,", path])
+
+                if sys.platform.startswith("win"):
+                    if os.path.exists(path):
+                        subprocess.Popen(["explorer", "/select,", path])
+                    else:
+                        parent_dir = os.path.dirname(path)
+                        if os.path.isdir(parent_dir):
+                            subprocess.Popen(["explorer", parent_dir])
+                elif sys.platform.startswith("darwin"):
+                    if os.path.exists(path):
+                        subprocess.Popen(["open", "-R", path])
+                    else:
+                        parent_dir = os.path.dirname(path)
+                        if os.path.isdir(parent_dir):
+                            subprocess.Popen(["open", parent_dir])
                 else:
-                    parent_dir = os.path.dirname(path)
+                    # Linux and other platforms
+                    parent_dir = os.path.dirname(path) if not os.path.isdir(path) else path
                     if os.path.isdir(parent_dir):
-                        subprocess.Popen(["explorer", parent_dir])
+                        subprocess.Popen(["xdg-open", parent_dir])
             except Exception:
                 pass
 
