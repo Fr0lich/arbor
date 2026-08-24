@@ -66,7 +66,8 @@ def save_prefs(prefs):
                 json.dump(_prefs_cache, f, indent=2)
             os.replace(tmp_path, _PREFS_PATH)
         except Exception as e:
-            pass
+            import sys
+            print(f"CRITICAL: Failed to save user preferences: {e}", file=sys.stderr)
 
     if root:
         if _save_job_id is not None:
