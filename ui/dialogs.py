@@ -263,13 +263,18 @@ class StartupDialog:
         # State vars
         self.db_path_var      = tk.StringVar()
         self.import_path_var  = tk.StringVar()
-        self.image_mode       = tk.StringVar(value="online")
+        self.image_mode       = tk.StringVar(value="folder")
         self.image_folder_var = tk.StringVar()
 
         # Pre-populate DB path from last used
         last = _cfg.get_last_dir("last_db_dir")
         if last and os.path.isfile(last):
             self.db_path_var.set(last)
+
+        # Pre-populate image folder path from last used
+        last_img_dir = _cfg.get_last_dir("last_image_dir")
+        if last_img_dir and os.path.isdir(last_img_dir):
+            self.image_folder_var.set(last_img_dir)
 
         # ── Build card ────────────────────────────────────────────────
         self._build_window()
@@ -683,7 +688,7 @@ class StartupDialog:
             browse_cmd=self.select_folder,
         )
 
-        self._set_image_mode("online")  # initial state
+        self._set_image_mode("folder")  # initial state
 
     def _set_image_mode(self, mode):
         self.image_mode.set(mode)
@@ -1460,6 +1465,10 @@ class StartupDialog:
         if mode == "folder" and not self.image_folder_var.get():
             messagebox.showerror("Error", "Please select a local image directory or switch to Online/Offline mode.")
             return
+
+        if mode == "folder":
+            import config
+            config.set_last_dir("last_image_dir", self.image_folder_var.get())
 
         self.image_mode_val = mode
         self.image_folder_val = self.image_folder_var.get()
