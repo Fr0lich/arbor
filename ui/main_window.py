@@ -1985,21 +1985,24 @@ class ObjectProgramUI(
         new_oid = str(max(existing_ids) + 1 if existing_ids else 1)
     
   
-        new_reg = self.app.df_reg.loc[oid].copy()
+        new_reg = self.app.df_reg.loc[[oid]].copy()
+        new_reg.index = [new_oid]
         new_reg["ObjectID"] = new_oid
-        new_reg["UID"] = uuid.uuid4().hex[:8]   
+        new_reg["UID"] = uuid.uuid4().hex[:8]
 
-        self.app.df_reg.loc[new_oid] = new_reg
+        self.app.df_reg = pd.concat([self.app.df_reg, new_reg])
 
- 
-        new_obs = self.app.df_obs.loc[oid].copy()
+
+        new_obs = self.app.df_obs.loc[[oid]].copy()
+        new_obs.index = [new_oid]
         new_obs["ProblemDescription"] = ""
-        self.app.df_obs.loc[new_oid] = new_obs
+        self.app.df_obs = pd.concat([self.app.df_obs, new_obs])
 
-   
+
         if not self.app.df_photo.empty and oid in self.app.df_photo.index:
-            new_photo = self.app.df_photo.loc[oid].copy()
-            self.app.df_photo.loc[new_oid] = new_photo
+            new_photo = self.app.df_photo.loc[[oid]].copy()
+            new_photo.index = [new_oid]
+            self.app.df_photo = pd.concat([self.app.df_photo, new_photo])
 
         self.app.active_object_ids.append(new_oid)
         self._invalidate_row_cache()
