@@ -4760,6 +4760,57 @@ class ObjectProgramUI(
         else:
             cf_text = jf(changed_fields)
 
+        if not hasattr(self.app, "_log_records") or not self.app._log_records:
+            if self.app.df_log is not None and not self.app.df_log.empty:
+                self.app._log_records = self.app.df_log.to_dict(orient="records")
+            else:
+                self.app._log_records = []
+
+        # Merge contiguous edits for the same object
+        if action == "EDIT" and self.app._log_records:
+            last_entry = self.app._log_records[-1]
+            if last_entry.get("Action") == "EDIT" and last_entry.get("ObjectID") == self.app.current_object_id:
+                # Update timestamp
+                last_entry["Timestamp"] = datetime.now().isoformat(timespec="seconds")
+
+                # Merge ChangedFields
+                existing_cf = set(x.strip() for x in last_entry.get("ChangedFields", "").split(",") if x.strip() and x.strip() != "(no changes)")
+                new_cf = set(x.strip() for x in (cf_text or "").split(",") if x.strip() and x.strip() != "(no changes)")
+                merged_cf = existing_cf.union(new_cf)
+                last_entry["ChangedFields"] = ", ".join(sorted(merged_cf)) if merged_cf else "(no changes)"
+
+                # Merge ChangedValues
+                existing_cv = last_entry.get("ChangedValues", "")
+                new_cv = jv(changed_values)
+                if new_cv:
+                    last_entry["ChangedValues"] = f"{existing_cv} | {new_cv}" if existing_cv else new_cv
+
+                # Merge ProblemsChanged
+                existing_pc = set(x.strip() for x in last_entry.get("ProblemsChanged", "").split(",") if x.strip())
+                new_pc = set(x.strip() for x in jf(prob_fields).split(",") if x.strip())
+                merged_pc = existing_pc.union(new_pc)
+                last_entry["ProblemsChanged"] = ", ".join(sorted(merged_pc)) if merged_pc else ""
+
+                # Merge ProblemsChangedValues
+                existing_pcv = last_entry.get("ProblemsChangedValues", "")
+                new_pcv = jv(prob_values)
+                if new_pcv:
+                    last_entry["ProblemsChangedValues"] = f"{existing_pcv} | {new_pcv}" if existing_pcv else new_pcv
+
+                # Merge LocationChanged
+                existing_lc = set(x.strip() for x in last_entry.get("LocationChanged", "").split(",") if x.strip())
+                new_lc = set(x.strip() for x in jf(loc_fields).split(",") if x.strip())
+                merged_lc = existing_lc.union(new_lc)
+                last_entry["LocationChanged"] = ", ".join(sorted(merged_lc)) if merged_lc else ""
+
+                # Replace LocationChangedValues entirely with the newest unified string
+                new_lcv = jv(loc_values)
+                if new_lcv:
+                    last_entry["LocationChangedValues"] = new_lcv
+
+                self.app.df_log = pd.DataFrame(self.app._log_records)
+                return
+
         entry = {
             "Timestamp": datetime.now().isoformat(timespec="seconds"),
             "Action": action,
@@ -4774,12 +4825,6 @@ class ObjectProgramUI(
             "SourceFile": os.path.basename(self.app.excel_path) if self.app.excel_path else "",
             "OutputFile": os.path.basename(self.app.output_path) if self.app.output_path else "",
         }
-
-        if not hasattr(self.app, "_log_records") or not self.app._log_records:
-            if self.app.df_log is not None and not self.app.df_log.empty:
-                self.app._log_records = self.app.df_log.to_dict(orient="records")
-            else:
-                self.app._log_records = []
 
         self.app._log_records.append(entry)
         self.app.df_log = pd.DataFrame(self.app._log_records)
@@ -4887,6 +4932,7 @@ class ObjectProgramUI(
 
         # -------- LOCATION --------
         if not skip_heavy:
+            loc_changed = False
             for col, var in self.location_vars.items():
                 old = utils.fmt_pandas_val(self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
                 new = var.get()
@@ -4896,8 +4942,16 @@ class ObjectProgramUI(
                     self.app.df_obs.at[oid, col] = new
                     if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
                         self._cached_obs_dict[oid][col] = new
-                    loc_changed_fields.append(col)
-                    loc_changed_values.append(f'{col}: "{old}"  "{new}"')
+                    loc_changed = True
+
+            if loc_changed:
+                loc_changed_fields.append("Location")
+                loc_vals = []
+                for col, var in self.location_vars.items():
+                    val = var.get()
+                    if val:
+                        loc_vals.append(f"{col}: {val}")
+                loc_changed_values.append(", ".join(loc_vals))
 
         # -------- REVIEWED --------
         old = bool(self.app.df_obs.at[oid, REVIEWED_COLUMN]) if oid in self.app.df_obs.index and REVIEWED_COLUMN in self.app.df_obs.columns else False
