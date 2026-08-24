@@ -5669,13 +5669,12 @@ class ObjectProgramUI(
 
 
                 if isinstance(widget, tk.Text):
-                    if not skip_heavy:
-                        widget.delete("1.0", tk.END)
-                        widget.insert("1.0", str(value))
-                        try:
-                            widget.edit_reset()
-                        except tk.TclError:
-                            pass
+                    widget.delete("1.0", tk.END)
+                    widget.insert("1.0", str(value))
+                    try:
+                        widget.edit_reset()
+                    except tk.TclError:
+                        pass
                 else:
                     if self.reg_vars[col].get() != value:
                         self.reg_vars[col].set(value)
