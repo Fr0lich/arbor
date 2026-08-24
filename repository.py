@@ -432,8 +432,14 @@ class SQLiteRepository:
 
             with conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-                existing_tables = {row[0] for row in cursor.fetchall()}
+                cursor.execute("SELECT m.name, p.name FROM sqlite_master m LEFT JOIN pragma_table_info(m.name) p WHERE m.type='table';")
+
+                existing_tables = set()
+                db_table_cols = {}
+                for t_name, c_name in cursor.fetchall():
+                    existing_tables.add(t_name)
+                    if c_name is not None:
+                        db_table_cols.setdefault(t_name, set()).add(c_name)
 
                 for table_name, df_save in [("Registration", df_reg_save), ("Observation", df_obs_save)]:
                     if table_name in existing_tables:
@@ -443,8 +449,7 @@ class SQLiteRepository:
                         if not table_name.isidentifier():
                             raise ValueError(f"Invalid table name: {table_name}")
 
-                        cursor.execute(f'PRAGMA table_info("{table_name}");')  # nosec B608
-                        db_cols = {row[1] for row in cursor.fetchall()}
+                        db_cols = db_table_cols.get(table_name, set())
                         df_cols = set(df_save.columns)
                         if df_cols.issubset(db_cols):
                             cursor.execute(f'DELETE FROM "{table_name}";')  # nosec B608
