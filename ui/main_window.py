@@ -4764,13 +4764,21 @@ class ObjectProgramUI(
             else:
                 self.app._log_records = []
 
+        is_reviewed = "Yes" if action == "REVIEWED" else "No" if action == "NOT_REVIEWED" else ""
+
         # Merge contiguous edits for the same object
         if action in ("EDIT", "REVIEWED", "NOT_REVIEWED") and self.app._log_records:
             last_entry = self.app._log_records[-1]
             if last_entry.get("Action") in ("EDIT", "REVIEWED", "NOT_REVIEWED") and last_entry.get("ObjectID") == target_oid:
                 # Update timestamp and action
                 last_entry["Timestamp"] = datetime.now().isoformat(timespec="seconds")
-                last_entry["Action"] = action
+
+                if action == "EDIT":
+                    last_entry["Action"] = "EDIT"
+                elif action in ("REVIEWED", "NOT_REVIEWED"):
+                    last_entry["Reviewed"] = is_reviewed
+                    if last_entry.get("Action") != "EDIT":
+                        last_entry["Action"] = action
 
                 # Merge ChangedFields
                 existing_cf = set(x.strip() for x in last_entry.get("ChangedFields", "").split(",") if x.strip() and x.strip() != "(no changes)")
@@ -4813,6 +4821,7 @@ class ObjectProgramUI(
         entry = {
             "Timestamp": datetime.now().isoformat(timespec="seconds"),
             "Action": action,
+            "Reviewed": is_reviewed,
             "ObjectID": target_oid,
             "ChangedFields": cf_text or ("(no changes)" if not has_any else ""),
             "ChangedValues": jv(changed_values),

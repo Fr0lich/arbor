@@ -231,7 +231,7 @@ def _normalise_log_dataframe(df_log):
     the new section-specific logging columns.
     """
     required_cols = [
-        "Timestamp", "Action", "ObjectID",
+        "Timestamp", "Action", "Reviewed", "ObjectID",
         "ChangedFields", "ChangedValues",
         "ProblemsChanged", "ProblemsChangedValues",
         "LocationChanged", "LocationChangedValues",
