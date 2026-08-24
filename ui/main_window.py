@@ -2580,6 +2580,10 @@ class ObjectProgramUI(
             if isinstance(widget, tk.Text):
                 widget.delete("1.0", tk.END)
                 widget.insert("1.0", value)
+                try:
+                    widget.edit_reset()
+                except tk.TclError:
+                    pass
             else:
                 widget.delete(0, tk.END)
                 widget.insert(0, value)
@@ -2911,6 +2915,10 @@ class ObjectProgramUI(
                 if isinstance(widget, tk.Text):
                     widget.delete("1.0", tk.END)
                     widget.insert("1.0", v)
+                    try:
+                        widget.edit_reset()
+                    except tk.TclError:
+                        pass
                     modified_widgets.append(widget)
                 else:
                     self.reg_vars[k].set(v)
@@ -5664,6 +5672,10 @@ class ObjectProgramUI(
                     if not skip_heavy:
                         widget.delete("1.0", tk.END)
                         widget.insert("1.0", str(value))
+                        try:
+                            widget.edit_reset()
+                        except tk.TclError:
+                            pass
                 else:
                     if self.reg_vars[col].get() != value:
                         self.reg_vars[col].set(value)
@@ -8086,6 +8098,10 @@ class ObjectProgramUI(
             if isinstance(widget, tk.Text):
                 widget.delete("1.0", tk.END)
                 widget.insert("1.0", self._copied_field_value)
+                try:
+                    widget.edit_reset()
+                except tk.TclError:
+                    pass
             else:
                 self.reg_vars[name].set(self._copied_field_value)
             self.system_status.config(text=f"Pasted to [{name}]")
