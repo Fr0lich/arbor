@@ -474,16 +474,22 @@ class HistoricalConflictResolverWindow:
         prob_changed_fields = []
         prob_changed_values = []
 
+        reg_updates = {}
+        prob_updates = {}
+
+        # Fetch outside the loop if it doesn't change per field in a way that matters for get
+        reg_dict = self.main_app._get_reg_dict() if hasattr(self.main_app, "_get_reg_dict") else {}
+        reg_row = reg_dict.get(self.oid) or self.main_app.app.df_reg.loc[self.oid]
+
         # We simulate clicking apply on all fields that have a value different from current
         for field in self.fields:
-            reg_dict = self.main_app._get_reg_dict() if hasattr(self.main_app, "_get_reg_dict") else {}
-            reg_row = reg_dict.get(self.oid) or self.main_app.app.df_reg.loc[self.oid]
             current_val = str(reg_row.get(field, "")).strip()
             if current_val == "nan": current_val = ""
             
             new_val = self.res_vars[field].get().strip()
             if new_val and new_val != current_val:
-                self.main_app.app.df_reg.loc[self.oid, field] = new_val
+                reg_updates[field] = new_val
+
                 if field in self.main_app.reg_vars:
                     self.main_app.reg_vars[field].set(new_val)
                 if hasattr(self.main_app, "reg_entries") and field in self.main_app.reg_entries:
@@ -504,15 +510,12 @@ class HistoricalConflictResolverWindow:
                             prob_changed_fields.append(pc)
                             prob_changed_values.append(f'{pc}: "True"  "False"')
                         self.main_app.problem_vars[pc].set(False)
-                        self.main_app.app.df_obs.loc[self.oid, pc] = False
+                        prob_updates[pc] = False
                         if getattr(self.main_app, "_cached_obs_dict", None) is not None and self.oid in self.main_app._cached_obs_dict:
                             self.main_app._cached_obs_dict[self.oid][pc] = False
                         if hasattr(self.main_app, "loaded_problem_states"):
                             self.main_app.loaded_problem_states[pc] = False
 
-                self.main_app._row_cache_dirty = True
-                self.main_app.commit_current_object()
-                        
                 # Update card visually
                 if field in self.card_frames:
                     card = self.card_frames[field]
@@ -522,7 +525,25 @@ class HistoricalConflictResolverWindow:
                     for w in header.winfo_children():
                         w.configure(bg=COLORS["success"])
                         
+        if reg_updates:
+            keys = list(reg_updates.keys())
+            values = list(reg_updates.values())
+            if len(keys) == 1:
+                self.main_app.app.df_reg.loc[self.oid, keys[0]] = values[0]
+            else:
+                self.main_app.app.df_reg.loc[self.oid, keys] = values
+        if prob_updates:
+            keys = list(prob_updates.keys())
+            values = list(prob_updates.values())
+            if len(keys) == 1:
+                self.main_app.app.df_obs.loc[self.oid, keys[0]] = values[0]
+            else:
+                self.main_app.app.df_obs.loc[self.oid, keys] = values
+
         if reg_changed_fields or prob_changed_fields:
+            self.main_app._row_cache_dirty = True
+            self.main_app.commit_current_object()
+
             self.main_app.log_action(
                 "RESOLVE_HISTORICAL_CONFLICT",
                 changed_fields=reg_changed_fields,
