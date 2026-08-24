@@ -689,10 +689,17 @@ class DatabaseOpsMixin:
                             self.app.config,
                             df_reg=df_reg_copy, df_obs=df_obs_copy, df_log=df_log_copy, df_photo=df_photo_copy
                         )
-                        self.root.after(0, lambda: (
-                            self._hide_progress("Export complete"),
+
+                        def _on_export_success():
+                            self.app.excel_path = path
+                            self.app.output_path = path
+                            self.app.dirty = False
+                            self.update_dirty_ui()
+                            self.system_status.config(text=f"Saved: {os.path.basename(path)}")
+                            self._hide_progress("Export complete")
                             self.show_banner(f"Exported to: {path}", "success")
-                        ))
+
+                        self.root.after(0, _on_export_success)
                     except Exception as e:
                         from utils import debug_error
                         import traceback
@@ -705,6 +712,7 @@ class DatabaseOpsMixin:
                 import threading
                 threading.Thread(target=_worker, daemon=True).start()
             else:
+                self.app.excel_path = path
                 self.app.output_path = path
                 self.save_session("SAVE_AS")
         except Exception as e:
