@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arbor Mobile Companion</title>
+    <style>
+        :root {
+            --primary: #3a7d44;
+            --primary-dark: #2e5228;
+            --bg: #f2f5f1;
+            --surface: #ffffff;
+            --text: #2c302e;
+            --text-light: #747878;
+            --border: #c4c7c7;
+            --error: #c93a40;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            overscroll-behavior-y: none;
+        }
+
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-left: 12px;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: none;
+        }
+
+        #view-list, #view-detail {
+            display: none;
+            padding: 16px;
+            padding-bottom: 80px; /* space for bottom buttons */
+        }
+
+        #view-list.active, #view-detail.active {
+            display: block;
+        }
+
+        /* --- List View --- */
+        .search-container {
+            margin-bottom: 16px;
+        }
+
+        .search-container input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            background-color: var(--surface);
+        }
+
+        .object-card {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .object-card:active {
+            background-color: #f9f9f9;
+        }
+
+        .object-info h3 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+
+        .object-info p {
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+
+        .status-icon {
+            font-size: 1.5rem;
+        }
+
+        .status-icon.reviewed {
+            color: var(--primary);
+        }
+
+        .status-icon.pending {
+            color: var(--border);
+        }
+
+        /* --- Detail View --- */
+        .image-gallery {
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            margin-bottom: 24px;
+            gap: 12px;
+            padding-bottom: 8px;
+        }
+
+        .image-gallery img {
+            height: 250px;
+            border-radius: 8px;
+            scroll-snap-align: center;
+            object-fit: contain;
+            background-color: #000;
+        }
+
+        .field-group {
+            margin-bottom: 20px;
+            background: var(--surface);
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .field-group h4 {
+            margin-bottom: 12px;
+            color: var(--text-light);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .form-row {
+            margin-bottom: 16px;
+        }
+
+        .form-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-row label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .form-row input[type="text"],
+        .form-row textarea,
+        .form-row select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+            background-color: var(--bg);
+        }
+
+        .form-row textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        /* --- Floating Action Area --- */
+        .action-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--surface);
+            padding: 16px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            display: none;
+            gap: 12px;
+            z-index: 100;
+        }
+
+        .action-bar.active {
+            display: flex;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:active {
+            background-color: var(--primary-dark);
+        }
+
+        .btn-reviewed {
+            background-color: var(--bg);
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn-reviewed.is-reviewed {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <button class="back-btn" id="btn-back">←</button>
+        <h1 id="header-title">Arbor Mobile</h1>
+    </header>
+
+    <div id="loading">Loading...</div>
+
+    <!-- LIST VIEW -->
+    <div id="view-list" class="active">
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="Search ID, genus, species...">
+        </div>
+        <div id="object-list">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <!-- DETAIL VIEW -->
+    <div id="view-detail">
+        <div class="image-gallery" id="detail-images">
+            <!-- Images populated by JS -->
+        </div>
+
+        <form id="detail-form">
+            <input type="hidden" id="current-oid">
+
+            <div class="field-group">
+                <h4>Taxonomy</h4>
+                <div class="form-row">
+                    <label>Genus</label>
+                    <input type="text" id="f-genus" data-col="Genus">
+                </div>
+                <div class="form-row">
+                    <label>Species</label>
+                    <input type="text" id="f-species" data-col="Species">
+                </div>
+            </div>
+
+            <div class="field-group">
+                <h4>Notes</h4>
+                <div class="form-row">
+                    <label>Observation</label>
+                    <textarea id="f-obs" data-col="Observation"></textarea>
+                </div>
+                <div class="form-row">
+                    <label>Comment</label>
+                    <textarea id="f-comment" data-col="Comment"></textarea>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <h4>Location</h4>
+                <div class="form-row">
+                    <label>Building</label>
+                    <input type="text" id="f-building" data-col="Building" data-table="obs">
+                </div>
+                <div class="form-row">
+                    <label>Floor</label>
+                    <input type="text" id="f-floor" data-col="Floor" data-table="obs">
+                </div>
+                <div class="form-row">
+                    <label>Cabinet</label>
+                    <input type="text" id="f-cabinet" data-col="Cabinet" data-table="obs">
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="action-bar" id="detail-actions">
+        <button class="btn btn-primary" id="btn-save">Save Edits</button>
+        <button class="btn btn-reviewed" id="btn-toggle-review">Mark Reviewed</button>
+    </div>
+
+    <script>
+        let allObjects = [];
+        let currentObjectIsReviewed = false;
+
+        const elViewList = document.getElementById('view-list');
+        const elViewDetail = document.getElementById('view-detail');
+        const elHeaderTitle = document.getElementById('header-title');
+        const elBtnBack = document.getElementById('btn-back');
+        const elActionBar = document.getElementById('detail-actions');
+        const elLoading = document.getElementById('loading');
+        const elObjectList = document.getElementById('object-list');
+        const elSearch = document.getElementById('search-input');
+
+        function showLoading(show) {
+            elLoading.style.display = show ? 'block' : 'none';
+        }
+
+        function switchView(view) {
+            if (view === 'list') {
+                elViewList.classList.add('active');
+                elViewDetail.classList.remove('active');
+                elActionBar.classList.remove('active');
+                elBtnBack.style.display = 'none';
+                elHeaderTitle.textContent = 'Arbor Mobile';
+                loadList(); // refresh list on back
+            } else {
+                elViewList.classList.remove('active');
+                elViewDetail.classList.add('active');
+                elActionBar.classList.add('active');
+                elBtnBack.style.display = 'block';
+            }
+        }
+
+        elBtnBack.addEventListener('click', () => switchView('list'));
+
+        // --- LIST VIEW LOGIC ---
+        async function loadList() {
+            showLoading(true);
+            try {
+                const res = await fetch('/api/objects');
+                const data = await res.json();
+                allObjects = data.objects || [];
+                renderList(allObjects);
+            } catch (e) {
+                alert('Error loading list');
+                console.error(e);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function renderList(objects) {
+            elObjectList.innerHTML = '';
+            objects.forEach(obj => {
+                const card = document.createElement('div');
+                card.className = 'object-card';
+
+                const iconClass = obj.reviewed ? 'status-icon reviewed' : 'status-icon pending';
+                const iconText = obj.reviewed ? '☑' : '☐';
+
+                const title = `${obj.genus} ${obj.species}`.trim() || 'Unknown';
+
+                card.innerHTML = `
+                    <div class="object-info">
+                        <h3>${obj.id} - ${title}</h3>
+                    </div>
+                    <div class="${iconClass}">${iconText}</div>
+                `;
+
+                card.addEventListener('click', () => openDetail(obj.id));
+                elObjectList.appendChild(card);
+            });
+        }
+
+        elSearch.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase();
+            const filtered = allObjects.filter(obj => {
+                return obj.id.toLowerCase().includes(q) ||
+                       obj.genus.toLowerCase().includes(q) ||
+                       obj.species.toLowerCase().includes(q);
+            });
+            renderList(filtered);
+        });
+
+        // --- DETAIL VIEW LOGIC ---
+        async function openDetail(id) {
+            showLoading(true);
+            try {
+                const res = await fetch(`/api/object/${id}`);
+                const data = await res.json();
+
+                if(data.error) throw new Error(data.error);
+
+                document.getElementById('current-oid').value = id;
+                elHeaderTitle.textContent = `Object ${id}`;
+
+                // Populate images
+                const gallery = document.getElementById('detail-images');
+                gallery.innerHTML = '';
+                if(data.images && data.images.length > 0) {
+                    data.images.forEach(src => {
+                        const img = document.createElement('img');
+                        img.src = src;
+                        gallery.appendChild(img);
+                    });
+                } else {
+                    gallery.innerHTML = '<p style="padding: 16px; color: #777;">No images available</p>';
+                }
+
+                // Populate form fields
+                document.querySelectorAll('#detail-form input[type="text"], #detail-form textarea').forEach(el => {
+                    const col = el.getAttribute('data-col');
+                    const table = el.getAttribute('data-table') || 'reg';
+                    const val = data[table][col];
+                    el.value = (val !== null && val !== undefined) ? val : '';
+                });
+
+                // Set review button state
+                currentObjectIsReviewed = data.obs.Reviewed || false;
+                updateReviewBtnUI();
+
+                switchView('detail');
+            } catch (e) {
+                alert('Error loading object: ' + e.message);
+                console.error(e);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function updateReviewBtnUI() {
+            const btn = document.getElementById('btn-toggle-review');
+            if (currentObjectIsReviewed) {
+                btn.textContent = '✓ Reviewed';
+                btn.classList.add('is-reviewed');
+            } else {
+                btn.textContent = 'Mark Reviewed';
+                btn.classList.remove('is-reviewed');
+            }
+        }
+
+        document.getElementById('btn-toggle-review').addEventListener('click', async () => {
+            currentObjectIsReviewed = !currentObjectIsReviewed;
+            updateReviewBtnUI();
+            await saveChanges();
+        });
+
+        document.getElementById('btn-save').addEventListener('click', saveChanges);
+
+        async function saveChanges() {
+            const oid = document.getElementById('current-oid').value;
+            const payload = {
+                id: oid,
+                reg: {},
+                obs: {
+                    Reviewed: currentObjectIsReviewed
+                }
+            };
+
+            document.querySelectorAll('#detail-form input[type="text"], #detail-form textarea').forEach(el => {
+                const col = el.getAttribute('data-col');
+                const table = el.getAttribute('data-table') || 'reg';
+                payload[table][col] = el.value;
+            });
+
+            const btn = document.getElementById('btn-save');
+            const originalText = btn.textContent;
+            btn.textContent = 'Saving...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+
+                btn.textContent = 'Saved!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 1500);
+
+            } catch (e) {
+                alert('Error saving: ' + e.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Init
+        loadList();
+
+    </script>
+</body>
+</html>

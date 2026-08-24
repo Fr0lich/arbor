@@ -359,6 +359,7 @@ class ObjectProgramUI(
         self._drawer_anim_job = None
         self._drawer_current_width = 0
         self._drawer_is_open = False
+        self._mobile_server_thread = None
 
         self.show_list_var = tk.BooleanVar(value=_init_prefs.get("show_list", True))
         self.show_search_var = tk.BooleanVar(value=_init_prefs.get("show_search", True))
@@ -582,6 +583,7 @@ class ObjectProgramUI(
         self.apply_saved_layout()
         self._autosave_job = None
         self.root.bind("<Button-1>", self._hide_search_if_outside)
+        self.root.bind("<<MobileEditReceived>>", self._on_mobile_edit_received)
         style = ttk.Style(self.root)
 
 
@@ -2203,6 +2205,7 @@ class ObjectProgramUI(
     def show_file_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
         popup.add_command(label="New Database", command=self.create_new_database)
+        popup.add_command(label="Start Mobile Companion", command=self.start_mobile_companion)
         popup.add_command(label="Open Excel", command=self.open_excel)
         popup.add_command(label="Save", command=lambda: self.save_session("SAVE"))
         popup.add_command(label="Save As...", command=self.save_as)
@@ -2308,6 +2311,87 @@ class ObjectProgramUI(
         """Shim: opens the unified settings window on the General tab."""
         self._open_unified("general")
 
+
+
+    def _on_mobile_edit_received(self, event=None):
+        self.update_dirty_ui()
+        if hasattr(self, "_invalidate_row_cache"):
+            self._invalidate_row_cache()
+        self._list_dirty = True
+        self.refresh_list()
+
+        oid = self.app.current_object_id
+        if oid:
+            # Re-load current object to show changes if we are currently looking at it
+            self.load_object(oid)
+
+    def start_mobile_companion(self):
+        import socket
+        import backend.mobile_server
+
+        if getattr(self, "_mobile_server_thread", None) is not None and self._mobile_server_thread.is_alive():
+            messagebox.showinfo("Mobile Companion", "Mobile server is already running.")
+            return
+
+        try:
+            # Get local IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            ip = "127.0.0.1"
+
+        port = 5000
+        url = f"http://{ip}:{port}"
+
+        try:
+            self._mobile_server_thread = backend.mobile_server.start_mobile_server(self.app, self.root, host='0.0.0.0', port=port)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start mobile server:\n{e}")
+            return
+
+        # Create popup with QR code
+        win = tk.Toplevel(self.root)
+        win.title("Mobile Companion")
+        win.resizable(False, False)
+        win.transient(self.root)
+
+        import utils
+        utils.center_and_fit_toplevel(win, sc(350), sc(400))
+
+        is_dark = getattr(self, "dark_mode_active", False)
+        bg_col = "#1e1e2d" if is_dark else "#ffffff"
+        fg_col = "#e8ebe9" if is_dark else "#000000"
+        win.configure(bg=bg_col)
+
+        lbl_title = tk.Label(win, text="Mobile Companion Active", font=("Segoe UI", sc(14), "bold"), bg=bg_col, fg=fg_col)
+        lbl_title.pack(pady=(20, 10))
+
+        lbl_inst = tk.Label(win, text="Scan this QR code with your phone\nconnected to the same Wi-Fi network:", bg=bg_col, fg=fg_col)
+        lbl_inst.pack(pady=(0, 10))
+
+        try:
+            import qrcode
+            from PIL import ImageTk
+            qr = qrcode.QRCode(version=1, box_size=8, border=4)
+            qr.add_data(url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+
+            # Convert to PhotoImage
+            tk_img = ImageTk.PhotoImage(img)
+            qr_lbl = tk.Label(win, image=tk_img, bg=bg_col)
+            qr_lbl.image = tk_img # keep reference
+            qr_lbl.pack(pady=10)
+        except Exception as e:
+            tk.Label(win, text="(Error generating QR code)", bg=bg_col, fg="red").pack(pady=20)
+
+        lbl_url = tk.Label(win, text=url, font=("Courier New", sc(12), "bold"), bg=bg_col, fg=fg_col)
+        lbl_url.pack(pady=(10, 20))
+
+        btn = ttk.Button(win, text="Close", command=win.destroy)
+        btn.pack(pady=10)
 
 
     def open_help_window(self):
