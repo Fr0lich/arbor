@@ -4748,7 +4748,10 @@ class ObjectProgramUI(
     def log_action(self, action, 
                    changed_fields=None, changed_values=None,
                    prob_fields=None, prob_values=None,
-                   loc_fields=None, loc_values=None):
+                   loc_fields=None, loc_values=None,
+                   oid=None):
+
+        target_oid = oid if oid is not None else self.app.current_object_id
         
         # Helper to join lists into strings for logging
         def jf(arr): return ", ".join(arr) if isinstance(arr, list) else (arr or "")
@@ -4767,11 +4770,12 @@ class ObjectProgramUI(
                 self.app._log_records = []
 
         # Merge contiguous edits for the same object
-        if action == "EDIT" and self.app._log_records:
+        if action in ("EDIT", "REVIEWED", "NOT_REVIEWED") and self.app._log_records:
             last_entry = self.app._log_records[-1]
-            if last_entry.get("Action") == "EDIT" and last_entry.get("ObjectID") == self.app.current_object_id:
-                # Update timestamp
+            if last_entry.get("Action") in ("EDIT", "REVIEWED", "NOT_REVIEWED") and last_entry.get("ObjectID") == target_oid:
+                # Update timestamp and action
                 last_entry["Timestamp"] = datetime.now().isoformat(timespec="seconds")
+                last_entry["Action"] = action
 
                 # Merge ChangedFields
                 existing_cf = set(x.strip() for x in last_entry.get("ChangedFields", "").split(",") if x.strip() and x.strip() != "(no changes)")
@@ -4814,7 +4818,7 @@ class ObjectProgramUI(
         entry = {
             "Timestamp": datetime.now().isoformat(timespec="seconds"),
             "Action": action,
-            "ObjectID": self.app.current_object_id,
+            "ObjectID": target_oid,
             "ChangedFields": cf_text or ("(no changes)" if not has_any else ""),
             "ChangedValues": jv(changed_values),
             "ProblemsChanged": jf(prob_fields),
@@ -7705,8 +7709,8 @@ class ObjectProgramUI(
                 self.object_list.item(oid, values=current_vals)
 
             self.update_list_item_color(oid)
+            self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'], oid=lookup_key)
             
-        self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'])
         self.app.dirty = True
         self.update_dirty_ui()
         self.update_review_progress()
@@ -7912,6 +7916,7 @@ class ObjectProgramUI(
         for oid in ids:
             self.app.df_obs.at[oid, REVIEWED_COLUMN] = value
             self.app.df_obs.at[oid, REVIEWED_AT_COLUMN] = now
+            self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'], oid=oid)
 
         self.app.dirty = True
         self.update_dirty_ui()
@@ -9054,7 +9059,7 @@ class ObjectProgramUI(
             self.reviewed_var.set(new_val)
             self.reviewed_time_label.config(text=now if new_val else "")
 
-        self.log_action("REVIEWED" if new_val else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{new_val}"'])
+        self.log_action("REVIEWED" if new_val else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{new_val}"'], oid=lookup_key)
             
         self.app.dirty = True
         self.update_dirty_ui()
