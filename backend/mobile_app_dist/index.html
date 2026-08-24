@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#2c302e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Arbor · Mobile Companion</title>
+
+  <!-- Google Fonts: Lora (Taxonomy Serif), Inter (UI Sans), JetBrains Mono (Data Mono) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,500;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Arbor Botanical Theme Stylesheet -->
+  <link rel="stylesheet" href="/assets/index.css">
+</head>
+<body class="bg-[#f3f3f3] text-[#191e1a] antialiased select-none pb-28">
+
+  <!-- App Header -->
+  <header class="sticky top-0 z-40 bg-[#fbfaf8] border-b border-[#d4d8d5] shadow-xs px-4 py-3">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-[#3a7d44] text-white font-serif font-bold text-sm">A</span>
+        <div>
+          <h1 class="font-serif font-bold text-base leading-tight text-[#191e1a]">Arbor Companion</h1>
+          <p id="header-db-name" class="font-mono text-xs text-[#535d56] truncate max-w-[190px]">Connecting...</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- Live Heartbeat Indicator -->
+        <button id="btn-connection-status" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#eff7f1] text-[#3a7d44] border border-[#a4cca9] cursor-pointer">
+          <span class="w-2 h-2 rounded-full bg-[#3a7d44] animate-pulse"></span>
+          <span id="conn-text">Live</span>
+        </button>
+        <!-- Screen Wake Lock Toggle -->
+        <button id="btn-wakelock" title="Keep screen awake" class="p-1.5 rounded-md text-[#535d56] hover:bg-[#eceeec] active:bg-[#dfe3e0]">
+          <i data-lucide="sun" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main id="app-root" class="max-w-md mx-auto px-3 pt-3">
+    <!-- Dynamic views (List View, Detail View, Connection Screen) render here -->
+    <div id="view-loading" class="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+      <div class="w-10 h-10 border-3 border-[#3a7d44] border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="font-serif text-lg font-semibold text-[#191e1a]">Connecting to Arbor Host</p>
+      <p class="font-sans text-xs text-[#535d56] mt-1">Synchronizing museum collection in memory...</p>
+    </div>
+  </main>
+
+  <!-- Fullscreen Photo Modal -->
+  <div id="photo-modal" class="fixed inset-0 z-50 bg-black/90 hidden flex-col items-center justify-center p-2 backdrop-blur-xs">
+    <div class="absolute top-4 right-4 flex items-center gap-3 z-10">
+      <button id="btn-photo-source-toggle" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-full text-xs font-mono backdrop-blur-md">Source: Online</button>
+      <button id="btn-close-photo-modal" class="p-2 bg-white/20 hover:bg-white/30 text-white rounded-full backdrop-blur-md">
+        <i data-lucide="x" class="w-6 h-6"></i>
+      </button>
+    </div>
+    <div class="w-full h-full flex items-center justify-center overflow-hidden p-2">
+      <img id="modal-photo-img" src="" alt="Specimen Detail" class="max-h-[85vh] max-w-full object-contain rounded-sm shadow-2xl transition-transform duration-200">
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="sync-toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-[#2c302e] text-[#fbfaf8] px-4 py-2 rounded-full shadow-lg text-xs font-sans font-medium flex items-center gap-2 opacity-0 pointer-events-none transition-opacity duration-300">
+    <i data-lucide="check" class="w-4 h-4 text-[#3a7d44]"></i>
+    <span id="sync-toast-msg">Changes pushed to desktop database</span>
+  </div>
+
+  <!-- Client SPA Script -->
+  <script src="/assets/index.js"></script>
+</body>
+</html>

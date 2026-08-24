@@ -464,6 +464,12 @@ class ObjectProgramUI(
         self._cached_species_dict: dict = {}
         self._row_cache_dirty: bool = True
 
+        # Mobile Companion Subsystems
+        self.mobile_server_mgr = None
+        self.mobile_tunnel_mgr = None
+        self._mobile_dialog = None
+        self.root.bind("<<MobileEditReceived>>", self._on_mobile_edit_received)
+
         self.problem_to_field = {}
         self.problem_columns = []
         self.location_columns = []
@@ -2208,6 +2214,8 @@ class ObjectProgramUI(
         popup.add_command(label="Save As...", command=self.save_as)
         popup.add_command(label="Export filtered list...", command=self.export_filtered_list)
         popup.add_separator()
+        popup.add_command(label="Mobile Web Companion...", command=self.open_mobile_companion)
+        popup.add_separator()
         popup.add_command(label="Restore earlier autosave...", command=self.open_autosave_manager)
         popup.add_separator()
         popup.add_command(label="Exit", command=self.on_close)
@@ -3509,6 +3517,10 @@ class ObjectProgramUI(
         # HISTORY — recent objects popup
         btn_hist = _nav_btn(nav_links_frame, "RECENT",  self.open_recent_popup)
         self.add_tooltip(btn_hist, "View recently visited objects")
+
+        # MOBILE — opens mobile companion pairing dialog
+        btn_mob = _nav_btn(nav_links_frame, "MOBILE 📱", self.open_mobile_companion)
+        self.add_tooltip(btn_mob, "Connect smartphone companion via QR code")
 
         # 1px separator before secondary controls
         tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)
@@ -5803,7 +5815,84 @@ class ObjectProgramUI(
 
 
 
+    def open_mobile_companion(self):
+        """Open or bring to focus the Mobile Companion controller dialog."""
+        if hasattr(self, "_mobile_dialog") and self._mobile_dialog and self._mobile_dialog.win.winfo_exists():
+            self._mobile_dialog.win.lift()
+            self._mobile_dialog.win.focus_force()
+            return
+
+        from ui.mobile_dialog import MobileCompanionDialog
+        self._mobile_dialog = MobileCompanionDialog(self, self.app)
+
+    def _on_mobile_edit_received(self, event=None):
+        """Processes incoming edits dispatched from the Flask Mobile Companion server queue."""
+        if not hasattr(self, "mobile_server_mgr") or not self.mobile_server_mgr:
+            return
+
+        while not self.mobile_server_mgr.event_queue.empty():
+            try:
+                edit = self.mobile_server_mgr.event_queue.get_nowait()
+            except Exception:
+                break
+
+            oid = str(edit.get("oid"))
+            reviewed = edit.get("reviewed")
+            obs_updates = edit.get("observation", {})
+            timestamp = edit.get("timestamp", datetime.now().strftime("%H:%M:%S"))
+
+            # 1. Update in-memory observation cache
+            if hasattr(self, "_cached_obs_dict") and self._cached_obs_dict and oid in self._cached_obs_dict:
+                if reviewed is not None:
+                    self._cached_obs_dict[oid][REVIEWED_COLUMN] = bool(reviewed)
+                for k, v in obs_updates.items():
+                    self._cached_obs_dict[oid][k] = v
+
+            if hasattr(self, "_cached_reviewed_dict") and self._cached_reviewed_dict:
+                if reviewed is not None:
+                    self._cached_reviewed_dict[oid] = bool(reviewed)
+
+            # 2. Mark application dirty
+            self.app.dirty = True
+
+            # 3. If currently viewing this object on desktop, sync form controls without focus disruption
+            if getattr(self.app, "current_object_id", None) == oid:
+                if reviewed is not None and hasattr(self, "reviewed_var"):
+                    self.reviewed_var.set(bool(reviewed))
+                for field, val in obs_updates.items():
+                    if hasattr(self, "obs_entry_dict") and field in self.obs_entry_dict:
+                        entry = self.obs_entry_dict[field]
+                        if hasattr(entry, "set"):
+                            entry.set(str(val) if val is not None else "")
+
+            # 4. Surgical status update in object list (preserves scroll & selection)
+            if hasattr(self, "object_list"):
+                try:
+                    if hasattr(self.object_list, "tree") and self.object_list.tree.exists(oid):
+                        tag = "reviewed" if reviewed else "unreviewed"
+                        self.object_list.tree.item(oid, tags=(tag,))
+                except Exception:
+                    pass
+
+            # 5. Log in Mobile Companion Dialog feed if open
+            if hasattr(self, "_mobile_dialog") and self._mobile_dialog and self._mobile_dialog.win.winfo_exists():
+                status_text = "Marked Reviewed" if reviewed else "Observation Updated"
+                self._mobile_dialog.log_activity(f"[{timestamp}] Object {oid}: {status_text}")
+
     def on_close(self):
+        # Stop Mobile Companion background server and SSH tunnel
+        if hasattr(self, "mobile_tunnel_mgr") and self.mobile_tunnel_mgr:
+            try:
+                self.mobile_tunnel_mgr.stop()
+            except Exception:
+                pass
+
+        if hasattr(self, "mobile_server_mgr") and self.mobile_server_mgr:
+            try:
+                self.mobile_server_mgr.stop()
+            except Exception:
+                pass
+
         if self.app.dirty:
             res = messagebox.askyesnocancel("Unsaved changes", "Save before exiting?")
             if res is None:
