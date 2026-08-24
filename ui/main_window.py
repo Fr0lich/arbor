@@ -503,7 +503,6 @@ class ObjectProgramUI(
 
         self.root.bind("<space>", self._toggle_problem_checkbox)
 
-        self.root.bind("<Control-f>", self.focus_search)
         self.root.bind("<Control-q>", self.toggle_focus_mode_shortcut)
         self.root.bind("<Control-h>", self.open_history_shortcut)
 
@@ -546,10 +545,11 @@ class ObjectProgramUI(
         self.root.bind("<Control-k>", self._apply_default_data_preset_shortcut)
         self.root.bind("<Control-K>", self._apply_default_data_preset_shortcut)
 
-        for seq in ("<Control-Key-o>", "<Control-Key-O>", "<Control-o>", "<Control-O>"):
-            self.root.bind_all(seq, self.handle_ctrl_o)
-        for seq in ("<Control-Key-f>", "<Control-Key-F>", "<Control-f>", "<Control-F>"):
-            self.root.bind_all(seq, self.handle_ctrl_f)
+        self.root.bind("<Control-o>", self.handle_ctrl_o)
+        self.root.bind("<Control-O>", self.handle_ctrl_o)
+
+        self.root.bind("<Control-f>", self.handle_ctrl_f)
+        self.root.bind("<Control-F>", self.handle_ctrl_f)
 
         # Collapsible Panel Toggles for Laptop Views
         self.root.bind("<F6>", self.toggle_list_panel_shortcut)
@@ -3071,18 +3071,14 @@ class ObjectProgramUI(
         _step()
 
     def handle_ctrl_o(self, event=None):
-        if self._drawer_is_open:
-            self.close_drawer()
-        else:
-            self.open_drawer()
-        return "break"
+        return self.toggle_left_pin(event)
 
     def handle_ctrl_l(self, event=None):
         return self.handle_ctrl_o(event)
 
     def handle_ctrl_f(self, event=None):
-        if not self._drawer_is_open and self._drawer_current_width <= 0:
-            self.open_drawer()
+        if not self.left_pinned.get():
+            self.toggle_left_pin()
         
         if hasattr(self, "_inline_search_entry"):
             self._inline_search_entry.focus_set()
@@ -4365,8 +4361,7 @@ class ObjectProgramUI(
     def focus_search(self, event=None):
         """Ctrl+F / Ctrl+L: Open drawer if unpinned, then focus the inline live search bar."""
         if hasattr(self, "left_pinned") and not self.left_pinned.get():
-            if not getattr(self, "_drawer_is_open", False) and getattr(self, "_drawer_current_width", 0) <= 0:
-                self.open_drawer()
+            self.toggle_left_pin()
         
         if hasattr(self, "_inline_search_entry"):
             self._inline_search_entry.focus_set()
