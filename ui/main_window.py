@@ -4760,6 +4760,23 @@ class ObjectProgramUI(
         else:
             cf_text = jf(changed_fields)
 
+        is_only_location = not changed_fields and not prob_fields and loc_fields == ["Location"]
+        if is_only_location and action == "EDIT" and getattr(self.app, "_log_records", None):
+            last_log = self.app._log_records[-1]
+            if last_log.get("ObjectID") == self.app.current_object_id and last_log.get("Action") == "EDIT":
+                if last_log.get("LocationChanged", "") == "Location":
+                    last_vals = last_log.get("LocationChangedValues", "")
+                    original_old = last_vals.rsplit('  "', 1)[0] if '  "' in last_vals else '""'
+
+                    current_vals = loc_values[0] if loc_values else '""  ""'
+                    new_new = '"' + current_vals.rsplit('  "', 1)[1] if '  "' in current_vals else '""'
+
+                    last_log["LocationChangedValues"] = f'{original_old}  {new_new}'
+                    last_log["Timestamp"] = datetime.now().isoformat(timespec="seconds")
+
+                    self.app.df_log = pd.DataFrame(self.app._log_records)
+                    return
+
         entry = {
             "Timestamp": datetime.now().isoformat(timespec="seconds"),
             "Action": action,
@@ -4887,17 +4904,33 @@ class ObjectProgramUI(
 
         # -------- LOCATION --------
         if not skip_heavy:
+            location_changed = False
+            old_loc_parts = []
+            new_loc_parts = []
             for col, var in self.location_vars.items():
-                old = utils.fmt_pandas_val(self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
-                new = var.get()
+                old_val = utils.fmt_pandas_val(self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
+                new_val = var.get()
 
-                if old != new:
-                    ensure_undo()
-                    self.app.df_obs.at[oid, col] = new
+                if old_val:
+                    old_loc_parts.append(str(old_val).strip())
+                if new_val:
+                    new_loc_parts.append(str(new_val).strip())
+
+                if old_val != new_val:
+                    location_changed = True
+
+            if location_changed:
+                ensure_undo()
+                for col, var in self.location_vars.items():
+                    new_val = var.get()
+                    self.app.df_obs.at[oid, col] = new_val
                     if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
-                        self._cached_obs_dict[oid][col] = new
-                    loc_changed_fields.append(col)
-                    loc_changed_values.append(f'{col}: "{old}"  "{new}"')
+                        self._cached_obs_dict[oid][col] = new_val
+
+                old_loc_str = ", ".join(old_loc_parts)
+                new_loc_str = ", ".join(new_loc_parts)
+                loc_changed_fields.append("Location")
+                loc_changed_values.append(f'"{old_loc_str}"  "{new_loc_str}"')
 
         # -------- REVIEWED --------
         old = bool(self.app.df_obs.at[oid, REVIEWED_COLUMN]) if oid in self.app.df_obs.index and REVIEWED_COLUMN in self.app.df_obs.columns else False
