@@ -1913,9 +1913,9 @@ class ObjectProgramUI(
             return
             
         if self.app.df_reg is not None and oid in self.app.df_reg.index:
-            self.app.df_reg.drop(index=oid, inplace=True)
+            self.app.df_reg = self.app.df_reg.drop(index=oid)
         if self.app.df_obs is not None and oid in self.app.df_obs.index:
-            self.app.df_obs.drop(index=oid, inplace=True)
+            self.app.df_obs = self.app.df_obs.drop(index=oid)
             
         self.app.dirty = True
         self.update_dirty_ui()
@@ -7908,9 +7908,11 @@ class ObjectProgramUI(
 
         now = datetime.now().strftime("%d.%m.%Y %H:%M") if value else ""
 
+        # Vectorized assignment for efficiency
+        self.app.df_obs.loc[ids, REVIEWED_COLUMN] = value
+        self.app.df_obs.loc[ids, REVIEWED_AT_COLUMN] = now
+
         for oid in ids:
-            self.app.df_obs.at[oid, REVIEWED_COLUMN] = value
-            self.app.df_obs.at[oid, REVIEWED_AT_COLUMN] = now
             self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'], oid=oid)
 
         self.app.dirty = True

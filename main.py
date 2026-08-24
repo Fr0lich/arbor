@@ -153,23 +153,30 @@ def _check_previous_crash_logs(root: tk.Tk, ui_ref: list) -> None:
             if not stale_logs:
                 return
 
-            most_recent = stale_logs[0]
+            most_recent_log[0] = stale_logs[0]
 
-            def _show_banner():
-                active_ui = ui_ref[0] if ui_ref else None
-                if active_ui is None:
-                    return
-                if hasattr(active_ui, "show_banner"):
-                    active_ui.show_banner(
-                        f"⚠ Crash log from last session found — click to view",
-                        banner_type="warning",
-                        duration_ms=12000,
-                        action_callback=lambda: active_ui.show_error_log_window(most_recent)
-                    )
-
-            root.after(2000, _show_banner)
+            # Trigger the event on the main thread
+            root.event_generate("<<ShowCrashBanner>>", when="tail")
         except Exception as e:
             pass
+
+    most_recent_log = [None]
+
+    def _on_show_banner(event):
+        def _show_banner():
+            active_ui = ui_ref[0] if ui_ref else None
+            if active_ui is None:
+                return
+            if hasattr(active_ui, "show_banner") and most_recent_log[0]:
+                active_ui.show_banner(
+                    f"⚠ Crash log from last session found — click to view",
+                    banner_type="warning",
+                    duration_ms=12000,
+                    action_callback=lambda: active_ui.show_error_log_window(most_recent_log[0])
+                )
+        root.after(2000, _show_banner)
+
+    root.bind("<<ShowCrashBanner>>", _on_show_banner)
 
     thread = threading.Thread(target=_background_scan, daemon=True)
     thread.start()
