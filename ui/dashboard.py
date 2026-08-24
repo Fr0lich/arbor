@@ -171,6 +171,27 @@ class DashboardMixin:
         add_row(c_overall, "Reviewed", f"{reviewed_count}  ({pct(reviewed_count)})", bold=reviewed_count > 0, value_color=COLORS["success"] if reviewed_count > 0 else COLORS["text"])
         add_row(c_overall, "Not reviewed", f"{not_reviewed}  ({pct(not_reviewed)})")
         add_row(c_overall, "With problems", f"{with_problems}  ({pct(with_problems)})", bold=with_problems > 0, value_color=COLORS["error"] if with_problems > 0 else COLORS["text"])
+
+        # Vectorized calculation for fixable problems
+        fixable_mask = pd.Series(False, index=self.app.df_reg.index)
+        for prob_col in getattr(self, "problem_columns", []):
+            if prob_col in self.app.df_obs.columns:
+                prob_active = _get_prob_series(prob_col)
+                is_unknown_mask = pd.Series(False, index=self.app.df_reg.index)
+                if hasattr(self, "problem_to_field") and prob_col in self.problem_to_field and prob_col != "Other_problem":
+                    field = self.problem_to_field.get(prob_col)
+                    if field and field != "Other" and field in self.app.df_reg.columns:
+                        reg_s = self.app.df_reg[field].reindex(self.app.df_reg.index, fill_value="")
+                        is_unknown_mask = reg_s.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
+                fixable_mask |= (prob_active & ~is_unknown_mask)
+
+        if hasattr(self, "_problem_cache") and len(self._problem_cache) >= total:
+            auth_mask = pd.Series(self._problem_cache).reindex(self.app.df_reg.index, fill_value=False)
+            fixable_mask &= auth_mask
+
+        fixable = int(fixable_mask.sum())
+        add_row(c_overall, 'Problems, excluding "unknown"', f"{fixable}  ({pct(fixable)})", bold=fixable > 0, value_color=COLORS["error"] if fixable > 0 else COLORS["text"])
+
         active_count = len(self.app.active_object_ids) if hasattr(self.app, "active_object_ids") else 0
         add_row(c_overall, "Currently filtered", f"{active_count} of {total}")
 
