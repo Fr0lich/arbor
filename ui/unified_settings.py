@@ -631,7 +631,7 @@ class UnifiedSettingsWindow:
         btn_start_tutorial = ttk.Button(
             c, text="Start Layout Tutorial",
             command=lambda: __import__('ui.tutorial', fromlist=['TutorialManager']).TutorialManager().start_tutorial("layout_settings", self.win, force=True)
-        )
+        , cursor="hand2")
         btn_start_tutorial.pack(anchor="ne", padx=10, pady=5)
 
         # Card 1: Workspace Panels
@@ -839,7 +839,7 @@ class UnifiedSettingsWindow:
         btn_start_tutorial = ttk.Button(
             c, text="Start Focus Tutorial",
             command=lambda: __import__('ui.tutorial', fromlist=['TutorialManager']).TutorialManager().start_tutorial("focus_settings", self.win, force=True)
-        )
+        , cursor="hand2")
         btn_start_tutorial.pack(anchor="ne", padx=10, pady=5)
 
         # Card 1: Focus Master Switches
@@ -924,7 +924,7 @@ class UnifiedSettingsWindow:
                 self._push_layout_to_app()
             messagebox.showinfo("Layout Loaded", f"Layout '{name}' applied.", parent=self.win)
 
-        ttk.Button(r1, text="Load", width=8, command=_load_layout).pack(side="left", padx=2)
+        ttk.Button(r1, text="Load", width=8, command=_load_layout, cursor="hand2").pack(side="left", padx=2)
 
         def _delete_layout():
             name = cb_layout.get()
@@ -937,7 +937,7 @@ class UnifiedSettingsWindow:
                 _refresh_layouts()
                 cb_layout.set("")
 
-        ttk.Button(r1, text="Delete", width=8, command=_delete_layout).pack(side="left", padx=2)
+        ttk.Button(r1, text="Delete", width=8, command=_delete_layout, cursor="hand2").pack(side="left", padx=2)
 
         r2 = tk.Frame(card1, bg=self.COLORS["card_bg"])
         r2.pack(fill="x", pady=sc(6))
@@ -989,7 +989,7 @@ class UnifiedSettingsWindow:
             messagebox.showinfo("Preset Saved",
                                 f"Layout preset '{name}' saved successfully!", parent=self.win)
 
-        ttk.Button(r2, text="Save Preset", width=12, command=_save_layout).pack(side="left")
+        ttk.Button(r2, text="Save Preset", width=12, command=_save_layout, cursor="hand2").pack(side="left")
 
         r3 = tk.Frame(card1, bg=self.COLORS["card_bg"])
         r3.pack(fill="x", pady=sc(4))
@@ -1013,9 +1013,9 @@ class UnifiedSettingsWindow:
                 _refresh_layouts()
 
         ttk.Button(r3, text="Set Current as Startup Default", width=30,
-                   command=_set_startup_default).pack(side="left", padx=(0, sc(4)))
+                   command=_set_startup_default, cursor="hand2").pack(side="left", padx=(0, sc(4)))
         ttk.Button(r3, text="Reset to Factory", width=16,
-                   command=_reset_factory).pack(side="left")
+                   command=_reset_factory, cursor="hand2").pack(side="left")
 
         # ── Focus Presets ──
         card2 = self._create_card(c, "Focus Presets Manager")
@@ -1068,8 +1068,8 @@ class UnifiedSettingsWindow:
                 _refresh_focus()
                 cb_focus.set("")
 
-        ttk.Button(rf1, text="Load", width=8, command=_load_focus).pack(side="left", padx=2)
-        ttk.Button(rf1, text="Delete", width=8, command=_delete_focus).pack(side="left", padx=2)
+        ttk.Button(rf1, text="Load", width=8, command=_load_focus, cursor="hand2").pack(side="left", padx=2)
+        ttk.Button(rf1, text="Delete", width=8, command=_delete_focus, cursor="hand2").pack(side="left", padx=2)
 
         rf2 = tk.Frame(card2, bg=self.COLORS["card_bg"])
         rf2.pack(fill="x", pady=sc(6))
@@ -1096,7 +1096,7 @@ class UnifiedSettingsWindow:
             messagebox.showinfo("Preset Saved",
                                 f"Focus preset '{name}' saved!", parent=self.win)
 
-        ttk.Button(rf2, text="Save Preset", width=12, command=_save_focus).pack(side="left")
+        ttk.Button(rf2, text="Save Preset", width=12, command=_save_focus, cursor="hand2").pack(side="left")
 
     # ── TAB 6: ADVANCED ──────────────────────────────────────────────────────
     def _build_tab_advanced(self):

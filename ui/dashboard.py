@@ -60,10 +60,10 @@ class DashboardMixin:
         footer.pack_propagate(False)
         tk.Frame(footer, bg=COLORS["border"], height=1).pack(side="top", fill="x")
 
-        btn_close = tk.Button(footer, text="CLOSE", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(16), pady=sc(8), command=win.destroy)
+        btn_close = tk.Button(footer, text="CLOSE", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(16), pady=sc(8), command=win.destroy, cursor="hand2")
         btn_close.pack(side="right", padx=sc(16), pady=sc(12))
 
-        btn_save = tk.Button(footer, text="SAVE SESSION STATS", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), pady=sc(8), command=self.save_session_stats)
+        btn_save = tk.Button(footer, text="SAVE SESSION STATS", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), pady=sc(8), command=self.save_session_stats, cursor="hand2")
         btn_save.pack(side="right", padx=sc(8), pady=sc(12))
 
         # Main Scrollable Area

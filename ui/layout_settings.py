@@ -173,7 +173,7 @@ class LayoutSettingsMixin:
             preset_name_var.set("")
             self.system_status.config(text=f"Layout preset '{name}' saved.")
 
-        ttk.Button(preset_row2, text="Save", command=on_save_preset, width=6, style="Primary.TButton").pack(side="left", padx=2)
+        ttk.Button(preset_row2, text="Save", command=on_save_preset, width=6, style="Primary.TButton", cursor="hand2").pack(side="left", padx=2)
 
         def on_delete_preset():
             val = self.layout_dialog_preset_cb.get()
@@ -187,13 +187,13 @@ class LayoutSettingsMixin:
                 refresh_preset_cb()
                 self.system_status.config(text=f"Layout preset '{val}' deleted.")
 
-        ttk.Button(preset_row2, text="Delete", command=on_delete_preset, width=6, style="Tool.TButton").pack(side="left", padx=2)
+        ttk.Button(preset_row2, text="Delete", command=on_delete_preset, width=6, style="Tool.TButton", cursor="hand2").pack(side="left", padx=2)
         refresh_preset_cb()
 
         preset_row3 = ttk.Frame(preset_lf)
         preset_row3.pack(fill="x", pady=(6, 2))
-        ttk.Button(preset_row3, text="Set Current as Startup Default", command=self.set_current_as_startup_default, style="Primary.TButton").pack(side="left", fill="x", expand=True, padx=2)
-        ttk.Button(preset_row3, text="Reset Layout to Factory", command=self.reset_layout_to_factory, style="Tool.TButton").pack(side="right", fill="x", expand=True, padx=2)
+        ttk.Button(preset_row3, text="Set Current as Startup Default", command=self.set_current_as_startup_default, style="Primary.TButton", cursor="hand2").pack(side="left", fill="x", expand=True, padx=2)
+        ttk.Button(preset_row3, text="Reset Layout to Factory", command=self.reset_layout_to_factory, style="Tool.TButton", cursor="hand2").pack(side="right", fill="x", expand=True, padx=2)
 
         return preset_lf
 
@@ -342,10 +342,10 @@ class LayoutSettingsMixin:
             self._on_apply_layout_settings()
             _close_layout_win()
 
-        ttk.Button(btn_row, text="Cancel", command=_close_layout_win, width=10, style="Tool.TButton").pack(side="right", padx=4)
-        ttk.Button(btn_row, text="OK", command=on_ok, width=10, style="Primary.TButton").pack(side="right", padx=4)
+        ttk.Button(btn_row, text="Cancel", command=_close_layout_win, width=10, style="Tool.TButton", cursor="hand2").pack(side="right", padx=4)
+        ttk.Button(btn_row, text="OK", command=on_ok, width=10, style="Primary.TButton", cursor="hand2").pack(side="right", padx=4)
 
-        apply_btn = ttk.Button(btn_row, text="Apply", command=self._on_apply_layout_settings, width=10, style="Primary.TButton")
+        apply_btn = ttk.Button(btn_row, text="Apply", command=self._on_apply_layout_settings, width=10, style="Primary.TButton", cursor="hand2")
         apply_btn.pack(side="right", padx=4)
 
         return btn_row, apply_btn, _close_layout_win

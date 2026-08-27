@@ -169,7 +169,7 @@ class HistoricalConflictResolverWindow:
         self.stats_label = tk.Label(footer, text="", font=FONT_MONO, fg=COLORS["text_muted"], bg=COLORS["surface_dim"])
         self.stats_label.pack(side="left", padx=sc(24), pady=sc(12))
         
-        btn_apply_all = tk.Button(footer, text="APPLY ALL RESOLVED (CTRL+A)", font=FONT_UI_BOLD, fg=COLORS["on_success"], bg=COLORS["success"], relief="flat", bd=0, padx=sc(16), pady=sc(8), command=self.apply_all)
+        btn_apply_all = tk.Button(footer, text="APPLY ALL RESOLVED (CTRL+A)", font=FONT_UI_BOLD, fg=COLORS["on_success"], bg=COLORS["success"], relief="flat", bd=0, padx=sc(16), pady=sc(8), command=self.apply_all, cursor="hand2")
         btn_apply_all.pack(side="right", padx=sc(16), pady=sc(6))
         
         # Cleanup routine
@@ -187,7 +187,7 @@ class HistoricalConflictResolverWindow:
  
         self.win.bind("<Destroy>", _cleanup)
  
-        btn_close = tk.Button(footer, text="CLOSE", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(16), pady=sc(8), command=self.win.destroy)
+        btn_close = tk.Button(footer, text="CLOSE", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(16), pady=sc(8), command=self.win.destroy, cursor="hand2")
         btn_close.pack(side="right", padx=sc(8), pady=sc(6))
 
         # Tutorial IDs
@@ -352,7 +352,7 @@ class HistoricalConflictResolverWindow:
                 src_str = f"[{', '.join(sorted(sources))}]" if sources else ""
                 
                 # We need it to be focusable for keyboard nav
-                sug_btn = tk.Button(sug_frame, text=f"{val}\n{src_str}", font=FONT_MONO, justify="left", bg=COLORS["surface"], fg=COLORS["text"], relief="flat", bd=0, anchor="w")
+                sug_btn = tk.Button(sug_frame, text=f"{val}\n{src_str}", font=FONT_MONO, justify="left", bg=COLORS["surface"], fg=COLORS["text"], relief="flat", bd=0, anchor="w", cursor="hand2")
                 sug_btn.pack(fill="both", expand=True, padx=sc(8), pady=sc(8))
                 
                 def _populate(v=val, rv=res_var):
@@ -426,7 +426,7 @@ class HistoricalConflictResolverWindow:
                     w.configure(bg=COLORS["success"])
                 h.configure(bg=COLORS["success"])
                 
-        btn_apply = tk.Button(entry_frame, text="APPLY", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), command=_apply)
+        btn_apply = tk.Button(entry_frame, text="APPLY", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), command=_apply, cursor="hand2")
         btn_apply.pack(side="right", padx=(sc(8), 0))
         
         entry.bind("<Return>", lambda e, f=_apply: f())

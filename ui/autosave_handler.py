@@ -357,7 +357,7 @@ class AutosaveMixin:
                         pass
                 win.destroy()
 
-        ttk.Button(btn_frame, text="Restore selected", command=restore_selected).pack(side="left", padx=4)
-        ttk.Button(btn_frame, text="Delete selected", command=delete_selected).pack(side="left", padx=4)
-        ttk.Button(btn_frame, text="Delete all", command=delete_all).pack(side="left", padx=4)
-        ttk.Button(btn_frame, text="Close", command=win.destroy).pack(side="right", padx=4)
+        ttk.Button(btn_frame, text="Restore selected", command=restore_selected, cursor="hand2").pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Delete selected", command=delete_selected, cursor="hand2").pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Delete all", command=delete_all, cursor="hand2").pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Close", command=win.destroy, cursor="hand2").pack(side="right", padx=4)

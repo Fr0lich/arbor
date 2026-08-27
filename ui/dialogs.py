@@ -1222,19 +1222,19 @@ class StartupDialog:
         self.db_dropdown.bind("<<ComboboxSelected>>", self.on_db_selected)
 
         self.books_label = ttk.Label(frame, text="No books loaded", foreground="gray")
-        ttk.Button(frame, text="Load Books", command=self.load_books_startup).pack(fill="x")
+        ttk.Button(frame, text="Load Books", command=self.load_books_startup, cursor="hand2").pack(fill="x")
         self.books_label.pack(anchor="w", pady=(2, 8))
 
         self.history_label = ttk.Label(frame, text="No historical databases loaded", foreground="gray")
         ttk.Button(frame, text="Load Earlier Databases",
-                   command=self.load_historical_startup).pack(fill="x")
+                   command=self.load_historical_startup, cursor="hand2").pack(fill="x")
         self.history_label.pack(anchor="w", pady=(2, 8))
 
         self.progress_bar_adv = ttk.Progressbar(frame, variable=self.progress_var, maximum=100)
         self.progress_bar_adv.pack(fill="x", pady=4)
         self.progress_bar_adv.pack_forget()
 
-        ttk.Button(frame, text="Done", command=adv_win.destroy).pack(anchor="e", pady=(8, 0))
+        ttk.Button(frame, text="Done", command=adv_win.destroy, cursor="hand2").pack(anchor="e", pady=(8, 0))
 
         # Point old progress_bar references to the advanced one
         self.progress_bar = self.progress_bar_adv

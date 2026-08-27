@@ -78,10 +78,10 @@ class MobileDialog:
         mode_btn_frame = tk.Frame(qr_container, bg="#ffffff")
         mode_btn_frame.pack(fill="x", pady=(4, 0))
 
-        self.btn_qr_local = tk.Button(mode_btn_frame, text="📶 Local Wi-Fi", font=("Segoe UI", 7, "bold"), bg="#1b4332", fg="white", relief="flat", padx=4, pady=1, command=lambda: self.switch_qr("local"))
+        self.btn_qr_local = tk.Button(mode_btn_frame, text="📶 Local Wi-Fi", font=("Segoe UI", 7, "bold"), bg="#1b4332", fg="white", relief="flat", padx=4, pady=1, command=lambda: self.switch_qr("local"), cursor="hand2")
         self.btn_qr_local.pack(side="left", expand=True, fill="x", padx=1)
 
-        self.btn_qr_public = tk.Button(mode_btn_frame, text="🌐 Public Pinggy", font=("Segoe UI", 7), bg="#e0e3df", fg="#333", relief="flat", padx=4, pady=1, command=lambda: self.switch_qr("public"))
+        self.btn_qr_public = tk.Button(mode_btn_frame, text="🌐 Public Pinggy", font=("Segoe UI", 7), bg="#e0e3df", fg="#333", relief="flat", padx=4, pady=1, command=lambda: self.switch_qr("public"), cursor="hand2")
         self.btn_qr_public.pack(side="right", expand=True, fill="x", padx=1)
 
         # Connection Info Grid
@@ -128,7 +128,7 @@ class MobileDialog:
         bottom_bar = tk.Frame(main, bg="#ffffff")
         bottom_bar.pack(fill="x")
 
-        self.stop_btn = ttk.Button(bottom_bar, text="🔴 Disconnect & Resume Desktop Editing", command=self.stop_session)
+        self.stop_btn = ttk.Button(bottom_bar, text="🔴 Disconnect & Resume Desktop Editing", command=self.stop_session, cursor="hand2")
         self.stop_btn.pack(fill="x", ipady=4)
 
         self.win.protocol("WM_DELETE_WINDOW", self.on_close)

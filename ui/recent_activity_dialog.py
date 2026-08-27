@@ -707,7 +707,7 @@ if __name__ == "__main__":
         )
 
     tk.Label(root, text="Recent Activity Standalone Harness", font=("Inter", 12, "bold"), bg="#f0f0f0").pack(pady=15)
-    tk.Button(root, text="Open Recent Activity (Light Mode)", command=lambda: launch(False), padx=10, pady=5).pack(pady=5)
-    tk.Button(root, text="Open Recent Activity (Dark Mode)", command=lambda: launch(True), padx=10, pady=5).pack(pady=5)
+    tk.Button(root, text="Open Recent Activity (Light Mode)", command=lambda: launch(False), padx=10, pady=5, cursor="hand2").pack(pady=5)
+    tk.Button(root, text="Open Recent Activity (Dark Mode)", command=lambda: launch(True), padx=10, pady=5, cursor="hand2").pack(pady=5)
 
     root.mainloop()
