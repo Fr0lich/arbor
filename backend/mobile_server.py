@@ -626,8 +626,24 @@ class MobileServer:
                     location_fields = [f["name"] for f in self.app_state.config["ui_sections"]["location"] if isinstance(f, dict) and f.get("name")]
 
                 objects = []
-                for oid in paged_indices:
-                    reg_row = df_reg.loc[oid]
+                paged_indices_list = paged_indices.tolist()
+                paged_reg_dict = df_reg.loc[paged_indices_list].to_dict('index')
+
+                obs_cols = set(df_obs.columns) if df_obs is not None else set()
+                reg_cols = set(df_reg.columns)
+
+                paged_obs_dict = {}
+                if df_obs is not None:
+                    intersect = df_obs.index.intersection(paged_indices_list)
+                    if len(intersect) > 0:
+                        paged_obs_dict = df_obs.loc[intersect].to_dict('index')
+
+                loc_keys = {lcol: lcol.lower().replace(" ", "_") for lcol in location_fields}
+
+                for oid in paged_indices_list:
+                    reg_row = paged_reg_dict.get(oid, {})
+                    obs_row = paged_obs_dict.get(oid)
+
                     genus = str(reg_row.get("Genus", "") or "")
                     species = str(reg_row.get("Species", "") or "")
                     family = str(reg_row.get("Family", "") or "")
@@ -637,16 +653,15 @@ class MobileServer:
                     sci_name = f"{genus} {species} {author}".strip() if (genus or species) else f"Specimen #{oid}"
 
                     rev_val = False
-                    if rev_col and df_obs is not None and oid in df_obs.index:
-                        v = str(df_obs.at[oid, rev_col]).strip().lower()
+                    if rev_col and obs_row is not None:
+                        v = str(obs_row.get(rev_col, "")).strip().lower()
                         rev_val = v in ["true", "1", "yes"]
 
                     loc = {}
-                    for lcol in location_fields:
-                        key_name = lcol.lower().replace(" ", "_")
-                        if df_obs is not None and lcol in df_obs.columns and oid in df_obs.index:
-                            loc[key_name] = str(df_obs.at[oid, lcol] or "")
-                        elif lcol in df_reg.columns:
+                    for lcol, key_name in loc_keys.items():
+                        if obs_row is not None and lcol in obs_cols:
+                            loc[key_name] = str(obs_row.get(lcol, "") or "")
+                        elif lcol in reg_cols:
                             loc[key_name] = str(reg_row.get(lcol, "") or "")
 
                     objects.append({
