@@ -143,4 +143,8 @@ class SearchEngine:
             else:
                 p5.append(oid)
 
-        return p1 + p2 + p3 + p4 + p5
+        p1.extend(p2)
+        p1.extend(p3)
+        p1.extend(p4)
+        p1.extend(p5)
+        return p1
