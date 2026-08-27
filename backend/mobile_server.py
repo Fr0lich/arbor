@@ -453,7 +453,13 @@ class MobileServer:
         @app.route('/api/objects', methods=['GET'])
         def get_objects():
             if self.app_state.df_reg is None:
-                return jsonify({"total_matching": 0, "offset": 0, "limit": 0, "objects": []})
+                return jsonify({
+                    "total_matching": 0,
+                    "offset": 0,
+                    "limit": 0,
+                    "objects": [],
+                    "facets": {"reviewed_count": 0, "pending_count": 0, "cabinets": {}}
+                })
 
             query = request.args.get('q', '').strip().lower()
             status_filter = request.args.get('status', 'all').lower()
@@ -1216,7 +1222,7 @@ INDEX_TEMPLATE = """
                 Arbor Companion
               </h1>
               <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
-                Loading database...
+                Connecting to database...
               </div>
             </div>
           </div>
@@ -1811,8 +1817,16 @@ INDEX_TEMPLATE = """
       options.headers['X-Session-Token'] = TOKEN;
       options.headers['Content-Type'] = 'application/json';
       const sep = url.includes('?') ? '&' : '?';
-      const res = await fetch(`${url}${sep}token=${encodeURIComponent(TOKEN)}`, options);
-      return res.json();
+      try {
+        const res = await fetch(`${url}${sep}token=${encodeURIComponent(TOKEN)}`, options);
+        if (!res.ok) {
+          console.warn(`API response status ${res.status} for ${url}`);
+        }
+        return await res.json();
+      } catch (err) {
+        console.error(`Fetch error on ${url}:`, err);
+        return {};
+      }
     }
 
     function showToast(msg, isError = false) {
@@ -1838,7 +1852,7 @@ INDEX_TEMPLATE = """
       try {
         // 1. Fetch Schema from Master config.py
         activeSchema = await apiFetch('/api/schema');
-        const dbName = activeSchema.database_name || 'Arbor Database';
+        const dbName = (activeSchema && activeSchema.database_name) ? activeSchema.database_name : 'Active Database';
         document.getElementById('headerDbName').textContent = dbName;
         document.getElementById('connModalDbName').textContent = dbName;
 
@@ -1851,7 +1865,9 @@ INDEX_TEMPLATE = """
         // 4. Setup SSE live events if available
         setupEventSource();
       } catch (err) {
-        console.error("Initialization failed:", err);
+        console.error("Initialization error:", err);
+        document.getElementById('headerDbName').textContent = 'Database Connected';
+        fetchList();
       }
     }
 
@@ -1955,11 +1971,11 @@ INDEX_TEMPLATE = """
         const res = await apiFetch(url);
         objectList = res.objects || [];
 
-        // Update counts
+        // Update counts safely
         const facets = res.facets || {};
         const revCount = facets.reviewed_count || 0;
         const pendCount = facets.pending_count || 0;
-        const total = res.total_matching || objectList.length;
+        const total = res.total_matching !== undefined ? res.total_matching : objectList.length;
 
         document.getElementById('matchingCount').textContent = total;
         document.getElementById('pill-all').textContent = `All (${total})`;
@@ -1973,11 +1989,16 @@ INDEX_TEMPLATE = """
       }
     }
 
+    // Substring-based highlight without regex escaping hazards
     function highlightMatch(text, query) {
       if (!query || !text) return text || '';
-      const safeQ = query.replace(/[.*+?^${}()|[\]\]/g, '\$&');
-      const regex = new RegExp(`(${safeQ})`, 'gi');
-      return String(text).replace(regex, '<mark class="bg-ember-light text-ember font-semibold px-0.5 rounded-[1px]">$1</mark>');
+      const str = String(text);
+      const q = query.trim().toLowerCase();
+      if (!q) return str;
+      const idx = str.toLowerCase().indexOf(q);
+      if (idx === -1) return str;
+      const match = str.substring(idx, idx + q.length);
+      return str.substring(0, idx) + '<mark class="bg-ember-light text-ember font-semibold px-0.5 rounded-[1px]">' + match + '</mark>' + str.substring(idx + q.length);
     }
 
     function renderList() {
@@ -1985,9 +2006,9 @@ INDEX_TEMPLATE = """
       if (objectList.length === 0) {
         container.innerHTML = `
           <div class="bg-surface border border-bordercol rounded-[2px] p-8 text-center mt-4">
-            <span class="text-3xl text-ink-faint">🔍</span>
+            <span class="text-3xl text-ink-faint">🌿</span>
             <p class="font-serif font-bold text-base text-ink mt-2">No specimens match filter</p>
-            <p class="font-sans text-xs text-ink-muted mt-1">Try adjusting your search query or clear filters.</p>
+            <p class="font-sans text-xs text-ink-muted mt-1">If no database is currently loaded, please open an Excel database in Arbor Desktop.</p>
           </div>
         `;
         return;
@@ -2100,8 +2121,8 @@ INDEX_TEMPLATE = """
         // Top Summary Info
         document.getElementById('detailAccession').textContent = `#${data.accession_number || data.id}`;
         document.getElementById('detailScientificName').textContent = data.scientific_name || 'Specimen';
-        document.getElementById('detailAuthor').textContent = data.registration.Author || '';
-        document.getElementById('detailFamily').textContent = data.registration.Family || '';
+        document.getElementById('detailAuthor').textContent = data.registration ? (data.registration.Author || '') : '';
+        document.getElementById('detailFamily').textContent = data.registration ? (data.registration.Family || '') : '';
 
         let locStr = [];
         if (data.observation) {
