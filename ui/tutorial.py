@@ -50,7 +50,7 @@ class TutorialManager:
             self.tutorials = {}
 
 
-    def start_tutorial(self, tutorial_name, root, on_complete=None):
+    def start_tutorial(self, tutorial_name, root, on_complete=None, force=False):
         import tkinter.messagebox as mb
 
         # Check if tutorials are disabled globally
@@ -62,7 +62,7 @@ class TutorialManager:
         # Check command line args
         no_tutorial_arg = "--no-tutorial" in sys.argv
 
-        if disable_tutorials_pref or not enable_tutorials_config or no_tutorial_arg:
+        if (disable_tutorials_pref or not enable_tutorials_config or no_tutorial_arg) and not force:
             return
 
         if not root or not root.winfo_exists():
@@ -308,7 +308,7 @@ class TutorialPopup:
         # Skip check
         if is_first:
             self.skip_var = tk.BooleanVar()
-            chk_skip = tk.Checkbutton(self.frame, text="Don't show this again", variable=self.skip_var, bg="#ffffff", activebackground="#ffffff", selectcolor="#ffffff", command=self.save_skip_pref, cursor="hand2")
+            chk_skip = tk.Checkbutton(self.frame, text="Don't show this, or other tutorial popups again", variable=self.skip_var, bg="#ffffff", activebackground="#ffffff", selectcolor="#ffffff", command=self.save_skip_pref, cursor="hand2")
             chk_skip.pack(anchor="w", padx=15, pady=(0, 10))
 
         self.win.update_idletasks()
@@ -325,6 +325,11 @@ class TutorialPopup:
         import config
         try:
             prefs = config.load_prefs()
+            if self.skip_var.get():
+                prefs["disable_tutorials"] = True
+            else:
+                prefs["disable_tutorials"] = False
+
             completed = prefs.get("completed_tutorials", [])
             if self.skip_var.get():
                 if self.manager.current_tutorial not in completed:
@@ -333,9 +338,11 @@ class TutorialPopup:
                 if self.manager.current_tutorial in completed:
                     completed.remove(self.manager.current_tutorial)
             prefs["completed_tutorials"] = completed
+
             # Also maintain legacy flag for startup_tutorial if needed
             if self.manager.current_tutorial == "startup_tutorial":
                 prefs["tutorial_skipped"] = self.skip_var.get()
+
             config.save_prefs(prefs)
         except Exception:
             pass

@@ -2502,7 +2502,7 @@ class ObjectProgramUI(
         import utils
         # Size of the dialog
         w_width = sc(400)
-        w_height = sc(320)
+        w_height = sc(420)
         utils.center_and_fit_toplevel(win, w_width, w_height)
         
         bg_color = "#181c19" if self.dark_mode_active else "#f2f5f1"
@@ -2531,10 +2531,20 @@ class ObjectProgramUI(
             
         def start_main_tutorial():
             from ui.tutorial import TutorialManager
-            TutorialManager().start_tutorial("main_tutorial", self.root)
+            TutorialManager().start_tutorial("main_tutorial", self.root, force=True)
             
+        def start_startup_tutorial():
+            from ui.tutorial import TutorialManager
+            TutorialManager().start_tutorial("startup_tutorial", self.root, force=True)
+
+        def start_hr_tutorial():
+            from ui.tutorial import TutorialManager
+            TutorialManager().start_tutorial("historical_resolver", self.root, force=True)
+
         options = [
             ("Interactive Tutorial", "Guided walkthrough of the main workspace.", start_main_tutorial),
+            ("Startup Tutorial", "Guided walkthrough of the welcome screen.", start_startup_tutorial),
+            ("Conflict Resolver Tutorial", "Guided walkthrough of the Historical Conflict Resolver.", start_hr_tutorial),
             ("User Guide", "Complete guide and detailed documentation.", self.show_main_help),
             ("Keyboard Shortcuts", "HUD cheat sheet for all keys and navigation.", self.show_shortcuts),
             ("Quick Start", "Basic shortcuts and workflow summary.", self.show_quick_help),
