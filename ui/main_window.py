@@ -4294,6 +4294,7 @@ class ObjectProgramUI(
             command=self.toggle_image_view
         , cursor="hand2")
         self.view_btn.pack(side="right")
+        self.add_tooltip(self.view_btn, "Toggle Gallery / Stack View")
         self.update_image_view_button()
 
         self.source_btn = ttk.Button(
@@ -4303,6 +4304,7 @@ class ObjectProgramUI(
             command=self.open_image_menu
         , cursor="hand2")
         self.source_btn.pack(side="right", padx=(0, 4))
+        self.add_tooltip(self.source_btn, "Select image source folder")
 
         self.images_missing_label = ttk.Label(
             header,
