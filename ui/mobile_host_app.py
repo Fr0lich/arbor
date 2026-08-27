@@ -134,6 +134,9 @@ class MobileHostApp:
         self.status_lbl = tk.Label(self.status_bar, text="🟢 Local Server Ready — Connecting public tunnel...", bg="#e8f5e9", fg="#1b4332", font=("Segoe UI", 9, "bold"))
         self.status_lbl.pack(side="left")
 
+        self.client_badge = tk.Label(self.status_bar, text="📱 Offline", bg="#e8f5e9", fg="#5a655e", font=("Segoe UI", 9))
+        self.client_badge.pack(side="right", padx=(0, 6))
+
         # QR & Info Container
         mid = tk.Frame(main, bg="#fbfbf9", bd=1, relief="solid", padx=10, pady=10)
         mid.pack(fill="x", pady=(0, 10))
@@ -224,6 +227,8 @@ class MobileHostApp:
             port=self.port,
             on_edit_callback=self._on_mobile_edit
         )
+        self.server.on_client_connect_callback = self._on_client_connect
+        self._on_client_connect(len(self.server.clients))
         self.server.start()
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
@@ -257,6 +262,15 @@ class MobileHostApp:
             self.feed_list.see(tk.END)
         self.root.after(0, update)
 
+
+    def _on_client_connect(self, active_count):
+        def update():
+            if active_count > 0:
+                self.client_badge.config(text=f"📱 Phone Connected ({active_count} Online)", fg="#2e7d32", font=("Segoe UI", 9, "bold"))
+            else:
+                self.client_badge.config(text="📱 Offline", fg="#5a655e", font=("Segoe UI", 9))
+        self.root.after(0, update)
+
     def _on_mobile_edit(self, oid, summary):
         def log():
             now = datetime.now().strftime("%H:%M:%S")
@@ -280,6 +294,9 @@ class MobileHostApp:
                             df_photo=self.app.df_photo
                         )
                         self._on_mobile_edit("SYS", "Background autosave completed")
+                        if self.server:
+                            ts = datetime.now().isoformat()
+                            self.server.broadcast_event("autosave_completed", {"timestamp": ts})
                 except Exception as e:
                     debug_error("MobileHost autosave", str(e))
 
