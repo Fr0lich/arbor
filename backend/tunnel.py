@@ -6,13 +6,40 @@ import logging
 import sys
 import time
 
+import os
 
-class LocalhostRunTunnel:
-    """SSH reverse tunnel via localhost.run (port 22).
 
-    Uses `nokey@localhost.run` which works on UiO Eduroam and most
-    institutional networks where SSH-over-HTTPS (port 443) is blocked.
-    Delivers a public HTTPS URL (*.lhr.life) within ~5 seconds.
+def ensure_ssh_key():
+    """Ensure an SSH key exists in ~/.ssh, generating one automatically if missing.
+
+    Reverse tunnel services (Serveo, Pinggy, etc.) require an SSH client key pair
+    for cryptographic session negotiation.
+    """
+    try:
+        ssh_dir = os.path.expanduser('~/.ssh')
+        os.makedirs(ssh_dir, exist_ok=True)
+        key_path = os.path.join(ssh_dir, 'id_ed25519')
+        rsa_path = os.path.join(ssh_dir, 'id_rsa')
+        if not os.path.exists(key_path) and not os.path.exists(rsa_path):
+            flags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+            subprocess.run(
+                ['ssh-keygen', '-t', 'ed25519', '-N', '', '-f', key_path, '-q'],
+                capture_output=True,
+                creationflags=flags,
+                timeout=5
+            )
+        return key_path if os.path.exists(key_path) else rsa_path
+    except Exception as e:
+        logging.warning(f"Could not auto-generate SSH key: {e}")
+        return None
+
+
+class ResilientSSHTunnel:
+    """Resilient SSH reverse tunnel.
+
+    Primary provider: Serveo (serveo.net, port 22), which delivers public HTTPS
+    URLs in ~1.5s without registration, accounts, or auth requirements.
+    Fallback providers are tried if Serveo is unreachable.
     """
 
     def __init__(self, port):
@@ -32,30 +59,53 @@ class LocalhostRunTunnel:
         self.thread.start()
 
     def _run(self, url_callback, status_callback):
-        cmd = [
-            'ssh',
-            '-p', '22',
-            '-o', 'StrictHostKeyChecking=no',
-            '-o', 'UserKnownHostsFile=NUL' if sys.platform.startswith('win') else '/dev/null',
-            '-o', 'ServerAliveInterval=30',
-            '-o', 'ConnectTimeout=15',
-            '-R', f'80:localhost:{self.port}',
-            'nokey@localhost.run'
+        ensure_ssh_key()
+
+        # Multi-provider configurations in priority order:
+        # (host, port, remote_forward, pattern)
+        providers = [
+            (
+                'serveo.net',
+                '22',
+                f'80:127.0.0.1:{self.port}',
+                re.compile(r'(https://[a-zA-Z0-9.-]+\.(?:serveousercontent\.com|serveo\.net))')
+            ),
+            (
+                'a.pinggy.io',
+                '443',
+                f'0:127.0.0.1:{self.port}',
+                re.compile(r'(https://[a-zA-Z0-9.-]+\.(?:pinggy\.io|pinggy\.net|pinggy-free\.link|pinggy\.link))')
+            ),
+            (
+                'nokey@localhost.run',
+                '22',
+                f'80:127.0.0.1:{self.port}',
+                re.compile(r'(https://[a-zA-Z0-9]+\.lhr\.life)')
+            )
         ]
 
-        flags = 0
-        if sys.platform.startswith('win'):
-            flags = subprocess.CREATE_NO_WINDOW
-
-        # Pattern matches lines like:
-        # "4a0f072c2dc8bb.lhr.life tunneled with tls termination, https://4a0f072c2dc8bb.lhr.life"
-        url_pattern = re.compile(r'(https://[a-zA-Z0-9]+\.lhr\.life)')
+        flags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
+        known_hosts_null = 'NUL' if sys.platform.startswith('win') else '/dev/null'
 
         attempt = 0
         backoff = 2
 
         try:
             while not self._stop_event.is_set():
+                provider_idx = attempt % len(providers)
+                target_host, target_port, forward_rule, url_pattern = providers[provider_idx]
+
+                cmd = [
+                    'ssh',
+                    '-p', target_port,
+                    '-o', 'StrictHostKeyChecking=no',
+                    '-o', f'UserKnownHostsFile={known_hosts_null}',
+                    '-o', 'ServerAliveInterval=30',
+                    '-o', 'ConnectTimeout=10',
+                    '-R', forward_rule,
+                    target_host
+                ]
+
                 try:
                     self.process = subprocess.Popen(
                         cmd,
@@ -63,22 +113,23 @@ class LocalhostRunTunnel:
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         text=True,
+                        encoding='utf-8',
+                        errors='replace',
                         bufsize=1,
                         creationflags=flags
                     )
 
                     connected = False
-                    url_deadline = time.time() + 20  # give up waiting for URL after 20s
+                    url_deadline = time.time() + 12  # 12s per provider attempt
 
                     while not self._stop_event.is_set():
                         line = self.process.stdout.readline()
                         if not line:
                             if self.process.poll() is not None:
                                 break
-                            # Check URL timeout while process is still running
                             if not connected and time.time() > url_deadline:
-                                logging.warning("localhost.run: no URL received within 20s")
-                                if status_callback:
+                                logging.warning(f"Tunnel {target_host}: no URL received within 12s")
+                                if status_callback and attempt >= len(providers):
                                     status_callback("🟡 Tunnel timeout — check network / firewall")
                                 self.process.terminate()
                                 break
@@ -94,10 +145,9 @@ class LocalhostRunTunnel:
                             if url_callback:
                                 url_callback(self.public_url)
 
-                        # Also check timeout after each line read
                         if not connected and time.time() > url_deadline:
-                            logging.warning("localhost.run: no URL received within 20s")
-                            if status_callback:
+                            logging.warning(f"Tunnel {target_host}: no URL received within 12s")
+                            if status_callback and attempt >= len(providers):
                                 status_callback("🟡 Tunnel timeout — check network / firewall")
                             self.process.terminate()
                             break
@@ -109,7 +159,7 @@ class LocalhostRunTunnel:
                         break
 
                 except Exception as e:
-                    logging.error(f"Tunnel error: {e}")
+                    logging.error(f"Tunnel error with {target_host}: {e}")
 
                 finally:
                     self.public_url = None
@@ -118,13 +168,13 @@ class LocalhostRunTunnel:
                     break
 
                 attempt += 1
-                if attempt > 3:
+                if attempt >= len(providers) * 2:
                     if status_callback:
                         status_callback("🟡 Tunnel disconnected (Local Wi-Fi still active)")
                     break
 
                 self._stop_event.wait(timeout=backoff)
-                backoff = min(backoff * 2, 30)
+                backoff = min(backoff * 1.5, 15)
 
         finally:
             if self.process:
@@ -152,8 +202,9 @@ class LocalhostRunTunnel:
         self.process = None
 
 
-# Backwards-compatible alias — callers import PinggyTunnel without changes
-PinggyTunnel = LocalhostRunTunnel
+# Backwards-compatible aliases — callers import without changes
+LocalhostRunTunnel = ResilientSSHTunnel
+PinggyTunnel = ResilientSSHTunnel
 
 
 def get_local_ip():
