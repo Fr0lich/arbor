@@ -202,6 +202,17 @@ class MobileServer:
 
             query = request.args.get('q', '').strip().lower()
             status_filter = request.args.get('status', 'all').lower()
+
+            # New query parameters
+            cabinet_filter = request.args.get('cabinet', '').strip().lower()
+            room_filter = request.args.get('room', '').strip().lower()
+            genus_filter = request.args.get('genus', '').strip().lower()
+            collector_filter = request.args.get('collector', '').strip().lower()
+            has_problems_filter = request.args.get('has_problems', '').strip().lower()
+
+            sort_by = request.args.get('sort_by', '').strip().lower()
+            sort_dir = request.args.get('sort_dir', 'asc').strip().lower()
+
             limit = max(1, min(int(request.args.get('limit', 100)), 500))
             offset = max(0, int(request.args.get('offset', 0)))
 
@@ -230,7 +241,119 @@ class MobileServer:
                     elif status_filter == 'pending':
                         matched_indices = matched_indices[~is_rev]
 
+                # Cabinet filter
+                if cabinet_filter:
+                    combined_cabinets = pd.Series(index=matched_indices, dtype=str)
+                    if "Cabinet" in df_reg.columns:
+                        combined_cabinets = df_reg["Cabinet"].reindex(matched_indices)
+                    if df_obs is not None and "Cabinet" in df_obs.columns:
+                        combined_cabinets = df_obs["Cabinet"].reindex(matched_indices).combine_first(combined_cabinets)
+
+                    mask = combined_cabinets.fillna("").astype(str).str.lower() == cabinet_filter
+                    matched_indices = matched_indices[mask]
+
+                # Room filter
+                if room_filter:
+                    combined_rooms = pd.Series(index=matched_indices, dtype=str)
+                    if "Room" in df_reg.columns:
+                        combined_rooms = df_reg["Room"].reindex(matched_indices)
+                    if df_obs is not None and "Room" in df_obs.columns:
+                        combined_rooms = df_obs["Room"].reindex(matched_indices).combine_first(combined_rooms)
+
+                    mask = combined_rooms.fillna("").astype(str).str.lower() == room_filter
+                    matched_indices = matched_indices[mask]
+
+                # Genus filter
+                if genus_filter:
+                    if "Genus" in df_reg.columns:
+                        mask = df_reg["Genus"].reindex(matched_indices).fillna("").astype(str).str.lower() == genus_filter
+                        matched_indices = matched_indices[mask]
+
+                # Collector filter
+                if collector_filter:
+                    if "Collector" in df_reg.columns:
+                        mask = df_reg["Collector"].reindex(matched_indices).fillna("").astype(str).str.lower().str.contains(collector_filter, regex=False)
+                        matched_indices = matched_indices[mask]
+
+                # Has problems filter
+                if has_problems_filter:
+                    mask = pd.Series(False, index=matched_indices)
+                    problems = []
+                    if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                        problems = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"]]
+
+                    for p_col in problems:
+                        combined_prob = pd.Series(index=matched_indices, dtype=str)
+                        if p_col in df_reg.columns:
+                            combined_prob = df_reg[p_col].reindex(matched_indices)
+                        if df_obs is not None and p_col in df_obs.columns:
+                            combined_prob = df_obs[p_col].reindex(matched_indices).combine_first(combined_prob)
+
+                        mask |= combined_prob.astype(str).str.strip().str.lower().isin(["true", "1", "yes", "t"])
+
+                    if has_problems_filter in ["true", "1", "yes", "t"]:
+                        matched_indices = matched_indices[mask]
+                    elif has_problems_filter in ["false", "0", "no", "f"]:
+                        matched_indices = matched_indices[~mask]
+
                 total_matching = len(matched_indices)
+
+                # Facet computation
+                facets = {}
+
+                # 1. Cabinets facet
+                cabinet_series = pd.Series(index=matched_indices, dtype=str)
+                if "Cabinet" in df_reg.columns:
+                    cabinet_series = df_reg["Cabinet"].reindex(matched_indices)
+                if df_obs is not None and "Cabinet" in df_obs.columns:
+                    cabinet_series = df_obs["Cabinet"].reindex(matched_indices).combine_first(cabinet_series)
+
+                cabinet_series = cabinet_series.fillna("").astype(str).str.strip()
+                cabinet_series = cabinet_series[cabinet_series != ""]
+                facets["cabinets"] = cabinet_series.value_counts().to_dict()
+
+                # 2. Review counts
+                reviewed_count = 0
+                pending_count = total_matching
+                if rev_col and df_obs is not None:
+                    rev_series_facet = df_obs.reindex(matched_indices)[rev_col].astype(str).str.strip().str.lower()
+                    reviewed_count = int(rev_series_facet.isin(["true", "1", "yes"]).sum())
+                    pending_count = max(0, total_matching - reviewed_count)
+
+                facets["reviewed_count"] = reviewed_count
+                facets["pending_count"] = pending_count
+
+                # Sorting logic
+                if sort_by in ['id', 'genus', 'cabinet']:
+                    ascending = (sort_dir == 'asc')
+                    if sort_by == 'id':
+                        # Use numeric sorting if possible, otherwise string sorting
+                        try:
+                            # index might be strings of integers
+                            num_index = matched_indices.astype(int)
+                            matched_indices = matched_indices[num_index.argsort()]
+                            if not ascending:
+                                matched_indices = matched_indices[::-1]
+                        except Exception:
+                            matched_indices = matched_indices.sort_values(ascending=ascending)
+                    elif sort_by == 'genus':
+                        if "Genus" in df_reg.columns:
+                            sort_series = df_reg["Genus"].reindex(matched_indices).fillna("").astype(str)
+                            matched_indices = matched_indices[sort_series.argsort()]
+                            if not ascending:
+                                matched_indices = matched_indices[::-1]
+                    elif sort_by == 'cabinet':
+                        sort_series = pd.Series(index=matched_indices, dtype=str)
+                        if "Cabinet" in df_reg.columns:
+                            sort_series = df_reg["Cabinet"].reindex(matched_indices)
+                        if df_obs is not None and "Cabinet" in df_obs.columns:
+                            sort_series = df_obs["Cabinet"].reindex(matched_indices).combine_first(sort_series)
+
+                        sort_series = sort_series.fillna("").astype(str)
+                        matched_indices = matched_indices[sort_series.argsort()]
+                        if not ascending:
+                            matched_indices = matched_indices[::-1]
+
                 paged_indices = matched_indices[offset:offset + limit]
 
                 objects = []
@@ -270,7 +393,8 @@ class MobileServer:
                 "total_matching": total_matching,
                 "offset": offset,
                 "limit": limit,
-                "objects": objects
+                "objects": objects,
+                "facets": facets
             })
 
         @app.route('/api/object/<oid>', methods=['GET'])
