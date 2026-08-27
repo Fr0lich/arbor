@@ -71,7 +71,7 @@ class MobileDialog:
         qr_container = tk.Frame(mid_frame, bg="#ffffff", bd=1, relief="solid", padx=6, pady=6)
         qr_container.pack(side="left", padx=(0, 14))
 
-        self.qr_label = tk.Label(qr_container, bg="#ffffff", width=24, height=11)
+        self.qr_label = tk.Label(qr_container, bg="#ffffff")
         self.qr_label.pack()
 
         # QR Mode Selector Buttons
