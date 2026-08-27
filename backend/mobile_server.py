@@ -378,6 +378,14 @@ class MobileServer:
                             self.app_state.df_reg.at[oid, k] = coerced
                             changed_fields.append(k)
                             changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+                    else:
+                        # Dynamic addition of new fields to df_reg if they don't exist
+                        new_v = sanitize_value(v)
+                        if new_v:
+                            self.app_state.df_reg[k] = pd.Series(dtype="object")
+                            self.app_state.df_reg.at[oid, k] = new_v
+                            changed_fields.append(k)
+                            changed_values.append(f'{k}: "" -> "{new_v}"')
 
                 # 3. Apply observation updates
                 if self.app_state.df_obs is not None and oid in self.app_state.df_obs.index:
@@ -398,6 +406,15 @@ class MobileServer:
                                 self.app_state.df_reg.at[oid, k] = coerced
                                 changed_fields.append(k)
                                 changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+                        else:
+                            # Dynamic addition of new fields to df_obs if they don't exist
+                            new_v = sanitize_value(v)
+                            if new_v:
+                                # Ensure column exists first in df_obs
+                                self.app_state.df_obs[k] = pd.Series(dtype="object")
+                                self.app_state.df_obs.at[oid, k] = new_v
+                                changed_fields.append(k)
+                                changed_values.append(f'{k}: "" -> "{new_v}"')
 
                 # 4. Handle Reviewed Status
                 action_name = "EDIT"
@@ -501,183 +518,384 @@ LOGIN_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
-INDEX_TEMPLATE = """<!DOCTYPE html>
+INDEX_TEMPLATE = """
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Arbor Mobile Companion</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            fern: {
+              DEFAULT: '#3a7d44',
+              dark: '#2c6034',
+              light: '#eff7f1',
+              border: '#a4cca9'
+            },
+            ember: {
+              DEFAULT: '#d95c14',
+              dark: '#b84a0c',
+              light: '#fff3ec',
+              border: '#f8c2a3'
+            },
+            canvas: '#f3f3f3',
+            surface: '#ffffff',
+            tonal1: '#f8f9fa',
+            tonal2: '#eceeec',
+            tonal3: '#dfe3e0',
+            bordercol: '#d4d8d5',
+            borderdark: '#b3b9b4',
+            ink: {
+              DEFAULT: '#191e1a',
+              muted: '#535d56',
+              faint: '#848f87'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Lora', 'serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
   <style>
     .touch-min { min-height: 44px; }
+    .touch-press:active { transform: scale(0.985); }
+    /* Accordion icon rotation */
+    .acc-open .acc-icon { transform: rotate(180deg); }
   </style>
 </head>
-<body class="bg-[#121915] text-[#1c241f] min-h-screen flex items-center justify-center p-0 sm:p-4 antialiased font-sans select-none">
+<body class="bg-canvas text-ink min-h-screen antialiased select-none">
   
-  <div class="w-full max-w-md bg-[#ffffff] sm:rounded-[20px] shadow-2xl overflow-hidden flex flex-col h-screen sm:h-[820px] border border-neutral-800 relative">
+  <div class="w-full h-screen flex flex-col relative overflow-hidden bg-canvas mx-auto max-w-md border-x border-bordercol shadow-xl">
     
     <!-- Top Status Bar -->
-    <div class="bg-[#1b4332] text-white px-4 py-2 flex items-center justify-between text-xs font-mono">
+    <div class="bg-fern-dark text-white px-4 py-2 flex items-center justify-between text-xs font-mono">
       <div class="flex items-center gap-1.5 font-bold">
-        <span class="inline-block w-2 h-2 rounded-full bg-[#52b788] animate-pulse"></span>
+        <span class="inline-block w-2 h-2 rounded-full bg-fern-border animate-pulse"></span>
         <span id="headerDbName">Herbarium Database</span>
       </div>
-      <div class="flex items-center gap-2 text-[11px] text-emerald-200">
+      <div class="flex items-center gap-2 text-[11px] text-fern-light">
         <span id="syncStatusBadge">⚡ Connected</span>
       </div>
     </div>
 
     <!-- Header Navigation -->
-    <header class="bg-[#2d6a4f] text-white px-4 py-2.5 flex items-center justify-between shadow-sm">
+    <header class="bg-fern text-white px-4 py-3 flex items-center justify-between shadow-md z-10">
       <div class="flex items-center gap-2">
-        <span class="text-xl">🌿</span>
-        <div>
-          <h1 class="font-bold text-sm tracking-tight leading-tight">Arbor Companion</h1>
-          <p class="text-[10px] text-emerald-100/80 font-mono" id="headerCount">Loading records...</p>
+        <div id="backButton" class="hidden mr-2 bg-fern-dark/50 hover:bg-fern-dark px-2 py-1 rounded cursor-pointer touch-press" onclick="showListView()">
+          <span class="font-bold text-lg">&lt;</span>
         </div>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <button id="btnListView" onclick="toggleListView()" class="bg-emerald-700/80 hover:bg-emerald-600 px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1 transition">
-          📋 List
-        </button>
+        <div class="bg-white text-fern rounded font-bold px-1.5 py-0.5 text-xs">A</div>
+        <div>
+          <h1 class="font-bold text-sm tracking-tight leading-tight font-sans">Arbor Companion</h1>
+          <p class="text-[10px] text-fern-light/80 font-mono" id="headerCount">Vault #04 • Linnaean Botanical</p>
+        </div>
       </div>
     </header>
 
-    <!-- Search & Sequential Jump Bar -->
-    <div class="bg-[#f4f6f4] px-4 py-2 border-b border-[#e0e3df] flex items-center gap-2">
-      <div class="relative flex-1">
-        <input id="searchBox" type="text" placeholder="Search ID, Genus, Species..." onkeydown="if(event.key==='Enter') doSearch()"
-               class="w-full bg-white border border-[#d0d6d1] rounded-md px-3 py-1.5 text-xs text-[#1c241f] focus:outline-none focus:border-[#2d6a4f] font-mono">
-      </div>
-      <div class="flex items-center gap-1">
-        <button onclick="navPrev()" class="bg-white border border-[#d0d6d1] text-[#2d6a4f] hover:bg-emerald-50 px-2.5 py-1.5 rounded-md text-xs font-bold touch-min flex items-center justify-center">◀</button>
-        <button onclick="navNext()" class="bg-white border border-[#d0d6d1] text-[#2d6a4f] hover:bg-emerald-50 px-2.5 py-1.5 rounded-md text-xs font-bold touch-min flex items-center justify-center">▶</button>
-      </div>
-    </div>
-
     <!-- Toast Notification Overlay -->
-    <div id="toast" class="hidden absolute top-14 left-4 right-4 bg-emerald-800 text-white text-xs font-bold py-2 px-3 rounded-lg shadow-lg text-center z-50 transition-all">
+    <div id="toast" class="hidden absolute top-16 left-4 right-4 bg-fern-dark text-white text-xs font-bold py-3 px-4 rounded-lg shadow-lg text-center z-50 transition-all opacity-95">
       Edits saved & synchronized
     </div>
 
-    <!-- Main Container -->
-    <main id="mainContent" class="flex-1 overflow-y-auto p-4 space-y-3 bg-[#fbfbf9]">
-      
-      <!-- Specimen Primary Identity Card -->
-      <div class="bg-white rounded-lg border border-[#e0e3df] p-3 shadow-xs">
-        <div class="flex items-start justify-between">
-          <div>
-            <span id="accessionTag" class="text-[10px] font-mono font-bold tracking-wider text-[#2d6a4f] uppercase bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-              Accession #---
-            </span>
-            <h2 id="scientificNameTitle" class="text-base font-bold text-[#1c241f] mt-1 italic">Loading Specimen...</h2>
-            <p id="familySubtitle" class="text-xs text-[#5a655e]">Family: ---</p>
-          </div>
-          <span id="reviewBadge" class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-300">
-            ⏳ Pending
-          </span>
+    <!-- VIEW: LIST -->
+    <main id="listView" class="flex-1 flex flex-col h-full bg-canvas overflow-hidden">
+      <!-- Search Bar -->
+      <div class="bg-surface px-4 py-3 border-b border-bordercol shadow-sm z-10">
+        <div class="relative flex">
+          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-muted">🔍</span>
+          <input id="searchBox" type="text" placeholder="Search botanical name, ID, collector, cabinet..." onkeyup="debounceSearch()"
+                 class="w-full bg-surface border border-bordercol rounded-md pl-9 pr-3 py-2 text-sm text-ink focus:outline-none focus:border-fern focus:ring-1 focus:ring-fern font-sans">
         </div>
       </div>
 
-      <!-- Specimen Photo Plate (On-Demand Click to Load) -->
-      <div class="bg-white rounded-lg border border-[#e0e3df] overflow-hidden">
-        <div class="px-3 py-2 border-b border-[#e0e3df] bg-[#f8f9fa] flex items-center justify-between text-xs">
-          <div class="flex items-center gap-1.5 font-semibold text-[#1c241f]">
-            <span>🖼️</span> <span>Specimen Photo Scan</span>
-          </div>
-          <span class="text-[10px] text-[#5a655e] font-mono">Cloud Archive</span>
-        </div>
-        
-        <div id="imagePlaceholder" class="p-5 text-center bg-[#fafafa] flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-[#f0f4f1] transition border-b border-dashed border-[#e0e3df]" onclick="loadImage()">
-          <div class="w-10 h-10 rounded-full bg-emerald-100 text-[#2d6a4f] flex items-center justify-center text-lg">🔍</div>
-          <div>
-            <p class="text-xs font-bold text-[#2d6a4f]">Tap to Load Specimen Plate</p>
-            <p class="text-[10px] text-[#5a655e]">Loads directly from cloud CDN (0 laptop bandwidth)</p>
-          </div>
-        </div>
-
-        <div id="imageContainer" class="hidden relative bg-neutral-900 flex items-center justify-center min-h-[160px]">
-          <img id="specimenImg" src="" alt="Specimen Plate" class="max-h-56 w-auto object-contain mx-auto">
+      <!-- List Header -->
+      <div class="px-4 py-2 flex items-center justify-between bg-canvas border-b border-bordercol">
+        <span id="listSummary" class="text-xs text-ink-muted font-mono">Showing 0 of 0 specimens</span>
+        <div class="flex items-center gap-2 text-xs text-ink-muted">
+          <span>Sort by:</span>
+          <select class="bg-surface border border-bordercol rounded px-2 py-1 focus:outline-none focus:border-fern text-ink">
+            <option>Scientific Name (A-Z)</option>
+          </select>
         </div>
       </div>
 
-      <!-- Segmented Category Tabs -->
-      <div class="flex rounded-md bg-[#e6eae6] p-1 gap-1 text-xs font-medium">
-        <button id="tabTax" class="flex-1 py-1.5 rounded text-center transition bg-white text-[#2d6a4f] shadow-xs font-bold" onclick="switchTab('tax')">
-          🏷️ Taxonomy
-        </button>
-        <button id="tabLoc" class="flex-1 py-1.5 rounded text-center transition text-[#5a655e] hover:text-[#1c241f]" onclick="switchTab('loc')">
-          📍 Location
-        </button>
-        <button id="tabObs" class="flex-1 py-1.5 rounded text-center transition text-[#5a655e] hover:text-[#1c241f]" onclick="switchTab('obs')">
-          📝 Notes
-        </button>
+      <!-- Scrollable List -->
+      <div id="specimenListContainer" class="flex-1 overflow-y-auto p-3 space-y-3 pb-24">
+        <!-- List items populated here -->
       </div>
-
-      <!-- Tab Content 1: Taxonomy -->
-      <div id="contentTax" class="bg-white rounded-lg border border-[#e0e3df] p-3 space-y-2.5 text-xs">
-        <div>
-          <label class="text-[11px] font-semibold text-[#5a655e] block mb-1">Genus</label>
-          <input id="inputGenus" type="text" class="w-full bg-[#fbfbf9] border border-[#d0d6d1] rounded px-2.5 py-1.5 text-xs text-[#1c241f] focus:outline-none focus:border-[#2d6a4f]">
-        </div>
-        <div>
-          <label class="text-[11px] font-semibold text-[#5a655e] block mb-1">Species Epithet</label>
-          <input id="inputSpecies" type="text" class="w-full bg-[#fbfbf9] border border-[#d0d6d1] rounded px-2.5 py-1.5 text-xs text-[#1c241f] focus:outline-none focus:border-[#2d6a4f]">
-        </div>
-        <div>
-          <label class="text-[11px] font-semibold text-[#5a655e] block mb-1">Author / Infraspecific</label>
-          <input id="inputAuthor" type="text" class="w-full bg-[#fbfbf9] border border-[#d0d6d1] rounded px-2.5 py-1.5 text-xs text-[#1c241f] focus:outline-none focus:border-[#2d6a4f]">
-        </div>
-      </div>
-
-      <!-- Tab Content 2: Location -->
-      <div id="contentLoc" class="hidden bg-white rounded-lg border border-[#e0e3df] p-3 space-y-2.5 text-xs">
-        <div>
-          <label class="text-[11px] font-semibold text-[#5a655e] block mb-1">Building & Room</label>
-          <input id="inputRoom" type="text" class="w-full bg-[#fbfbf9] border border-[#d0d6d1] rounded px-2.5 py-1.5 text-xs text-[#1c241f]">
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="text-[11px] font-semibold text-[#5a655e] block mb-1">Cabinet</label>
-            <input id="inputCabinet" type="text" class="w-full bg-[#fbfbf9] border border-[#d0d6d1] rounded px-2.5 py-1.5 text-xs text-[#1c241f]">
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold text-[#5a655e] block mb-1">Shelf / Drawer</label>
-            <input id="inputShelf" type="text" class="w-full bg-[#fbfbf9] border border-[#d0d6d1] rounded px-2.5 py-1.5 text-xs text-[#1c241f]">
-          </div>
-        </div>
-      </div>
-
-      <!-- Tab Content 3: Notes & Observation -->
-      <div id="contentObs" class="hidden bg-white rounded-lg border border-[#e0e3df] p-3 space-y-2.5 text-xs">
-        <div>
-          <label class="text-[11px] font-semibold text-[#5a655e] block mb-1">Inspection Notes & Comments</label>
-          <textarea id="inputNotes" rows="4" class="w-full bg-[#fbfbf9] border border-[#d0d6d1] rounded px-2.5 py-1.5 text-xs text-[#1c241f] focus:outline-none focus:border-[#2d6a4f]"></textarea>
-        </div>
-      </div>
-
     </main>
 
-    <!-- Specimen List View Overlay (Hidden by default) -->
-    <div id="listViewModal" class="hidden absolute inset-0 bg-white z-40 flex flex-col">
-      <div class="bg-[#2d6a4f] text-white p-3 flex items-center justify-between">
-        <h3 class="font-bold text-sm">Specimens in Database</h3>
-        <button onclick="toggleListView()" class="text-white font-bold text-lg px-2">✕</button>
+    <!-- VIEW: DETAIL -->
+    <main id="detailView" class="hidden flex-1 flex flex-col h-full overflow-hidden bg-canvas relative">
+      <!-- Detail Header (Fixed) -->
+      <div class="bg-surface border-b border-bordercol p-4 shadow-sm z-10 shrink-0">
+        <div class="flex items-center justify-between mb-1">
+           <span class="font-mono text-sm font-bold text-ink" id="detailAccession"></span>
+           <span class="text-xs text-ink-muted font-sans" id="detailTopLocation"></span>
+        </div>
+        <h2 id="detailScientificName" class="font-serif italic text-2xl font-bold text-ink mb-1"></h2>
+        <div class="text-sm font-sans text-ink-muted">
+           <span id="detailAuthor" class="font-bold text-ink"></span> • <span id="detailFamily"></span> • <span id="detailCommonName" class="italic"></span>
+        </div>
       </div>
-      <div id="specimenListContainer" class="flex-1 overflow-y-auto p-2 divide-y divide-gray-100">
-        <!-- populated dynamically -->
-      </div>
-    </div>
 
-    <!-- Sticky Bottom Action Bar -->
-    <footer class="bg-white border-t border-[#e0e3df] p-3 flex items-center gap-2 shadow-lg">
-      <button id="btnReviewed" onclick="toggleReviewed()" class="flex-1 bg-[#2d6a4f] hover:bg-[#1b4332] text-white py-2.5 rounded-md font-bold text-xs flex items-center justify-center gap-1.5 touch-min shadow-sm transition">
-        <span>✓</span> <span>Mark Reviewed</span>
-      </button>
-      <button onclick="saveAndNext()" class="bg-[#f0f4f1] border border-[#d0d6d1] text-[#2d6a4f] hover:bg-emerald-100 px-4 py-2.5 rounded-md font-bold text-xs touch-min transition">
-        Save & Next ▶
-      </button>
-    </footer>
+      <!-- Scrollable Detail Content -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
+
+        <!-- Photo Plate Card -->
+        <div class="bg-surface rounded-md border border-bordercol shadow-sm overflow-hidden">
+          <div class="p-3 border-b border-bordercol flex items-center justify-between">
+            <span class="text-sm font-bold font-sans text-ink">Attached Archival Scans (1)</span>
+            <button class="text-xs text-fern font-semibold hover:underline touch-press" onclick="loadImage()">↗ Inspect Scan</button>
+          </div>
+          <div id="imagePlaceholder" class="p-8 text-center bg-tonal1 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-tonal2 transition" onclick="loadImage()">
+            <div class="w-12 h-12 rounded-full bg-fern-light text-fern flex items-center justify-center text-xl shadow-sm">📷</div>
+            <div>
+              <p class="text-sm font-bold text-fern">Tap to Load Specimen Plate</p>
+              <p class="text-xs text-ink-muted mt-1">Loads directly from cloud CDN (0 laptop bandwidth)</p>
+            </div>
+          </div>
+          <div id="imageContainer" class="hidden relative bg-ink flex items-center justify-center p-2 min-h-[250px]">
+            <img id="specimenImg" src="" alt="Specimen Plate" class="max-h-80 w-auto object-contain mx-auto">
+          </div>
+        </div>
+
+        <!-- Accordion 1: Taxonomy -->
+        <div class="bg-surface rounded-md border border-bordercol shadow-sm overflow-hidden accordion">
+          <button class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press acc-header" onclick="toggleAcc(this)">
+             <div class="flex items-center gap-3">
+               <span class="text-lg">🧬</span>
+               <div class="text-left">
+                 <h3 class="font-bold text-sm text-ink">Taxonomy & Scientific Name</h3>
+                 <p class="text-xs text-ink-muted">Linnaean classification, determination author & qualifier</p>
+               </div>
+             </div>
+             <span class="acc-icon text-ink-muted font-bold transition-transform duration-200">^</span>
+          </button>
+          <div class="p-4 space-y-4 acc-content block border-t border-bordercol">
+
+             <!-- Botanical Binomial -->
+             <div>
+               <div class="flex items-center justify-between mb-1">
+                 <label class="text-xs font-bold text-ink">Botanical / Scientific Binomial *</label>
+                 <span class="text-[10px] text-ink-muted font-medium">⚑ Flag discrepancy</span>
+               </div>
+               <input id="inputBinomial" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink font-serif italic focus:outline-none focus:border-fern" onchange="autoSave()">
+             </div>
+
+             <div class="grid grid-cols-2 gap-3">
+               <div>
+                 <label class="text-xs font-bold text-ink block mb-1">Taxon Author</label>
+                 <input id="inputAuthor" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+               </div>
+               <div>
+                 <label class="text-xs font-bold text-ink block mb-1">Common Name</label>
+                 <input id="inputCommonName" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+               </div>
+             </div>
+
+             <div>
+                <h4 class="text-[10px] font-mono font-bold text-ink-muted uppercase tracking-wider mb-2 mt-4 border-b border-bordercol pb-1">Darwin Core Classification Ranks</h4>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Family</label>
+                    <input id="inputFamily" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Genus</label>
+                    <input id="inputGenus" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink font-serif italic focus:outline-none focus:border-fern" onchange="autoSave()">
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Order</label>
+                    <input id="inputOrder" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Class / Phylum</label>
+                    <input id="inputClass" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                  </div>
+                </div>
+             </div>
+
+             <!-- Identification status placeholder block from mock -->
+             <div class="border border-ember-border bg-ember-light p-3 rounded mt-4">
+                <div class="flex items-center justify-between mb-2">
+                   <h4 class="text-xs font-bold text-ember-dark">Identification Qualifier / Status</h4>
+                   <span class="text-[10px] text-ember-dark border border-ember-border bg-white px-2 py-0.5 rounded">Flagged for re-examination</span>
+                </div>
+                <div class="border-l-2 border-ember pl-2 mb-3">
+                   <p class="text-sm font-semibold text-ember-dark">Requires re-examination</p>
+                </div>
+                <div class="bg-white border border-ember-border p-2 rounded flex items-start gap-2 text-xs">
+                   <span class="text-ember">⚠</span>
+                   <p class="text-ember-dark flex-1">Curator note: Check whether specimen might be Adansonia za var. bozy based on calyx dimensions.</p>
+                   <button class="border border-ember-dark text-ember-dark font-bold px-2 py-1 rounded bg-white hover:bg-ember-light touch-press">Resolve</button>
+                </div>
+             </div>
+
+             <div class="grid grid-cols-2 gap-3">
+               <div>
+                 <label class="text-xs font-bold text-ink block mb-1">Determined By</label>
+                 <input id="inputDeterminedBy" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+               </div>
+               <div>
+                 <label class="text-xs font-bold text-ink block mb-1">Date Determined</label>
+                 <input id="inputDateDetermined" type="text" placeholder="DD.MM.YYYY" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+               </div>
+             </div>
+
+          </div>
+        </div>
+
+
+        <!-- Accordion 2: Collection & Specimen -->
+        <div class="bg-surface rounded-md border border-bordercol shadow-sm overflow-hidden accordion acc-open">
+          <button class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press acc-header border-b border-bordercol" onclick="toggleAcc(this)">
+             <div class="flex items-center gap-3">
+               <span class="text-lg">📦</span>
+               <div class="text-left">
+                 <h3 class="font-bold text-sm text-ink">Collection & Specimen Metadata</h3>
+                 <p class="text-xs text-ink-muted">Physical vault location, field collector, GPS & preparation</p>
+               </div>
+             </div>
+             <span class="acc-icon text-ink-muted font-bold transition-transform duration-200">^</span>
+          </button>
+          <div class="p-4 space-y-4 acc-content block">
+
+             <div>
+                <div class="flex items-center justify-between mb-2">
+                   <h4 class="text-[10px] font-mono font-bold text-ink-muted uppercase tracking-wider">Museum Physical Storage Coordinates</h4>
+                   <span class="text-[10px] text-fern-dark border border-fern-border bg-white px-2 py-0.5 rounded font-mono">Tagged Unit</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Cabinet</label>
+                    <input id="inputCabinet" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Drawer / Unit Tray</label>
+                    <input id="inputShelf" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Room & Building</label>
+                    <input id="inputRoom" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Barcode String</label>
+                    <input id="inputBarcode" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+                  </div>
+                </div>
+             </div>
+
+             <div class="mt-6 border-t border-bordercol pt-4">
+                <h4 class="text-[10px] font-mono font-bold text-ink-muted uppercase tracking-wider mb-2">Historical Field Collection Data</h4>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Collector Name</label>
+                    <input id="inputCollector" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Field Number</label>
+                    <input id="inputFieldNumber" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Collection Date</label>
+                    <input id="inputCollectionDate" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Country / Province</label>
+                    <input id="inputCountry" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label class="text-xs font-medium text-ink-muted block mb-1">Specific Locality</label>
+                  <textarea id="inputLocality" rows="2" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()"></textarea>
+                </div>
+
+                <label class="text-xs font-medium text-ink-muted block mb-1">Decimal GPS Coordinates (Technical Monospace)</label>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                  <input id="inputLat" type="text" placeholder="Latitude" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+                  <input id="inputLon" type="text" placeholder="Longitude" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Elevation</label>
+                    <input id="inputElevation" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-ink-muted block mb-1">Habitat / Ecology</label>
+                    <input id="inputHabitat" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                  </div>
+                </div>
+             </div>
+
+             <div class="mt-6 border-t border-bordercol pt-4">
+                <h4 class="text-[10px] font-mono font-bold text-ink-muted uppercase tracking-wider mb-2">Preservation & Physical Condition</h4>
+                <div class="mb-3">
+                  <label class="text-xs font-medium text-ink-muted block mb-1">Preparation Type</label>
+                  <input id="inputPreparation" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                </div>
+                <div class="mb-3">
+                  <label class="text-xs font-medium text-ink-muted block mb-1">Condition Grade</label>
+                  <select id="inputCondition" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
+                     <option value="">Select Condition</option>
+                     <option value="Pristine">Pristine (No Damage)</option>
+                     <option value="Good">Good (Stable)</option>
+                     <option value="Fair">Fair (Minor Degradation)</option>
+                     <option value="Fragile">Fragile (Needs Support)</option>
+                     <option value="Severe">Severe (Urgent Repair)</option>
+                  </select>
+                </div>
+
+                <div class="bg-tonal1 border border-bordercol p-3 rounded">
+                  <label class="text-xs font-medium text-ink-muted block mb-2">Phenology Traits Visible on Sheet:</label>
+                  <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-1.5 text-sm text-ink touch-press"><input type="checkbox" id="checkFlower" class="w-4 h-4 text-fern" onchange="autoSave()"> Flower / Inflorescence</label>
+                    <label class="flex items-center gap-1.5 text-sm text-ink touch-press"><input type="checkbox" id="checkFruit" class="w-4 h-4 text-fern" onchange="autoSave()"> Fruit / Cone</label>
+                    <label class="flex items-center gap-1.5 text-sm text-ink touch-press"><input type="checkbox" id="checkBuds" class="w-4 h-4 text-fern" onchange="autoSave()"> Buds</label>
+                  </div>
+                </div>
+             </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Detail Sticky Footer (Floating / Fixed to Bottom of Screen) -->
+      <footer class="absolute bottom-0 w-full bg-surface/95 backdrop-blur border-t border-bordercol p-3 flex flex-col gap-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
+         <div class="flex items-center justify-between px-1">
+            <div class="flex items-center gap-2">
+               <span class="inline-block w-2.5 h-2.5 rounded-full bg-fern"></span>
+               <span class="text-xs font-mono text-ink-muted font-bold">Desktop Host Linked (14ms)</span>
+            </div>
+            <button class="text-xs font-bold text-ember touch-press">⚠ Discrepancy Open</button>
+         </div>
+         <div class="flex items-center gap-2">
+           <button id="btnReviewed" onclick="toggleReviewed()" class="flex-1 bg-surface border-2 border-bordercol text-ink hover:bg-tonal1 px-4 py-3 rounded-md font-bold text-sm flex items-center justify-center gap-2 touch-min touch-press transition">
+             <span class="text-fern-dark">✓</span> <span>Mark Reviewed</span>
+           </button>
+         </div>
+      </footer>
+    </main>
 
   </div>
 
@@ -687,7 +905,9 @@ INDEX_TEMPLATE = """<!DOCTYPE html>
     let currentRecord = null;
     let isReviewed = false;
     let objectList = [];
-    let currentIndex = 0;
+
+    // Auto-save debounce timer
+    let saveTimeout = null;
 
     async function apiFetch(url, options = {}) {
       options.headers = options.headers || {};
@@ -705,47 +925,165 @@ INDEX_TEMPLATE = """<!DOCTYPE html>
       setTimeout(() => toast.classList.add('hidden'), 2500);
     }
 
+    function toggleAcc(btn) {
+       const acc = btn.closest('.accordion');
+       acc.classList.toggle('acc-open');
+       const content = acc.querySelector('.acc-content');
+       if (acc.classList.contains('acc-open')) {
+           content.classList.remove('hidden');
+       } else {
+           content.classList.add('hidden');
+       }
+    }
+
     async function init() {
       try {
         const status = await apiFetch('/api/status');
         document.getElementById('headerDbName').textContent = status.database_name || 'Arbor Database';
         document.getElementById('headerCount').textContent = `${status.reviewed_count} / ${status.total_objects} reviewed`;
 
-        const objRes = await apiFetch('/api/objects?limit=500');
-        objectList = objRes.objects || [];
-        if (objectList.length > 0) {
-          loadObject(objectList[0].id);
-        }
+        await fetchList();
       } catch (err) {
         console.error("Init failed:", err);
       }
     }
 
+    let searchDebounce = null;
+    function debounceSearch() {
+       clearTimeout(searchDebounce);
+       searchDebounce = setTimeout(fetchList, 300);
+    }
+
+    async function fetchList() {
+      const q = document.getElementById('searchBox').value.trim();
+      const objRes = await apiFetch(`/api/objects?limit=50&q=${encodeURIComponent(q)}`);
+      objectList = objRes.objects || [];
+      document.getElementById('listSummary').textContent = `Showing ${objectList.length} of ${objRes.total_matching} specimens`;
+      renderList();
+    }
+
+    function renderList() {
+      const container = document.getElementById('specimenListContainer');
+      if (objectList.length === 0) {
+          container.innerHTML = `<div class="p-4 text-center text-ink-muted text-sm border border-dashed border-bordercol rounded bg-surface">No specimens found.</div>`;
+          return;
+      }
+
+      container.innerHTML = objectList.map(o => {
+          let badge = '';
+          if (o.review_status === 'reviewed') {
+              badge = `<span class="bg-fern-light text-fern-dark border border-fern-border px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">✓ Reviewed</span>`;
+          } else {
+              badge = `<span class="bg-surface border border-bordercol text-ink-muted px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">🕒 Pending</span>`;
+          }
+
+          let subtext = [];
+          if (o.location.cabinet && o.location.cabinet !== 'nan') subtext.push(`Cab ${o.location.cabinet}`);
+          if (o.location.drawer && o.location.drawer !== 'nan') subtext.push(`Drw ${o.location.drawer}`);
+          else if (o.location.shelf && o.location.shelf !== 'nan') subtext.push(`Shf ${o.location.shelf}`);
+
+          return `
+          <div onclick="loadObject('${o.id}')" class="bg-surface rounded-md border-l-4 border-l-fern border-y border-r border-bordercol shadow-sm p-3 hover:bg-tonal1 cursor-pointer touch-press transition">
+             <div class="flex items-start justify-between mb-2">
+                 <div class="flex items-center gap-2">
+                     <span class="font-mono text-[10px] bg-tonal1 border border-bordercol text-ink px-1.5 py-0.5 rounded font-bold">${o.accession_number}</span>
+                 </div>
+                 ${badge}
+             </div>
+             <h3 class="font-serif italic font-bold text-ink text-base mb-1">${o.scientific_name}</h3>
+             <p class="text-xs text-ink-muted font-sans">${o.family || 'Unknown Family'}</p>
+             <div class="mt-2 pt-2 border-t border-tonal2 flex justify-between items-center text-[10px] text-ink-muted font-mono">
+                 <div class="flex items-center gap-1">📍 ${subtext.join(' / ') || 'Location unknown'}</div>
+                 <div>📅 --</div>
+             </div>
+          </div>
+          `;
+      }).join('');
+    }
+
+    function showListView() {
+       document.getElementById('detailView').classList.add('hidden');
+       document.getElementById('listView').classList.remove('hidden');
+       document.getElementById('backButton').classList.add('hidden');
+       // Refresh list in case of changes
+       fetchList();
+    }
+
+    function showDetailView() {
+       document.getElementById('listView').classList.add('hidden');
+       document.getElementById('detailView').classList.remove('hidden');
+       document.getElementById('backButton').classList.remove('hidden');
+    }
+
+    function setVal(id, val) {
+       const el = document.getElementById(id);
+       if(el) el.value = val || '';
+    }
+
+    function setCheck(id, val) {
+       const el = document.getElementById(id);
+       if(el) el.checked = (String(val).toLowerCase() === 'true' || val === true || val === '1' || val === 'yes');
+    }
+
     async function loadObject(oid) {
       currentOid = oid;
-      currentIndex = objectList.findIndex(o => o.id === oid);
-      if (currentIndex === -1) currentIndex = 0;
+      showDetailView();
 
       document.getElementById('imagePlaceholder').classList.remove('hidden');
       document.getElementById('imageContainer').classList.add('hidden');
       document.getElementById('specimenImg').src = '';
 
+      // Reset scroll position to top
+      document.querySelector('#detailView .flex-1.overflow-y-auto').scrollTop = 0;
+
       try {
         const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}`);
         currentRecord = data;
         
-        document.getElementById('accessionTag').textContent = `Accession #${data.accession_number}`;
-        document.getElementById('scientificNameTitle').textContent = data.scientific_name || `Specimen #${oid}`;
-        document.getElementById('familySubtitle').textContent = `Family: ${data.registration.Family || '---'}`;
+        // Header
+        document.getElementById('detailAccession').textContent = data.accession_number;
+        document.getElementById('detailScientificName').textContent = data.scientific_name;
+        document.getElementById('detailAuthor').textContent = data.registration.Author || '';
+        document.getElementById('detailFamily').textContent = data.registration.Family || 'Unknown Family';
+        const cab = data.observation.Cabinet || data.registration.Cabinet || '';
+        const drw = data.observation.Shelf || data.registration.Shelf || '';
+        document.getElementById('detailTopLocation').textContent = cab ? `Cabinet ${cab} / Drawer ${drw}` : '';
+        document.getElementById('detailCommonName').textContent = data.observation.CommonName || '';
+
+        // Taxonomy Tab
+        setVal('inputBinomial', (data.registration.Genus || '') + ' ' + (data.registration.Species || ''));
+        setVal('inputAuthor', data.registration.Author);
+        setVal('inputCommonName', data.observation.CommonName || data.registration.CommonName);
+        setVal('inputFamily', data.registration.Family);
+        setVal('inputGenus', data.registration.Genus);
+        setVal('inputOrder', data.observation.Order || data.registration.Order);
+        setVal('inputClass', data.observation.Class || data.registration.Class);
+        setVal('inputDeterminedBy', data.observation.DeterminedBy || data.registration.DeterminedBy);
+        setVal('inputDateDetermined', data.observation.DateDetermined || data.registration.DateDetermined);
+
+        // Collection Tab
+        setVal('inputCabinet', data.observation.Cabinet || data.registration.Cabinet);
+        setVal('inputShelf', data.observation.Shelf || data.registration.Shelf);
+        setVal('inputRoom', data.observation.Room || data.registration.Room);
+        setVal('inputBarcode', data.observation.Barcode || data.registration.Barcode);
+
+        setVal('inputCollector', data.observation.Collector || data.registration.Collector);
+        setVal('inputFieldNumber', data.observation.FieldNumber || data.registration.FieldNumber);
+        setVal('inputCollectionDate', data.observation.CollectionDate || data.registration.CollectionDate);
+        setVal('inputCountry', data.observation.Country || data.registration.Country);
+        setVal('inputLocality', data.observation.Locality || data.registration.Locality);
+
+        setVal('inputLat', data.observation.Latitude || data.registration.Latitude);
+        setVal('inputLon', data.observation.Longitude || data.registration.Longitude);
+        setVal('inputElevation', data.observation.Elevation || data.registration.Elevation);
+        setVal('inputHabitat', data.observation.Habitat || data.registration.Habitat);
         
-        document.getElementById('inputGenus').value = data.registration.Genus || '';
-        document.getElementById('inputSpecies').value = data.registration.Species || '';
-        document.getElementById('inputAuthor').value = data.registration.Author || '';
+        setVal('inputPreparation', data.observation.Preparation || data.registration.Preparation);
+        setVal('inputCondition', data.observation.ConditionGrade || data.registration.ConditionGrade);
         
-        document.getElementById('inputRoom').value = data.observation.Room || data.registration.Room || '';
-        document.getElementById('inputCabinet').value = data.observation.Cabinet || data.registration.Cabinet || '';
-        document.getElementById('inputShelf').value = data.observation.Shelf || data.registration.Shelf || '';
-        document.getElementById('inputNotes').value = data.observation.Notes || '';
+        setCheck('checkFlower', data.observation.PhenologyFlower);
+        setCheck('checkFruit', data.observation.PhenologyFruit);
+        setCheck('checkBuds', data.observation.PhenologyBuds);
 
         isReviewed = data.review_status === 'reviewed';
         updateReviewButton();
@@ -764,64 +1102,73 @@ INDEX_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
-    function switchTab(tab) {
-      document.getElementById('contentTax').classList.add('hidden');
-      document.getElementById('contentLoc').classList.add('hidden');
-      document.getElementById('contentObs').classList.add('hidden');
-
-      document.getElementById('tabTax').className = 'flex-1 py-1.5 rounded text-center transition text-[#5a655e] hover:text-[#1c241f]';
-      document.getElementById('tabLoc').className = 'flex-1 py-1.5 rounded text-center transition text-[#5a655e] hover:text-[#1c241f]';
-      document.getElementById('tabObs').className = 'flex-1 py-1.5 rounded text-center transition text-[#5a655e] hover:text-[#1c241f]';
-
-      if (tab === 'tax') {
-        document.getElementById('contentTax').classList.remove('hidden');
-        document.getElementById('tabTax').className = 'flex-1 py-1.5 rounded text-center transition bg-white text-[#2d6a4f] shadow-xs font-bold';
-      } else if (tab === 'loc') {
-        document.getElementById('contentLoc').classList.remove('hidden');
-        document.getElementById('tabLoc').className = 'flex-1 py-1.5 rounded text-center transition bg-white text-[#2d6a4f] shadow-xs font-bold';
-      } else if (tab === 'obs') {
-        document.getElementById('contentObs').classList.remove('hidden');
-        document.getElementById('tabObs').className = 'flex-1 py-1.5 rounded text-center transition bg-white text-[#2d6a4f] shadow-xs font-bold';
-      }
-    }
-
     function updateReviewButton() {
-      const badge = document.getElementById('reviewBadge');
       const btn = document.getElementById('btnReviewed');
       if (isReviewed) {
-        badge.className = 'bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300';
-        badge.textContent = '✓ Reviewed';
-        btn.className = 'flex-1 bg-emerald-800 text-white py-2.5 rounded-md font-bold text-xs flex items-center justify-center gap-1.5 touch-min shadow-sm';
+        btn.className = 'flex-1 bg-fern text-white px-4 py-3 rounded-md font-bold text-sm flex items-center justify-center gap-2 touch-min touch-press shadow-md transition border-2 border-fern-dark';
         btn.innerHTML = '<span>✓</span> <span>Reviewed (Tap to undo)</span>';
       } else {
-        badge.className = 'bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-300';
-        badge.textContent = '⏳ Pending';
-        btn.className = 'flex-1 bg-[#2d6a4f] hover:bg-[#1b4332] text-white py-2.5 rounded-md font-bold text-xs flex items-center justify-center gap-1.5 touch-min shadow-sm';
-        btn.innerHTML = '<span>✓</span> <span>Mark Reviewed</span>';
+        btn.className = 'flex-1 bg-surface border-2 border-bordercol text-ink hover:bg-tonal1 px-4 py-3 rounded-md font-bold text-sm flex items-center justify-center gap-2 touch-min touch-press transition';
+        btn.innerHTML = '<span class="text-fern-dark">✓</span> <span>Mark Reviewed</span>';
       }
     }
 
     async function toggleReviewed() {
       isReviewed = !isReviewed;
       updateReviewButton();
-      await saveCurrentEdits();
+      await saveCurrentEdits(true);
     }
 
-    async function saveCurrentEdits() {
+    function autoSave() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            saveCurrentEdits(false);
+        }, 1000);
+    }
+
+    async function saveCurrentEdits(showStatus=false) {
       if (!currentOid) return;
+
+      const binomial = document.getElementById('inputBinomial').value.trim().split(' ');
+      const genus = binomial[0] || '';
+      const species = binomial.slice(1).join(' ') || '';
+
       const payload = {
         id: currentOid,
         reviewed: isReviewed,
         registration: {
-          Genus: document.getElementById('inputGenus').value,
-          Species: document.getElementById('inputSpecies').value,
+          Genus: genus || document.getElementById('inputGenus').value,
+          Species: species,
+          Family: document.getElementById('inputFamily').value,
           Author: document.getElementById('inputAuthor').value
         },
         observation: {
+          CommonName: document.getElementById('inputCommonName').value,
+          Order: document.getElementById('inputOrder').value,
+          Class: document.getElementById('inputClass').value,
+          DeterminedBy: document.getElementById('inputDeterminedBy').value,
+          DateDetermined: document.getElementById('inputDateDetermined').value,
+
           Room: document.getElementById('inputRoom').value,
           Cabinet: document.getElementById('inputCabinet').value,
           Shelf: document.getElementById('inputShelf').value,
-          Notes: document.getElementById('inputNotes').value
+          Barcode: document.getElementById('inputBarcode').value,
+
+          Collector: document.getElementById('inputCollector').value,
+          FieldNumber: document.getElementById('inputFieldNumber').value,
+          CollectionDate: document.getElementById('inputCollectionDate').value,
+          Country: document.getElementById('inputCountry').value,
+          Locality: document.getElementById('inputLocality').value,
+          Latitude: document.getElementById('inputLat').value,
+          Longitude: document.getElementById('inputLon').value,
+          Elevation: document.getElementById('inputElevation').value,
+          Habitat: document.getElementById('inputHabitat').value,
+
+          Preparation: document.getElementById('inputPreparation').value,
+          ConditionGrade: document.getElementById('inputCondition').value,
+          PhenologyFlower: document.getElementById('checkFlower').checked,
+          PhenologyFruit: document.getElementById('checkFruit').checked,
+          PhenologyBuds: document.getElementById('checkBuds').checked,
         }
       };
 
@@ -830,58 +1177,9 @@ INDEX_TEMPLATE = """<!DOCTYPE html>
           method: 'POST',
           body: JSON.stringify(payload)
         });
-        showToast('✓ Edits synced to desktop database');
+        if(showStatus) showToast('✓ Edits synced to desktop database');
       } catch (err) {
-        showToast('⚠ Error syncing edits');
-      }
-    }
-
-    async function saveAndNext() {
-      await saveCurrentEdits();
-      navNext();
-    }
-
-    function navPrev() {
-      if (currentIndex > 0) {
-        loadObject(objectList[currentIndex - 1].id);
-      }
-    }
-
-    function navNext() {
-      if (currentIndex < objectList.length - 1) {
-        loadObject(objectList[currentIndex + 1].id);
-      }
-    }
-
-    function doSearch() {
-      const q = document.getElementById('searchBox').value.trim();
-      if (!q) return;
-      apiFetch(`/api/objects?q=${encodeURIComponent(q)}`).then(res => {
-        if (res.objects && res.objects.length > 0) {
-          objectList = res.objects;
-          loadObject(objectList[0].id);
-        } else {
-          showToast('No matching specimens found');
-        }
-      });
-    }
-
-    function toggleListView() {
-      const modal = document.getElementById('listViewModal');
-      modal.classList.toggle('hidden');
-      if (!modal.classList.contains('hidden')) {
-        const container = document.getElementById('specimenListContainer');
-        container.innerHTML = objectList.map(o => `
-          <div onclick="loadObject('${o.id}'); toggleListView();" class="p-3 hover:bg-emerald-50 cursor-pointer flex items-center justify-between">
-            <div>
-              <span class="font-mono text-[10px] text-emerald-800 font-bold">#${o.id}</span>
-              <p class="font-bold text-xs italic">${o.scientific_name}</p>
-            </div>
-            <span class="text-[10px] px-2 py-0.5 rounded-full ${o.review_status === 'reviewed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
-              ${o.review_status}
-            </span>
-          </div>
-        `).join('');
+        if(showStatus) showToast('⚠ Error syncing edits');
       }
     }
 
@@ -892,4 +1190,5 @@ INDEX_TEMPLATE = """<!DOCTYPE html>
     init();
   </script>
 </body>
-</html>"""
+</html>
+"""
