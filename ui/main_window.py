@@ -3512,12 +3512,98 @@ class ObjectProgramUI(
                 elif manager == "pack":
                     btn.pack_forget()
 
+    def _check_responsive_buttons(self, event):
+        # Debounce to prevent layout thrashing
+        if hasattr(self, '_responsive_resize_job') and self._responsive_resize_job:
+            self.root.after_cancel(self._responsive_resize_job)
+
+        def do_check():
+            if not hasattr(self, 'responsive_btn_config') or not hasattr(self, '_responsive_icons_cache'):
+                return
+
+            w = self.root.winfo_width()
+            # If the window isn't mapped properly yet or width is artificially low, skip
+            if w < 100:
+                return
+
+            for btn_name, (_, threshold, full_text) in self.responsive_btn_config.items():
+                btn = self.toolbar_buttons.get(btn_name)
+                if not btn or not btn.winfo_exists():
+                    continue
+
+                try:
+                    is_tk_button = isinstance(btn, tk.Button) and not isinstance(btn, ttk.Button)
+
+                    if w < threshold:
+                        # Use small icon version
+                        icon = self._responsive_icons_cache.get(btn_name)
+                        if icon:
+                            if is_tk_button:
+                                btn.config(text="", image=icon, compound="center")
+                            else:
+                                btn.config(text="", image=icon, compound="center")
+                    else:
+                        # Restore full text
+                        if is_tk_button:
+                            btn.config(text=full_text, image="", compound="none")
+                        else:
+                            btn.config(text=full_text, image="", compound="none")
+                except Exception as e:
+                    import sys
+                    print(f"Error making button {btn_name} responsive: {e}", file=sys.stderr)
+
+        self._responsive_resize_job = self.root.after(50, do_check)
+
     def on_left_frame_configure(self, event):
         if hasattr(self, "sb_buttons_frame") and self.sb_buttons_frame.winfo_exists():
             self.sb_buttons_frame.config(width=event.width)
 
+    def _init_responsive_icons(self):
+        """Pre-renders pytablericons for responsive button collapse to avoid overhead during resize."""
+        try:
+            from pytablericons import TablerIcons
+            import pytablericons.outline_icon as oi
+        except ImportError:
+            self._responsive_icons_cache = {}
+            return
+
+        from PIL import ImageTk
+
+        # Mapping definition:
+        # dict key: string name in self.toolbar_buttons / specific buttons
+        # tuple: (enum, threshold_width, full_text)
+
+        self.responsive_btn_config = {
+            'Next+Hist': (oi.OutlineIcon.HISTORY_TOGGLE, 1300, "Next+Hist"),
+            'Next Problem': (oi.OutlineIcon.ALERT_TRIANGLE, 1200, "⚠ Next Problem"),
+            'CREATE': (oi.OutlineIcon.FILE_PLUS, 1150, "CREATE"),
+            'RECENT': (oi.OutlineIcon.HISTORY, 1100, "RECENT"),
+            'DATA': (oi.OutlineIcon.DATABASE, 1050, "DATA"),
+            'IMAGES ▾': (oi.OutlineIcon.PHOTO, 1000, "IMAGES ▾"),
+            'FILE ▾': (oi.OutlineIcon.FILE, 950, "FILE ▾"),
+            'Filter': (oi.OutlineIcon.FILTER, 900, "Filter"),
+            'SETTINGS': (oi.OutlineIcon.SETTINGS, 850, "SETTINGS"),
+            'HELP': (oi.OutlineIcon.HELP, 800, "HELP"),
+            'Prev': (oi.OutlineIcon.PLAYER_TRACK_PREV, 800, "◄"),
+            'Next': (oi.OutlineIcon.PLAYER_TRACK_NEXT, 800, "►"),
+            'Last': (oi.OutlineIcon.ARROW_BAR_TO_LEFT, 800, "Last"),
+        }
+
+        self._responsive_icons_cache = {}
+        for btn_name, (icon_enum, _, _) in self.responsive_btn_config.items():
+            try:
+                # Render icon using TablerIcons (size 20 is good for standard buttons)
+                pil_img = TablerIcons.load(icon_enum, 20, '#555555', 1.5)
+                self._responsive_icons_cache[btn_name] = ImageTk.PhotoImage(pil_img)
+            except Exception as e:
+                import sys
+                print(f"Error loading icon for {btn_name}: {e}", file=sys.stderr)
+
     # ---------- UI ----------
     def build_ui(self):
+        self._init_responsive_icons()
+        self.root.bind("<Configure>", self._check_responsive_buttons, add="+")
+
         # ----------------------------------------------------------------
         # LAYER 4: Global Status Bar — packed FIRST at bottom so panes
         # fills the remaining space above it.
@@ -3558,6 +3644,8 @@ class ObjectProgramUI(
             style="Nav.TButton",
             command=self._open_unified
         )
+        self.toolbar_buttons['SETTINGS'] = self.sb_settings_btn
+        self.add_tooltip(self.sb_settings_btn, "Open Application Settings")
         self.sb_settings_btn.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
 
         sep = ttk.Separator(self.sb_buttons_frame, orient="vertical")
@@ -3569,6 +3657,8 @@ class ObjectProgramUI(
             style="Nav.TButton",
             command=self.open_help_window
         )
+        self.toolbar_buttons['HELP'] = self.sb_help_btn
+        self.add_tooltip(self.sb_help_btn, "Open Help Window")
         self.sb_help_btn.grid(row=0, column=2, sticky="nsew", padx=(2, 6), pady=3)
 
 
@@ -3728,6 +3818,7 @@ class ObjectProgramUI(
             secondary_frame, text="⚠ Next Problem", style="Primary.TButton",
             command=self.goto_next_problem)
         self.toolbar_buttons['Next Problem'].pack(side="left", padx=(4, 1))
+        self.add_tooltip(self.toolbar_buttons['Next Problem'], "Jump to next problem")
 
         self.next_history_btn = ttk.Button(
             secondary_frame, text="Next+Hist", style="Primary.TButton",
