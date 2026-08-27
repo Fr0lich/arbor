@@ -172,10 +172,12 @@ class MobileDialog:
                 port=self.port,
                 on_edit_callback=self.on_mobile_edit_received
             )
+            self.server.on_client_connection_change = self.on_client_connection_change
             self.server.start()
             self.parent_ui._mobile_server_instance = self.server
         else:
             self.server.on_edit_callback = self.on_mobile_edit_received
+            self.server.on_client_connection_change = self.on_client_connection_change
 
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
@@ -189,6 +191,14 @@ class MobileDialog:
         # 4. Start Pinggy SSH Tunnel in background
         self.tunnel = PinggyTunnel(self.port)
         self.tunnel.start(self.on_tunnel_ready)
+
+    def on_client_connection_change(self, count):
+        def update():
+            if count > 0:
+                self.status_lbl.config(text=f"🟢 Public Tunnel Live & Secure — 📱 {count} Phone(s) Connected (Online)")
+            else:
+                self.status_lbl.config(text="🟢 Public Tunnel Live & Secure")
+        self.root.after(0, update)
 
     def on_tunnel_ready(self, url):
         def update_ui():

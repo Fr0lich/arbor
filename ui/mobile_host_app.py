@@ -224,6 +224,7 @@ class MobileHostApp:
             port=self.port,
             on_edit_callback=self._on_mobile_edit
         )
+        self.server.on_client_connection_change = self.on_client_connection_change
         self.server.start()
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
@@ -246,6 +247,14 @@ class MobileHostApp:
             self.btn_qr_public.config(text="🌐 Public (Ready)")
             self.feed_list.insert(tk.END, f"Public tunnel live: {url}")
             self.feed_list.see(tk.END)
+        self.root.after(0, update)
+
+    def on_client_connection_change(self, count):
+        def update():
+            if count > 0:
+                self.status_lbl.config(text=f"🟢 Public Tunnel Live & Secure — 📱 {count} Phone(s) Connected (Online)")
+            else:
+                self.status_lbl.config(text="🟢 Public Tunnel Live & Secure")
         self.root.after(0, update)
 
     def _on_mobile_edit(self, oid, summary):
@@ -271,6 +280,11 @@ class MobileHostApp:
                             df_photo=self.app.df_photo
                         )
                         self._on_mobile_edit("SYS", "Background autosave completed")
+                        if self.server:
+                            try:
+                                self.server.broadcast_event("autosave_completed", {"timestamp": datetime.now().isoformat()})
+                            except Exception:
+                                pass
                 except Exception as e:
                     debug_error("MobileHost autosave", str(e))
 

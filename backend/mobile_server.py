@@ -8,8 +8,10 @@ import os
 import io
 import mimetypes
 import socket
+import queue
+import time
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file, Response
 import pandas as pd
 import config
 from utils import debug_error
@@ -80,7 +82,24 @@ class MobileServer:
         self.thread = None
         self._is_running = False
         self.recent_edits = []  # list of dicts: {oid, summary, time}
+        self.sse_clients = set()
+        self.sse_lock = threading.Lock()
+        self.on_client_connection_change = None
         self._setup_routes()
+
+    def broadcast_event(self, event_type, data):
+        message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+        with self.sse_lock:
+            for q in self.sse_clients:
+                try:
+                    q.put(message)
+                except Exception:
+                    pass
+
+    def _heartbeat_loop(self):
+        while self._is_running:
+            time.sleep(15)
+            self.broadcast_event("heartbeat", {"time": datetime.now().isoformat()})
 
     def start(self):
         if self._is_running:
@@ -88,6 +107,9 @@ class MobileServer:
         self._is_running = True
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
+
+        self.heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self.heartbeat_thread.start()
 
     def _run(self):
         try:
@@ -169,6 +191,37 @@ class MobileServer:
         # -------------------------------------------------------------
         # REST API (Conforming to arbor-mobile-companion / src/api.ts)
         # -------------------------------------------------------------
+
+        @app.route('/api/events')
+        def events():
+            def generate_stream():
+                q = queue.Queue()
+                with self.sse_lock:
+                    self.sse_clients.add(q)
+                    count = len(self.sse_clients)
+                if self.on_client_connection_change:
+                    try:
+                        self.on_client_connection_change(count)
+                    except Exception:
+                        pass
+
+                try:
+                    while True:
+                        msg = q.get()
+                        yield msg
+                except GeneratorExit:
+                    pass
+                finally:
+                    with self.sse_lock:
+                        self.sse_clients.remove(q)
+                        count = len(self.sse_clients)
+                    if self.on_client_connection_change:
+                        try:
+                            self.on_client_connection_change(count)
+                        except Exception:
+                            pass
+
+            return Response(generate_stream(), mimetype="text/event-stream")
 
         @app.route('/api/status', methods=['GET'])
         def get_status():
@@ -463,6 +516,9 @@ class MobileServer:
                 })
                 if len(self.recent_edits) > 20:
                     self.recent_edits.pop()
+
+            # Notify mobile clients
+            self.broadcast_event("record_updated", {"id": oid})
 
             # 8. Notify desktop UI
             if self.on_edit_callback:

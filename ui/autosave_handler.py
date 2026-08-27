@@ -102,6 +102,13 @@ class AutosaveMixin:
                         # U2-F: Brief non-blocking banner so the user has clear
                         # confirmation their work is safe, even in low-light conditions.
                         self.show_banner("💾 Autosaved", "info", duration_ms=2000)
+
+                        # Notify mobile clients if connected
+                        if hasattr(self, "_mobile_server_instance") and self._mobile_server_instance:
+                            try:
+                                self._mobile_server_instance.broadcast_event("autosave_completed", {"timestamp": ts})
+                            except Exception:
+                                pass
                     else:
                         self.set_status_badge("autosaved", "Autosave failed")
                         self.show_banner("⚠ Autosave failed — check disk space", "error", duration_ms=6000)
