@@ -10,6 +10,7 @@ import mimetypes
 import socket
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file
+from werkzeug.utils import secure_filename
 import pandas as pd
 import config
 from utils import debug_error
@@ -484,6 +485,117 @@ class MobileServer:
                 "review_status": "reviewed" if reviewed else "pending",
                 "synced_at": datetime.now().isoformat()
             })
+
+        @app.route('/api/object/<oid>/photo', methods=['POST'])
+        def attach_photo(oid):
+            if self.app_state.df_reg is None:
+                return jsonify({"error": "No database loaded"}), 400
+
+            oid = str(oid).strip()
+
+            if 'image' not in request.files and 'file' not in request.files:
+                return jsonify({"error": "No image payload found"}), 400
+
+            file = request.files.get('image') or request.files.get('file')
+            if file.filename == '':
+                return jsonify({"error": "Empty filename"}), 400
+
+            caption = request.form.get('caption', '').strip()
+            category = request.form.get('category', '').strip()
+
+            with self.app_state.df_lock:
+                if oid not in self.app_state.df_reg.index:
+                    return jsonify({"error": f"Object {oid} not found"}), 404
+
+            if self.app_state.excel_path:
+                db_folder = os.path.dirname(self.app_state.excel_path)
+            else:
+                db_folder = os.getcwd()
+            photos_dir = os.path.join(db_folder, "photos")
+            os.makedirs(photos_dir, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            original_filename = secure_filename(file.filename)
+            _, ext = os.path.splitext(original_filename)
+            if not ext:
+                ext = ".jpg"
+
+            new_filename = f"{oid}_{timestamp}{ext}"
+            file_path = os.path.join(photos_dir, new_filename)
+
+            try:
+                file.save(file_path)
+            except Exception as e:
+                debug_error("Photo Upload Error", str(e))
+                return jsonify({"error": "Failed to save image"}), 500
+
+            with self.app_state.df_lock:
+                if getattr(self.app_state, 'df_photo', None) is None:
+                    # Depending on how it's structured, standard columns are generic
+                    self.app_state.df_photo = pd.DataFrame(columns=["PhotoPath", "FileName", "Caption", "Timestamp"])
+                    self.app_state.df_photo.index.name = "ObjectID"
+
+                # Check for what columns exist
+                cols = self.app_state.df_photo.columns.tolist()
+                new_row = {}
+                for c in cols:
+                    new_row[c] = ""
+
+                # Use user's requested columns
+                if "PhotoPath" in cols or "FileName" in cols or "Caption" in cols or "Timestamp" in cols:
+                    # It's an empty schema or already matching our requested schema
+                    pass
+                else:
+                    # Let's add them to columns if they don't exist
+                    for c in ["PhotoPath", "FileName", "Caption", "Timestamp"]:
+                        if c not in self.app_state.df_photo.columns:
+                            self.app_state.df_photo[c] = ""
+
+                new_row["PhotoPath"] = file_path
+                new_row["FileName"] = new_filename
+                new_row["Caption"] = caption
+                new_row["Timestamp"] = timestamp
+                if category and "Category" in self.app_state.df_photo.columns:
+                    new_row["Category"] = category
+                elif category:
+                    self.app_state.df_photo["Category"] = ""
+                    new_row["Category"] = category
+
+                new_df = pd.DataFrame([new_row], index=[oid])
+                new_df.index.name = self.app_state.df_photo.index.name or "ObjectID"
+
+                self.app_state.df_photo = pd.concat([self.app_state.df_photo, new_df])
+
+                if not hasattr(self.app_state, "_log_records") or self.app_state._log_records is None:
+                    self.app_state._log_records = []
+
+                now_ts = datetime.now().isoformat(timespec="seconds")
+                log_entry = {
+                    "Timestamp": now_ts,
+                    "Action": "PHOTO_ADDED",
+                    "Reviewed": "",
+                    "ObjectID": oid,
+                    "ChangedFields": "Photo",
+                    "ChangedValues": f"Added {new_filename}",
+                    "ProblemsChanged": "",
+                    "ProblemsChangedValues": "",
+                    "LocationChanged": "",
+                    "LocationChangedValues": "",
+                    "User": "Mobile-Companion",
+                    "SourceFile": os.path.basename(self.app_state.excel_path or ""),
+                    "OutputFile": os.path.basename(self.app_state.output_path or self.app_state.excel_path or "")
+                }
+                self.app_state._log_records.append(log_entry)
+                self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+
+                self.app_state.dirty = True
+
+            return jsonify({
+                "success": True,
+                "photo_id": new_filename,
+                "filename": new_filename,
+                "url": f"/api/photo/{new_filename}"
+            }), 201
 
 
 LOGIN_TEMPLATE = """<!DOCTYPE html>
