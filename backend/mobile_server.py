@@ -503,6 +503,152 @@ class MobileServer:
             })
 
 
+
+        @app.route('/api/batch_update', methods=['POST'])
+        def batch_update_objects():
+            data = request.get_json(silent=True) or {}
+            updates_list = data.get('updates')
+            if not updates_list or not isinstance(updates_list, list):
+                return jsonify({"error": "Missing or invalid 'updates' array"}), 400
+
+            updated_ids = []
+
+            with self.app_state.df_lock:
+                if self.app_state.df_reg is None:
+                    return jsonify({"error": "No database loaded"}), 400
+
+                for update in updates_list:
+                    oid = str(update.get('id') or update.get('oid') or '').strip()
+                    if not oid or oid not in self.app_state.df_reg.index:
+                        continue
+
+                    reviewed = update.get('reviewed')
+                    obs_updates = update.get('observation') or {}
+                    reg_updates = update.get('registration') or {}
+
+                    # 1. Snapshot for Undo Stack
+                    old_reg = self.app_state.df_reg.loc[oid].to_dict()
+                    old_obs = self.app_state.df_obs.loc[oid].to_dict() if (self.app_state.df_obs is not None and oid in self.app_state.df_obs.index) else {}
+                    undo_snapshot = {
+                        "oid": oid,
+                        "reg": old_reg.copy(),
+                        "obs": old_obs.copy(),
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    self.app_state.undo_stacks.setdefault(oid, []).append(undo_snapshot)
+                    if len(self.app_state.undo_stacks[oid]) > 20:
+                        self.app_state.undo_stacks[oid].pop(0)
+
+                    changed_fields = []
+                    changed_values = []
+
+                    # 2. Apply registration updates
+                    for k, v in reg_updates.items():
+                        if k in self.app_state.df_reg.columns:
+                            old_v = sanitize_value(self.app_state.df_reg.at[oid, k])
+                            new_v = sanitize_value(v)
+                            if str(old_v) != str(new_v):
+                                coerced = coerce_type(new_v, self.app_state.df_reg[k].dtype)
+                                self.app_state.df_reg.at[oid, k] = coerced
+                                changed_fields.append(k)
+                                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+
+                    # 3. Apply observation updates
+                    if self.app_state.df_obs is not None and oid in self.app_state.df_obs.index:
+                        for k, v in obs_updates.items():
+                            if k in self.app_state.df_obs.columns:
+                                old_v = sanitize_value(self.app_state.df_obs.at[oid, k])
+                                new_v = sanitize_value(v)
+                                if str(old_v) != str(new_v):
+                                    coerced = coerce_type(new_v, self.app_state.df_obs[k].dtype)
+                                    self.app_state.df_obs.at[oid, k] = coerced
+                                    changed_fields.append(k)
+                                    changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+                            elif k in self.app_state.df_reg.columns and k not in reg_updates:
+                                old_v = sanitize_value(self.app_state.df_reg.at[oid, k])
+                                new_v = sanitize_value(v)
+                                if str(old_v) != str(new_v):
+                                    coerced = coerce_type(new_v, self.app_state.df_reg[k].dtype)
+                                    self.app_state.df_reg.at[oid, k] = coerced
+                                    changed_fields.append(k)
+                                    changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+
+                    # 4. Handle Reviewed Status
+                    action_name = "EDIT"
+                    is_rev_str = ""
+                    if reviewed is not None:
+                        is_reviewed_bool = bool(reviewed)
+                        is_rev_str = "Yes" if is_reviewed_bool else "No"
+                        action_name = "REVIEWED" if is_reviewed_bool else "NOT_REVIEWED"
+                        if self.app_state.df_obs is not None and oid in self.app_state.df_obs.index:
+                            if "Reviewed" in self.app_state.df_obs.columns:
+                                self.app_state.df_obs.at[oid, "Reviewed"] = is_reviewed_bool
+                            if "ReviewedAt" in self.app_state.df_obs.columns:
+                                self.app_state.df_obs.at[oid, "ReviewedAt"] = datetime.now().isoformat(timespec="seconds")
+                            changed_fields.append("Reviewed")
+
+                    # 5. Append / Merge Log Record
+                    if not hasattr(self.app_state, "_log_records") or self.app_state._log_records is None:
+                        self.app_state._log_records = []
+
+                    now_ts = datetime.now().isoformat(timespec="seconds")
+                    log_entry = {
+                        "Timestamp": now_ts,
+                        "Action": action_name,
+                        "Reviewed": is_rev_str,
+                        "ObjectID": oid,
+                        "ChangedFields": ", ".join(changed_fields) if changed_fields else "(no changes)",
+                        "ChangedValues": " | ".join(changed_values),
+                        "ProblemsChanged": "",
+                        "ProblemsChangedValues": "",
+                        "LocationChanged": "",
+                        "LocationChangedValues": "",
+                        "User": "Mobile-Companion",
+                        "SourceFile": os.path.basename(self.app_state.excel_path or ""),
+                        "OutputFile": os.path.basename(self.app_state.output_path or self.app_state.excel_path or "")
+                    }
+                    self.app_state._log_records.append(log_entry)
+
+                    # 7. Record Recent Edit in Server
+                    edit_summary = f"#{oid}: {', '.join(changed_fields)}" if changed_fields else f"#{oid} updated"
+                    self.recent_edits.insert(0, {
+                        "oid": oid,
+                        "summary": edit_summary,
+                        "time": datetime.now().strftime("%H:%M:%S")
+                    })
+                    if len(self.recent_edits) > 20:
+                        self.recent_edits.pop()
+
+                    updated_ids.append(oid)
+
+                if updated_ids:
+                    self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+                    self.app_state.dirty = True
+
+            if not updated_ids:
+                return jsonify({"success": True, "updated_count": 0, "updated_ids": []})
+
+            # 8. Notify desktop UI
+            if self.on_edit_callback:
+                try:
+                    self.on_edit_callback("BATCH", f"Batch updated {len(updated_ids)} records")
+                except Exception as e:
+                    pass
+
+            if self.root_tk:
+                try:
+                    self.app_state._mobile_last_edited_oid = updated_ids[-1]
+                    self.root_tk.event_generate("<<MobileEdit>>", when="tail")
+                except Exception as e:
+                    pass
+
+            return jsonify({
+                "success": True,
+                "updated_count": len(updated_ids),
+                "updated_ids": updated_ids
+            })
+
+
 LOGIN_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
