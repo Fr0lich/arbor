@@ -6,7 +6,15 @@ import logging
 import sys
 import time
 
-class PinggyTunnel:
+
+class LocalhostRunTunnel:
+    """SSH reverse tunnel via localhost.run (port 22).
+
+    Uses `nokey@localhost.run` which works on UiO Eduroam and most
+    institutional networks where SSH-over-HTTPS (port 443) is blocked.
+    Delivers a public HTTPS URL (*.lhr.life) within ~5 seconds.
+    """
+
     def __init__(self, port):
         self.port = port
         self.public_url = None
@@ -16,27 +24,32 @@ class PinggyTunnel:
 
     def start(self, url_callback, status_callback=None):
         self._stop_event.clear()
-        self.thread = threading.Thread(target=self._run, args=(url_callback, status_callback), daemon=True)
+        self.thread = threading.Thread(
+            target=self._run,
+            args=(url_callback, status_callback),
+            daemon=True
+        )
         self.thread.start()
 
     def _run(self, url_callback, status_callback):
-        # We use a.pinggy.io on port 443 with -T (disable pseudo-terminal) for clean non-blocking IO
         cmd = [
             'ssh',
-            '-p', '443',
-            '-T',
-            f'-R0:localhost:{self.port}',
+            '-p', '22',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'UserKnownHostsFile=NUL' if sys.platform.startswith('win') else '/dev/null',
             '-o', 'ServerAliveInterval=30',
-            '-o', 'ConnectTimeout=10',
-            'a.pinggy.io'
+            '-o', 'ConnectTimeout=15',
+            '-R', f'80:localhost:{self.port}',
+            'nokey@localhost.run'
         ]
 
         flags = 0
         if sys.platform.startswith('win'):
-            # CREATE_NO_WINDOW prevents console allocation hangs on Windows
             flags = subprocess.CREATE_NO_WINDOW
+
+        # Pattern matches lines like:
+        # "4a0f072c2dc8bb.lhr.life tunneled with tls termination, https://4a0f072c2dc8bb.lhr.life"
+        url_pattern = re.compile(r'(https://[a-zA-Z0-9]+\.lhr\.life)')
 
         attempt = 0
         backoff = 2
@@ -54,15 +67,20 @@ class PinggyTunnel:
                         creationflags=flags
                     )
 
-                    # Robust URL matching pattern
-                    url_pattern = re.compile(r'(https://[a-zA-Z0-9.-]+\.pinggy\.[a-z]+)')
                     connected = False
+                    url_deadline = time.time() + 20  # give up waiting for URL after 20s
 
-                    # Read with non-blocking check
                     while not self._stop_event.is_set():
                         line = self.process.stdout.readline()
                         if not line:
                             if self.process.poll() is not None:
+                                break
+                            # Check URL timeout while process is still running
+                            if not connected and time.time() > url_deadline:
+                                logging.warning("localhost.run: no URL received within 20s")
+                                if status_callback:
+                                    status_callback("🟡 Tunnel timeout — check network / firewall")
+                                self.process.terminate()
                                 break
                             time.sleep(0.1)
                             continue
@@ -75,6 +93,14 @@ class PinggyTunnel:
                             backoff = 2
                             if url_callback:
                                 url_callback(self.public_url)
+
+                        # Also check timeout after each line read
+                        if not connected and time.time() > url_deadline:
+                            logging.warning("localhost.run: no URL received within 20s")
+                            if status_callback:
+                                status_callback("🟡 Tunnel timeout — check network / firewall")
+                            self.process.terminate()
+                            break
 
                     if self.process and not self._stop_event.is_set():
                         self.process.wait()
@@ -124,6 +150,10 @@ class PinggyTunnel:
                 except Exception:
                     pass
         self.process = None
+
+
+# Backwards-compatible alias — callers import PinggyTunnel without changes
+PinggyTunnel = LocalhostRunTunnel
 
 
 def get_local_ip():

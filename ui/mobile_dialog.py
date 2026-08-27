@@ -42,7 +42,13 @@ class MobileDialog:
                 pass
 
         # Build panel — reuse an existing server if one is already running
-        reuse = getattr(self.parent_ui, "_mobile_server_instance", None)
+        self.server = getattr(self.parent_ui, '_mobile_server_instance', None)
+        self.tunnel = None
+        self.port = 5055
+        self.qr_image_ref = None
+        self.local_url_with_token = ""
+        self.public_url_with_token = ""
+        self.current_qr_mode = "public"
         self.panel = MobilePanel(
             parent=self.win,
             app_state=self.app_state,
@@ -50,7 +56,7 @@ class MobileDialog:
             port=self.port,
             on_end_session=self._end_session,
             on_edit=self._on_mobile_edit,
-            reuse_server=reuse,
+            reuse_server=self.server,
         )
         self.panel.start()
 

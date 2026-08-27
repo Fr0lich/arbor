@@ -253,7 +253,8 @@ def test_mobile_host_app_lifecycle(mock_app_state):
         host = MobileHostApp(root=root, app=mock_app_state)
         assert host.server is not None
         assert host.app == mock_app_state
-        assert host.url_var.get().startswith("http://")
+        assert "Connecting" in host.url_var.get()
+        assert host.panel.local_url_with_token.startswith("http://")
         if host.autosave_job:
             root.after_cancel(host.autosave_job)
         if host.tunnel:

@@ -122,8 +122,21 @@ class MobileHostApp:
             sys.exit(1)
 
     # ------------------------------------------------------------------
-    # UI
     # ------------------------------------------------------------------
+    # UI & Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def server(self):
+        return self.panel.server if self.panel else None
+
+    @property
+    def tunnel(self):
+        return self.panel.tunnel if self.panel else None
+
+    @property
+    def url_var(self):
+        return self.panel.url_var if self.panel else None
 
     def _build_ui(self):
         self.panel = MobilePanel(

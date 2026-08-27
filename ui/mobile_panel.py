@@ -63,7 +63,7 @@ class MobilePanel:
         self.qr_image_ref = None
         self.local_url_with_token = ""
         self.public_url_with_token = ""
-        self.current_qr_mode = "local"
+        self.current_qr_mode = "public"  # public tunnel is the default
 
         self._build_ui()
 
@@ -139,33 +139,33 @@ class MobilePanel:
         mode_btn_frame = tk.Frame(qr_box, bg="#ffffff")
         mode_btn_frame.pack(fill="x", pady=(4, 0))
 
-        self.btn_qr_local = tk.Button(
+        self.btn_qr_public = tk.Button(
             mode_btn_frame,
-            text="📶 Local Wi-Fi",
+            text="🌐 Public (Internet)",
             font=("Segoe UI", 7, "bold"),
             bg="#1b4332",
             fg="white",
             relief="flat",
             padx=4,
             pady=1,
-            command=lambda: self.switch_qr("local"),
+            command=lambda: self.switch_qr("public"),
             cursor="hand2",
         )
-        self.btn_qr_local.pack(side="left", expand=True, fill="x", padx=1)
+        self.btn_qr_public.pack(side="left", expand=True, fill="x", padx=1)
 
-        self.btn_qr_public = tk.Button(
+        self.btn_qr_local = tk.Button(
             mode_btn_frame,
-            text="🌐 Public Pinggy",
+            text="📶 LAN only",
             font=("Segoe UI", 7),
             bg="#e0e3df",
             fg="#333",
             relief="flat",
             padx=4,
             pady=1,
-            command=lambda: self.switch_qr("public"),
+            command=lambda: self.switch_qr("local"),
             cursor="hand2",
         )
-        self.btn_qr_public.pack(side="right", expand=True, fill="x", padx=1)
+        self.btn_qr_local.pack(side="right", expand=True, fill="x", padx=1)
 
         # Connection info
         info = tk.Frame(mid, bg="#fbfbf9")
@@ -279,7 +279,7 @@ class MobilePanel:
     # ------------------------------------------------------------------
 
     def start(self):
-        """Start (or reuse) MobileServer and launch Pinggy tunnel."""
+        """Start (or reuse) MobileServer and launch localhost.run tunnel."""
         # Start or reuse MobileServer
         if self.server is None:
             self.server = MobileServer(
@@ -295,13 +295,12 @@ class MobilePanel:
         self.server.on_client_connect_callback = self._on_client_connect
         self._on_client_connect(len(self.server.clients))
 
-        # Populate PIN and URLs
+        # Populate PIN and local URL (kept as LAN fallback)
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
         self.local_url_with_token = (
             f"http://{local_ip}:{self.port}/?token={self.server.session_token}"
         )
-        self.url_var.set(self.local_url_with_token)
 
         # Update DB info label
         try:
@@ -311,13 +310,20 @@ class MobilePanel:
         except Exception:
             pass
 
-        # Render QR code immediately
-        self._render_qr(self.local_url_with_token)
-        self.log(f"Local host active at http://{local_ip}:{self.port}")
+        # Show connecting placeholder — public QR renders in _on_tunnel_ready()
+        self.url_var.set("🔄 Connecting public tunnel…")
+        self.qr_label.config(
+            image="",
+            text="🔄 Connecting\npublic tunnel…",
+            font=("Segoe UI", 9, "italic"),
+            fg="#d97706",
+        )
+        self.log(f"Local LAN fallback: http://{local_ip}:{self.port}")
 
-        # Start Pinggy tunnel in background
+        # Start localhost.run tunnel in background
         self.tunnel = PinggyTunnel(self.port)
         self.tunnel.start(self._on_tunnel_ready, self._on_tunnel_status)
+
 
     def stop(self):
         """Stop the tunnel (does not save data — wrapper handles that)."""
@@ -379,10 +385,10 @@ class MobilePanel:
             self.status_dot.config(fg="#2e7d32")
             self.status_lbl.config(text="🟢 Public Tunnel Live & Secure", fg="#1b4332")
             self.tunnel_lbl.config(text=f"Public: {url}", fg="#2e7d32", font=("Segoe UI", 8))
-            self.btn_qr_public.config(text="🌐 Public Pinggy (Ready)")
-            if self.current_qr_mode != "local":
-                self.switch_qr("public")
-            self.feed_list.insert(tk.END, f"Public tunnel established: {url}")
+            self.btn_qr_public.config(text="🌐 Public (Internet) ✓")
+            # Always switch to the public QR as soon as the tunnel is ready
+            self.switch_qr("public")
+            self.feed_list.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] Public tunnel ready: {url}")
             self.feed_list.see(tk.END)
         self.root.after(0, _update)
 

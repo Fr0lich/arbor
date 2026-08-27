@@ -8,6 +8,8 @@ import os
 import io
 import mimetypes
 import socket
+import subprocess
+import sys
 import time
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file, Response
@@ -168,9 +170,37 @@ class MobileServer:
         self.on_client_connect_callback = None
         self._setup_routes()
 
+    def _add_firewall_rule(self):
+        """Add a Windows Firewall inbound rule for the mobile server port.
+        Silently skips on non-Windows or if netsh fails (e.g. no admin rights)."""
+        if not sys.platform.startswith('win'):
+            return
+        try:
+            subprocess.run([
+                'netsh', 'advfirewall', 'firewall', 'add', 'rule',
+                f'name=Arbor Mobile Server (port {self.port})',
+                'dir=in', 'action=allow', 'protocol=TCP',
+                f'localport={self.port}'
+            ], capture_output=True, timeout=5)
+        except Exception:
+            pass  # No admin rights or netsh unavailable — safe to ignore
+
+    def _remove_firewall_rule(self):
+        """Remove the Windows Firewall inbound rule added by _add_firewall_rule."""
+        if not sys.platform.startswith('win'):
+            return
+        try:
+            subprocess.run([
+                'netsh', 'advfirewall', 'firewall', 'delete', 'rule',
+                f'name=Arbor Mobile Server (port {self.port})'
+            ], capture_output=True, timeout=5)
+        except Exception:
+            pass
+
     def start(self):
         if self._is_running:
             return
+        self._add_firewall_rule()
         self._is_running = True
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
@@ -185,6 +215,8 @@ class MobileServer:
 
     def stop(self):
         self._is_running = False
+        self._remove_firewall_rule()
+
 
     def broadcast_event(self, event_type, data=None):
         if data is None:
