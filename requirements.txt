@@ -4,3 +4,4 @@ pillow
 requests
 python-calamine
 pytablericons
+flask

@@ -3684,6 +3684,20 @@ class ObjectProgramUI(
         sep = ttk.Separator(self.sb_buttons_frame, orient="vertical")
         sep.grid(row=0, column=1, sticky="ns", pady=3)
 
+        # --- Mobile App Button ---
+        self.sb_mobile_btn = ttk.Button(
+            self.sb_buttons_frame,
+            text="📱 MOBILE",
+            style="Nav.TButton",
+            command=self.open_mobile_dialog
+        )
+        self.toolbar_buttons['MOBILE'] = self.sb_mobile_btn
+        self.add_tooltip(self.sb_mobile_btn, "Connect your phone to edit records")
+        self.sb_mobile_btn.grid(row=0, column=2, sticky="nsew", padx=(2, 6), pady=3)
+
+        sep2 = ttk.Separator(self.sb_buttons_frame, orient="vertical")
+        sep2.grid(row=0, column=3, sticky="ns", pady=3)
+
         self.sb_help_btn = ttk.Button(
             self.sb_buttons_frame,
             text="HELP",
@@ -4007,6 +4021,7 @@ class ObjectProgramUI(
             highlightbackground=config.DRAWER_THEME.get("drawer_border", "#c4c7c7")
         )
         self.root.bind_all("<Button-1>", self._on_global_click_for_drawer, add="+")
+        self.root.bind("<<MobileEdit>>", self._on_mobile_edit)
 
         self.review_progress_label = None
         self.review_progress = None
@@ -6113,6 +6128,32 @@ class ObjectProgramUI(
 
 
 
+
+    def open_mobile_dialog(self):
+        from ui.mobile_dialog import MobileDialog
+        if not hasattr(self, '_mobile_dialog') or not self._mobile_dialog.win.winfo_exists():
+            self._mobile_dialog = MobileDialog(self, self.root, self.app)
+        else:
+            self._mobile_dialog.win.lift()
+            self._mobile_dialog.win.focus_force()
+
+    def _on_mobile_edit(self, event=None):
+        """Called when the mobile server fires <<MobileEdit>>"""
+        if getattr(self.app, '_mobile_last_edited_oid', None):
+            oid = self.app._mobile_last_edited_oid
+            self.app._mobile_last_edited_oid = None
+
+            self.log_action("EDIT", oid)
+
+            # If the edited object is currently displayed, refresh it
+            if self.app.current_object_id == oid:
+                self.load_object(oid)
+                self.commit_current_object()
+
+            self.update_dirty_ui()
+            self.update_object_count()
+            self._update_accordion_badges()
+            self.update_review_progress()
 
     def on_close(self):
         if self.app.dirty:
