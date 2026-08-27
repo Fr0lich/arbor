@@ -284,6 +284,18 @@ if __name__ == "__main__":
 
         ui.apply_config()
 
+        if getattr(app, "_history_cache_pending", False):
+            from collections import OrderedDict
+            ui._history_cache = OrderedDict()
+            app._history_cache_pending = False
+            oid = app.current_object_id
+            if oid:
+                try:
+                    ui.update_history_indicator(oid)
+                except Exception:
+                    pass
+
+
         if hasattr(dialog, "selected_excel_path"):
             from ui.dialogs import LoadingWindow
             loading_win = LoadingWindow(root, dialog.selected_excel_path, ui)

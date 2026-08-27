@@ -1388,7 +1388,10 @@ class StartupDialog:
         if hasattr(self, "progress_bar"):
             self.progress_bar.pack_forget()
         from collections import OrderedDict
-        self.ui._history_cache = OrderedDict()
+        if hasattr(self, "ui"):
+            self.ui._history_cache = OrderedDict()
+        else:
+            self.app._history_cache_pending = True
         if not loaded:
             if hasattr(self, "history_label"):
                 self.history_label.config(text="No valid databases loaded", foreground="red")
@@ -1403,7 +1406,8 @@ class StartupDialog:
         oid = self.app.current_object_id
         if oid:
             try:
-                self.ui.update_history_indicator(oid)
+                if hasattr(self, "ui"):
+                    self.ui.update_history_indicator(oid)
             except Exception:
                 pass
 
@@ -1411,7 +1415,10 @@ class StartupDialog:
         if hasattr(self, "progress_bar"):
             self.progress_bar.pack_forget()
         from collections import OrderedDict
-        self.ui._history_cache = OrderedDict()
+        if hasattr(self, "ui"):
+            self.ui._history_cache = OrderedDict()
+        else:
+            self.app._history_cache_pending = True
         if not loaded:
             if hasattr(self, "books_label"):
                 self.books_label.config(text="No valid sheets found", foreground="red")
@@ -1422,7 +1429,8 @@ class StartupDialog:
         self.app.historical_dbs.extend(loaded)
         oid = self.app.current_object_id
         if oid:
-            self.ui.update_history_indicator(oid)
+            if hasattr(self, "ui"):
+                self.ui.update_history_indicator(oid)
         if hasattr(self, "books_label"):
             self.books_label.config(text=f"Books loaded ({len(loaded)} sheets)", foreground="green")
         self.continue_btn.config(state="normal")
