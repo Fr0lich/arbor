@@ -1432,7 +1432,7 @@ INDEX_TEMPLATE = """
           <div class="flex items-center gap-2 text-xs font-sans text-ink-muted" id="detailTaxonSubline">
             <span id="detailAuthor" class="font-medium text-ink"></span>
             <span>•</span>
-            <span id="detailFamily"></span>
+            <span id="detailFamily" class="font-serif italic"></span>
           </div>
         </div>
 
@@ -1641,7 +1641,7 @@ INDEX_TEMPLATE = """
             </label>
             <select
               id="discrepancyFieldSelect"
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink font-sans outline-none focus:border-fern"
             >
               <!-- Populated dynamically from schema -->
             </select>
@@ -1676,7 +1676,7 @@ INDEX_TEMPLATE = """
               rows="3"
               required
               placeholder="e.g. Inscription handwriting does not match genus determination..."
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink font-sans outline-none focus:border-fern"
             ></textarea>
           </div>
 
@@ -2274,7 +2274,7 @@ INDEX_TEMPLATE = """
               data-section="${section}"
               data-field="${fName}"
               onchange="triggerAutoSave()"
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern cursor-pointer"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink font-sans outline-none focus:border-fern cursor-pointer"
             >
               ${optionsHtml}
             </select>
@@ -2315,7 +2315,7 @@ INDEX_TEMPLATE = """
               data-field="${fName}"
               rows="2"
               oninput="triggerAutoSave()"
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink font-sans outline-none focus:border-fern"
             >${value || ''}</textarea>
           </div>
         `;
@@ -2334,7 +2334,7 @@ INDEX_TEMPLATE = """
             data-section="${section}"
             data-field="${fName}"
             value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()"'}
+            ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink font-sans outline-none focus:border-fern" oninput="triggerAutoSave()"'}
           />
         </div>
       `;
