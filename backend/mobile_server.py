@@ -10,7 +10,8 @@ import mimetypes
 import socket
 import time
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file, Response
+import queue
 from werkzeug.utils import secure_filename
 import pandas as pd
 import config
@@ -83,6 +84,9 @@ class MobileServer:
         self._is_running = False
         self.recent_edits = []  # list of dicts: {oid, summary, time}
         self._auth_attempts = {}
+        self.clients = []
+        self.clients_lock = threading.Lock()
+        self.on_client_connect_callback = None
         self._setup_routes()
 
     def start(self):
@@ -102,6 +106,17 @@ class MobileServer:
 
     def stop(self):
         self._is_running = False
+
+    def broadcast_event(self, event_type, data=None):
+        if data is None:
+            data = {}
+        payload = {"type": event_type, "data": data}
+        with self.clients_lock:
+            for q in self.clients:
+                try:
+                    q.put(payload)
+                except Exception:
+                    pass
 
     def _check_rate_limit(self, ip):
         if ip not in self._auth_attempts:
@@ -235,6 +250,46 @@ class MobileServer:
         # -------------------------------------------------------------
         # REST API (Conforming to arbor-mobile-companion / src/api.ts)
         # -------------------------------------------------------------
+
+
+        @app.route('/api/events', methods=['GET'])
+        def sse_events():
+            if not self._check_auth():
+                return jsonify({"error": "Unauthorized"}), 401
+
+            client_queue = queue.Queue()
+
+            with self.clients_lock:
+                self.clients.append(client_queue)
+                active_count = len(self.clients)
+
+            if self.on_client_connect_callback:
+                try:
+                    self.on_client_connect_callback(active_count)
+                except Exception:
+                    pass
+
+            def generate():
+                try:
+                    while True:
+                        try:
+                            # 15s heartbeat timeout
+                            msg = client_queue.get(timeout=15)
+                            yield f"data: {json.dumps(msg)}\n\n"
+                        except queue.Empty:
+                            yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                finally:
+                    with self.clients_lock:
+                        if client_queue in self.clients:
+                            self.clients.remove(client_queue)
+                        active_count = len(self.clients)
+                    if self.on_client_connect_callback:
+                        try:
+                            self.on_client_connect_callback(active_count)
+                        except Exception:
+                            pass
+
+            return Response(generate(), mimetype="text/event-stream")
 
         @app.route('/api/status', methods=['GET'])
         def get_status():
@@ -671,6 +726,8 @@ class MobileServer:
                 if len(self.recent_edits) > 20:
                     self.recent_edits.pop()
 
+            self.broadcast_event("record_updated", {"id": oid})
+
             # 8. Notify desktop UI
             if self.on_edit_callback:
                 try:
@@ -921,6 +978,8 @@ class MobileServer:
                         self.recent_edits.pop()
 
                     updated_ids.append(oid)
+
+                    self.broadcast_event("record_updated", {"id": oid})
 
                 if updated_ids:
                     self.app_state.df_log = pd.DataFrame(self.app_state._log_records)

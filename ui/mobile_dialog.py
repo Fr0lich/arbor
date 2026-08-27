@@ -60,6 +60,9 @@ class MobileDialog:
         self.status_lbl = tk.Label(self.status_bar, text="🟢 Local Server Ready — Connecting public tunnel...", bg="#e8f5e9", fg="#1b4332", font=("Segoe UI", 9, "bold"))
         self.status_lbl.pack(side="left")
 
+        self.client_badge = tk.Label(self.status_bar, text="📱 Offline", bg="#e8f5e9", fg="#5a655e", font=("Segoe UI", 9))
+        self.client_badge.pack(side="right", padx=(0, 6))
+
         # Middle Content Frame (QR Code + Connection Details)
         mid_frame = tk.Frame(main, bg="#fbfbf9", bd=1, relief="solid", padx=12, pady=12)
         mid_frame.pack(fill="x", pady=(0, 10))
@@ -176,6 +179,8 @@ class MobileDialog:
             self.parent_ui._mobile_server_instance = self.server
         else:
             self.server.on_edit_callback = self.on_mobile_edit_received
+        self.server.on_client_connect_callback = self.on_client_connect
+        self.on_client_connect(len(self.server.clients))
 
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
@@ -217,6 +222,15 @@ class MobileDialog:
             self.feed_list.see(tk.END)
 
         self.root.after(0, update_ui)
+
+
+    def on_client_connect(self, active_count):
+        def update():
+            if active_count > 0:
+                self.client_badge.config(text=f"📱 Phone Connected ({active_count} Online)", fg="#2e7d32", font=("Segoe UI", 9, "bold"))
+            else:
+                self.client_badge.config(text="📱 Offline", fg="#5a655e", font=("Segoe UI", 9))
+        self.root.after(0, update)
 
     def on_mobile_edit_received(self, oid, summary):
         def log_item():
