@@ -124,48 +124,48 @@ class FilterManager:
             if not items:
                 return None
 
-            results = []
-            for p in items:
+            def evaluate(p):
                 if p == "Any_Problem":
-                    val = fast_has_any_problem(oid, obs_row, reg_row)
+                    return fast_has_any_problem(oid, obs_row, reg_row)
                 elif p == "Has_Images":
                     if image_mode == "online":
-                        val = True
+                        return True
                     elif image_mode == "offline":
-                        val = False
+                        return False
                     else:
-                        val = not bool(obs_row.get("Images_Missing", False))
+                        return not bool(obs_row.get("Images_Missing", False))
                 elif p == "Images_Missing":
                     if image_mode in ("online", "offline"):
-                        val = False
+                        return False
                     else:
-                        val = bool(obs_row.get("Images_Missing", False))
+                        return bool(obs_row.get("Images_Missing", False))
                 elif p == "Reviewed":
-                    val = bool(obs_row.get(REVIEWED_COLUMN, False))
+                    return bool(obs_row.get(REVIEWED_COLUMN, False))
                 elif p == "Not_Reviewed":
-                    val = not bool(obs_row.get(REVIEWED_COLUMN, False))
+                    return not bool(obs_row.get(REVIEWED_COLUMN, False))
                 elif p == "Comment_Empty":
-                    val = not str(reg_row.get("Comment", "")).strip()
+                    return not str(reg_row.get("Comment", "")).strip()
                 elif p == "Comment_Not_Empty":
-                    val = bool(str(reg_row.get("Comment", "")).strip())
+                    return bool(str(reg_row.get("Comment", "")).strip())
                 elif p == "Extra_Empty":
-                    val = not str(obs_row.get("Extra", "")).strip()
+                    return not str(obs_row.get("Extra", "")).strip()
                 elif p == "Extra_Not_Empty":
-                    val = bool(str(obs_row.get("Extra", "")).strip())
+                    return bool(str(obs_row.get("Extra", "")).strip())
                 elif p == "Unknown":
-                    val = any(_is_unknown(reg_row.get(field, "")) for field in unknown_fields)
+                    return any(_is_unknown(reg_row.get(field, "")) for field in unknown_fields)
                 elif p == "Reviewed_With_Problem":
-                    val = (bool(obs_row.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs_row, reg_row))
+                    return (bool(obs_row.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs_row, reg_row))
                 elif p == "Problem_With_History":
-                    val = fast_has_history(oid)
+                    return fast_has_history(oid)
                 elif p == "Has_History":
-                    val = fast_has_history(oid)
+                    return fast_has_history(oid)
                 else:
-                    val = fast_is_problem_active(oid, p, obs_row, reg_row)
+                    return fast_is_problem_active(oid, p, obs_row, reg_row)
 
-                results.append(val)
-
-            return all(results) if mode == "AND" else any(results)
+            if mode == "AND":
+                return all(evaluate(p) for p in items)
+            else:
+                return any(evaluate(p) for p in items)
 
         for oid in df_reg.index:
             obs_row = get_obs_row(oid)
