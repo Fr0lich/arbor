@@ -964,10 +964,10 @@ class StartupDialog:
         self.continue_btn.bind("<Enter>", lambda e: self._launch_hover(True))
         self.continue_btn.bind("<Leave>", lambda e: self._launch_hover(False))
 
-        # 📱 MOBILE MODE button (Secondary accent: emerald green)
+        # 📱 Mobile Companion button (Secondary accent: emerald green)
         self.mobile_mode_btn = tk.Button(
             footer,
-            text="📱 MOBILE MODE",
+            text="📱 Mobile Companion",
             bg="#2d6a4f",
             fg="#ffffff",
             font=("Segoe UI", sc(10), "bold"),
