@@ -481,6 +481,21 @@ class MobileServer:
                 df_reg = self.app_state.df_reg
                 df_obs = self.app_state.df_obs
 
+                def _get_combined(col_name, indices):
+                    """Helper to efficiently combine columns using in-place update instead of combine_first."""
+                    result = pd.Series(index=indices, dtype=str)
+                    if col_name in df_reg.columns:
+                        result = df_reg[col_name].reindex(indices)
+                    if df_obs is not None and col_name in df_obs.columns:
+                        obs_col = df_obs[col_name].reindex(indices).dropna()
+                        if not obs_col.empty:
+                            if result.empty or result.isna().all():
+                                result = pd.Series(index=indices, dtype=str)
+                                result.update(obs_col)
+                            else:
+                                result.update(obs_col)
+                    return result
+
                 rev_col = "Reviewed" if (df_obs is not None and "Reviewed" in df_obs.columns) else None
                 matched_indices = df_reg.index
 
@@ -507,23 +522,13 @@ class MobileServer:
 
                 # Cabinet filter
                 if cabinet_filter:
-                    combined_cabinets = pd.Series(index=matched_indices, dtype=str)
-                    if "Cabinet" in df_reg.columns:
-                        combined_cabinets = df_reg["Cabinet"].reindex(matched_indices)
-                    if df_obs is not None and "Cabinet" in df_obs.columns:
-                        combined_cabinets = df_obs["Cabinet"].reindex(matched_indices).combine_first(combined_cabinets)
-
+                    combined_cabinets = _get_combined("Cabinet", matched_indices)
                     mask = combined_cabinets.fillna("").astype(str).str.lower() == cabinet_filter
                     matched_indices = matched_indices[mask]
 
                 # Room filter
                 if room_filter:
-                    combined_rooms = pd.Series(index=matched_indices, dtype=str)
-                    if "Room" in df_reg.columns:
-                        combined_rooms = df_reg["Room"].reindex(matched_indices)
-                    if df_obs is not None and "Room" in df_obs.columns:
-                        combined_rooms = df_obs["Room"].reindex(matched_indices).combine_first(combined_rooms)
-
+                    combined_rooms = _get_combined("Room", matched_indices)
                     mask = combined_rooms.fillna("").astype(str).str.lower() == room_filter
                     matched_indices = matched_indices[mask]
 
@@ -547,12 +552,7 @@ class MobileServer:
                         problems = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"]]
 
                     for p_col in problems:
-                        combined_prob = pd.Series(index=matched_indices, dtype=str)
-                        if p_col in df_reg.columns:
-                            combined_prob = df_reg[p_col].reindex(matched_indices)
-                        if df_obs is not None and p_col in df_obs.columns:
-                            combined_prob = df_obs[p_col].reindex(matched_indices).combine_first(combined_prob)
-
+                        combined_prob = _get_combined(p_col, matched_indices)
                         mask |= combined_prob.astype(str).str.strip().str.lower().isin(["true", "1", "yes", "t"])
 
                     if has_problems_filter in ["true", "1", "yes", "t"]:
@@ -566,12 +566,7 @@ class MobileServer:
                 facets = {}
 
                 # 1. Cabinets facet
-                cabinet_series = pd.Series(index=matched_indices, dtype=str)
-                if "Cabinet" in df_reg.columns:
-                    cabinet_series = df_reg["Cabinet"].reindex(matched_indices)
-                if df_obs is not None and "Cabinet" in df_obs.columns:
-                    cabinet_series = df_obs["Cabinet"].reindex(matched_indices).combine_first(cabinet_series)
-
+                cabinet_series = _get_combined("Cabinet", matched_indices)
                 cabinet_series = cabinet_series.fillna("").astype(str).str.strip()
                 cabinet_series = cabinet_series[cabinet_series != ""]
                 facets["cabinets"] = cabinet_series.value_counts().to_dict()
@@ -607,12 +602,7 @@ class MobileServer:
                             if not ascending:
                                 matched_indices = matched_indices[::-1]
                     elif sort_by == 'cabinet':
-                        sort_series = pd.Series(index=matched_indices, dtype=str)
-                        if "Cabinet" in df_reg.columns:
-                            sort_series = df_reg["Cabinet"].reindex(matched_indices)
-                        if df_obs is not None and "Cabinet" in df_obs.columns:
-                            sort_series = df_obs["Cabinet"].reindex(matched_indices).combine_first(sort_series)
-
+                        sort_series = _get_combined("Cabinet", matched_indices)
                         sort_series = sort_series.fillna("").astype(str)
                         matched_indices = matched_indices[sort_series.argsort()]
                         if not ascending:
@@ -1007,6 +997,24 @@ class MobileServer:
                 if self.app_state.df_reg is None:
                     return jsonify({"error": "No database loaded"}), 400
 
+                # Compute allowed columns from active config outside the loop
+                allowed_reg_cols = set()
+                allowed_obs_cols = {"Reviewed", "ReviewedAt", "Images_Missing", "Images_Problem", "Online_Images_Exist"}
+                if getattr(self.app_state, "config", None) and isinstance(self.app_state.config, dict):
+                    ui_sec = self.app_state.config.get("ui_sections", {})
+                    for item in ui_sec.get("registration", []):
+                        if isinstance(item, dict) and "name" in item:
+                            allowed_reg_cols.add(item["name"])
+                    for item in ui_sec.get("location", []):
+                        if isinstance(item, dict) and "name" in item:
+                            allowed_obs_cols.add(item["name"])
+                    for item in ui_sec.get("problems", []):
+                        if isinstance(item, dict) and "name" in item:
+                            allowed_obs_cols.add(item["name"])
+                    for item in ui_sec.get("unknown_fields", []):
+                        if isinstance(item, dict) and "name" in item:
+                            allowed_obs_cols.add(item["name"])
+
                 for update in updates_list:
                     oid = str(update.get('id') or update.get('oid') or '').strip()
                     if not oid or oid not in self.app_state.df_reg.index:
@@ -1031,24 +1039,6 @@ class MobileServer:
 
                     changed_fields = []
                     changed_values = []
-
-                    # Compute allowed columns from active config
-                    allowed_reg_cols = set()
-                    allowed_obs_cols = {"Reviewed", "ReviewedAt", "Images_Missing", "Images_Problem", "Online_Images_Exist"}
-                    if getattr(self.app_state, "config", None) and isinstance(self.app_state.config, dict):
-                        ui_sec = self.app_state.config.get("ui_sections", {})
-                        for item in ui_sec.get("registration", []):
-                            if isinstance(item, dict) and "name" in item:
-                                allowed_reg_cols.add(item["name"])
-                        for item in ui_sec.get("location", []):
-                            if isinstance(item, dict) and "name" in item:
-                                allowed_obs_cols.add(item["name"])
-                        for item in ui_sec.get("problems", []):
-                            if isinstance(item, dict) and "name" in item:
-                                allowed_obs_cols.add(item["name"])
-                        for item in ui_sec.get("unknown_fields", []):
-                            if isinstance(item, dict) and "name" in item:
-                                allowed_obs_cols.add(item["name"])
 
                     # 2. Apply registration updates
                     _apply_dataframe_updates(self.app_state.df_reg, reg_updates, changed_fields, changed_values, oid, allowed_columns=allowed_reg_cols if allowed_reg_cols else None)
