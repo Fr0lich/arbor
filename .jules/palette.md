@@ -1,0 +1,3 @@
+## 2024-03-24 - Enforcing the Tri-Font Strategy in Tailwind components
+**Learning:** The desktop app uses a strict "Tri-Font Strategy" (Scholarly Serif, Systematic Sans, Technical Monospace). In a responsive/mobile single-page application context (like `mobile_server.py`), these must be explicitly managed within class attributes (`font-serif`, `font-sans`, `font-mono`) on target components like form inputs and specific typography rather than globally cascading or relying on generic HTML elements.
+**Action:** Always explicitly specify `font-sans` on `<input>`, `<select>`, and `<textarea>` components in Tailwind. Always explicitly specify `font-serif italic` for botanical nomenclature (e.g. taxonomic family names).
