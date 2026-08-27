@@ -1037,13 +1037,25 @@ class ObjectProgramUI(
             lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width) if getattr(tc, "_last_width", None) != e.width and not setattr(tc, "_last_width", e.width) else None
         )
 
-        # Mousewheel scrolling specific to this tab
-        def _make_mousewheel_scroller(canvas):
-            return lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units")
+        def _on_tab_mousewheel(event):
+            if hasattr(event, "delta") and event.delta:
+                tab_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            elif hasattr(event, "num"):
+                if event.num == 4:
+                    tab_canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    tab_canvas.yview_scroll(1, "units")
 
-        mw_scroller = _make_mousewheel_scroller(tab_canvas)
-        tab_container.bind("<Enter>", lambda e, mws=mw_scroller: tab_container.bind_all("<MouseWheel>", mws))
-        tab_container.bind("<Leave>", lambda e: tab_container.unbind_all("<MouseWheel>"))
+        tab_canvas.bind_class("TabScroll", "<MouseWheel>", _on_tab_mousewheel)
+        tab_canvas.bind_class("TabScroll", "<Button-4>", _on_tab_mousewheel)
+        tab_canvas.bind_class("TabScroll", "<Button-5>", _on_tab_mousewheel)
+
+        def _apply_tabscroll_tag(w):
+            if "TabScroll" not in w.bindtags():
+                w.bindtags(w.bindtags() + ("TabScroll",))
+            for child in w.winfo_children():
+                _apply_tabscroll_tag(child)
+        tab_frame.bind("<Map>", lambda e: _apply_tabscroll_tag(tab_frame))
 
         tab_canvas.pack(side="left", fill="both", expand=True)
         tab_scroll.pack(side="right", fill="y")
@@ -1257,6 +1269,26 @@ class ObjectProgramUI(
             lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width) if getattr(tc, "_last_width", None) != e.width and not setattr(tc, "_last_width", e.width) else None
         )
         
+        def _on_prob_tab_mousewheel(event):
+            if hasattr(event, "delta") and event.delta:
+                tab_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            elif hasattr(event, "num"):
+                if event.num == 4:
+                    tab_canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    tab_canvas.yview_scroll(1, "units")
+
+        tab_canvas.bind_class("ProbTabScroll", "<MouseWheel>", _on_prob_tab_mousewheel)
+        tab_canvas.bind_class("ProbTabScroll", "<Button-4>", _on_prob_tab_mousewheel)
+        tab_canvas.bind_class("ProbTabScroll", "<Button-5>", _on_prob_tab_mousewheel)
+
+        def _apply_probtabscroll_tag(w):
+            if "ProbTabScroll" not in w.bindtags():
+                w.bindtags(w.bindtags() + ("ProbTabScroll",))
+            for child in w.winfo_children():
+                _apply_probtabscroll_tag(child)
+        tab_frame.bind("<Map>", lambda e: _apply_probtabscroll_tag(tab_frame))
+
         tab_canvas.pack(side="left", fill="both", expand=True)
         tab_scroll.pack(side="right", fill="y")
 
@@ -2116,15 +2148,28 @@ class ObjectProgramUI(
 
       
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
-        win.protocol("WM_DELETE_WINDOW", lambda: (
-            canvas.unbind_all("<MouseWheel>"), win.destroy()
-        ))
+            if hasattr(event, "delta") and event.delta:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            elif hasattr(event, "num"):
+                if event.num == 4:
+                    canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    canvas.yview_scroll(1, "units")
 
-        ttk.Button(win, text="Close", command=lambda: (
-            canvas.unbind_all("<MouseWheel>"), win.destroy()
-        )).pack(side="bottom", pady=8)
+        canvas.bind_class("LogScroll", "<MouseWheel>", _on_mousewheel)
+        canvas.bind_class("LogScroll", "<Button-4>", _on_mousewheel)
+        canvas.bind_class("LogScroll", "<Button-5>", _on_mousewheel)
+
+        def _apply_logscroll_tag(w):
+            if "LogScroll" not in w.bindtags():
+                w.bindtags(w.bindtags() + ("LogScroll",))
+            for child in w.winfo_children():
+                _apply_logscroll_tag(child)
+        win.bind("<Map>", lambda e: _apply_logscroll_tag(win))
+
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+
+        ttk.Button(win, text="Close", command=win.destroy).pack(side="bottom", pady=8)
 
 
     def show_quick_help(self):
@@ -3242,9 +3287,11 @@ class ObjectProgramUI(
     def toggle_search_panel(self):
         if hasattr(self, "search_bar_frame"):
             if self.show_search_var.get():
-                self.search_bar_frame.pack(fill="x", padx=0, pady=(0, 2), before=self.search_bar_frame.master.winfo_children()[1] if len(self.search_bar_frame.master.winfo_children()) > 1 else None)
+                if self.search_bar_frame.winfo_manager() != 'pack':
+                    self.search_bar_frame.pack(fill="x", padx=0, pady=(0, 2), before=self.search_bar_frame.master.winfo_children()[1] if len(self.search_bar_frame.master.winfo_children()) > 1 else None)
             else:
-                self.search_bar_frame.pack_forget()
+                if self.search_bar_frame.winfo_manager() == 'pack':
+                    self.search_bar_frame.pack_forget()
                 
 
     def _sync_middle_panes(self):
@@ -3273,7 +3320,8 @@ class ObjectProgramUI(
     def toggle_location_panel(self):
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
             if hasattr(self, 'loc_container'):
-                self.loc_container.pack_forget()
+                if self.loc_container.winfo_manager() == 'pack':
+                    self.loc_container.pack_forget()
                 if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
                     if str(self.left_bottom_container) in self.left_panes.panes():
                         self.left_panes.forget(self.left_bottom_container)
@@ -3285,28 +3333,35 @@ class ObjectProgramUI(
                 if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
                     if str(self.left_bottom_container) not in self.left_panes.panes():
                         self.left_panes.add(self.left_bottom_container, weight=0)
-                self.loc_container.pack(side="top", fill="x")
+                if self.loc_container.winfo_manager() != 'pack':
+                    self.loc_container.pack(side="top", fill="x")
 
     def toggle_images_panel(self):
         self._sync_middle_panes()
             
     def toggle_image_tools(self):
-        self.image_toolbar.pack_forget()
         if self.show_image_tools_var.get():
-            self.image_toolbar.pack(before=self.image_box, fill="x", pady=(2, 4))
+            if self.image_toolbar.winfo_manager() != 'pack':
+                self.image_toolbar.pack(before=self.image_box, fill="x", pady=(2, 4))
+        else:
+            if self.image_toolbar.winfo_manager() == 'pack':
+                self.image_toolbar.pack_forget()
 
     def toggle_bulk_edit_btn(self):
         if hasattr(self, 'bulk_edit_btn'):
             import config
             advanced_prefs = config.load_prefs().get("advanced", {})
             if not advanced_prefs.get("enable_bulk_editor", False):
-                self.bulk_edit_btn.pack_forget()
+                if self.bulk_edit_btn.winfo_manager() == 'pack':
+                    self.bulk_edit_btn.pack_forget()
                 return
 
             if self.show_bulk_edit_var.get():
-                self.bulk_edit_btn.pack(side="bottom", fill="x", pady=(2, 0))
+                if self.bulk_edit_btn.winfo_manager() != 'pack':
+                    self.bulk_edit_btn.pack(side="bottom", fill="x", pady=(2, 0))
             else:
-                self.bulk_edit_btn.pack_forget()
+                if self.bulk_edit_btn.winfo_manager() == 'pack':
+                    self.bulk_edit_btn.pack_forget()
 
 
 
@@ -3674,15 +3729,15 @@ class ObjectProgramUI(
         self.add_tooltip(self.pin_btn, "Toggle Docked / Unpinned Focus Mode")
 
         self.drawer_btn = tk.Button(
-            rail, text="🔍",
-            font=("Segoe UI Symbol", sc(11)),
+            rail, text="≡",
+            font=("Segoe UI Symbol", sc(14)),
             bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
             fg=config.RAIL_THEME.get("icon_active_fg", "#000000"),
             activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"),
             bd=0, relief="flat", cursor="hand2",
             command=self.toggle_floating_drawer
         )
-        self.drawer_btn.pack(side="top", fill="x", pady=sc(4), padx=sc(4))
+        self.drawer_btn.pack(side="top", fill="x", pady=sc(8), padx=sc(4))
         self.add_tooltip(self.drawer_btn, "Open Object Drawer (Ctrl+O)")
 
         self.filter_indicator = tk.Label(
@@ -4697,7 +4752,7 @@ class ObjectProgramUI(
                 # Grid of shortcuts
                 grid_frame = tk.Frame(scroll_content, bg=bg_color)
                 grid_frame.pack(fill="x", padx=15, pady=2, anchor="w")
-                grid_frame.columnconfigure(0, minsize=220)
+                grid_frame.columnconfigure(0, minsize=150)
                 grid_frame.columnconfigure(1, weight=1)
                 
                 for r, (keys, desc) in enumerate(items):
@@ -5151,7 +5206,7 @@ class ObjectProgramUI(
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
         dialog.resizable(True, True)
-        dialog.minsize(sc(550), sc(400))  # U2-G: scaled to DPI
+        dialog.minsize(sc(400), sc(300))  # U2-G: scaled to DPI
         dialog.grab_set()
 
         s = getattr(self, "_scale", 1.0)
@@ -5889,7 +5944,7 @@ class ObjectProgramUI(
         win = tk.Toplevel(self.root)
         win.title(f"Error Log — {os.path.basename(log_path)}")
         win.resizable(True, True)
-        win.minsize(sc(660), sc(420))  # U2-G: scaled to DPI
+        win.minsize(sc(500), sc(300))  # U2-G: scaled to DPI
         win.configure(bg="#1a1a2e")
 
         import utils
@@ -8238,7 +8293,8 @@ class ObjectProgramUI(
             show_prob = not (focus_active and not self.focus_visibility_vars.get("Problems", tk.BooleanVar(value=True)).get())
             
             # Repack location components safely
-            self.loc_container.pack_forget()
+            if self.loc_container.winfo_manager() == 'pack':
+                self.loc_container.pack_forget()
 
             # Check if location should be in the left column or center column
             loc_in_center = hasattr(self, 'location_in_center_var') and self.location_in_center_var.get()
@@ -8246,7 +8302,8 @@ class ObjectProgramUI(
             if show_loc and not loc_in_center:
                 if str(self.left_bottom_container) not in self.left_panes.panes():
                     self.left_panes.add(self.left_bottom_container, weight=0)
-                self.loc_container.pack(side="top", fill="x")
+                if self.loc_container.winfo_manager() != 'pack':
+                    self.loc_container.pack(side="top", fill="x")
             else:
                 # Either we're hiding location entirely (due to focus mode) OR it's centered
                 # If it's centered, it's managed by `_sync_middle_panes` instead.

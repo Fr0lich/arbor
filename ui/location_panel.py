@@ -665,7 +665,7 @@ def create_location_panel(
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Location Panel - Standalone Test Harness")
-    root.geometry("900x650")
+
     
     # Top Control Bar
     ctrl_bar = tk.Frame(root, bg="#eaeaea", pady=8, padx=12)

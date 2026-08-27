@@ -876,10 +876,24 @@ class ImageHandlerMixin:
 
         # Bind horizontal mousewheel scrolling on the thumbnail strip
         def _on_thumb_scroll(event):
-            self.thumb_canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+            if hasattr(event, "delta") and event.delta:
+                self.thumb_canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+            elif hasattr(event, "num"):
+                if event.num == 4:
+                    self.thumb_canvas.xview_scroll(-1, "units")
+                elif event.num == 5:
+                    self.thumb_canvas.xview_scroll(1, "units")
 
-        self.thumb_canvas.bind("<Enter>", lambda e: self.thumb_canvas.bind_all("<MouseWheel>", _on_thumb_scroll))
-        self.thumb_canvas.bind("<Leave>", lambda e: self.thumb_canvas.unbind_all("<MouseWheel>"))
+        self.thumb_canvas.bind_class("ThumbScroll", "<MouseWheel>", _on_thumb_scroll)
+        self.thumb_canvas.bind_class("ThumbScroll", "<Button-4>", _on_thumb_scroll)
+        self.thumb_canvas.bind_class("ThumbScroll", "<Button-5>", _on_thumb_scroll)
+
+        def _apply_thumbscroll_tag(w):
+            if "ThumbScroll" not in w.bindtags():
+                w.bindtags(w.bindtags() + ("ThumbScroll",))
+            for child in w.winfo_children():
+                _apply_thumbscroll_tag(child)
+        thumb_inner.bind("<Map>", lambda e: _apply_thumbscroll_tag(thumb_inner))
 
         # Keyboard Navigation Auto-Scroll logic
         if active_card:

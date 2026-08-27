@@ -1078,7 +1078,7 @@ class TreeviewListboxWrapper(ttk.Frame):
                 card_frame = self._populate_card_widget(widget_dict, oid)
                 y_pos = idx * self._card_height
                 self.canvas.coords(win_id, 0, y_pos)
-                self.canvas.itemconfig(win_id, window=card_frame, width=canvas_width)
+                self.canvas.itemconfig(win_id, state='normal', window=card_frame, width=canvas_width)
             else:
                 widget_dict = self._build_empty_card_widget(self.canvas)
                 card_frame = self._populate_card_widget(widget_dict, oid)

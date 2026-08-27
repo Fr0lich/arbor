@@ -42,7 +42,18 @@ class SearchEngine:
 
             # Build the "all" column by joining all columns per row + index
             index_str = df_str.index.astype(str).str.lower()
-            all_s = df_str.apply(lambda row: " ".join(v.strip().lower() for v in row if v.strip() and v.strip().lower() not in ("nan", "none")), axis=1)
+
+            # Clean individual string columns vectorized
+            for col in df_str.columns:
+                df_str[col] = df_str[col].str.strip().str.lower()
+
+            # Extract underlying numpy array
+            arr = df_str.values
+
+            # Process row concatenation via standard Python list comprehension for speed
+            all_s_list = [" ".join(v for v in row if v and v not in ("nan", "none")) for row in arr]
+
+            all_s = pd.Series(all_s_list, index=df_str.index)
             all_s = index_str + " " + all_s
 
             # Construct the dict efficiently bypassing pandas .iloc overhead
