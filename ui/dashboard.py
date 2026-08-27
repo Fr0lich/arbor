@@ -115,7 +115,47 @@ class DashboardMixin:
         reviewed_count = int(self.app.df_obs[REVIEWED_COLUMN].sum()) if REVIEWED_COLUMN in self.app.df_obs.columns else 0
         not_reviewed = total - reviewed_count
 
-        def _get_prob_series(prob_col, subset_idx=None):
+        mask_any_problem = pd.Series(False, index=self.app.df_reg.index)
+        mask_actionable = pd.Series(False, index=self.app.df_reg.index)
+        mask_image = pd.Series(False, index=self.app.df_reg.index)
+        mask_unknown = pd.Series(False, index=self.app.df_reg.index)
+
+        # Iterate over all possible problem columns
+        for prob_col in getattr(self, "problem_columns", []):
+            is_checked = pd.Series(False, index=self.app.df_reg.index)
+            if prob_col in self.app.df_obs.columns:
+                is_checked = self.app.df_obs[prob_col].fillna(False).astype(bool).reindex(self.app.df_reg.index, fill_value=False)
+
+            is_missing = pd.Series(False, index=self.app.df_reg.index)
+            is_unknown = pd.Series(False, index=self.app.df_reg.index)
+
+            if hasattr(self, "problem_to_field") and prob_col in self.problem_to_field and prob_col != "Other_problem":
+                field = self.problem_to_field.get(prob_col)
+                if field and field != "Other" and field in self.app.df_reg.columns:
+                    reg_s = self.app.df_reg[field].reindex(self.app.df_reg.index, fill_value="")
+                    is_missing = reg_s.isna() | (reg_s.astype(str).str.strip() == "")
+                    is_unknown = reg_s.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
+
+            # 1. Unknown issues: The field is explicitly marked as unknown
+            mask_unknown |= is_unknown
+
+            # 2. Any problem: Explicitly checked, OR missing, OR unknown
+            mask_any_problem |= (is_checked | is_missing | is_unknown)
+
+            # 3 & 4. Image vs Actionable
+            if "Image" in prob_col:
+                mask_image |= (is_checked | is_missing)
+            else:
+                # Actionable: It is a problem (checked or missing), but it is NOT marked as unknown
+                mask_actionable |= ((is_checked | is_missing) & ~is_unknown)
+
+        objects_with_problems = int(mask_any_problem.sum())
+        actionable_problems = int(mask_actionable.sum())
+        image_problems = int(mask_image.sum())
+        issues_unknown = int(mask_unknown.sum())
+
+        def _get_prob_series(prob_col, subset_idx=None, include_unknowns=False):
+            # Keep this helper strictly for Card 3 and 4 total problem breakdown
             idx = self.app.df_reg.index if subset_idx is None else subset_idx
             obs_s = pd.Series(False, index=idx)
             if prob_col in self.app.df_obs.columns:
@@ -128,17 +168,11 @@ class DashboardMixin:
                     reg_s = self.app.df_reg[field].reindex(idx, fill_value="")
                     is_missing = reg_s.isna() | (reg_s.astype(str).str.strip() == "")
                     is_unknown = reg_s.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
-                    obs_s |= (is_missing & ~is_unknown)
+                    if include_unknowns:
+                        obs_s |= (is_missing | is_unknown)
+                    else:
+                        obs_s |= (is_missing & ~is_unknown)
             return obs_s
-
-        if hasattr(self, "_problem_cache") and len(self._problem_cache) >= total:
-            with_problems = sum(1 for oid in self.app.df_reg.index if self._problem_cache.get(oid, False))
-        else:
-            cols = [p for p in getattr(self, "problem_columns", []) if p in self.app.df_obs.columns]
-            if cols:
-                with_problems = int(self.app.df_obs[cols].any(axis=1).sum())
-            else:
-                with_problems = 0
 
         def pct(n):
             return f"{int(n / total * 100)}%" if total else "0%"
@@ -170,27 +204,10 @@ class DashboardMixin:
         add_row(c_overall, "Total objects", total, bold=True)
         add_row(c_overall, "Reviewed", f"{reviewed_count}  ({pct(reviewed_count)})", bold=reviewed_count > 0, value_color=COLORS["success"] if reviewed_count > 0 else COLORS["text"])
         add_row(c_overall, "Not reviewed", f"{not_reviewed}  ({pct(not_reviewed)})")
-        add_row(c_overall, "With problems", f"{with_problems}  ({pct(with_problems)})", bold=with_problems > 0, value_color=COLORS["error"] if with_problems > 0 else COLORS["text"])
-
-        # Vectorized calculation for fixable problems
-        fixable_mask = pd.Series(False, index=self.app.df_reg.index)
-        for prob_col in getattr(self, "problem_columns", []):
-            if prob_col in self.app.df_obs.columns:
-                prob_active = _get_prob_series(prob_col)
-                is_unknown_mask = pd.Series(False, index=self.app.df_reg.index)
-                if hasattr(self, "problem_to_field") and prob_col in self.problem_to_field and prob_col != "Other_problem":
-                    field = self.problem_to_field.get(prob_col)
-                    if field and field != "Other" and field in self.app.df_reg.columns:
-                        reg_s = self.app.df_reg[field].reindex(self.app.df_reg.index, fill_value="")
-                        is_unknown_mask = reg_s.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
-                fixable_mask |= (prob_active & ~is_unknown_mask)
-
-        if hasattr(self, "_problem_cache") and len(self._problem_cache) >= total:
-            auth_mask = pd.Series(self._problem_cache).reindex(self.app.df_reg.index, fill_value=False)
-            fixable_mask &= auth_mask
-
-        fixable = int(fixable_mask.sum())
-        add_row(c_overall, 'Problems, excluding "unknown"', f"{fixable}  ({pct(fixable)})", bold=fixable > 0, value_color=COLORS["error"] if fixable > 0 else COLORS["text"])
+        add_row(c_overall, "Objects with problems", f"{objects_with_problems}  ({pct(objects_with_problems)})", bold=objects_with_problems > 0, value_color=COLORS["error"] if objects_with_problems > 0 else COLORS["text"])
+        add_row(c_overall, 'Actionable problems (excluding "unknown" and Image Problems)', f"{actionable_problems}  ({pct(actionable_problems)})", bold=actionable_problems > 0, value_color=COLORS["error"] if actionable_problems > 0 else COLORS["text"])
+        add_row(c_overall, "Image Problems", f"{image_problems}  ({pct(image_problems)})", bold=image_problems > 0, value_color=COLORS["warning"] if image_problems > 0 else COLORS["text"])
+        add_row(c_overall, 'Issues (marked "unknown")', f"{issues_unknown}  ({pct(issues_unknown)})", bold=issues_unknown > 0, value_color=COLORS["warning"] if issues_unknown > 0 else COLORS["text"])
 
         active_count = len(self.app.active_object_ids) if hasattr(self.app, "active_object_ids") else 0
         add_row(c_overall, "Currently filtered", f"{active_count} of {total}")
@@ -247,7 +264,7 @@ class DashboardMixin:
         probs_content = None
         for prob_col in getattr(self, "problem_columns", []):
             if prob_col in self.app.df_obs.columns:
-                count = int(_get_prob_series(prob_col).sum())
+                count = int(_get_prob_series(prob_col, include_unknowns=True).sum())
                 if count > 0:
                     if probs_content is None:
                         probs_content = create_card("TOTAL PROBLEMS BREAKDOWN")
@@ -260,7 +277,7 @@ class DashboardMixin:
             filtered_content = None
             for prob_col in getattr(self, "problem_columns", []):
                 if prob_col in self.app.df_obs.columns:
-                    count = int(_get_prob_series(prob_col, self.app.active_object_ids).sum())
+                    count = int(_get_prob_series(prob_col, self.app.active_object_ids, include_unknowns=True).sum())
                     if count > 0:
                         if filtered_content is None:
                             filtered_content = create_card("PROBLEMS IN CURRENT FILTER")
