@@ -1,0 +1,3 @@
+## YYYY-MM-DD - Fast Pandas Pre-binding and Closure Compilation
+**Learning:** In tight, high-volume filtering loops spanning thousands of Pandas rows passed as dictionaries, standard string-based conditionals (e.g. `if condition == "TypeA"`) and internal function abstractions create severe Python evaluation overhead.
+**Action:** When filtering across large datasets, use the factory pattern to build lists of closures (`lambdas`) that pre-compile the condition branching *before* entering the loop. Furthermore, always pre-bind dictionary `.get` methods (`obs_get = obs_dict.get`) and extract the Pandas index to a native list (`.tolist()`) to sidestep overhead.
