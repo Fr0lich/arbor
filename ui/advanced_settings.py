@@ -90,6 +90,17 @@ ADVANCED_SETTINGS_SCHEMA = [
         "callback": "update_focus_toggle_visibility"
     },
     {
+        "id": "enable_gbif",
+        "type": "toggle",
+        "tab": "UX & Themes",
+        "group": "Taxonomy Validation",
+        "label": "Enable GBIF Validation",
+        "description": "Shows the 'Check GBIF' button to validate Genus and Species.",
+        "default": False,
+        "refresh_type": "immediate",
+        "callback": "refresh_gbif_button"
+    },
+    {
         "id": "enable_problem_highlights",
         "type": "toggle",
         "tab": "UX & Themes",

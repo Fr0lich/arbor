@@ -938,6 +938,170 @@ class ObjectProgramUI(
                 self.location_entries.append(w)
 
 
+
+    def refresh_gbif_button(self):
+        if not hasattr(self, "gbif_btn"): return
+        import config
+        prefs = config.load_prefs()
+        show_gbif = prefs.get("enable_gbif", False)
+        if show_gbif:
+            self.gbif_btn.pack(side="right", padx=6)
+        else:
+            self.gbif_btn.pack_forget()
+
+    def check_gbif_action(self):
+        if not self.app.current_object_id:
+            return
+
+        genus = self.reg_vars.get("Genus", tk.StringVar()).get().strip()
+        species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
+
+        if not genus and not species:
+            messagebox.showinfo("GBIF Check", "Genus and Species are empty.", parent=self.root)
+            return
+
+        import threading
+
+        def run_check():
+            import backend.gbif
+            result = backend.gbif.check_gbif(genus, species)
+            self.root.after(0, lambda: self._on_gbif_result(result, genus, species))
+
+        self.show_inline_banner("Checking GBIF...", "info", "🔍")
+        threading.Thread(target=run_check, daemon=True).start()
+
+    def _on_gbif_result(self, result, old_genus, old_species):
+        self.hide_banner()
+        if not result:
+            messagebox.showwarning("GBIF Check", "Could not find a match for this scientific name or an error occurred.", parent=self.root)
+            return
+
+        old_author = self.reg_vars.get("Author", tk.StringVar()).get().strip()
+
+        import tkinter.messagebox as mb
+
+        # If it's a synonym, fetch the accepted name and then prompt to update
+        if result.get("synonym") and result.get("acceptedUsageKey"):
+            import backend.gbif
+            def fetch_accepted():
+                acc = backend.gbif.get_accepted_name(result["acceptedUsageKey"])
+                self.root.after(0, lambda: self._prompt_synonym_update(acc, old_genus, old_species, old_author))
+            self.show_inline_banner("Fetching accepted name...", "info", "🔄")
+            import threading
+            threading.Thread(target=fetch_accepted, daemon=True).start()
+            return
+
+        # Match found, check for differences
+        new_genus = result.get("genus", "")
+        new_species = result.get("species", "")
+        new_author = result.get("author", "")
+
+        # GBIF can sometimes return canonical name in species if the rank is species.
+        # But if we searched for Quercus robur, the species is 'Quercus robur'.
+        # However if we searched for 'Aster novae-angliae', it might return that as species.
+
+        # If we have a fuzzy match or a different spelling
+        if result.get("matchType") in ("FUZZY",) or (new_genus and new_genus.lower() != old_genus.lower()) or (new_species and new_species.lower() != old_species.lower() and new_species != f"{old_genus} {old_species}".strip()):
+            ans = mb.askyesno("GBIF Spelling Update",
+                f"Found a match with a different spelling:\n\nCurrent: {old_genus} {old_species}\nGBIF: {new_genus} {new_species}\n\nUpdate to GBIF spelling?", parent=self.root)
+            if ans:
+                self._apply_gbif_update(result, False, old_genus, old_species, old_author)
+            elif new_author and new_author != old_author:
+                 # Even if they refuse the spelling update, ask about author
+                 self._prompt_author_update(new_author, old_author, old_genus, old_species)
+            return
+
+        # If it's an exact match but the author is different/missing
+        if new_author and new_author != old_author:
+            self._prompt_author_update(new_author, old_author, old_genus, old_species)
+        elif result.get("matchType") == "EXACT":
+            mb.showinfo("GBIF Check", f"Name is up to date and valid.\nMatch: {result.get('scientificName')}", parent=self.root)
+        else:
+             mb.showinfo("GBIF Check", f"Match found (Type: {result.get('matchType')}).\nMatch: {result.get('scientificName')}", parent=self.root)
+
+    def _prompt_synonym_update(self, acc_result, old_genus, old_species, old_author):
+        self.hide_banner()
+        if not acc_result:
+            import tkinter.messagebox as mb
+            mb.showwarning("GBIF Check", "Could not fetch accepted name.", parent=self.root)
+            return
+
+        new_genus = acc_result.get("genus", "")
+        new_species = acc_result.get("species", "")
+        new_author = acc_result.get("author", "")
+
+        import tkinter.messagebox as mb
+        ans = mb.askyesno("GBIF Synonym Detected",
+            f"The name '{old_genus} {old_species}' is a synonym.\n\n"
+            f"Accepted name:\n{new_genus} {new_species} {new_author}\n\n"
+            f"Would you like to update to this accepted name?", parent=self.root)
+
+        if ans:
+            self._apply_gbif_update(acc_result, True, old_genus, old_species, old_author)
+
+    def _prompt_author_update(self, new_author, old_author, old_genus="", old_species=""):
+        import tkinter.messagebox as mb
+        ans = mb.askyesno("GBIF Author Update",
+            f"Update Author?\n\n" \
+            f"Current: {old_author or '(Empty)'}\n"
+            f"GBIF: {new_author}", parent=self.root)
+        if ans:
+            if "Author" in self.reg_vars:
+                self.reg_vars["Author"].set(new_author)
+
+            # preserve original author
+            if old_author:
+                old_name = f"{old_genus} {old_species} {old_author}".strip()
+                comment_var = self.reg_vars.get("Comment")
+                if comment_var and "Comment" in self.reg_entries:
+                    text_widget = self.reg_entries["Comment"]
+                    current_text = text_widget.get("1.0", tk.END).strip()
+                    note = f"Author updated from: {old_name}."
+                    if current_text:
+                        text_widget.insert(tk.END, "\n" + note)
+                    else:
+                        text_widget.insert("1.0", note)
+
+            self.commit_current_object()
+            self.show_inline_banner("Author updated.", "success", "✓")
+
+    def _apply_gbif_update(self, result, is_synonym_update, old_genus, old_species, old_author):
+        if not result:
+            self.hide_banner()
+            return
+
+        new_genus = result.get("genus", "")
+        new_species = result.get("species", "")
+        new_author = result.get("author", "")
+
+        # Extract species epithet if species is full canonical name
+        if new_genus and new_species and new_species.startswith(new_genus + " "):
+             new_species = new_species[len(new_genus):].strip()
+
+        if "Genus" in self.reg_vars and new_genus:
+            self.reg_vars["Genus"].set(new_genus)
+        if "Species" in self.reg_vars and new_species:
+            self.reg_vars["Species"].set(new_species)
+        if "Author" in self.reg_vars and new_author:
+            self.reg_vars["Author"].set(new_author)
+
+        # Always add a comment to preserve original name including author
+        old_name = f"{old_genus} {old_species} {old_author}".strip()
+        comment_var = self.reg_vars.get("Comment")
+        if comment_var and "Comment" in self.reg_entries:
+            text_widget = self.reg_entries["Comment"]
+            current_text = text_widget.get("1.0", tk.END).strip()
+            note = f"Updated from synonym: {old_name}." if is_synonym_update else f"Updated spelling from: {old_name}."
+            if current_text:
+                text_widget.insert(tk.END, "\n" + note)
+            else:
+                text_widget.insert("1.0", note)
+
+        self.commit_current_object()
+        self.hide_banner()
+        self.show_inline_banner("Taxonomy updated from GBIF.", "success", "✓")
+
+
     def build_sections(self):
         self._rebuild_focus_registration_menu()
 
@@ -1086,6 +1250,18 @@ class ObjectProgramUI(
             title_lbl = tk.Label(header_frame, text=card_title, font=("Hanken Grotesk", sc(11), "bold"), bg=header_bg, fg=fg_color)
             title_lbl.pack(side="left")
             
+            if card_id == "taxonomy":
+                import config
+                prefs = config.load_prefs()
+                show_gbif = prefs.get("enable_gbif", False)
+
+                self.gbif_btn = tk.Label(header_frame, text="🔍 Check GBIF", font=("Segoe UI", sc(9), "bold"), bg="#2b8a3e", fg="#ffffff", cursor="hand2", padx=6, pady=2)
+                if show_gbif:
+                    self.gbif_btn.pack(side="right", padx=6)
+                self.gbif_btn.bind("<Button-1>", lambda e: self.check_gbif_action())
+                self.gbif_btn.bind("<Enter>", lambda e, w=self.gbif_btn: w.config(bg="#3bc954"))
+                self.gbif_btn.bind("<Leave>", lambda e, w=self.gbif_btn: w.config(bg="#2b8a3e"))
+
             # Card content area
             body_frame = tk.Frame(card_frame, bg=card_bg, padx=12, pady=12)
             body_frame.pack(fill="x")
