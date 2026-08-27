@@ -24,14 +24,28 @@ def check_gbif(genus: str, species: str):
         else:
             match_type = data.get("matchType")
 
+        new_genus = data.get("genus", "")
+        new_species = data.get("species", data.get("canonicalName", ""))
+        if new_genus and new_species and new_species.startswith(new_genus + " "):
+            new_species = new_species[len(new_genus):].strip()
+
+        higher_classification = " | ".join(filter(None, [
+            data.get("kingdom"),
+            data.get("phylum"),
+            data.get("class"),
+            data.get("order")
+        ]))
+
         return {
             "matchType": match_type,
             "status": data.get("status"),
             "canonicalName": data.get("canonicalName"),
             "scientificName": data.get("scientificName"),
-            "genus": data.get("genus"),
-            "species": data.get("species", data.get("canonicalName", "")),
+            "genus": new_genus,
+            "species": new_species,
             "author": author,
+            "family": data.get("family", ""),
+            "higherClassification": higher_classification,
             "rank": data.get("rank"),
             "synonym": data.get("status") == "SYNONYM",
             "acceptedUsageKey": data.get("acceptedUsageKey"),
@@ -54,12 +68,26 @@ def get_accepted_name(usage_key: int):
         if not author:
              author = scientific_name.replace(canonical_name, "").strip() if canonical_name and scientific_name.startswith(canonical_name) else ""
 
+        new_genus = data.get("genus", "")
+        new_species = data.get("species", data.get("canonicalName", ""))
+        if new_genus and new_species and new_species.startswith(new_genus + " "):
+            new_species = new_species[len(new_genus):].strip()
+
+        higher_classification = " | ".join(filter(None, [
+            data.get("kingdom"),
+            data.get("phylum"),
+            data.get("class"),
+            data.get("order")
+        ]))
+
         return {
             "canonicalName": data.get("canonicalName"),
             "scientificName": data.get("scientificName"),
-            "genus": data.get("genus"),
-            "species": data.get("species", data.get("canonicalName", "")),
+            "genus": new_genus,
+            "species": new_species,
             "author": author,
+            "family": data.get("family", ""),
+            "higherClassification": higher_classification,
         }
     except Exception as e:
         print(f"Error checking GBIF accepted name: {e}")

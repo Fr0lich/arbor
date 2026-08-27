@@ -967,139 +967,162 @@ class ObjectProgramUI(
             result = backend.gbif.check_gbif(genus, species)
             self.root.after(0, lambda: self._on_gbif_result(result, genus, species))
 
-        self.show_inline_banner("Checking GBIF...", "info", "🔍")
+        if hasattr(self, "show_banner"):
+            self.show_banner("Checking GBIF...", "info")
         threading.Thread(target=run_check, daemon=True).start()
 
     def _on_gbif_result(self, result, old_genus, old_species):
-        self.hide_banner()
+        if hasattr(self, "hide_banner"):
+            self.hide_banner()
         if not result:
             messagebox.showwarning("GBIF Check", "Could not find a match for this scientific name or an error occurred.", parent=self.root)
             return
-
-        old_author = self.reg_vars.get("Author", tk.StringVar()).get().strip()
-
-        import tkinter.messagebox as mb
 
         # If it's a synonym, fetch the accepted name and then prompt to update
         if result.get("synonym") and result.get("acceptedUsageKey"):
             import backend.gbif
             def fetch_accepted():
                 acc = backend.gbif.get_accepted_name(result["acceptedUsageKey"])
-                self.root.after(0, lambda: self._prompt_synonym_update(acc, old_genus, old_species, old_author))
-            self.show_inline_banner("Fetching accepted name...", "info", "🔄")
+                self.root.after(0, lambda: self._process_gbif_updates(acc, old_genus, old_species, is_synonym=True))
+            if hasattr(self, "show_banner"):
+                self.show_banner("Fetching accepted name...", "info")
             import threading
             threading.Thread(target=fetch_accepted, daemon=True).start()
             return
 
-        # Match found, check for differences
+        self._process_gbif_updates(result, old_genus, old_species, is_synonym=False)
+
+    def _process_gbif_updates(self, result, old_genus, old_species, is_synonym=False):
+        self.hide_banner()
+        if not result:
+            import tkinter.messagebox as mb
+            mb.showwarning("GBIF Check", "Could not fetch accepted name data.", parent=self.root)
+            return
+
+        old_author = self.reg_vars.get("Author", tk.StringVar()).get().strip()
+        old_family = self.reg_vars.get("Family", tk.StringVar()).get().strip()
+        old_higher_classification = self.reg_vars.get("Higher Classification", tk.StringVar()).get().strip()
+
         new_genus = result.get("genus", "")
         new_species = result.get("species", "")
         new_author = result.get("author", "")
+        new_family = result.get("family", "")
+        new_higher_classification = result.get("higherClassification", "")
 
-        # GBIF can sometimes return canonical name in species if the rank is species.
-        # But if we searched for Quercus robur, the species is 'Quercus robur'.
-        # However if we searched for 'Aster novae-angliae', it might return that as species.
+        updates_available = []
 
-        # If we have a fuzzy match or a different spelling
-        if result.get("matchType") in ("FUZZY",) or (new_genus and new_genus.lower() != old_genus.lower()) or (new_species and new_species.lower() != old_species.lower() and new_species != f"{old_genus} {old_species}".strip()):
-            ans = mb.askyesno("GBIF Spelling Update",
-                f"Found a match with a different spelling:\n\nCurrent: {old_genus} {old_species}\nGBIF: {new_genus} {new_species}\n\nUpdate to GBIF spelling?", parent=self.root)
-            if ans:
-                self._apply_gbif_update(result, False, old_genus, old_species, old_author)
-            elif new_author and new_author != old_author:
-                 # Even if they refuse the spelling update, ask about author
-                 self._prompt_author_update(new_author, old_author, old_genus, old_species)
-            return
+        # Check for Taxonomy updates (spelling or synonym)
+        if is_synonym or result.get("matchType") in ("FUZZY",) or (new_genus and new_genus.lower() != old_genus.lower()) or (new_species and new_species.lower() != old_species.lower()):
+            if new_genus and new_species:
+                updates_available.append({
+                    "field": "Taxonomy (Synonym)" if is_synonym else "Taxonomy (Spelling)",
+                    "current": f"{old_genus} {old_species}".strip(),
+                    "gbif": f"{new_genus} {new_species}".strip(),
+                    "selected": True,
+                    "data": {"genus": new_genus, "species": new_species, "is_synonym_update": is_synonym}
+                })
 
-        # If it's an exact match but the author is different/missing
+        # Check for Author update
         if new_author and new_author != old_author:
-            self._prompt_author_update(new_author, old_author, old_genus, old_species)
-        elif result.get("matchType") == "EXACT":
-            mb.showinfo("GBIF Check", f"Name is up to date and valid.\nMatch: {result.get('scientificName')}", parent=self.root)
-        else:
-             mb.showinfo("GBIF Check", f"Match found (Type: {result.get('matchType')}).\nMatch: {result.get('scientificName')}", parent=self.root)
+            updates_available.append({
+                "field": "Author",
+                "current": old_author,
+                "gbif": new_author,
+                "selected": True,
+                "data": {"author": new_author}
+            })
 
-    def _prompt_synonym_update(self, acc_result, old_genus, old_species, old_author):
-        self.hide_banner()
-        if not acc_result:
+        # Check for Family update
+        if new_family and new_family != old_family:
+            updates_available.append({
+                "field": "Family",
+                "current": old_family,
+                "gbif": new_family,
+                "selected": not bool(old_family), # Default true if currently empty
+                "data": {"family": new_family}
+            })
+
+        # Check for Higher Classification update
+        if new_higher_classification and new_higher_classification != old_higher_classification:
+            updates_available.append({
+                "field": "Higher Classification",
+                "current": old_higher_classification,
+                "gbif": new_higher_classification,
+                "selected": not bool(old_higher_classification), # Default true if currently empty
+                "data": {"higherClassification": new_higher_classification}
+            })
+
+        if not updates_available:
             import tkinter.messagebox as mb
-            mb.showwarning("GBIF Check", "Could not fetch accepted name.", parent=self.root)
+            if result.get("matchType") == "EXACT":
+                mb.showinfo("GBIF Check", f"Name is up to date and valid.\nMatch: {result.get('scientificName')}", parent=self.root)
+            else:
+                 mb.showinfo("GBIF Check", f"Match found (Type: {result.get('matchType')}). No significant updates available.", parent=self.root)
             return
 
-        new_genus = acc_result.get("genus", "")
-        new_species = acc_result.get("species", "")
-        new_author = acc_result.get("author", "")
+        # Show custom dialog
+        from ui.gbif_dialog import GBIFUpdateDialog
+        dialog = GBIFUpdateDialog(self.root, updates_available)
+        self.root.wait_window(dialog)
 
-        import tkinter.messagebox as mb
-        ans = mb.askyesno("GBIF Synonym Detected",
-            f"The name '{old_genus} {old_species}' is a synonym.\n\n"
-            f"Accepted name:\n{new_genus} {new_species} {new_author}\n\n"
-            f"Would you like to update to this accepted name?", parent=self.root)
+        if dialog.result_data:
+            self._apply_gbif_update(dialog.result_data, old_genus, old_species, old_author, old_family, old_higher_classification)
 
-        if ans:
-            self._apply_gbif_update(acc_result, True, old_genus, old_species, old_author)
-
-    def _prompt_author_update(self, new_author, old_author, old_genus="", old_species=""):
-        import tkinter.messagebox as mb
-        ans = mb.askyesno("GBIF Author Update",
-            f"Update Author?\n\n" \
-            f"Current: {old_author or '(Empty)'}\n"
-            f"GBIF: {new_author}", parent=self.root)
-        if ans:
-            if "Author" in self.reg_vars:
-                self.reg_vars["Author"].set(new_author)
-
-            # preserve original author
-            if old_author:
-                old_name = f"{old_genus} {old_species} {old_author}".strip()
-                comment_var = self.reg_vars.get("Comment")
-                if comment_var and "Comment" in self.reg_entries:
-                    text_widget = self.reg_entries["Comment"]
-                    current_text = text_widget.get("1.0", tk.END).strip()
-                    note = f"Author updated from: {old_name}."
-                    if current_text:
-                        text_widget.insert(tk.END, "\n" + note)
-                    else:
-                        text_widget.insert("1.0", note)
-
-            self.commit_current_object()
-            self.show_inline_banner("Author updated.", "success", "✓")
-
-    def _apply_gbif_update(self, result, is_synonym_update, old_genus, old_species, old_author):
+    def _apply_gbif_update(self, result, old_genus, old_species, old_author, old_family, old_higher_classification):
         if not result:
             self.hide_banner()
             return
 
-        new_genus = result.get("genus", "")
-        new_species = result.get("species", "")
-        new_author = result.get("author", "")
+        notes = []
 
-        # Extract species epithet if species is full canonical name
-        if new_genus and new_species and new_species.startswith(new_genus + " "):
-             new_species = new_species[len(new_genus):].strip()
+        # Update Taxonomy
+        if "genus" in result and "species" in result:
+            if "Genus" in self.reg_vars:
+                self.reg_vars["Genus"].set(result["genus"])
+            if "Species" in self.reg_vars:
+                self.reg_vars["Species"].set(result["species"])
 
-        if "Genus" in self.reg_vars and new_genus:
-            self.reg_vars["Genus"].set(new_genus)
-        if "Species" in self.reg_vars and new_species:
-            self.reg_vars["Species"].set(new_species)
-        if "Author" in self.reg_vars and new_author:
-            self.reg_vars["Author"].set(new_author)
+            old_name = f"{old_genus} {old_species} {old_author}".strip()
+            if result.get("is_synonym_update"):
+                notes.append(f"Updated from synonym: {old_name}.")
+            else:
+                notes.append(f"Updated spelling from: {old_name}.")
 
-        # Always add a comment to preserve original name including author
-        old_name = f"{old_genus} {old_species} {old_author}".strip()
-        comment_var = self.reg_vars.get("Comment")
-        if comment_var and "Comment" in self.reg_entries:
+        # Update Author
+        if "author" in result:
+            if "Author" in self.reg_vars:
+                self.reg_vars["Author"].set(result["author"])
+            if "genus" not in result: # If taxonomy wasn't updated, log just author
+                notes.append(f"Author updated from: {old_author or '(Empty)'}.")
+
+        # Update Family
+        if "family" in result:
+            if "Family" in self.reg_vars:
+                self.reg_vars["Family"].set(result["family"])
+            if old_family:
+                notes.append(f"Family updated from: {old_family}.")
+
+        # Update Higher Classification
+        if "higherClassification" in result:
+            if "Higher Classification" in self.reg_vars:
+                self.reg_vars["Higher Classification"].set(result["higherClassification"])
+            if old_higher_classification:
+                notes.append(f"Higher Classification updated from: {old_higher_classification}.")
+
+        # Append notes to comment
+        if notes and "Comment" in self.reg_vars and "Comment" in self.reg_entries:
             text_widget = self.reg_entries["Comment"]
             current_text = text_widget.get("1.0", tk.END).strip()
-            note = f"Updated from synonym: {old_name}." if is_synonym_update else f"Updated spelling from: {old_name}."
+            note_str = "\n".join(notes)
             if current_text:
-                text_widget.insert(tk.END, "\n" + note)
+                text_widget.insert(tk.END, "\n" + note_str)
             else:
-                text_widget.insert("1.0", note)
+                text_widget.insert("1.0", note_str)
 
         self.commit_current_object()
-        self.hide_banner()
-        self.show_inline_banner("Taxonomy updated from GBIF.", "success", "✓")
+        if hasattr(self, "hide_banner"):
+            self.hide_banner()
+            self.show_banner("Taxonomy updated from GBIF.", "success")
 
 
     def build_sections(self):
