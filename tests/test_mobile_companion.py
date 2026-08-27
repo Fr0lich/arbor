@@ -265,27 +265,41 @@ def test_mobile_host_app_lifecycle(mock_app_state):
         root.destroy()
 
 
-def test_schema_safe_dynamic_column_addition(mock_app_state):
+def test_schema_endpoint(mock_app_state):
     server = MobileServer(mock_app_state, port=5096)
     client = server.flask_app.test_client()
     headers = {"X-Session-Token": server.session_token}
 
-    # Add a custom observation field to object 1024
+    res = client.get('/api/schema', headers=headers)
+    assert res.status_code == 200
+    data = res.json
+    assert data["config_name"] == "Botanical Herbarium"
+    assert "ui_sections" in data
+    assert "registration" in data["ui_sections"]
+    assert "location" in data["ui_sections"]
+    assert "problems" in data["ui_sections"]
+
+
+def test_schema_safe_unconfigured_column_rejection(mock_app_state):
+    server = MobileServer(mock_app_state, port=5096)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Attempt to send an unconfigured ghost field
     payload = {
         "id": "1024",
         "observation": {
-            "CustomVoucherTag": "VOUCH-2026-X"
+            "CustomGhostField": "ShouldNotBeAdded",
+            "Cabinet": "C-99"  # Configured field
         }
     }
     res = client.post('/api/update', json=payload, headers=headers)
     assert res.status_code == 200
 
-    # Ensure the new column exists and is populated for 1024
-    assert mock_app_state.df_obs.at["1024", "CustomVoucherTag"] == "VOUCH-2026-X"
-    # Ensure existing rows are clean empty strings, NOT NaNs
-    assert mock_app_state.df_obs.at["1025", "CustomVoucherTag"] == ""
-    assert mock_app_state.df_obs.at["1026", "CustomVoucherTag"] == ""
-    assert not mock_app_state.df_obs["CustomVoucherTag"].isna().any()
+    # Ensure configured field was updated
+    assert mock_app_state.df_obs.at["1024", "Cabinet"] == "C-99"
+    # Ensure unconfigured ghost field was NOT added as a new column to df_obs
+    assert "CustomGhostField" not in mock_app_state.df_obs.columns
 
 
 def test_problem_audit_logging(mock_app_state):

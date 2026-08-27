@@ -1,4 +1,3 @@
-INDEX_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,354 +39,640 @@ INDEX_TEMPLATE = """
             }
           },
           fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            serif: ['Lora', 'serif'],
-            mono: ['JetBrains Mono', 'monospace'],
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            serif: ['Lora', 'Georgia', 'serif'],
+            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
           }
         }
       }
     }
   </script>
   <style>
-    .touch-min { min-height: 44px; }
-    .touch-press:active { transform: scale(0.985); }
-    /* Accordion icon rotation */
+    .touch-target-min { min-height: 44px; min-width: 44px; }
+    .touch-press:active { transform: scale(0.985); filter: brightness(0.97); }
+    .search-active:focus-within {
+      border-color: #d95c14 !important;
+      box-shadow: 0 0 0 2px rgba(217, 92, 20, 0.2) !important;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #f3f3f3; }
+    ::-webkit-scrollbar-thumb { background: #c8ccc9; border-radius: 2px; }
     .acc-open .acc-icon { transform: rotate(180deg); }
+    @keyframes spinSlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .animate-spin-slow { animation: spinSlow 8s linear infinite; }
   </style>
 </head>
-<body class="bg-canvas text-ink min-h-screen antialiased select-none">
+<body class="bg-canvas text-ink min-h-screen antialiased select-none font-sans">
 
   <div class="w-full h-screen flex flex-col relative overflow-hidden bg-canvas mx-auto max-w-md border-x border-bordercol shadow-xl">
 
-    <!-- Top Status Bar -->
-    <div class="bg-fern-dark text-white px-4 py-2 flex items-center justify-between text-xs font-mono">
-      <div class="flex items-center gap-1.5 font-bold">
-        <span class="inline-block w-2 h-2 rounded-full bg-fern-border animate-pulse"></span>
-        <span id="headerDbName">Herbarium Database</span>
+    <!-- ========================================== -->
+    <!-- VIEW: SPECIMEN LIST                        -->
+    <!-- ========================================== -->
+    <div id="listView" class="flex-1 flex flex-col h-full bg-canvas overflow-hidden">
+      <!-- Sticky Header -->
+      <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 pt-3 pb-2.5 shadow-xs shrink-0">
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-[2px] bg-fern text-white flex items-center justify-center font-serif font-bold text-sm">
+              A
+            </div>
+            <div>
+              <h1 class="font-serif font-bold text-base text-ink leading-tight">
+                Arbor Companion
+              </h1>
+              <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
+                Loading database...
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <!-- Screen Wake Lock / Walk Mode Toggle -->
+            <button
+              type="button"
+              id="btnWakeLock"
+              onclick="toggleWakeLock()"
+              class="p-2 rounded-[2px] border transition-colors touch-target-min bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center justify-center"
+              title="Toggle Walk Mode (Prevent Screen Sleep)"
+            >
+              <span id="wakeLockIcon" class="text-sm leading-none">☀️</span>
+            </button>
+
+            <!-- Desktop Connection Pill Button -->
+            <button
+              type="button"
+              onclick="openModal('connectionModal')"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
+              title="Desktop Connection Status"
+            >
+              <span class="relative flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
+              </span>
+              <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
+                12ms
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Search Input Box -->
+        <div class="relative flex items-center gap-2">
+          <div class="relative flex-1 flex items-center bg-tonal1 border border-bordercol rounded-[2px] transition-all search-active">
+            <span class="text-ink-faint ml-2.5 shrink-0 text-xs">🔍</span>
+            <input
+              type="text"
+              id="searchBox"
+              oninput="debounceSearch()"
+              placeholder="Search taxonomy, accession, collector, cabinet..."
+              class="w-full bg-transparent px-2.5 py-2 font-sans text-xs text-ink placeholder:text-ink-faint outline-none"
+            />
+            <button
+              type="button"
+              id="searchClearBtn"
+              onclick="clearSearch()"
+              class="hidden p-1 mr-1.5 text-ink-faint hover:text-ink text-xs font-bold"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- Barcode / QR Scanner Modal Trigger -->
+          <button
+            type="button"
+            onclick="openScannerModal()"
+            class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+            title="Scan Physical Barcode / QR"
+          >
+            <span class="text-ember text-sm font-mono">📷</span>
+          </button>
+        </div>
+
+        <!-- Filter Pill Tabs -->
+        <div class="flex items-center gap-1.5 mt-2.5 overflow-x-auto no-scrollbar pb-0.5" id="filterPills">
+          <button
+            type="button"
+            onclick="setStatusFilter('all')"
+            id="pill-all"
+            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors bg-ink text-white border-ink"
+          >
+            All (0)
+          </button>
+
+          <button
+            type="button"
+            onclick="setStatusFilter('pending')"
+            id="pill-pending"
+            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1"
+          >
+            <span>🕒</span>
+            <span>Unreviewed (0)</span>
+          </button>
+
+          <button
+            type="button"
+            onclick="setStatusFilter('flagged')"
+            id="pill-flagged"
+            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ember-light text-ember-dark border-ember-border hover:bg-ember-light/80"
+          >
+            <span>⚠</span>
+            <span>Flagged (0)</span>
+          </button>
+
+          <button
+            type="button"
+            onclick="setStatusFilter('reviewed')"
+            id="pill-reviewed"
+            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-fern-light text-fern-dark border-fern-border hover:bg-fern-light/80"
+          >
+            <span>✓</span>
+            <span>Reviewed (0)</span>
+          </button>
+        </div>
+
+        <!-- Results Counter & Sort Dropdown -->
+        <div class="flex items-center justify-between mt-2 pt-2 border-t border-tonal2 text-[11px]">
+          <span class="font-mono text-ink-muted" id="listSummaryText">
+            Showing <strong class="text-ink" id="matchingCount">0</strong> records
+          </span>
+
+          <div class="flex items-center gap-1 text-ink-muted">
+            <span class="text-xs">⇅</span>
+            <select
+              id="sortBySelect"
+              onchange="handleSortChange()"
+              class="bg-transparent font-sans text-[11px] font-medium text-ink outline-none cursor-pointer"
+            >
+              <option value="location">Sort by Physical Location</option>
+              <option value="name-asc">Scientific Name (A-Z)</option>
+              <option value="name-desc">Scientific Name (Z-A)</option>
+              <option value="id-asc">Accession / ID Number</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <!-- Scrollable List -->
+      <main id="specimenListContainer" class="flex-1 overflow-y-auto p-3 space-y-2.5 pb-24">
+        <!-- Specimen cards injected dynamically -->
+      </main>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- VIEW: SPECIMEN DETAIL                      -->
+    <!-- ========================================== -->
+    <div id="detailView" class="hidden flex-1 flex flex-col h-full bg-canvas overflow-hidden relative">
+      <!-- Sticky Top Header -->
+      <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 py-2.5 shadow-xs shrink-0 flex items-center justify-between">
+        <button
+          type="button"
+          onclick="showListView()"
+          class="flex items-center gap-1.5 text-xs font-sans font-medium text-ink hover:text-fern py-1 px-1.5 -ml-1 rounded-[2px] transition-colors touch-target-min"
+        >
+          <span class="font-bold text-sm">&lt;</span>
+          <span>Vault List</span>
+        </button>
+
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-xs text-ink-muted" id="detailNavIndex">
+            1 of 1
+          </span>
+          <div class="flex items-center border border-bordercol rounded-[2px] bg-tonal1 overflow-hidden">
+            <button
+              type="button"
+              id="btnPrevSpecimen"
+              onclick="navSpecimen(-1)"
+              class="p-1.5 hover:bg-tonal2 disabled:opacity-30 text-ink transition-colors touch-target-min"
+              title="Previous specimen"
+            >
+              <span class="font-bold text-xs">&lt;</span>
+            </button>
+            <div class="w-[1px] h-4 bg-bordercol"></div>
+            <button
+              type="button"
+              id="btnNextSpecimen"
+              onclick="navSpecimen(1)"
+              class="p-1.5 hover:bg-tonal2 disabled:opacity-30 text-ink transition-colors touch-target-min"
+              title="Next specimen"
+            >
+              <span class="font-bold text-xs">&gt;</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Scrollable Specimen Form Content -->
+      <main class="flex-1 overflow-y-auto p-3.5 space-y-3.5 pb-36">
+
+        <!-- Top Specimen Summary Card -->
+        <div class="bg-surface border border-bordercol rounded-[2px] p-4 shadow-xs">
+          <div class="flex items-start justify-between gap-2 mb-2">
+            <div>
+              <div class="font-mono text-xs font-bold text-ink-muted tracking-wider" id="detailAccession">
+                #---
+              </div>
+              <div class="font-mono text-[11px] text-ink-faint" id="detailTopLocation">
+                Location: ---
+              </div>
+            </div>
+
+            <div id="detailReviewStatusBadge">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-tonal1 text-ink-muted border border-bordercol">
+                🕒 UNREVIEWED
+              </span>
+            </div>
+          </div>
+
+          <h2 id="detailScientificName" class="font-serif italic font-bold text-xl text-ink leading-snug mb-1">
+            Loading specimen...
+          </h2>
+
+          <div class="flex items-center gap-2 text-xs font-sans text-ink-muted" id="detailTaxonSubline">
+            <span id="detailAuthor" class="font-medium text-ink"></span>
+            <span>•</span>
+            <span id="detailFamily"></span>
+          </div>
+        </div>
+
+        <!-- Archival Scans / Photo Gallery Card -->
+        <div class="bg-surface border border-bordercol rounded-[2px] p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5 text-xs font-sans font-semibold text-ink">
+              <span>📷</span>
+              <span>Attached Archival Scans</span>
+              <span id="photoCountBadge" class="font-mono text-[10px] text-ink-muted bg-tonal1 border border-tonal3 px-1.5 py-0.2 rounded-[2px]">
+                0 available
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onclick="openFullscreenPhoto()"
+              class="text-[11px] font-sans font-medium text-fern hover:text-fern-dark flex items-center gap-1 transition-colors touch-target-min py-1 px-1"
+            >
+              <span>↗</span>
+              <span>Fullscreen</span>
+            </button>
+          </div>
+
+          <!-- Photo Container -->
+          <div
+            id="photoMainContainer"
+            onclick="openFullscreenPhoto()"
+            class="relative w-full h-52 bg-ink/5 rounded-[2px] border border-bordercol overflow-hidden cursor-pointer group flex items-center justify-center"
+          >
+            <div id="photoPlaceholder" class="p-6 text-center text-xs text-ink-muted flex flex-col items-center gap-1.5">
+              <span class="text-2xl">📷</span>
+              <p class="font-semibold text-fern">Tap to Load Specimen Plate</p>
+              <p class="text-[10px] text-ink-faint">Direct CDN stream</p>
+            </div>
+            <img
+              id="specimenImg"
+              src=""
+              alt="Archival Specimen Plate"
+              class="hidden w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-200"
+              onload="onPhotoLoaded()"
+              onerror="onPhotoError()"
+            />
+            <div id="photoWatermark" class="hidden absolute bottom-1.5 left-1.5 bg-white/90 backdrop-blur-xs font-mono text-[9px] text-ink-muted px-1.5 py-0.5 rounded-[1px] border border-bordercol">
+              Archival Scan
+            </div>
+          </div>
+
+          <!-- Thumbnail Strip -->
+          <div id="photoThumbStrip" class="hidden flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <!-- Thumbnails injected dynamically -->
+          </div>
+        </div>
+
+        <!-- Dynamic Form Groups Container (Injected from config.py) -->
+        <div id="detailAccordionsContainer" class="space-y-3.5">
+          <!-- Rendered dynamically by renderDynamicForm() -->
+        </div>
+
+        <!-- Problem Discrepancies Card -->
+        <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3">
+          <div class="flex items-center justify-between border-b border-tonal2 pb-2">
+            <div class="flex items-center gap-2">
+              <span class="text-ember font-bold text-sm">⚑</span>
+              <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
+                Flagged Problems & Issues
+              </h3>
+            </div>
+            <button
+              type="button"
+              onclick="openAddDiscrepancyModal()"
+              class="text-xs font-medium text-ember hover:text-ember-dark flex items-center gap-1 border border-ember-border bg-ember-light px-2 py-0.5 rounded-[2px] transition-colors touch-target-min"
+            >
+              <span>+</span>
+              <span>Flag Issue</span>
+            </button>
+          </div>
+
+          <!-- Active Discrepancies List -->
+          <div id="activeDiscrepanciesList" class="space-y-2">
+            <!-- Discrepancy items injected dynamically -->
+          </div>
+
+          <!-- Problem Flags Quick-Toggle Grid -->
+          <div id="problemFlagsGrid" class="pt-2 border-t border-tonal2 space-y-2">
+            <p class="font-mono text-[10px] uppercase font-bold text-ink-muted">Quick Problem Toggles:</p>
+            <div id="problemTogglesContainer" class="grid grid-cols-2 gap-2 text-xs">
+              <!-- Checkboxes dynamically generated from ui_sections.problems -->
+            </div>
+          </div>
+        </div>
+
+      </main>
+
+      <!-- Sticky Action Bar (Fixed to Screen Bottom) -->
+      <footer class="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-bordercol shadow-[0_-4px_16px_rgba(0,0,0,0.08)] max-w-md mx-auto">
+        <div class="px-4 py-2.5">
+          <!-- Mini Status Ticker Bar -->
+          <div class="flex items-center justify-between text-[11px] mb-2 pb-1.5 border-b border-tonal2">
+            <div class="flex items-center gap-1.5">
+              <span class="relative flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
+              </span>
+              <span class="font-mono text-ink-muted" id="footerTickerHost">
+                Host Linked (12ms)
+              </span>
+            </div>
+
+            <div class="flex items-center gap-1" id="footerSyncStatus">
+              <span class="font-mono text-fern-dark font-medium">✓ Synced to host</span>
+            </div>
+          </div>
+
+          <!-- Primary Action Button: Full-Width Mark Reviewed -->
+          <button
+            type="button"
+            id="btnMarkReviewed"
+            onclick="toggleReviewed()"
+            class="w-full py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm flex items-center justify-center gap-2 border-2 transition-all touch-target-min touch-press bg-surface text-ink border-bordercol hover:bg-tonal1 shadow-xs"
+          >
+            <span class="text-fern-dark text-base">✓</span>
+            <span id="btnReviewedLabel">Mark Reviewed</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODAL: FULLSCREEN PHOTO VIEWER             -->
+    <!-- ========================================== -->
+    <div id="photoViewerModal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col">
+      <!-- Modal Header -->
+      <header class="p-3 bg-black/40 text-white flex items-center justify-between border-b border-white/10 shrink-0">
+        <div class="flex items-center gap-2 text-xs font-mono">
+          <span class="text-fern-light font-bold" id="photoViewerTitle">Specimen Plate</span>
+          <span class="text-white/60" id="photoViewerCounter">(1/1)</span>
+        </div>
+        <button
+          type="button"
+          onclick="closeModal('photoViewerModal')"
+          class="p-2 text-white/80 hover:text-white rounded-[2px] text-lg font-bold touch-target-min"
+        >
+          ✕
+        </button>
+      </header>
+
+      <!-- Viewport -->
+      <div
+        id="photoViewport"
+        class="flex-1 relative overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
+        onmousedown="startPhotoDrag(event)"
+        ontouchstart="startPhotoTouch(event)"
+      >
+        <img
+          id="photoViewerImg"
+          src=""
+          alt="High Resolution Scan"
+          class="max-w-full max-h-full object-contain transition-transform duration-75 origin-center"
+          style="transform: scale(1) rotate(0deg) translate(0px, 0px);"
+        />
       </div>
-      <div class="flex items-center gap-2 text-[11px] text-fern-light">
-        <span id="syncStatusBadge">⚡ Connected</span>
+
+      <!-- Controls Footer -->
+      <footer class="p-3 bg-black/60 text-white flex items-center justify-between border-t border-white/10 shrink-0 text-xs font-mono">
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="zoomPhoto(-0.5)" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min">− Zoom</button>
+          <span id="zoomLevelDisplay" class="text-white/80 min-w-[40px] text-center">1.0x</span>
+          <button type="button" onclick="zoomPhoto(0.5)" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min">+ Zoom</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="rotatePhoto()" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min" title="Rotate 90°">↻ Rotate</button>
+          <button type="button" onclick="resetPhotoTransform()" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min">Reset</button>
+        </div>
+      </footer>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODAL: ADD DISCREPANCY                     -->
+    <!-- ========================================== -->
+    <div id="addDiscrepancyModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
+          <div class="flex items-center gap-2 text-ember">
+            <span class="text-sm">⚑</span>
+            <h2 class="font-serif font-bold text-sm text-ink">
+              Flag Specimen Discrepancy
+            </h2>
+          </div>
+          <button
+            type="button"
+            onclick="closeModal('addDiscrepancyModal')"
+            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold"
+          >
+            ✕
+          </button>
+        </header>
+
+        <form onsubmit="submitDiscrepancy(event)" class="p-4 space-y-3.5">
+          <div>
+            <label class="block font-sans text-xs font-medium text-ink mb-1">
+              Target Field
+            </label>
+            <select
+              id="discrepancyFieldSelect"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
+            >
+              <!-- Populated dynamically from schema -->
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-sans text-xs font-medium text-ink mb-1">
+              Severity Level
+            </label>
+            <div class="grid grid-cols-3 gap-2">
+              <label class="border border-bordercol rounded-[2px] p-2 flex items-center gap-1.5 text-xs cursor-pointer hover:bg-tonal1">
+                <input type="radio" name="severity" value="warning" checked class="text-ember">
+                <span class="text-ember-dark font-medium">Warning</span>
+              </label>
+              <label class="border border-bordercol rounded-[2px] p-2 flex items-center gap-1.5 text-xs cursor-pointer hover:bg-tonal1">
+                <input type="radio" name="severity" value="critical" class="text-red-600">
+                <span class="text-red-700 font-medium">Critical</span>
+              </label>
+              <label class="border border-bordercol rounded-[2px] p-2 flex items-center gap-1.5 text-xs cursor-pointer hover:bg-tonal1">
+                <input type="radio" name="severity" value="inquiry" class="text-blue-600">
+                <span class="text-blue-700 font-medium">Inquiry</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-sans text-xs font-medium text-ink mb-1">
+              Discrepancy Reason / Note *
+            </label>
+            <textarea
+              id="discrepancyReasonInput"
+              rows="3"
+              required
+              placeholder="e.g. Inscription handwriting does not match genus determination..."
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
+            ></textarea>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-tonal2">
+            <button
+              type="button"
+              onclick="closeModal('addDiscrepancyModal')"
+              class="px-3 py-2 border border-bordercol text-ink-muted hover:bg-tonal1 rounded-[2px] text-xs font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="px-4 py-2 bg-ember hover:bg-ember-dark text-white rounded-[2px] text-xs font-bold transition"
+            >
+              Flag Issue
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
-    <!-- Header Navigation -->
-    <header class="bg-fern text-white px-4 py-3 flex items-center justify-between shadow-md z-10">
-      <div class="flex items-center gap-2">
-        <div id="backButton" class="hidden mr-2 bg-fern-dark/50 hover:bg-fern-dark px-2 py-1 rounded cursor-pointer touch-press" onclick="showListView()">
-          <span class="font-bold text-lg">&lt;</span>
-        </div>
-        <div class="bg-white text-fern rounded font-bold px-1.5 py-0.5 text-xs">A</div>
-        <div>
-          <h1 class="font-bold text-sm tracking-tight leading-tight font-sans">Arbor Companion</h1>
-          <p class="text-[10px] text-fern-light/80 font-mono" id="headerCount">Vault #04 • Linnaean Botanical</p>
+
+    <!-- ========================================== -->
+    <!-- MODAL: QR / BARCODE SCANNER                -->
+    <!-- ========================================== -->
+    <div id="qrScannerModal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col p-4 items-center justify-center">
+      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-sm overflow-hidden shadow-2xl">
+        <header class="p-3 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
+          <h3 class="font-serif font-bold text-xs text-ink">📷 Scan Accession Barcode / QR</h3>
+          <button type="button" onclick="closeScannerModal()" class="p-1 text-ink-muted text-sm font-bold">✕</button>
+        </header>
+
+        <div class="p-4 text-center space-y-3">
+          <div class="relative w-full h-48 bg-black rounded-[2px] overflow-hidden flex items-center justify-center">
+            <video id="scannerVideo" class="w-full h-full object-cover"></video>
+            <div class="absolute inset-4 border-2 border-dashed border-ember/70 pointer-events-none rounded-[2px]"></div>
+          </div>
+
+          <p class="text-xs text-ink-muted font-sans">
+            Align specimen barcode or type accession number below:
+          </p>
+
+          <div class="flex items-center gap-2">
+            <input
+              type="text"
+              id="manualBarcodeInput"
+              placeholder="e.g. 1024"
+              class="flex-1 bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs font-mono outline-none focus:border-fern"
+            />
+            <button
+              type="button"
+              onclick="handleManualBarcodeSearch()"
+              class="px-3 py-2 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold"
+            >
+              Find
+            </button>
+          </div>
         </div>
       </div>
-    </header>
+    </div>
 
-    <!-- Toast Notification Overlay -->
-    <div id="toast" class="hidden absolute top-16 left-4 right-4 bg-fern-dark text-white text-xs font-bold py-3 px-4 rounded-lg shadow-lg text-center z-50 transition-all opacity-95">
+
+    <!-- ========================================== -->
+    <!-- MODAL: CONNECTION STATUS                   -->
+    <!-- ========================================== -->
+    <div id="connectionModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-sm p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between border-b border-tonal2 pb-2">
+          <h3 class="font-serif font-bold text-sm text-ink">⚡ Desktop Host Linked</h3>
+          <button type="button" onclick="closeModal('connectionModal')" class="text-ink-muted font-bold text-sm">✕</button>
+        </div>
+
+        <div class="space-y-1.5 text-xs font-mono">
+          <div class="flex justify-between py-1 border-b border-tonal2">
+            <span class="text-ink-muted">Host Status:</span>
+            <span class="text-fern-dark font-bold">Online (Active)</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-tonal2">
+            <span class="text-ink-muted">Database:</span>
+            <span class="text-ink font-bold" id="connModalDbName">---</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-tonal2">
+            <span class="text-ink-muted">Reviewed Total:</span>
+            <span class="text-ink" id="connModalReviewed">---</span>
+          </div>
+          <div class="flex justify-between py-1">
+            <span class="text-ink-muted">Latency / Ping:</span>
+            <span class="text-fern-dark font-bold" id="connModalPing">12ms</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onclick="closeModal('connectionModal')"
+          class="w-full py-2 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold"
+        >
+          Done
+        </button>
+      </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toast" class="hidden fixed top-4 left-4 right-4 max-w-sm mx-auto bg-fern-dark text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity">
       Edits saved & synchronized
     </div>
 
-    <!-- VIEW: LIST -->
-    <main id="listView" class="flex-1 flex flex-col h-full bg-canvas overflow-hidden">
-      <!-- Search Bar -->
-      <div class="bg-surface px-4 py-3 border-b border-bordercol shadow-sm z-10">
-        <div class="relative flex">
-          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-muted">🔍</span>
-          <input id="searchBox" type="text" placeholder="Search botanical name, ID, collector, cabinet..." onkeyup="debounceSearch()"
-                 class="w-full bg-surface border border-bordercol rounded-md pl-9 pr-3 py-2 text-sm text-ink focus:outline-none focus:border-fern focus:ring-1 focus:ring-fern font-sans">
-        </div>
-      </div>
-
-      <!-- List Header -->
-      <div class="px-4 py-2 flex items-center justify-between bg-canvas border-b border-bordercol">
-        <span id="listSummary" class="text-xs text-ink-muted font-mono">Showing 0 of 0 specimens</span>
-        <div class="flex items-center gap-2 text-xs text-ink-muted">
-          <span>Sort by:</span>
-          <select class="bg-surface border border-bordercol rounded px-2 py-1 focus:outline-none focus:border-fern text-ink">
-            <option>Scientific Name (A-Z)</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Scrollable List -->
-      <div id="specimenListContainer" class="flex-1 overflow-y-auto p-3 space-y-3 pb-24">
-        <!-- List items populated here -->
-      </div>
-    </main>
-
-    <!-- VIEW: DETAIL -->
-    <main id="detailView" class="hidden flex-1 flex flex-col h-full overflow-hidden bg-canvas relative">
-      <!-- Detail Header (Fixed) -->
-      <div class="bg-surface border-b border-bordercol p-4 shadow-sm z-10 shrink-0">
-        <div class="flex items-center justify-between mb-1">
-           <span class="font-mono text-sm font-bold text-ink" id="detailAccession"></span>
-           <span class="text-xs text-ink-muted font-sans" id="detailTopLocation"></span>
-        </div>
-        <h2 id="detailScientificName" class="font-serif italic text-2xl font-bold text-ink mb-1"></h2>
-        <div class="text-sm font-sans text-ink-muted">
-           <span id="detailAuthor" class="font-bold text-ink"></span> • <span id="detailFamily"></span> • <span id="detailCommonName" class="italic"></span>
-        </div>
-      </div>
-
-      <!-- Scrollable Detail Content -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
-
-        <!-- Photo Plate Card -->
-        <div class="bg-surface rounded-md border border-bordercol shadow-sm overflow-hidden">
-          <div class="p-3 border-b border-bordercol flex items-center justify-between">
-            <span class="text-sm font-bold font-sans text-ink">Attached Archival Scans (1)</span>
-            <button class="text-xs text-fern font-semibold hover:underline touch-press" onclick="loadImage()">↗ Inspect Scan</button>
-          </div>
-          <div id="imagePlaceholder" class="p-8 text-center bg-tonal1 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-tonal2 transition" onclick="loadImage()">
-            <div class="w-12 h-12 rounded-full bg-fern-light text-fern flex items-center justify-center text-xl shadow-sm">📷</div>
-            <div>
-              <p class="text-sm font-bold text-fern">Tap to Load Specimen Plate</p>
-              <p class="text-xs text-ink-muted mt-1">Loads directly from cloud CDN (0 laptop bandwidth)</p>
-            </div>
-          </div>
-          <div id="imageContainer" class="hidden relative bg-ink flex items-center justify-center p-2 min-h-[250px]">
-            <img id="specimenImg" src="" alt="Specimen Plate" class="max-h-80 w-auto object-contain mx-auto">
-          </div>
-        </div>
-
-        <!-- Accordion 1: Taxonomy -->
-        <div class="bg-surface rounded-md border border-bordercol shadow-sm overflow-hidden accordion">
-          <button class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press acc-header" onclick="toggleAcc(this)">
-             <div class="flex items-center gap-3">
-               <span class="text-lg">🧬</span>
-               <div class="text-left">
-                 <h3 class="font-bold text-sm text-ink">Taxonomy & Scientific Name</h3>
-                 <p class="text-xs text-ink-muted">Linnaean classification, determination author & qualifier</p>
-               </div>
-             </div>
-             <span class="acc-icon text-ink-muted font-bold transition-transform duration-200">^</span>
-          </button>
-          <div class="p-4 space-y-4 acc-content block border-t border-bordercol">
-
-             <!-- Botanical Binomial -->
-             <div>
-               <div class="flex items-center justify-between mb-1">
-                 <label class="text-xs font-bold text-ink">Botanical / Scientific Binomial *</label>
-                 <span class="text-[10px] text-ink-muted font-medium">⚑ Flag discrepancy</span>
-               </div>
-               <input id="inputBinomial" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink font-serif italic focus:outline-none focus:border-fern" onchange="autoSave()">
-             </div>
-
-             <div class="grid grid-cols-2 gap-3">
-               <div>
-                 <label class="text-xs font-bold text-ink block mb-1">Taxon Author</label>
-                 <input id="inputAuthor" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-               </div>
-               <div>
-                 <label class="text-xs font-bold text-ink block mb-1">Common Name</label>
-                 <input id="inputCommonName" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-               </div>
-             </div>
-
-             <div>
-                <h4 class="text-[10px] font-mono font-bold text-ink-muted uppercase tracking-wider mb-2 mt-4 border-b border-bordercol pb-1">Darwin Core Classification Ranks</h4>
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Family</label>
-                    <input id="inputFamily" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Genus</label>
-                    <input id="inputGenus" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink font-serif italic focus:outline-none focus:border-fern" onchange="autoSave()">
-                  </div>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Order</label>
-                    <input id="inputOrder" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Class / Phylum</label>
-                    <input id="inputClass" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                  </div>
-                </div>
-             </div>
-
-             <!-- Identification status placeholder block from mock -->
-             <div class="border border-ember-border bg-ember-light p-3 rounded mt-4">
-                <div class="flex items-center justify-between mb-2">
-                   <h4 class="text-xs font-bold text-ember-dark">Identification Qualifier / Status</h4>
-                   <span class="text-[10px] text-ember-dark border border-ember-border bg-white px-2 py-0.5 rounded">Flagged for re-examination</span>
-                </div>
-                <div class="border-l-2 border-ember pl-2 mb-3">
-                   <p class="text-sm font-semibold text-ember-dark">Requires re-examination</p>
-                </div>
-                <div class="bg-white border border-ember-border p-2 rounded flex items-start gap-2 text-xs">
-                   <span class="text-ember">⚠</span>
-                   <p class="text-ember-dark flex-1">Curator note: Check whether specimen might be Adansonia za var. bozy based on calyx dimensions.</p>
-                   <button class="border border-ember-dark text-ember-dark font-bold px-2 py-1 rounded bg-white hover:bg-ember-light touch-press">Resolve</button>
-                </div>
-             </div>
-
-             <div class="grid grid-cols-2 gap-3">
-               <div>
-                 <label class="text-xs font-bold text-ink block mb-1">Determined By</label>
-                 <input id="inputDeterminedBy" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-               </div>
-               <div>
-                 <label class="text-xs font-bold text-ink block mb-1">Date Determined</label>
-                 <input id="inputDateDetermined" type="text" placeholder="DD.MM.YYYY" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-               </div>
-             </div>
-
-          </div>
-        </div>
-
-
-        <!-- Accordion 2: Collection & Specimen -->
-        <div class="bg-surface rounded-md border border-bordercol shadow-sm overflow-hidden accordion acc-open">
-          <button class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press acc-header border-b border-bordercol" onclick="toggleAcc(this)">
-             <div class="flex items-center gap-3">
-               <span class="text-lg">📦</span>
-               <div class="text-left">
-                 <h3 class="font-bold text-sm text-ink">Collection & Specimen Metadata</h3>
-                 <p class="text-xs text-ink-muted">Physical vault location, field collector, GPS & preparation</p>
-               </div>
-             </div>
-             <span class="acc-icon text-ink-muted font-bold transition-transform duration-200">^</span>
-          </button>
-          <div class="p-4 space-y-4 acc-content block">
-
-             <div>
-                <div class="flex items-center justify-between mb-2">
-                   <h4 class="text-[10px] font-mono font-bold text-ink-muted uppercase tracking-wider">Museum Physical Storage Coordinates</h4>
-                   <span class="text-[10px] text-fern-dark border border-fern-border bg-white px-2 py-0.5 rounded font-mono">Tagged Unit</span>
-                </div>
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Cabinet</label>
-                    <input id="inputCabinet" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Drawer / Unit Tray</label>
-                    <input id="inputShelf" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-                  </div>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Room & Building</label>
-                    <input id="inputRoom" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Barcode String</label>
-                    <input id="inputBarcode" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-                  </div>
-                </div>
-             </div>
-
-             <div class="mt-6 border-t border-bordercol pt-4">
-                <h4 class="text-[10px] font-mono font-bold text-ink-muted uppercase tracking-wider mb-2">Historical Field Collection Data</h4>
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Collector Name</label>
-                    <input id="inputCollector" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Field Number</label>
-                    <input id="inputFieldNumber" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-                  </div>
-                </div>
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Collection Date</label>
-                    <input id="inputCollectionDate" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Country / Province</label>
-                    <input id="inputCountry" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                  </div>
-                </div>
-                <div class="mb-3">
-                  <label class="text-xs font-medium text-ink-muted block mb-1">Specific Locality</label>
-                  <textarea id="inputLocality" rows="2" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()"></textarea>
-                </div>
-
-                <label class="text-xs font-medium text-ink-muted block mb-1">Decimal GPS Coordinates (Technical Monospace)</label>
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                  <input id="inputLat" type="text" placeholder="Latitude" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-                  <input id="inputLon" type="text" placeholder="Longitude" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Elevation</label>
-                    <input id="inputElevation" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern font-mono" onchange="autoSave()">
-                  </div>
-                  <div>
-                    <label class="text-xs font-medium text-ink-muted block mb-1">Habitat / Ecology</label>
-                    <input id="inputHabitat" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                  </div>
-                </div>
-             </div>
-
-             <div class="mt-6 border-t border-bordercol pt-4">
-                <h4 class="text-[10px] font-mono font-bold text-ink-muted uppercase tracking-wider mb-2">Preservation & Physical Condition</h4>
-                <div class="mb-3">
-                  <label class="text-xs font-medium text-ink-muted block mb-1">Preparation Type</label>
-                  <input id="inputPreparation" type="text" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                </div>
-                <div class="mb-3">
-                  <label class="text-xs font-medium text-ink-muted block mb-1">Condition Grade</label>
-                  <select id="inputCondition" class="w-full bg-surface border border-bordercol rounded px-3 py-2 text-sm text-ink focus:outline-none focus:border-fern" onchange="autoSave()">
-                     <option value="">Select Condition</option>
-                     <option value="Pristine">Pristine (No Damage)</option>
-                     <option value="Good">Good (Stable)</option>
-                     <option value="Fair">Fair (Minor Degradation)</option>
-                     <option value="Fragile">Fragile (Needs Support)</option>
-                     <option value="Severe">Severe (Urgent Repair)</option>
-                  </select>
-                </div>
-
-                <div class="bg-tonal1 border border-bordercol p-3 rounded">
-                  <label class="text-xs font-medium text-ink-muted block mb-2">Phenology Traits Visible on Sheet:</label>
-                  <div class="flex items-center gap-4">
-                    <label class="flex items-center gap-1.5 text-sm text-ink touch-press"><input type="checkbox" id="checkFlower" class="w-4 h-4 text-fern" onchange="autoSave()"> Flower / Inflorescence</label>
-                    <label class="flex items-center gap-1.5 text-sm text-ink touch-press"><input type="checkbox" id="checkFruit" class="w-4 h-4 text-fern" onchange="autoSave()"> Fruit / Cone</label>
-                    <label class="flex items-center gap-1.5 text-sm text-ink touch-press"><input type="checkbox" id="checkBuds" class="w-4 h-4 text-fern" onchange="autoSave()"> Buds</label>
-                  </div>
-                </div>
-             </div>
-
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Detail Sticky Footer (Floating / Fixed to Bottom of Screen) -->
-      <footer class="absolute bottom-0 w-full bg-surface/95 backdrop-blur border-t border-bordercol p-3 flex flex-col gap-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
-         <div class="flex items-center justify-between px-1">
-            <div class="flex items-center gap-2">
-               <span class="inline-block w-2.5 h-2.5 rounded-full bg-fern"></span>
-               <span class="text-xs font-mono text-ink-muted font-bold">Desktop Host Linked (14ms)</span>
-            </div>
-            <button class="text-xs font-bold text-ember touch-press">⚠ Discrepancy Open</button>
-         </div>
-         <div class="flex items-center gap-2">
-           <button id="btnReviewed" onclick="toggleReviewed()" class="flex-1 bg-surface border-2 border-bordercol text-ink hover:bg-tonal1 px-4 py-3 rounded-md font-bold text-sm flex items-center justify-center gap-2 touch-min touch-press transition">
-             <span class="text-fern-dark">✓</span> <span>Mark Reviewed</span>
-           </button>
-         </div>
-      </footer>
-    </main>
-
   </div>
 
+  <!-- ========================================== -->
+  <!-- CLIENT APPLICATION SCRIPT                  -->
+  <!-- ========================================== -->
   <script>
     const TOKEN = "{{ token }}";
+    let activeSchema = null;
+    let objectList = [];
     let currentOid = null;
     let currentRecord = null;
     let isReviewed = false;
-    let objectList = [];
+    let activeStatusFilter = 'all';
+    let activeSortBy = 'location';
+    let searchQuery = '';
+    let searchDebounceTimer = null;
+    let autoSaveTimer = null;
+    let wakeLockSentinel = null;
 
-    // Auto-save debounce timer
-    let saveTimeout = null;
+    // Photo viewer state
+    let photoUrls = [];
+    let currentPhotoIdx = 0;
+    let photoZoom = 1;
+    let photoRotation = 0;
+    let photoPan = { x: 0, y: 0 };
+    let isDraggingPhoto = false;
+    let photoDragStart = { x: 0, y: 0 };
 
     async function apiFetch(url, options = {}) {
       options.headers = options.headers || {};
@@ -398,258 +683,680 @@ INDEX_TEMPLATE = """
       return res.json();
     }
 
-    function showToast(msg) {
+    function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
       toast.textContent = msg;
+      toast.className = `fixed top-4 left-4 right-4 max-w-sm mx-auto ${isError ? 'bg-red-700' : 'bg-fern-dark'} text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity`;
       toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2500);
+      setTimeout(() => toast.classList.add('hidden'), 2200);
     }
 
-    function toggleAcc(btn) {
-       const acc = btn.closest('.accordion');
-       acc.classList.toggle('acc-open');
-       const content = acc.querySelector('.acc-content');
-       if (acc.classList.contains('acc-open')) {
-           content.classList.remove('hidden');
-       } else {
-           content.classList.add('hidden');
-       }
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
     }
 
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    // ==========================================
+    // INITIALIZATION & SCHEMA LOADING
+    // ==========================================
     async function init() {
       try {
-        const status = await apiFetch('/api/status');
-        document.getElementById('headerDbName').textContent = status.database_name || 'Arbor Database';
-        document.getElementById('headerCount').textContent = `${status.reviewed_count} / ${status.total_objects} reviewed`;
+        // 1. Fetch Schema from Master config.py
+        activeSchema = await apiFetch('/api/schema');
+        const dbName = activeSchema.database_name || 'Arbor Database';
+        document.getElementById('headerDbName').textContent = dbName;
+        document.getElementById('connModalDbName').textContent = dbName;
 
+        // 2. Fetch Initial List
         await fetchList();
+
+        // 3. Populate Discrepancy Field Select Options
+        populateDiscrepancyFields();
+
+        // 4. Setup SSE live events if available
+        setupEventSource();
       } catch (err) {
-        console.error("Init failed:", err);
+        console.error("Initialization failed:", err);
       }
     }
 
-    let searchDebounce = null;
+    function setupEventSource() {
+      try {
+        const evtSource = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
+        evtSource.onmessage = function(e) {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'record_updated') {
+              if (document.getElementById('listView').classList.contains('hidden') && currentOid === data.data.id) {
+                // Background notification
+              } else if (!document.getElementById('listView').classList.contains('hidden')) {
+                fetchList();
+              }
+            }
+          } catch(err) {}
+        };
+      } catch(err) {}
+    }
+
+    // ==========================================
+    // SCREEN WAKE LOCK (WALK MODE)
+    // ==========================================
+    async function toggleWakeLock() {
+      const btn = document.getElementById('btnWakeLock');
+      const icon = document.getElementById('wakeLockIcon');
+      if (wakeLockSentinel) {
+        await wakeLockSentinel.release();
+        wakeLockSentinel = null;
+        btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center justify-center';
+        icon.classList.remove('animate-spin-slow');
+        showToast('Walk Mode Deactivated (Sleep Allowed)');
+      } else if ('wakeLock' in navigator) {
+        try {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+          btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-fern-light text-fern-dark border-fern-border flex items-center justify-center';
+          icon.classList.add('animate-spin-slow');
+          showToast('Walk Mode Active (Screen Sleep Prevented)');
+          wakeLockSentinel.addEventListener('release', () => {
+            wakeLockSentinel = null;
+            btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center justify-center';
+            icon.classList.remove('animate-spin-slow');
+          });
+        } catch (err) {
+          showToast('Wake Lock unavailable on this device', true);
+        }
+      } else {
+        showToast('Wake Lock API not supported on this browser', true);
+      }
+    }
+
+    // ==========================================
+    // SPECIMEN LIST RENDERING & SEARCH
+    // ==========================================
     function debounceSearch() {
-       clearTimeout(searchDebounce);
-       searchDebounce = setTimeout(fetchList, 300);
+      clearTimeout(searchDebounceTimer);
+      searchQuery = document.getElementById('searchBox').value.trim();
+      const clearBtn = document.getElementById('searchClearBtn');
+      if (searchQuery) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+      searchDebounceTimer = setTimeout(fetchList, 200);
+    }
+
+    function clearSearch() {
+      document.getElementById('searchBox').value = '';
+      document.getElementById('searchClearBtn').classList.add('hidden');
+      searchQuery = '';
+      fetchList();
+    }
+
+    function setStatusFilter(status) {
+      activeStatusFilter = status;
+      ['all', 'pending', 'flagged', 'reviewed'].forEach(s => {
+        const pill = document.getElementById(`pill-${s}`);
+        if (!pill) return;
+        if (s === status) {
+          pill.className = s === 'reviewed' 
+            ? 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border bg-fern text-white border-fern'
+            : (s === 'flagged' 
+              ? 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border bg-ember text-white border-ember'
+              : 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border bg-ink text-white border-ink');
+        } else {
+          pill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center gap-1.5';
+        }
+      });
+      fetchList();
+    }
+
+    function handleSortChange() {
+      activeSortBy = document.getElementById('sortBySelect').value;
+      renderList();
     }
 
     async function fetchList() {
-      const q = document.getElementById('searchBox').value.trim();
-      const objRes = await apiFetch(`/api/objects?limit=50&q=${encodeURIComponent(q)}`);
-      objectList = objRes.objects || [];
-      document.getElementById('listSummary').textContent = `Showing ${objectList.length} of ${objRes.total_matching} specimens`;
-      renderList();
+      try {
+        let url = `/api/objects?limit=150&q=${encodeURIComponent(searchQuery)}`;
+        if (activeStatusFilter !== 'all') {
+          url += `&status=${encodeURIComponent(activeStatusFilter)}`;
+        }
+        const res = await apiFetch(url);
+        objectList = res.objects || [];
+
+        // Update counts
+        const facets = res.facets || {};
+        const revCount = facets.reviewed_count || 0;
+        const pendCount = facets.pending_count || 0;
+        const total = res.total_matching || objectList.length;
+
+        document.getElementById('matchingCount').textContent = total;
+        document.getElementById('pill-all').textContent = `All (${total})`;
+        document.getElementById('pill-pending').innerHTML = `<span>🕒</span> <span>Unreviewed (${pendCount})</span>`;
+        document.getElementById('pill-reviewed').innerHTML = `<span>✓</span> <span>Reviewed (${revCount})</span>`;
+        document.getElementById('connModalReviewed').textContent = `${revCount} / ${total} items`;
+
+        renderList();
+      } catch (err) {
+        console.error("Failed to fetch specimen list:", err);
+      }
+    }
+
+    function highlightMatch(text, query) {
+      if (!query || !text) return text || '';
+      const safeQ = query.replace(/[.*+?^${}()|[\]\]/g, '\$&');
+      const regex = new RegExp(`(${safeQ})`, 'gi');
+      return String(text).replace(regex, '<mark class="bg-ember-light text-ember font-semibold px-0.5 rounded-[1px]">$1</mark>');
     }
 
     function renderList() {
       const container = document.getElementById('specimenListContainer');
       if (objectList.length === 0) {
-          container.innerHTML = `<div class="p-4 text-center text-ink-muted text-sm border border-dashed border-bordercol rounded bg-surface">No specimens found.</div>`;
-          return;
+        container.innerHTML = `
+          <div class="bg-surface border border-bordercol rounded-[2px] p-8 text-center mt-4">
+            <span class="text-3xl text-ink-faint">🔍</span>
+            <p class="font-serif font-bold text-base text-ink mt-2">No specimens match filter</p>
+            <p class="font-sans text-xs text-ink-muted mt-1">Try adjusting your search query or clear filters.</p>
+          </div>
+        `;
+        return;
       }
 
-      container.innerHTML = objectList.map(o => {
-          let badge = '';
-          if (o.review_status === 'reviewed') {
-              badge = `<span class="bg-fern-light text-fern-dark border border-fern-border px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">✓ Reviewed</span>`;
-          } else {
-              badge = `<span class="bg-surface border border-bordercol text-ink-muted px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">🕒 Pending</span>`;
-          }
+      // Sort in-place if requested
+      const sorted = [...objectList].sort((a, b) => {
+        if (activeSortBy === 'name-asc') return (a.scientific_name || '').localeCompare(b.scientific_name || '');
+        if (activeSortBy === 'name-desc') return (b.scientific_name || '').localeCompare(a.scientific_name || '');
+        if (activeSortBy === 'id-asc') return (a.id || '').localeCompare(b.id || '', undefined, { numeric: true });
+        return 0; // default server order
+      });
 
-          let subtext = [];
-          if (o.location.cabinet && o.location.cabinet !== 'nan') subtext.push(`Cab ${o.location.cabinet}`);
-          if (o.location.drawer && o.location.drawer !== 'nan') subtext.push(`Drw ${o.location.drawer}`);
-          else if (o.location.shelf && o.location.shelf !== 'nan') subtext.push(`Shf ${o.location.shelf}`);
+      container.innerHTML = sorted.map(s => {
+        const isRev = s.review_status === 'reviewed';
+        const statusBadge = isRev
+          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-fern-light text-fern-dark border border-fern-border">✓ REVIEWED</span>`
+          : (s.has_flags
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-ember-light text-ember-dark border border-ember-border">⚠ FLAGGED</span>`
+            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-tonal1 text-ink-muted border border-bordercol">🕒 UNREVIEWED</span>`);
 
-          return `
-          <div onclick="loadObject('${o.id}')" class="bg-surface rounded-md border-l-4 border-l-fern border-y border-r border-bordercol shadow-sm p-3 hover:bg-tonal1 cursor-pointer touch-press transition">
-             <div class="flex items-start justify-between mb-2">
-                 <div class="flex items-center gap-2">
-                     <span class="font-mono text-[10px] bg-tonal1 border border-bordercol text-ink px-1.5 py-0.5 rounded font-bold">${o.accession_number}</span>
-                 </div>
-                 ${badge}
-             </div>
-             <h3 class="font-serif italic font-bold text-ink text-base mb-1">${o.scientific_name}</h3>
-             <p class="text-xs text-ink-muted font-sans">${o.family || 'Unknown Family'}</p>
-             <div class="mt-2 pt-2 border-t border-tonal2 flex justify-between items-center text-[10px] text-ink-muted font-mono">
-                 <div class="flex items-center gap-1">📍 ${subtext.join(' / ') || 'Location unknown'}</div>
-                 <div>📅 --</div>
-             </div>
+        let locStr = [];
+        if (s.location) {
+          if (s.location.building) locStr.push(s.location.building);
+          if (s.location.floor) locStr.push(`Fl ${s.location.floor}`);
+          if (s.location.cabinet) locStr.push(`Cab ${s.location.cabinet}`);
+          if (s.location.stored_as) locStr.push(s.location.stored_as);
+        }
+        const locDisplay = locStr.join(' • ') || 'Location unrecorded';
+
+        return `
+          <div
+            onclick="loadSpecimen('${s.id}')"
+            class="bg-surface border border-bordercol hover:border-borderdark rounded-[2px] p-3.5 transition-all cursor-pointer touch-press shadow-xs"
+          >
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="flex items-center gap-1.5">
+                <span class="font-mono text-xs font-bold text-ink-muted">
+                  ${highlightMatch(s.accession_number || s.id, searchQuery)}
+                </span>
+                ${s.family ? `<span class="font-sans text-[10px] text-ink-faint bg-tonal1 px-1.5 py-0.2 rounded-[1px] border border-tonal3">${highlightMatch(s.family, searchQuery)}</span>` : ''}
+              </div>
+              ${statusBadge}
+            </div>
+
+            <h2 class="font-serif italic font-bold text-base text-ink leading-snug">
+              ${highlightMatch(s.scientific_name, searchQuery)}
+            </h2>
+
+            <div class="flex items-center gap-2 text-xs font-sans text-ink-muted mt-0.5">
+              ${s.author ? `<span class="text-ink font-medium">${highlightMatch(s.author, searchQuery)}</span>` : ''}
+              ${s.collector ? `<span>•</span> <span class="truncate max-w-[140px]">👤 ${highlightMatch(s.collector, searchQuery)}</span>` : ''}
+            </div>
+
+            <div class="flex items-center justify-between mt-2.5 pt-2 border-t border-tonal2 text-xs">
+              <div class="flex items-center gap-1.5 text-ink truncate max-w-[240px]">
+                <span class="text-fern text-xs">📍</span>
+                <span class="font-mono text-[11px] text-ink-muted truncate">${locDisplay}</span>
+              </div>
+              <div class="flex items-center gap-1 text-[11px] font-sans font-medium text-fern shrink-0">
+                <span>Inspect</span>
+                <span>&gt;</span>
+              </div>
+            </div>
           </div>
-          `;
+        `;
       }).join('');
     }
 
     function showListView() {
-       document.getElementById('detailView').classList.add('hidden');
-       document.getElementById('listView').classList.remove('hidden');
-       document.getElementById('backButton').classList.add('hidden');
-       // Refresh list in case of changes
-       fetchList();
+      document.getElementById('detailView').classList.add('hidden');
+      document.getElementById('listView').classList.remove('hidden');
+      fetchList();
     }
 
     function showDetailView() {
-       document.getElementById('listView').classList.add('hidden');
-       document.getElementById('detailView').classList.remove('hidden');
-       document.getElementById('backButton').classList.remove('hidden');
+      document.getElementById('listView').classList.add('hidden');
+      document.getElementById('detailView').classList.remove('hidden');
     }
 
-    function setVal(id, val) {
-       const el = document.getElementById(id);
-       if(el) el.value = val || '';
-    }
-
-    function setCheck(id, val) {
-       const el = document.getElementById(id);
-       if(el) el.checked = (String(val).toLowerCase() === 'true' || val === true || val === '1' || val === 'yes');
-    }
-
-    async function loadObject(oid) {
+    // ==========================================
+    // SPECIMEN DETAIL VIEW & DYNAMIC FORM ENGINE
+    // ==========================================
+    async function loadSpecimen(oid) {
       currentOid = oid;
       showDetailView();
 
-      document.getElementById('imagePlaceholder').classList.remove('hidden');
-      document.getElementById('imageContainer').classList.add('hidden');
-      document.getElementById('specimenImg').src = '';
-
       // Reset scroll position to top
-      document.querySelector('#detailView .flex-1.overflow-y-auto').scrollTop = 0;
+      document.querySelector('#detailView main').scrollTop = 0;
+
+      // Update Nav Index
+      const idx = objectList.findIndex(o => o.id === oid);
+      if (idx !== -1) {
+        document.getElementById('detailNavIndex').textContent = `${idx + 1} of ${objectList.length}`;
+        document.getElementById('btnPrevSpecimen').disabled = (idx === 0);
+        document.getElementById('btnNextSpecimen').disabled = (idx === objectList.length - 1);
+      }
+
+      // Reset Photo State
+      document.getElementById('photoPlaceholder').classList.remove('hidden');
+      document.getElementById('specimenImg').classList.add('hidden');
+      document.getElementById('photoWatermark').classList.add('hidden');
+      document.getElementById('specimenImg').src = '';
 
       try {
         const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}`);
         currentRecord = data;
+        isReviewed = (data.review_status === 'reviewed');
 
-        // Header
-        document.getElementById('detailAccession').textContent = data.accession_number;
-        document.getElementById('detailScientificName').textContent = data.scientific_name;
+        // Top Summary Info
+        document.getElementById('detailAccession').textContent = `#${data.accession_number || data.id}`;
+        document.getElementById('detailScientificName').textContent = data.scientific_name || 'Specimen';
         document.getElementById('detailAuthor').textContent = data.registration.Author || '';
-        document.getElementById('detailFamily').textContent = data.registration.Family || 'Unknown Family';
-        const cab = data.observation.Cabinet || data.registration.Cabinet || '';
-        const drw = data.observation.Shelf || data.registration.Shelf || '';
-        document.getElementById('detailTopLocation').textContent = cab ? `Cabinet ${cab} / Drawer ${drw}` : '';
-        document.getElementById('detailCommonName').textContent = data.observation.CommonName || '';
+        document.getElementById('detailFamily').textContent = data.registration.Family || '';
 
-        // Taxonomy Tab
-        setVal('inputBinomial', (data.registration.Genus || '') + ' ' + (data.registration.Species || ''));
-        setVal('inputAuthor', data.registration.Author);
-        setVal('inputCommonName', data.observation.CommonName || data.registration.CommonName);
-        setVal('inputFamily', data.registration.Family);
-        setVal('inputGenus', data.registration.Genus);
-        setVal('inputOrder', data.observation.Order || data.registration.Order);
-        setVal('inputClass', data.observation.Class || data.registration.Class);
-        setVal('inputDeterminedBy', data.observation.DeterminedBy || data.registration.DeterminedBy);
-        setVal('inputDateDetermined', data.observation.DateDetermined || data.registration.DateDetermined);
+        let locStr = [];
+        if (data.observation) {
+          if (data.observation.Building) locStr.push(data.observation.Building);
+          if (data.observation.Floor) locStr.push(`Floor ${data.observation.Floor}`);
+          if (data.observation.Cabinet) locStr.push(`Cab ${data.observation.Cabinet}`);
+          if (data.observation["Stored as"]) locStr.push(data.observation["Stored as"]);
+        }
+        document.getElementById('detailTopLocation').textContent = locStr.length > 0 ? `Location: ${locStr.join(' • ')}` : 'Location: Unrecorded';
 
-        // Collection Tab
-        setVal('inputCabinet', data.observation.Cabinet || data.registration.Cabinet);
-        setVal('inputShelf', data.observation.Shelf || data.registration.Shelf);
-        setVal('inputRoom', data.observation.Room || data.registration.Room);
-        setVal('inputBarcode', data.observation.Barcode || data.registration.Barcode);
+        updateReviewButtonUI();
 
-        setVal('inputCollector', data.observation.Collector || data.registration.Collector);
-        setVal('inputFieldNumber', data.observation.FieldNumber || data.registration.FieldNumber);
-        setVal('inputCollectionDate', data.observation.CollectionDate || data.registration.CollectionDate);
-        setVal('inputCountry', data.observation.Country || data.registration.Country);
-        setVal('inputLocality', data.observation.Locality || data.registration.Locality);
+        // Load Photos
+        photoUrls = (data.images && data.images.online_urls) ? data.images.online_urls : [];
+        document.getElementById('photoCountBadge').textContent = `${photoUrls.length} available`;
+        if (photoUrls.length > 0) {
+          currentPhotoIdx = 0;
+          document.getElementById('specimenImg').src = photoUrls[0];
+          document.getElementById('photoPlaceholder').classList.add('hidden');
+          document.getElementById('specimenImg').classList.remove('hidden');
+          document.getElementById('photoWatermark').classList.remove('hidden');
+        }
 
-        setVal('inputLat', data.observation.Latitude || data.registration.Latitude);
-        setVal('inputLon', data.observation.Longitude || data.registration.Longitude);
-        setVal('inputElevation', data.observation.Elevation || data.registration.Elevation);
-        setVal('inputHabitat', data.observation.Habitat || data.registration.Habitat);
+        // Render Dynamic Forms Driven by config.py
+        renderDynamicForm(activeSchema, data);
 
-        setVal('inputPreparation', data.observation.Preparation || data.registration.Preparation);
-        setVal('inputCondition', data.observation.ConditionGrade || data.registration.ConditionGrade);
+        // Render Problems & Discrepancies
+        renderDiscrepancies(data);
 
-        setCheck('checkFlower', data.observation.PhenologyFlower);
-        setCheck('checkFruit', data.observation.PhenologyFruit);
-        setCheck('checkBuds', data.observation.PhenologyBuds);
-
-        isReviewed = data.review_status === 'reviewed';
-        updateReviewButton();
       } catch (err) {
-        console.error("Failed to load object:", err);
+        console.error("Failed to load specimen details:", err);
       }
     }
 
-    function loadImage() {
-      if (currentRecord && currentRecord.images && currentRecord.images.online_urls.length > 0) {
-        const url = currentRecord.images.online_urls[0];
-        const img = document.getElementById('specimenImg');
-        img.src = url;
-        document.getElementById('imagePlaceholder').classList.add('hidden');
-        document.getElementById('imageContainer').classList.remove('hidden');
+    function navSpecimen(offset) {
+      const idx = objectList.findIndex(o => o.id === currentOid);
+      if (idx !== -1 && objectList[idx + offset]) {
+        loadSpecimen(objectList[idx + offset].id);
       }
     }
 
-    function updateReviewButton() {
-      const btn = document.getElementById('btnReviewed');
-      if (isReviewed) {
-        btn.className = 'flex-1 bg-fern text-white px-4 py-3 rounded-md font-bold text-sm flex items-center justify-center gap-2 touch-min touch-press shadow-md transition border-2 border-fern-dark';
-        btn.innerHTML = '<span>✓</span> <span>Reviewed (Tap to undo)</span>';
+    // ==========================================
+    // DYNAMIC SCHEMA-DRIVEN FORM GENERATOR
+    // ==========================================
+    function renderDynamicForm(schema, record) {
+      const container = document.getElementById('detailAccordionsContainer');
+      if (!schema || !schema.ui_sections) {
+        container.innerHTML = '';
+        return;
+      }
+
+      const uiSec = schema.ui_sections;
+      const regGroups = uiSec.reg_groups || [];
+      const regFields = uiSec.registration || [];
+      const locFields = uiSec.location || [];
+
+      let html = '';
+
+      // 1. Render Registration Groups from config.py
+      regGroups.forEach((grp, gIdx) => {
+        const isTaxonomy = grp.name.toLowerCase().includes('tax');
+        const icon = isTaxonomy ? '🧬' : (grp.name.toLowerCase().includes('collect') ? '📦' : (grp.name.toLowerCase().includes('obj') ? '🌿' : (grp.name.toLowerCase().includes('note') ? '📝' : '🔒')));
+        const isOpen = (gIdx <= 1); // First two open by default
+
+        let fieldsHtml = '';
+        grp.fields.forEach(fName => {
+          const fDef = regFields.find(f => f.name === fName) || { name: fName, type: 'text' };
+          const val = (record.registration && record.registration[fName] !== undefined) ? record.registration[fName] : '';
+          fieldsHtml += renderFieldInput(fDef, val, 'registration');
+        });
+
+        html += `
+          <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion ${isOpen ? 'acc-open' : ''}">
+            <button
+              type="button"
+              onclick="toggleAccordion(this)"
+              class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press border-b border-bordercol text-left"
+            >
+              <div class="flex items-center gap-2.5">
+                <span class="text-base">${icon}</span>
+                <div>
+                  <h3 class="font-bold text-xs text-ink uppercase tracking-wider">${grp.name}</h3>
+                  <p class="text-[10px] text-ink-muted">${grp.fields.join(' • ')}</p>
+                </div>
+              </div>
+              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">▼</span>
+            </button>
+            <div class="p-3.5 space-y-3 acc-content ${isOpen ? 'block' : 'hidden'}">
+              ${fieldsHtml}
+            </div>
+          </div>
+        `;
+      });
+
+      // 2. Render Physical Location Group from config.py
+      if (locFields.length > 0) {
+        let locFieldsHtml = '';
+        locFields.forEach(fDef => {
+          const val = (record.observation && record.observation[fDef.name] !== undefined) ? record.observation[fDef.name] : '';
+          locFieldsHtml += renderFieldInput(fDef, val, 'observation');
+        });
+
+        html += `
+          <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion acc-open">
+            <button
+              type="button"
+              onclick="toggleAccordion(this)"
+              class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press border-b border-bordercol text-left"
+            >
+              <div class="flex items-center gap-2.5">
+                <span class="text-base">📍</span>
+                <div>
+                  <h3 class="font-bold text-xs text-ink uppercase tracking-wider">Physical Storage Location</h3>
+                  <p class="text-[10px] text-ink-muted">Museum coordinates & storage trait</p>
+                </div>
+              </div>
+              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">▼</span>
+            </button>
+            <div class="p-3.5 space-y-3 acc-content block">
+              ${locFieldsHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+    }
+
+    function renderFieldInput(field, value, section) {
+      const fName = field.name;
+      const fType = field.type || 'text';
+      const isReadOnly = !!field.readonly;
+      const inputId = `input_${section}_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+
+      // Choice / Select
+      if (fType === 'choice' && Array.isArray(field.choices)) {
+        const optionsHtml = ['<option value="">Select option...</option>']
+          .concat(field.choices.map(c => `<option value="${c}" ${String(value) === String(c) ? 'selected' : ''}>${c}</option>`))
+          .join('');
+
+        return `
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-ink">${fName}</label>
+              <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>
+            </div>
+            <select
+              id="${inputId}"
+              data-section="${section}"
+              data-field="${fName}"
+              onchange="triggerAutoSave()"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern cursor-pointer"
+            >
+              ${optionsHtml}
+            </select>
+          </div>
+        `;
+      }
+
+      // Checkbox
+      if (fType === 'checkbox' || fType === 'bool') {
+        const isChecked = (String(value).toLowerCase() === 'true' || value === true || value === '1' || value === 'yes');
+        return `
+          <div class="flex items-center justify-between py-1">
+            <label class="text-xs font-bold text-ink">${fName}</label>
+            <input
+              type="checkbox"
+              id="${inputId}"
+              data-section="${section}"
+              data-field="${fName}"
+              ${isChecked ? 'checked' : ''}
+              onchange="triggerAutoSave()"
+              class="w-4 h-4 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
+            />
+          </div>
+        `;
+      }
+
+      // Multiline
+      if (fType === 'multiline') {
+        return `
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-ink">${fName}</label>
+              <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>
+            </div>
+            <textarea
+              id="${inputId}"
+              data-section="${section}"
+              data-field="${fName}"
+              rows="2"
+              oninput="triggerAutoSave()"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
+            >${value || ''}</textarea>
+          </div>
+        `;
+      }
+
+      // Standard Text or Readonly
+      return `
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-bold text-ink">${fName} ${isReadOnly ? '<span class="text-[9px] text-ink-faint font-normal">(Locked)</span>' : ''}</label>
+            ${!isReadOnly ? `<button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>` : ''}
+          </div>
+          <input
+            type="text"
+            id="${inputId}"
+            data-section="${section}"
+            data-field="${fName}"
+            value="${value || ''}"
+            ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()"'}
+          />
+        </div>
+      `;
+    }
+
+    function toggleAccordion(btn) {
+      const acc = btn.closest('.accordion');
+      acc.classList.toggle('acc-open');
+      const content = acc.querySelector('.acc-content');
+      if (acc.classList.contains('acc-open')) {
+        content.classList.remove('hidden');
       } else {
-        btn.className = 'flex-1 bg-surface border-2 border-bordercol text-ink hover:bg-tonal1 px-4 py-3 rounded-md font-bold text-sm flex items-center justify-center gap-2 touch-min touch-press transition';
-        btn.innerHTML = '<span class="text-fern-dark">✓</span> <span>Mark Reviewed</span>';
+        content.classList.add('hidden');
       }
     }
 
-    async function toggleReviewed() {
-      isReviewed = !isReviewed;
-      updateReviewButton();
-      await saveCurrentEdits(true);
+    // ==========================================
+    // DISCREPANCY & PROBLEM TOGGLES
+    // ==========================================
+    function renderDiscrepancies(record) {
+      const listContainer = document.getElementById('activeDiscrepanciesList');
+      const togglesContainer = document.getElementById('problemTogglesContainer');
+
+      const issues = record.flagged_issues || [];
+      if (issues.length === 0) {
+        listContainer.innerHTML = `<p class="text-xs text-ink-faint italic">No active discrepancies flagged for this specimen.</p>`;
+      } else {
+        listContainer.innerHTML = issues.map((iss, idx) => `
+          <div class="bg-ember-light border border-ember-border p-2.5 rounded-[2px] flex items-start justify-between gap-2 text-xs">
+            <div>
+              <span class="font-bold text-ember-dark">${iss.field || 'General'}:</span>
+              <p class="text-ember-dark mt-0.5">${iss.reason || 'Flagged problem'}</p>
+            </div>
+            <button
+              type="button"
+              onclick="resolveDiscrepancy('${iss.id}')"
+              class="px-2 py-1 bg-white hover:bg-ember-light border border-ember-border text-ember-dark font-bold text-[10px] rounded-[2px] shrink-0"
+            >
+              Resolve
+            </button>
+          </div>
+        `).join('');
+      }
+
+      // Quick Toggles from ui_sections.problems
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+        const probs = activeSchema.ui_sections.problems;
+        togglesContainer.innerHTML = probs.map(p => {
+          const pName = p.name;
+          const pLabel = pName.replace('_Problem', '').replace(/_/g, ' ');
+          const isFlagged = (record.observation && (String(record.observation[pName]).toLowerCase() === 'true' || record.observation[pName] === true || record.observation[pName] === '1'));
+          return `
+            <label class="flex items-center gap-1.5 p-1.5 border border-bordercol rounded-[2px] hover:bg-tonal1 cursor-pointer">
+              <input
+                type="checkbox"
+                id="prob_${pName}"
+                ${isFlagged ? 'checked' : ''}
+                onchange="toggleProblemFlag('${pName}')"
+                class="w-3.5 h-3.5 text-ember rounded-[1px]"
+              />
+              <span class="truncate text-[11px] ${isFlagged ? 'text-ember font-bold' : 'text-ink'}">${pLabel}</span>
+            </label>
+          `;
+        }).join('');
+      }
     }
 
-    function autoSave() {
-        clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => {
-            saveCurrentEdits(false);
-        }, 1000);
+    function populateDiscrepancyFields() {
+      const select = document.getElementById('discrepancyFieldSelect');
+      if (!activeSchema || !activeSchema.ui_sections) return;
+      const reg = (activeSchema.ui_sections.registration || []).map(f => f.name);
+      const loc = (activeSchema.ui_sections.location || []).map(f => f.name);
+      const all = ['General Specimen Issue'].concat(reg).concat(loc);
+      select.innerHTML = all.map(f => `<option value="${f}">${f}</option>`).join('');
     }
 
-    async function saveCurrentEdits(showStatus=false) {
+    function openAddDiscrepancyModal(fieldName) {
+      if (fieldName) {
+        document.getElementById('discrepancyFieldSelect').value = fieldName;
+      }
+      openModal('addDiscrepancyModal');
+    }
+
+    async function submitDiscrepancy(e) {
+      e.preventDefault();
+      const field = document.getElementById('discrepancyFieldSelect').value;
+      const reason = document.getElementById('discrepancyReasonInput').value.trim();
+      const severity = document.querySelector('input[name="severity"]:checked').value;
+
+      if (!reason) return;
+
+      // Add to flagged issues locally and trigger save
+      currentRecord.flagged_issues = currentRecord.flagged_issues || [];
+      currentRecord.flagged_issues.push({
+        id: `flag_${Date.now()}`,
+        field: field,
+        severity: severity,
+        reason: reason,
+        resolved: false
+      });
+
+      // Match corresponding problem toggle if it exists
+      const matchProb = `${field}_Problem`;
+      if (currentRecord.observation) {
+        currentRecord.observation[matchProb] = true;
+      }
+
+      closeModal('addDiscrepancyModal');
+      document.getElementById('discrepancyReasonInput').value = '';
+      renderDiscrepancies(currentRecord);
+      await saveCurrentEdits();
+      showToast('Discrepancy flagged on host');
+    }
+
+    async function resolveDiscrepancy(issId) {
+      if (!currentRecord || !currentRecord.flagged_issues) return;
+      currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issId);
+      renderDiscrepancies(currentRecord);
+      await saveCurrentEdits();
+      showToast('Discrepancy resolved');
+    }
+
+    async function toggleProblemFlag(probName) {
+      const el = document.getElementById(`prob_${probName}`);
+      if (!el || !currentRecord) return;
+      currentRecord.observation = currentRecord.observation || {};
+      currentRecord.observation[probName] = el.checked;
+      await saveCurrentEdits();
+    }
+
+    // ==========================================
+    // AUTO-SAVE & PRIMARY ACTION: MARK REVIEWED
+    // ==========================================
+    function triggerAutoSave() {
+      const syncStatus = document.getElementById('footerSyncStatus');
+      syncStatus.innerHTML = '<span class="font-mono text-ember font-medium animate-pulse">Saving changes...</span>';
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(saveCurrentEdits, 500);
+    }
+
+    async function saveCurrentEdits() {
       if (!currentOid) return;
 
-      const binomial = document.getElementById('inputBinomial').value.trim().split(' ');
-      const genus = binomial[0] || '';
-      const species = binomial.slice(1).join(' ') || '';
+      const regPayload = {};
+      const obsPayload = {};
+
+      // Collect all dynamic inputs
+      document.querySelectorAll('[data-section="registration"]').forEach(input => {
+        const f = input.getAttribute('data-field');
+        regPayload[f] = input.value;
+      });
+
+      document.querySelectorAll('[data-section="observation"]').forEach(input => {
+        const f = input.getAttribute('data-field');
+        if (input.type === 'checkbox') {
+          obsPayload[f] = input.checked;
+        } else {
+          obsPayload[f] = input.value;
+        }
+      });
+
+      // Merge problem flags
+      if (currentRecord && currentRecord.observation) {
+        Object.keys(currentRecord.observation).forEach(k => {
+          if (k.endsWith('_Problem') || k.startsWith('Unknown_')) {
+            obsPayload[k] = currentRecord.observation[k];
+          }
+        });
+      }
 
       const payload = {
         id: currentOid,
         reviewed: isReviewed,
-        registration: {
-          Genus: genus || document.getElementById('inputGenus').value,
-          Species: species,
-          Family: document.getElementById('inputFamily').value,
-          Author: document.getElementById('inputAuthor').value
-        },
-        observation: {
-          CommonName: document.getElementById('inputCommonName').value,
-          Order: document.getElementById('inputOrder').value,
-          Class: document.getElementById('inputClass').value,
-          DeterminedBy: document.getElementById('inputDeterminedBy').value,
-          DateDetermined: document.getElementById('inputDateDetermined').value,
-
-          Room: document.getElementById('inputRoom').value,
-          Cabinet: document.getElementById('inputCabinet').value,
-          Shelf: document.getElementById('inputShelf').value,
-          Barcode: document.getElementById('inputBarcode').value,
-
-          Collector: document.getElementById('inputCollector').value,
-          FieldNumber: document.getElementById('inputFieldNumber').value,
-          CollectionDate: document.getElementById('inputCollectionDate').value,
-          Country: document.getElementById('inputCountry').value,
-          Locality: document.getElementById('inputLocality').value,
-          Latitude: document.getElementById('inputLat').value,
-          Longitude: document.getElementById('inputLon').value,
-          Elevation: document.getElementById('inputElevation').value,
-          Habitat: document.getElementById('inputHabitat').value,
-
-          Preparation: document.getElementById('inputPreparation').value,
-          ConditionGrade: document.getElementById('inputCondition').value,
-          PhenologyFlower: document.getElementById('checkFlower').checked,
-          PhenologyFruit: document.getElementById('checkFruit').checked,
-          PhenologyBuds: document.getElementById('checkBuds').checked,
-        }
+        registration: regPayload,
+        observation: obsPayload
       };
 
       try {
@@ -657,18 +1364,175 @@ INDEX_TEMPLATE = """
           method: 'POST',
           body: JSON.stringify(payload)
         });
-        if(showStatus) showToast('✓ Edits synced to desktop database');
+        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium">✓ Synced to host</span>';
       } catch (err) {
-        if(showStatus) showToast('⚠ Error syncing edits');
+        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-red-600 font-medium">⚠ Sync Error</span>';
       }
     }
 
-    if ('wakeLock' in navigator) {
-      navigator.wakeLock.request('screen').catch(() => {});
+    function updateReviewButtonUI() {
+      const btn = document.getElementById('btnMarkReviewed');
+      const label = document.getElementById('btnReviewedLabel');
+      const badgeContainer = document.getElementById('detailReviewStatusBadge');
+
+      if (isReviewed) {
+        btn.className = 'w-full py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm flex items-center justify-center gap-2 border-2 transition-all touch-target-min touch-press bg-fern text-white border-fern-dark shadow-md';
+        label.textContent = '✓ Reviewed (Tap to undo)';
+        badgeContainer.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-fern-light text-fern-dark border border-fern-border">✓ REVIEWED</span>';
+      } else {
+        btn.className = 'w-full py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm flex items-center justify-center gap-2 border-2 transition-all touch-target-min touch-press bg-surface text-ink border-bordercol hover:bg-tonal1 shadow-xs';
+        label.textContent = 'Mark Reviewed';
+        badgeContainer.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-tonal1 text-ink-muted border border-bordercol">🕒 UNREVIEWED</span>';
+      }
     }
 
+    async function toggleReviewed() {
+      isReviewed = !isReviewed;
+      updateReviewButtonUI();
+      await saveCurrentEdits();
+      showToast(isReviewed ? '✓ Specimen marked as Reviewed' : 'Specimen marked Unreviewed');
+    }
+
+    // ==========================================
+    // FULLSCREEN PHOTO VIEWER MODAL
+    // ==========================================
+    function openFullscreenPhoto() {
+      if (!photoUrls || photoUrls.length === 0) return;
+      currentPhotoIdx = 0;
+      photoZoom = 1;
+      photoRotation = 0;
+      photoPan = { x: 0, y: 0 };
+      updatePhotoTransform();
+      document.getElementById('photoViewerImg').src = photoUrls[0];
+      document.getElementById('photoViewerCounter').textContent = `(1/${photoUrls.length})`;
+      openModal('photoViewerModal');
+    }
+
+    function onPhotoLoaded() {
+      document.getElementById('photoPlaceholder').classList.add('hidden');
+      document.getElementById('specimenImg').classList.remove('hidden');
+      document.getElementById('photoWatermark').classList.remove('hidden');
+    }
+
+    function onPhotoError() {
+      document.getElementById('photoPlaceholder').innerHTML = `
+        <span class="text-2xl text-ink-faint">📷</span>
+        <p class="font-semibold text-ink-muted">Photo scan unavailable</p>
+      `;
+    }
+
+    function zoomPhoto(delta) {
+      photoZoom = Math.min(Math.max(photoZoom + delta, 1), 4);
+      if (photoZoom === 1) photoPan = { x: 0, y: 0 };
+      updatePhotoTransform();
+    }
+
+    function rotatePhoto() {
+      photoRotation = (photoRotation + 90) % 360;
+      updatePhotoTransform();
+    }
+
+    function resetPhotoTransform() {
+      photoZoom = 1;
+      photoRotation = 0;
+      photoPan = { x: 0, y: 0 };
+      updatePhotoTransform();
+    }
+
+    function updatePhotoTransform() {
+      const img = document.getElementById('photoViewerImg');
+      document.getElementById('zoomLevelDisplay').textContent = `${photoZoom.toFixed(1)}x`;
+      img.style.transform = `scale(${photoZoom}) rotate(${photoRotation}deg) translate(${photoPan.x}px, ${photoPan.y}px)`;
+    }
+
+    function startPhotoDrag(e) {
+      if (photoZoom > 1) {
+        isDraggingPhoto = true;
+        photoDragStart = { x: e.clientX - photoPan.x, y: e.clientY - photoPan.y };
+        window.addEventListener('mousemove', onPhotoDrag);
+        window.addEventListener('mouseup', stopPhotoDrag);
+      }
+    }
+
+    function onPhotoDrag(e) {
+      if (isDraggingPhoto && photoZoom > 1) {
+        photoPan = { x: e.clientX - photoDragStart.x, y: e.clientY - photoDragStart.y };
+        updatePhotoTransform();
+      }
+    }
+
+    function stopPhotoDrag() {
+      isDraggingPhoto = false;
+      window.removeEventListener('mousemove', onPhotoDrag);
+      window.removeEventListener('mouseup', stopPhotoDrag);
+    }
+
+    function startPhotoTouch(e) {
+      if (e.touches.length === 1 && photoZoom > 1) {
+        isDraggingPhoto = true;
+        photoDragStart = { x: e.touches[0].clientX - photoPan.x, y: e.touches[0].clientY - photoPan.y };
+        window.addEventListener('touchmove', onPhotoTouchMove);
+        window.addEventListener('touchend', stopPhotoTouch);
+      }
+    }
+
+    function onPhotoTouchMove(e) {
+      if (isDraggingPhoto && e.touches.length === 1 && photoZoom > 1) {
+        photoPan = { x: e.touches[0].clientX - photoDragStart.x, y: e.touches[0].clientY - photoDragStart.y };
+        updatePhotoTransform();
+      }
+    }
+
+    function stopPhotoTouch() {
+      isDraggingPhoto = false;
+      window.removeEventListener('touchmove', onPhotoTouchMove);
+      window.removeEventListener('touchend', stopPhotoTouch);
+    }
+
+    // ==========================================
+    // QR / BARCODE SCANNER MODAL
+    // ==========================================
+    let scannerStream = null;
+
+    async function openScannerModal() {
+      openModal('qrScannerModal');
+      document.getElementById('manualBarcodeInput').value = '';
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          const video = document.getElementById('scannerVideo');
+          video.srcObject = scannerStream;
+          video.play();
+        } catch(err) {
+          // Camera denied or unavailable
+        }
+      }
+    }
+
+    function closeScannerModal() {
+      if (scannerStream) {
+        scannerStream.getTracks().forEach(track => track.stop());
+        scannerStream = null;
+      }
+      closeModal('qrScannerModal');
+    }
+
+    function handleManualBarcodeSearch() {
+      const code = document.getElementById('manualBarcodeInput').value.trim();
+      if (!code) return;
+      closeScannerModal();
+      // Search or load directly
+      const match = objectList.find(o => o.id === code || o.accession_number === code);
+      if (match) {
+        loadSpecimen(match.id);
+      } else {
+        document.getElementById('searchBox').value = code;
+        debounceSearch();
+      }
+    }
+
+    // Initialize application
     init();
   </script>
 </body>
 </html>
-"""
