@@ -761,7 +761,7 @@ class ObjectProgramUI(
             
             # Custom checkbox style
             cb = tk.Checkbutton(
-                cb_frame, 
+                cb_frame, cursor="hand2",
                 text="ACTIVE LOAN" if is_horiz else "ACTIVE LOAN STATUS", 
                 variable=var,
                 onvalue="True", offvalue="False",
@@ -772,7 +772,7 @@ class ObjectProgramUI(
                 activeforeground=cb_active_fg,
                 selectcolor=bg_col,
                 highlightthickness=0, bd=0
-            , cursor="hand2")
+            )
             cb.pack(side="left")
             widget = cb
         else:
@@ -792,11 +792,11 @@ class ObjectProgramUI(
                 if "" not in choices:
                     choices = [""] + choices
                 widget = ttk.Combobox(
-                    container, textvariable=var,
+                    container, textvariable=var, cursor="hand2",
                     values=choices,
                     state="readonly" if name != "Stored as" else "normal",
                     font=(font_family, sc(font_size))
-                , cursor="hand2")
+                )
                 widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
                 if is_horiz:
                     widget.pack(fill="x", expand=True, ipady=sc(3))
@@ -864,8 +864,8 @@ class ObjectProgramUI(
             textvariable=self.active_preset_var, 
             values=preset_names, 
             state="normal", 
-            width=8 if is_horiz else 12
-        , cursor="hand2")
+            width=8 if is_horiz else 12, cursor="hand2"
+        )
         self.active_preset_cb.pack(side="left", padx=4)
         self.add_tooltip(self.active_preset_cb, "The preset that will be applied when you press Ctrl+K")
         
@@ -1296,12 +1296,12 @@ class ObjectProgramUI(
                     self.prob_border_bars[name] = border_bar
 
                     cb = ttk.Checkbutton(
-                        col0_frame, text="", variable=prob_var,
+                        col0_frame, text="", variable=prob_var, cursor="hand2",
                         command=lambda n=name, pc=prob_col: (
                             self._update_problem_row_style(n, self.problem_vars[pc].get()),
                             self.commit_current_object()
                         )
-                    , cursor="hand2")
+                    )
                     cb.pack(side="left")
                     self.add_tooltip(cb, f"Flag as having a problem ({prob_col.replace('_', ' ')}). Tab + Space to toggle.")
 
@@ -1331,13 +1331,13 @@ class ObjectProgramUI(
                     widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
                 elif ftype == "checkbox":
                     widget = ttk.Checkbutton(
-                        frame,
+                        frame, cursor="hand2",
                         text="",
                         variable=var,
                         onvalue="True",
                         offvalue="False",
                         command=lambda n=name, v=var: self._on_checkbox_change(n, v)
-                    , cursor="hand2")
+                    )
                 elif ftype == "multiline" or name in ("Conservation Status", "Observation", "Comment", "ProblemDescription", "Problem Description"):
                     widget = tk.Text(
                         frame, height=3,
@@ -1458,14 +1458,14 @@ class ObjectProgramUI(
                 self.problem_vars[name] = var
                 
             cb = ttk.Checkbutton(
-                edit_frame,
+                edit_frame, cursor="hand2",
                 text=name.replace("_", " "),
                 variable=var,
                 command=lambda: (
                     self.update_reg_fields_visibility(skip_snap=True),
                     self.commit_current_object()
                 )
-            , cursor="hand2")
+            )
             row = i // 2
             col = i % 2
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=6)
@@ -3901,12 +3901,12 @@ class ObjectProgramUI(
         self.sort_var = tk.StringVar(value="ID")
 
         sort_cb = ttk.Combobox(
-            sort_frame,
+            sort_frame, cursor="hand2",
             textvariable=self.sort_var,
             values=["ID", "Genus A-Z", "Reviewed first", "Problems first"],
             state="readonly",
             width=16
-        , cursor="hand2")
+        )
         sort_cb.pack(side="left", padx=(4, 0))
 
         sort_cb.bind(
@@ -4672,11 +4672,11 @@ class ObjectProgramUI(
         ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 12))
 
         ttk.Checkbutton(
-            frame,
+            frame, cursor="hand2",
             text="Show all historical data",
             variable=self.show_all_history_var,
             command=self._on_history_toggle
-        , cursor="hand2").pack(anchor="w")
+        ).pack(anchor="w")
 
 
 
@@ -6590,16 +6590,16 @@ class ObjectProgramUI(
                 if "" not in choices:
                     choices = [""] + choices
                 widget = ttk.Combobox(
-                    grid_frame, textvariable=var,
+                    grid_frame, textvariable=var, cursor="hand2",
                     values=choices,
                     state="readonly" if name != "Stored as" else "normal"
-                , cursor="hand2")
+                )
             elif ftype == "checkbox":
                 widget = ttk.Checkbutton(
-                    grid_frame, text="", variable=var,
+                    grid_frame, cursor="hand2", text="", variable=var,
                     onvalue="True", offvalue="False",
                     command=lambda n=name, v=var: self._on_checkbox_change(n, v)
-                , cursor="hand2")
+                )
             else:
                 widget = ttk.Entry(
                     grid_frame, textvariable=var,
@@ -6811,14 +6811,14 @@ class ObjectProgramUI(
             col = i % 2
 
             cb = ttk.Checkbutton(
-                grid_frame,
+                grid_frame, cursor="hand2",
                 text=name.replace("_", " "),
                 variable=var,
                 command=lambda: (
                     self.update_reg_fields_visibility(skip_snap=True),
                     self.commit_current_object()
                 )
-            , cursor="hand2")
+            )
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=8)
             self.problem_checkbuttons.append(cb)
 
@@ -9392,10 +9392,10 @@ class ObjectProgramUI(
         
         local_vars_var = tk.BooleanVar(value=self.ignored_words_variations.get())
         cb = ttk.Checkbutton(
-            vars_frame, 
+            vars_frame, cursor="hand2",
             text="Include variations (ignore capitalization, punctuation, extra spacing)",
             variable=local_vars_var
-        , cursor="hand2")
+        )
         cb.pack(anchor="w")
         
         btn_frame = ttk.Frame(win, padding=10)
