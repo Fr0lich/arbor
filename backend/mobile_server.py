@@ -39,6 +39,85 @@ def coerce_type(val, dtype):
             return 0.0
     return str(val).strip()
 
+def _apply_dataframe_updates(target_df, updates, changed_fields, changed_values, oid, fallback_df=None):
+    if target_df is None or oid not in target_df.index or not updates:
+        return
+    for k, v in updates.items():
+        if k in target_df.columns:
+            old_v = sanitize_value(target_df.at[oid, k])
+            new_v = sanitize_value(v)
+            if str(old_v) != str(new_v):
+                coerced = coerce_type(new_v, target_df[k].dtype)
+                target_df.at[oid, k] = coerced
+                changed_fields.append(k)
+                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+        elif fallback_df is not None and k in fallback_df.columns:
+            old_v = sanitize_value(fallback_df.at[oid, k])
+            new_v = sanitize_value(v)
+            if str(old_v) != str(new_v):
+                coerced = coerce_type(new_v, fallback_df[k].dtype)
+                fallback_df.at[oid, k] = coerced
+                changed_fields.append(k)
+                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+        else:
+            new_v = sanitize_value(v)
+            if new_v:
+                # Initialize new column across all rows with empty string to avoid NaN corruption
+                target_df[k] = ""
+                target_df.at[oid, k] = new_v
+                changed_fields.append(k)
+                changed_values.append(f'{k}: "" -> "{new_v}"')
+
+def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fields, changed_values):
+    location_names = {"building", "room", "cabinet", "shelf", "drawer", "box", "location", "aisle", "unittray", "tray", "barcode"}
+    problem_names = set()
+    if getattr(app_state, "config", None) and isinstance(app_state.config, dict) and "ui_sections" in app_state.config:
+        ui_sec = app_state.config["ui_sections"]
+        if "location" in ui_sec and isinstance(ui_sec["location"], list):
+            for l_item in ui_sec["location"]:
+                if isinstance(l_item, dict) and "name" in l_item:
+                    location_names.add(l_item["name"].lower())
+        if "problems" in ui_sec and isinstance(ui_sec["problems"], list):
+            for p_item in ui_sec["problems"]:
+                if isinstance(p_item, dict) and "name" in p_item:
+                    problem_names.add(p_item["name"].lower())
+
+    loc_fields = []
+    loc_values = []
+    prob_fields = []
+    prob_values = []
+    gen_fields = []
+    gen_values = []
+
+    for f, v in zip(changed_fields, changed_values):
+        f_lower = f.lower()
+        if f_lower in problem_names:
+            prob_fields.append(f)
+            prob_values.append(v)
+        elif f_lower in location_names:
+            loc_fields.append(f)
+            loc_values.append(v)
+        else:
+            gen_fields.append(f)
+            gen_values.append(v)
+
+    now_ts = datetime.now().isoformat(timespec="seconds")
+    return {
+        "Timestamp": now_ts,
+        "Action": action_name,
+        "Reviewed": is_rev_str,
+        "ObjectID": str(oid),
+        "ChangedFields": ", ".join(gen_fields) if gen_fields else ("(no changes)" if not (loc_fields or prob_fields) else ""),
+        "ChangedValues": " | ".join(gen_values),
+        "ProblemsChanged": ", ".join(prob_fields),
+        "ProblemsChangedValues": " | ".join(prob_values),
+        "LocationChanged": ", ".join(loc_fields),
+        "LocationChangedValues": " | ".join(loc_values),
+        "User": "Mobile-Companion",
+        "SourceFile": os.path.basename(app_state.excel_path or ""),
+        "OutputFile": os.path.basename(app_state.output_path or app_state.excel_path or "")
+    }
+
 # Reduce Flask logging spam
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -629,52 +708,10 @@ class MobileServer:
                 changed_values = []
 
                 # 2. Apply registration updates
-                for k, v in reg_updates.items():
-                    if k in self.app_state.df_reg.columns:
-                        old_v = sanitize_value(self.app_state.df_reg.at[oid, k])
-                        new_v = sanitize_value(v)
-                        if str(old_v) != str(new_v):
-                            coerced = coerce_type(new_v, self.app_state.df_reg[k].dtype)
-                            self.app_state.df_reg.at[oid, k] = coerced
-                            changed_fields.append(k)
-                            changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
-                    else:
-                        # Dynamic addition of new fields to df_reg if they don't exist
-                        new_v = sanitize_value(v)
-                        if new_v:
-                            self.app_state.df_reg[k] = pd.Series(dtype="object")
-                            self.app_state.df_reg.at[oid, k] = new_v
-                            changed_fields.append(k)
-                            changed_values.append(f'{k}: "" -> "{new_v}"')
+                _apply_dataframe_updates(self.app_state.df_reg, reg_updates, changed_fields, changed_values, oid)
 
                 # 3. Apply observation updates
-                if self.app_state.df_obs is not None and oid in self.app_state.df_obs.index:
-                    for k, v in updates.items():
-                        if k in self.app_state.df_obs.columns:
-                            old_v = sanitize_value(self.app_state.df_obs.at[oid, k])
-                            new_v = sanitize_value(v)
-                            if str(old_v) != str(new_v):
-                                coerced = coerce_type(new_v, self.app_state.df_obs[k].dtype)
-                                self.app_state.df_obs.at[oid, k] = coerced
-                                changed_fields.append(k)
-                                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
-                        elif k in self.app_state.df_reg.columns and k not in reg_updates:
-                            old_v = sanitize_value(self.app_state.df_reg.at[oid, k])
-                            new_v = sanitize_value(v)
-                            if str(old_v) != str(new_v):
-                                coerced = coerce_type(new_v, self.app_state.df_reg[k].dtype)
-                                self.app_state.df_reg.at[oid, k] = coerced
-                                changed_fields.append(k)
-                                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
-                        else:
-                            # Dynamic addition of new fields to df_obs if they don't exist
-                            new_v = sanitize_value(v)
-                            if new_v:
-                                # Ensure column exists first in df_obs
-                                self.app_state.df_obs[k] = pd.Series(dtype="object")
-                                self.app_state.df_obs.at[oid, k] = new_v
-                                changed_fields.append(k)
-                                changed_values.append(f'{k}: "" -> "{new_v}"')
+                _apply_dataframe_updates(self.app_state.df_obs, updates, changed_fields, changed_values, oid, fallback_df=self.app_state.df_reg)
 
                 # 4. Handle Reviewed Status
                 action_name = "EDIT"
@@ -689,27 +726,13 @@ class MobileServer:
                         if "ReviewedAt" in self.app_state.df_obs.columns:
                             self.app_state.df_obs.at[oid, "ReviewedAt"] = datetime.now().isoformat(timespec="seconds")
                         changed_fields.append("Reviewed")
+                        changed_values.append(f'Reviewed: "{old_obs.get("Reviewed", "")}" -> "{is_reviewed_bool}"')
 
                 # 5. Append / Merge Log Record
                 if not hasattr(self.app_state, "_log_records") or self.app_state._log_records is None:
                     self.app_state._log_records = []
 
-                now_ts = datetime.now().isoformat(timespec="seconds")
-                log_entry = {
-                    "Timestamp": now_ts,
-                    "Action": action_name,
-                    "Reviewed": is_rev_str,
-                    "ObjectID": oid,
-                    "ChangedFields": ", ".join(changed_fields) if changed_fields else "(no changes)",
-                    "ChangedValues": " | ".join(changed_values),
-                    "ProblemsChanged": "",
-                    "ProblemsChangedValues": "",
-                    "LocationChanged": "",
-                    "LocationChangedValues": "",
-                    "User": "Mobile-Companion",
-                    "SourceFile": os.path.basename(self.app_state.excel_path or ""),
-                    "OutputFile": os.path.basename(self.app_state.output_path or self.app_state.excel_path or "")
-                }
+                log_entry = _build_audit_log_entry(self.app_state, oid, action_name, is_rev_str, changed_fields, changed_values)
                 self.app_state._log_records.append(log_entry)
                 self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
 
@@ -901,35 +924,10 @@ class MobileServer:
                     changed_values = []
 
                     # 2. Apply registration updates
-                    for k, v in reg_updates.items():
-                        if k in self.app_state.df_reg.columns:
-                            old_v = sanitize_value(self.app_state.df_reg.at[oid, k])
-                            new_v = sanitize_value(v)
-                            if str(old_v) != str(new_v):
-                                coerced = coerce_type(new_v, self.app_state.df_reg[k].dtype)
-                                self.app_state.df_reg.at[oid, k] = coerced
-                                changed_fields.append(k)
-                                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+                    _apply_dataframe_updates(self.app_state.df_reg, reg_updates, changed_fields, changed_values, oid)
 
                     # 3. Apply observation updates
-                    if self.app_state.df_obs is not None and oid in self.app_state.df_obs.index:
-                        for k, v in obs_updates.items():
-                            if k in self.app_state.df_obs.columns:
-                                old_v = sanitize_value(self.app_state.df_obs.at[oid, k])
-                                new_v = sanitize_value(v)
-                                if str(old_v) != str(new_v):
-                                    coerced = coerce_type(new_v, self.app_state.df_obs[k].dtype)
-                                    self.app_state.df_obs.at[oid, k] = coerced
-                                    changed_fields.append(k)
-                                    changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
-                            elif k in self.app_state.df_reg.columns and k not in reg_updates:
-                                old_v = sanitize_value(self.app_state.df_reg.at[oid, k])
-                                new_v = sanitize_value(v)
-                                if str(old_v) != str(new_v):
-                                    coerced = coerce_type(new_v, self.app_state.df_reg[k].dtype)
-                                    self.app_state.df_reg.at[oid, k] = coerced
-                                    changed_fields.append(k)
-                                    changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+                    _apply_dataframe_updates(self.app_state.df_obs, obs_updates, changed_fields, changed_values, oid, fallback_df=self.app_state.df_reg)
 
                     # 4. Handle Reviewed Status
                     action_name = "EDIT"
@@ -944,27 +942,13 @@ class MobileServer:
                             if "ReviewedAt" in self.app_state.df_obs.columns:
                                 self.app_state.df_obs.at[oid, "ReviewedAt"] = datetime.now().isoformat(timespec="seconds")
                             changed_fields.append("Reviewed")
+                            changed_values.append(f'Reviewed: "{old_obs.get("Reviewed", "")}" -> "{is_reviewed_bool}"')
 
                     # 5. Append / Merge Log Record
                     if not hasattr(self.app_state, "_log_records") or self.app_state._log_records is None:
                         self.app_state._log_records = []
 
-                    now_ts = datetime.now().isoformat(timespec="seconds")
-                    log_entry = {
-                        "Timestamp": now_ts,
-                        "Action": action_name,
-                        "Reviewed": is_rev_str,
-                        "ObjectID": oid,
-                        "ChangedFields": ", ".join(changed_fields) if changed_fields else "(no changes)",
-                        "ChangedValues": " | ".join(changed_values),
-                        "ProblemsChanged": "",
-                        "ProblemsChangedValues": "",
-                        "LocationChanged": "",
-                        "LocationChangedValues": "",
-                        "User": "Mobile-Companion",
-                        "SourceFile": os.path.basename(self.app_state.excel_path or ""),
-                        "OutputFile": os.path.basename(self.app_state.output_path or self.app_state.excel_path or "")
-                    }
+                    log_entry = _build_audit_log_entry(self.app_state, oid, action_name, is_rev_str, changed_fields, changed_values)
                     self.app_state._log_records.append(log_entry)
 
                     # 7. Record Recent Edit in Server

@@ -1,10 +1,12 @@
 import os
 import sys
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import qrcode
 from PIL import ImageTk, Image
 from datetime import datetime
+import pandas as pd
 
 from models import AppState
 import config
@@ -282,21 +284,46 @@ class MobileHostApp:
         def tick():
             if self.app.dirty:
                 try:
+                    # 1. Take lightweight copies under lock
                     with self.app.df_lock:
-                        backup_path = self.app.excel_path + ".autosave"
-                        SQLiteRepository.export_to_excel(
-                            sqlite_path=None,
-                            excel_path=backup_path,
-                            config=self.app.config,
-                            df_reg=self.app.df_reg,
-                            df_obs=self.app.df_obs,
-                            df_log=self.app.df_log,
-                            df_photo=self.app.df_photo
-                        )
-                        self._on_mobile_edit("SYS", "Background autosave completed")
-                        if self.server:
-                            ts = datetime.now().isoformat()
-                            self.server.broadcast_event("autosave_completed", {"timestamp": ts})
+                        df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
+                        df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
+                        df_photo_copy = self.app.df_photo.copy() if self.app.df_photo is not None else None
+                        df_log_copy = pd.DataFrame(self.app._log_records) if (hasattr(self.app, '_log_records') and self.app._log_records) else (self.app.df_log.copy() if self.app.df_log is not None else pd.DataFrame())
+                        config_copy = self.app.config
+                        excel_path = self.app.excel_path
+
+                    # 2. Perform slow disk I/O in worker thread outside df_lock
+                    def write_backup():
+                        try:
+                            if excel_path.endswith((".db", ".sqlite", ".sqlite3")):
+                                backup_path = excel_path + ".autosave.db"
+                                SQLiteRepository.save_sqlite(
+                                    backup_path,
+                                    df_reg_copy,
+                                    df_obs_copy,
+                                    df_photo_copy,
+                                    df_log_copy
+                                )
+                            else:
+                                backup_path = excel_path + ".autosave"
+                                SQLiteRepository.export_to_excel(
+                                    sqlite_path=None,
+                                    excel_path=backup_path,
+                                    config=config_copy,
+                                    df_reg=df_reg_copy,
+                                    df_obs=df_obs_copy,
+                                    df_log=df_log_copy,
+                                    df_photo=df_photo_copy
+                                )
+                            self._on_mobile_edit("SYS", "Background autosave completed")
+                            if self.server:
+                                ts = datetime.now().isoformat()
+                                self.server.broadcast_event("autosave_completed", {"timestamp": ts})
+                        except Exception as e:
+                            debug_error("MobileHost autosave worker", str(e))
+
+                    threading.Thread(target=write_backup, daemon=True).start()
                 except Exception as e:
                     debug_error("MobileHost autosave", str(e))
 
@@ -310,24 +337,31 @@ class MobileHostApp:
 
         try:
             with self.app.df_lock:
-                if self.app.excel_path.endswith((".db", ".sqlite", ".sqlite3")):
-                    SQLiteRepository.save_sqlite(
-                        self.app.excel_path,
-                        self.app.df_reg,
-                        self.app.df_obs,
-                        self.app.df_photo,
-                        self.app.df_log
-                    )
-                else:
-                    SQLiteRepository.export_to_excel(
-                        sqlite_path=None,
-                        excel_path=self.app.excel_path,
-                        config=self.app.config,
-                        df_reg=self.app.df_reg,
-                        df_obs=self.app.df_obs,
-                        df_log=self.app.df_log,
-                        df_photo=self.app.df_photo
-                    )
+                df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
+                df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
+                df_photo_copy = self.app.df_photo.copy() if self.app.df_photo is not None else None
+                df_log_copy = pd.DataFrame(self.app._log_records) if (hasattr(self.app, '_log_records') and self.app._log_records) else (self.app.df_log.copy() if self.app.df_log is not None else pd.DataFrame())
+                config_copy = self.app.config
+                excel_path = self.app.excel_path
+
+            if excel_path.endswith((".db", ".sqlite", ".sqlite3")):
+                SQLiteRepository.save_sqlite(
+                    excel_path,
+                    df_reg_copy,
+                    df_obs_copy,
+                    df_photo_copy,
+                    df_log_copy
+                )
+            else:
+                SQLiteRepository.export_to_excel(
+                    sqlite_path=None,
+                    excel_path=excel_path,
+                    config=config_copy,
+                    df_reg=df_reg_copy,
+                    df_obs=df_obs_copy,
+                    df_log=df_log_copy,
+                    df_photo=df_photo_copy
+                )
             messagebox.showinfo("Saved", "All changes have been successfully saved to database.")
         except Exception as e:
             debug_error("MobileHost Save Error", str(e))

@@ -143,8 +143,9 @@ def test_mobile_server_api_flow(mock_app_state):
     assert log_entry["ObjectID"] == "1024"
     assert log_entry["Action"] == "REVIEWED"
     assert "Species" in log_entry["ChangedFields"]
-    assert "Cabinet" in log_entry["ChangedFields"]
+    assert "Cabinet" in log_entry["LocationChanged"]
     assert "sylvestris" in log_entry["ChangedValues"] and "mugo" in log_entry["ChangedValues"]
+    assert "C-12" in log_entry["LocationChangedValues"] and "C-14" in log_entry["LocationChangedValues"]
 
     assert not mock_app_state.df_log.empty
     assert "ObjectID" in mock_app_state.df_log.columns
@@ -261,3 +262,47 @@ def test_mobile_host_app_lifecycle(mock_app_state):
             host.server.stop()
     finally:
         root.destroy()
+
+
+def test_schema_safe_dynamic_column_addition(mock_app_state):
+    server = MobileServer(mock_app_state, port=5096)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Add a custom observation field to object 1024
+    payload = {
+        "id": "1024",
+        "observation": {
+            "CustomVoucherTag": "VOUCH-2026-X"
+        }
+    }
+    res = client.post('/api/update', json=payload, headers=headers)
+    assert res.status_code == 200
+
+    # Ensure the new column exists and is populated for 1024
+    assert mock_app_state.df_obs.at["1024", "CustomVoucherTag"] == "VOUCH-2026-X"
+    # Ensure existing rows are clean empty strings, NOT NaNs
+    assert mock_app_state.df_obs.at["1025", "CustomVoucherTag"] == ""
+    assert mock_app_state.df_obs.at["1026", "CustomVoucherTag"] == ""
+    assert not mock_app_state.df_obs["CustomVoucherTag"].isna().any()
+
+
+def test_problem_audit_logging(mock_app_state):
+    server = MobileServer(mock_app_state, port=5095)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    payload = {
+        "id": "1025",
+        "observation": {
+            "MissingLabel": True,
+            "Shelf": "Shelf 9"
+        }
+    }
+    res = client.post('/api/update', json=payload, headers=headers)
+    assert res.status_code == 200
+
+    log_entry = mock_app_state._log_records[-1]
+    assert "MissingLabel" in log_entry["ProblemsChanged"]
+    assert "Shelf" in log_entry["LocationChanged"]
+    assert "Shelf 9" in log_entry["LocationChangedValues"]
