@@ -894,11 +894,11 @@ class ObjectProgramUI(
             self.system_status.config(text=f"Saved preset: {name}")
             self._refresh_load_data_preset_menu()
 
-        save_btn = ttk.Button(presets_frame, text="Save", width=5, command=save_current_as_preset)
+        save_btn = ttk.Button(presets_frame, text="Save", width=5, command=save_current_as_preset, cursor="hand2")
         save_btn.pack(side="left", padx=2)
         self.add_tooltip(save_btn, "Save current Location fields to this preset")
         
-        apply_btn = ttk.Button(presets_frame, text="Apply", width=5, command=self._apply_default_data_preset_shortcut)
+        apply_btn = ttk.Button(presets_frame, text="Apply", width=5, command=self._apply_default_data_preset_shortcut, cursor="hand2")
         apply_btn.pack(side="left", padx=2)
         self.add_tooltip(apply_btn, "Apply this preset to the fields above (Ctrl+K)")
         
@@ -2323,7 +2323,7 @@ class ObjectProgramUI(
 
         ttk.Button(win, text="Close", command=lambda: (
             canvas.unbind_all("<MouseWheel>"), win.destroy()
-        )).pack(side="bottom", pady=8)
+        ), cursor="hand2").pack(side="bottom", pady=8)
 
 
     def show_quick_help(self):
@@ -2586,7 +2586,7 @@ class ObjectProgramUI(
                 width=18,
                 command=lambda c=cmd: run_help_cmd(c),
                 style="Primary.TButton"
-            )
+            , cursor="hand2")
             btn.pack(side="left", padx=(0, 10))
             
             lbl_desc = ttk.Label(
@@ -2604,7 +2604,7 @@ class ObjectProgramUI(
             command=win.destroy,
             style="Tool.TButton",
             width=10
-        )
+        , cursor="hand2")
         close_btn.pack(side="bottom", pady=(15, 0))
 
 
@@ -3679,7 +3679,7 @@ class ObjectProgramUI(
             text="SETTINGS",
             style="Nav.TButton",
             command=self._open_unified
-        )
+        , cursor="hand2")
         self.toolbar_buttons['SETTINGS'] = self.sb_settings_btn
         self.add_tooltip(self.sb_settings_btn, "Open Application Settings")
         self.sb_settings_btn.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
@@ -3693,7 +3693,7 @@ class ObjectProgramUI(
             text="📱 MOBILE",
             style="Nav.TButton",
             command=self.open_mobile_dialog
-        )
+        , cursor="hand2")
         self.toolbar_buttons['MOBILE'] = self.sb_mobile_btn
         self.add_tooltip(self.sb_mobile_btn, "Connect your phone to edit records")
         self.sb_mobile_btn.grid(row=0, column=2, sticky="nsew", padx=(2, 2), pady=3)
@@ -3706,7 +3706,7 @@ class ObjectProgramUI(
             text="HELP",
             style="Nav.TButton",
             command=self.open_help_window
-        )
+        , cursor="hand2")
         self.toolbar_buttons['HELP'] = self.sb_help_btn
         self.add_tooltip(self.sb_help_btn, "Open Help Window")
         self.sb_help_btn.grid(row=0, column=4, sticky="nsew", padx=(2, 6), pady=3)
@@ -3805,7 +3805,7 @@ class ObjectProgramUI(
             Returns:
                 ttk.Button: The created styled button widget.
             """
-            btn = ttk.Button(parent, text=label, style="Nav.TButton", command=cmd)
+            btn = ttk.Button(parent, text=label, style="Nav.TButton", command=cmd, cursor="hand2")
             btn.pack(side="left", fill="y")
             self.toolbar_buttons[label] = btn
             self.toolbar_vars[label] = tk.BooleanVar(value=True)
@@ -3847,19 +3847,19 @@ class ObjectProgramUI(
 
         self.toolbar_buttons['Prev'] = ttk.Button(
             secondary_frame, text="◄", style="Nav.TButton",
-            command=lambda: self.navigate_object(-1))
+            command=lambda: self.navigate_object(-1), cursor="hand2")
         self.toolbar_buttons['Prev'].pack(side="left", padx=1)
         self.add_tooltip(self.toolbar_buttons['Prev'], "Previous in list")
 
         self.toolbar_buttons['Next'] = ttk.Button(
             secondary_frame, text="►", style="Nav.TButton",
-            command=lambda: self.navigate_object(1))
+            command=lambda: self.navigate_object(1), cursor="hand2")
         self.toolbar_buttons['Next'].pack(side="left", padx=1)
         self.add_tooltip(self.toolbar_buttons['Next'], "Next in list")
 
         self.toolbar_buttons['Last'] = ttk.Button(
             secondary_frame, text="Last", style="Nav.TButton",
-            command=self.goto_last_object)
+            command=self.goto_last_object, cursor="hand2")
         self.toolbar_buttons['Last'].pack(side="left", padx=2)
         self.add_tooltip(self.toolbar_buttons['Last'], "Return to last visited object")
 
@@ -3870,13 +3870,13 @@ class ObjectProgramUI(
 
         self.toolbar_buttons['Next Problem'] = ttk.Button(
             secondary_frame, text="⚠ Next Problem", style="Primary.TButton",
-            command=self.goto_next_problem)
+            command=self.goto_next_problem, cursor="hand2")
         self.toolbar_buttons['Next Problem'].pack(side="left", padx=(4, 1))
         self.add_tooltip(self.toolbar_buttons['Next Problem'], "Jump to next problem")
 
         self.next_history_btn = ttk.Button(
             secondary_frame, text="Next+Hist", style="Primary.TButton",
-            command=self.goto_next_problem_with_history, state="disabled")
+            command=self.goto_next_problem_with_history, state="disabled", cursor="hand2")
         self.next_history_btn.pack(side="left", padx=1)
         self.toolbar_buttons['Next+Hist'] = self.next_history_btn
         self.add_tooltip(self.next_history_btn, "Jump to next object with suggestions")
@@ -4088,7 +4088,7 @@ class ObjectProgramUI(
         self.left_panes.add(self.left_bottom_container, weight=0)
 
         # ---------- FILTER ----------
-        self.toolbar_buttons['Filter'] = ttk.Button(sort_frame, text="Filter", style="Nav.TButton", command=self.open_filter_menu)
+        self.toolbar_buttons['Filter'] = ttk.Button(sort_frame, text="Filter", style="Nav.TButton", command=self.open_filter_menu, cursor="hand2")
         self.toolbar_buttons['Filter'].pack(side="left", padx=(4, 0))
         self.filter_btn = self.toolbar_buttons['Filter']
         self.add_tooltip(self.toolbar_buttons['Filter'], "Ctrl+G")
@@ -4210,7 +4210,7 @@ class ObjectProgramUI(
         self.context_menu.add_command(label="Duplicate Object", command=lambda: self._shortcut_duplicate_object(None))
         self.context_menu.add_command(label="Delete Object", command=self.delete_current_object)
 
-        self.bulk_edit_btn = ttk.Button(list_container, text="Bulk Edit Selected", state="disabled", command=self.open_bulk_edit_window)
+        self.bulk_edit_btn = ttk.Button(list_container, text="Bulk Edit Selected", state="disabled", command=self.open_bulk_edit_window, cursor="hand2")
         self.toggle_bulk_edit_btn()
 
 
@@ -4292,7 +4292,7 @@ class ObjectProgramUI(
             text="View: Gallery",
             style="Nav.TButton",
             command=self.toggle_image_view
-        )
+        , cursor="hand2")
         self.view_btn.pack(side="right")
         self.update_image_view_button()
 
@@ -4301,7 +4301,7 @@ class ObjectProgramUI(
             text="Source...",
             style="Nav.TButton",
             command=self.open_image_menu
-        )
+        , cursor="hand2")
         self.source_btn.pack(side="right", padx=(0, 4))
 
         self.images_missing_label = ttk.Label(
@@ -4585,7 +4585,7 @@ class ObjectProgramUI(
         self.split_frame = split
         self.prob_container = split
         self.problem_frame = split
-        self.pop_out_prob_btn = ttk.Button(split)  # Dummy to prevent attribute errors
+        self.pop_out_prob_btn = ttk.Button(split, cursor="hand2")  # Dummy to prevent attribute errors
         self.problem_count_label = ttk.Label(split)  # Dummy to prevent attribute errors
 
         self.apply_theme()
@@ -4807,13 +4807,13 @@ class ObjectProgramUI(
             frame,
             text="Load books",
             command=lambda: run_cmd(self.load_books_file)
-        ).pack(fill="x", pady=(0, 6))
+        , cursor="hand2").pack(fill="x", pady=(0, 6))
 
         ttk.Button(
             frame,
             text="Load earlier databases",
             command=lambda: run_cmd(self.load_historical_databases)
-        ).pack(fill="x", pady=(0, 12))
+        , cursor="hand2").pack(fill="x", pady=(0, 12))
 
         ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 12))
 
@@ -5069,7 +5069,7 @@ class ObjectProgramUI(
             footer,
             text="Close",
             command=win.destroy
-        ).pack(side="right")
+        , cursor="hand2").pack(side="right")
 
 
     # ---------- Logging ----------
@@ -5531,7 +5531,7 @@ class ObjectProgramUI(
             copy_btn.config(text="Copied!")
             self.root.after(1500, lambda: copy_btn.config(text="Copy to Clipboard"))
 
-        copy_btn = ttk.Button(footer, text="Copy to Clipboard", command=copy_traceback)
+        copy_btn = ttk.Button(footer, text="Copy to Clipboard", command=copy_traceback, cursor="hand2")
         copy_btn.pack(side="left")
 
         if is_crash:
@@ -5557,13 +5557,13 @@ class ObjectProgramUI(
                     from tkinter import messagebox
                     messagebox.showerror("Emergency Save Failed", f"Failed to autosave:\n{e}", parent=dialog)
 
-            save_btn = ttk.Button(footer, text="Emergency Autosave", command=emergency_autosave)
+            save_btn = ttk.Button(footer, text="Emergency Autosave", command=emergency_autosave, cursor="hand2")
             save_btn.pack(side="left", padx=10)
 
-            quit_btn = ttk.Button(footer, text="Quit Application", command=self.root.destroy)
+            quit_btn = ttk.Button(footer, text="Quit Application", command=self.root.destroy, cursor="hand2")
             quit_btn.pack(side="right")
         else:
-            close_btn = ttk.Button(footer, text="Close", command=dialog.destroy)
+            close_btn = ttk.Button(footer, text="Close", command=dialog.destroy, cursor="hand2")
             close_btn.pack(side="right")
 
     def show_banner(self, text, banner_type="info", duration_ms=4000, action_callback=None):
@@ -7493,7 +7493,7 @@ class ObjectProgramUI(
             self.update_filter_button_text()
             win.destroy()
             
-        ttk.Button(win, text="Load", command=on_load).pack(pady=10)
+        ttk.Button(win, text="Load", command=on_load, cursor="hand2").pack(pady=10)
 
     def _filter_nav_down(self, event):
         if not hasattr(self, "_filter_widgets"):
@@ -9590,6 +9590,6 @@ class ObjectProgramUI(
                 
             win.destroy()
             
-        ttk.Button(btn_frame, text="Save", command=on_save).pack(side="right", padx=5)
-        ttk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Save", command=on_save, cursor="hand2").pack(side="right", padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=win.destroy, cursor="hand2").pack(side="left", padx=5)
 

@@ -1279,7 +1279,7 @@ class NewDatabaseWizard:
             bg_color = self.colors["primary_container"] if is_active else self.colors["surface_container_low"]
             fg_color = self.colors["on_primary_container"] if is_active else self.colors["on_surface"]
 
-            btn = tk.Button(self.cat_list_frame, text=cat, font=self.FONT_LABEL_BOLD if is_active else self.FONT_LABEL, bg=bg_color, fg=fg_color, relief="flat", anchor="w", padx=config.sc(8), pady=config.sc(4), command=lambda c=cat: self._select_category(c))
+            btn = tk.Button(self.cat_list_frame, text=cat, font=self.FONT_LABEL_BOLD if is_active else self.FONT_LABEL, bg=bg_color, fg=fg_color, relief="flat", anchor="w", padx=config.sc(8), pady=config.sc(4), command=lambda c=cat: self._select_category(c), cursor="hand2")
             btn.pack(fill="x", pady=config.sc(2))
 
         # Refresh right pane
@@ -1302,7 +1302,7 @@ class NewDatabaseWizard:
             cb = ttk.Combobox(add_frame, textvariable=self.pull_field_var, values=all_other_fields, state="readonly", width=20, cursor="hand2")
             cb.pack(side="left", padx=(0, config.sc(6)))
 
-            tk.Button(add_frame, text="Pull into Category", font=self.FONT_SMALL, bg=self.colors["card_bg"], command=self._pull_field).pack(side="left")
+            tk.Button(add_frame, text="Pull into Category", font=self.FONT_SMALL, bg=self.colors["card_bg"], command=self._pull_field, cursor="hand2").pack(side="left")
 
         # List of fields in this category
         fields_in_cat = [f["name"] for f in self.fields if self.field_group_map.get(f["name"], "General") == self.active_category]
@@ -1313,7 +1313,7 @@ class NewDatabaseWizard:
 
             # Remove from category (moves to General or Uncategorized)
             if self.active_category != "General":
-                tk.Button(row, text="Remove", font=self.FONT_SMALL, bg=self.colors["error_container"], fg=self.colors["on_surface"], bd=0, command=lambda fn=fname: self._remove_field_from_cat(fn)).pack(side="right")
+                tk.Button(row, text="Remove", font=self.FONT_SMALL, bg=self.colors["error_container"], fg=self.colors["on_surface"], bd=0, command=lambda fn=fname: self._remove_field_from_cat(fn), cursor="hand2").pack(side="right")
 
     def _pull_field(self):
         fname = self.pull_field_var.get()
@@ -1450,7 +1450,7 @@ class NewDatabaseWizard:
         has_default = self.problem_flags.get(self.selected_flag_field, False)
         btn_def = tk.Button(self.right_flag_col, text=f"Remove '{self.selected_flag_field}_Problem'" if has_default else f"Add '{self.selected_flag_field}_Problem'",
                           font=self.FONT_SMALL, bg=self.colors["error_container"] if has_default else self.colors["primary_container"],
-                          command=self._toggle_default_flag)
+                          command=self._toggle_default_flag, cursor="hand2")
         btn_def.pack(fill="x", pady=config.sc(4))
 
         # Custom flags
@@ -1460,9 +1460,9 @@ class NewDatabaseWizard:
                 cf_row = tk.Frame(self.right_flag_col, bg=self.colors["surface_container_low"])
                 cf_row.pack(fill="x", pady=config.sc(2))
                 tk.Label(cf_row, text=cf.get("name"), font=self.FONT_MONO_SM, bg=self.colors["surface_container_low"], fg=self.colors["on_surface"]).pack(side="left")
-                tk.Button(cf_row, text="X", font=self.FONT_SMALL, bg=self.colors["error"], fg="white", bd=0, command=lambda c=cf: self._remove_custom_flag(c)).pack(side="right")
+                tk.Button(cf_row, text="X", font=self.FONT_SMALL, bg=self.colors["error"], fg="white", bd=0, command=lambda c=cf: self._remove_custom_flag(c), cursor="hand2").pack(side="right")
 
-        tk.Button(self.right_flag_col, text="+ Add Custom Flag", font=self.FONT_SMALL, bg=self.colors["card_bg"], command=self._add_custom_flag).pack(fill="x", pady=(config.sc(8), 0))
+        tk.Button(self.right_flag_col, text="+ Add Custom Flag", font=self.FONT_SMALL, bg=self.colors["card_bg"], command=self._add_custom_flag, cursor="hand2").pack(fill="x", pady=(config.sc(8), 0))
 
     def _select_flag_field(self, fname):
         self.selected_flag_field = fname

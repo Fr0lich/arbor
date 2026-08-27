@@ -166,19 +166,19 @@ class ImageHandlerMixin:
             frame,
             text="Select Local Image Folder...",
             command=lambda: run_action(self.select_image_folder)
-        ).pack(fill="x", pady=2)
+        , cursor="hand2").pack(fill="x", pady=2)
 
         ttk.Button(
             frame,
             text="Load from Online Repository",
             command=lambda: run_action(self.enable_online_images)
-        ).pack(fill="x", pady=2)
+        , cursor="hand2").pack(fill="x", pady=2)
 
         ttk.Button(
             frame,
             text="Disable Images (Offline Mode)",
             command=lambda: run_action(self.enable_offline_mode)
-        ).pack(fill="x", pady=2)
+        , cursor="hand2").pack(fill="x", pady=2)
 
         # Close button in footer
         footer = ttk.Frame(frame)
@@ -188,7 +188,7 @@ class ImageHandlerMixin:
             footer,
             text="Close",
             command=win.destroy
-        ).pack(side="right")
+        , cursor="hand2").pack(side="right")
 
         win.bind("<Escape>", lambda e: win.destroy())
 
@@ -1326,7 +1326,7 @@ class ImageHandlerMixin:
             container,
             text="Open",
             command=lambda im=tk_img, p=path: self.open_image_popup(im, source=p, is_online=False)
-        ).pack(pady=(4, 0))
+        , cursor="hand2").pack(pady=(4, 0))
 
 
     def open_image_popup(self, tk_img, source=None, is_online=False):

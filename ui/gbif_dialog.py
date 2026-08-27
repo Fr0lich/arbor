@@ -63,7 +63,7 @@ class GBIFUpdateDialog(tk.Toplevel):
         btn_frame = tk.Frame(main_frame, bg="#f8f9fa")
         btn_frame.pack(fill="x", side="bottom")
 
-        cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.destroy, font=("Segoe UI", sc(10)), width=10)
+        cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.destroy, font=("Segoe UI", sc(10)), width=10, cursor="hand2")
         cancel_btn.pack(side="right", padx=(sc(10), 0))
 
         apply_btn = tk.Button(btn_frame, text="Apply Selected Updates", command=self.apply, font=("Segoe UI", sc(10), "bold"), bg="#2b8a3e", fg="white", width=20, cursor="hand2")

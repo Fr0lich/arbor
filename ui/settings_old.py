@@ -487,7 +487,7 @@ def _LEGACY_open_focus_settings(self):
         self.system_status.config(text=f"Focus preset '{name}' saved (draft state).")
 
     ttk.Button(preset_row2, text="Save", command=on_save_preset, width=6,
-               style="Primary.TButton").pack(side="left", padx=2)
+               style="Primary.TButton", cursor="hand2").pack(side="left", padx=2)
 
     def on_delete_preset():
         val = self.focus_dialog_preset_cb.get()
@@ -502,7 +502,7 @@ def _LEGACY_open_focus_settings(self):
             self.system_status.config(text=f"Focus preset '{val}' deleted.")
 
     ttk.Button(preset_row2, text="Delete", command=on_delete_preset, width=6,
-               style="Tool.TButton").pack(side="left", padx=2)
+               style="Tool.TButton", cursor="hand2").pack(side="left", padx=2)
     refresh_preset_cb()
 
     dyn_frame = ttk.Frame(main_frame)
@@ -600,10 +600,10 @@ def _LEGACY_open_focus_settings(self):
         _close_focus_win()
 
     ttk.Button(btn_row, text="Cancel", command=_close_focus_win, width=10,
-               style="Tool.TButton").pack(side="right", padx=4)
+               style="Tool.TButton", cursor="hand2").pack(side="right", padx=4)
     ttk.Button(btn_row, text="OK", command=on_ok, width=10,
-               style="Primary.TButton").pack(side="right", padx=4)
-    apply_btn = ttk.Button(btn_row, text="Apply", command=on_apply, width=10, style="Primary.TButton")
+               style="Primary.TButton", cursor="hand2").pack(side="right", padx=4)
+    apply_btn = ttk.Button(btn_row, text="Apply", command=on_apply, width=10, style="Primary.TButton", cursor="hand2")
     apply_btn.pack(side="right", padx=4)
     if self.focus_dynamic_update_var.get():
         apply_btn.config(state="disabled")

@@ -152,10 +152,10 @@ class MobileHostApp:
         mode_btn_frame = tk.Frame(qr_box, bg="#ffffff")
         mode_btn_frame.pack(fill="x", pady=(3, 0))
 
-        self.btn_qr_local = tk.Button(mode_btn_frame, text="📶 Local", font=("Segoe UI", 7, "bold"), bg="#1b4332", fg="white", relief="flat", padx=3, pady=1, command=lambda: self.switch_qr("local"))
+        self.btn_qr_local = tk.Button(mode_btn_frame, text="📶 Local", font=("Segoe UI", 7, "bold"), bg="#1b4332", fg="white", relief="flat", padx=3, pady=1, command=lambda: self.switch_qr("local"), cursor="hand2")
         self.btn_qr_local.pack(side="left", expand=True, fill="x", padx=1)
 
-        self.btn_qr_public = tk.Button(mode_btn_frame, text="🌐 Public", font=("Segoe UI", 7), bg="#e0e3df", fg="#333", relief="flat", padx=3, pady=1, command=lambda: self.switch_qr("public"))
+        self.btn_qr_public = tk.Button(mode_btn_frame, text="🌐 Public", font=("Segoe UI", 7), bg="#e0e3df", fg="#333", relief="flat", padx=3, pady=1, command=lambda: self.switch_qr("public"), cursor="hand2")
         self.btn_qr_public.pack(side="right", expand=True, fill="x", padx=1)
 
         info = tk.Frame(mid, bg="#fbfbf9")
@@ -192,7 +192,7 @@ class MobileHostApp:
         bottom = tk.Frame(main, bg="#ffffff")
         bottom.pack(fill="x")
 
-        self.save_btn = ttk.Button(bottom, text="💾 Save Changes & Exit", command=self.save_and_exit)
+        self.save_btn = ttk.Button(bottom, text="💾 Save Changes & Exit", command=self.save_and_exit, cursor="hand2")
         self.save_btn.pack(fill="x", ipady=5)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
