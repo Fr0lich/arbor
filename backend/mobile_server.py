@@ -8,6 +8,7 @@ import os
 import io
 import mimetypes
 import socket
+import time
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file
 import pandas as pd
@@ -80,6 +81,7 @@ class MobileServer:
         self.thread = None
         self._is_running = False
         self.recent_edits = []  # list of dicts: {oid, summary, time}
+        self._auth_attempts = {}
         self._setup_routes()
 
     def start(self):
@@ -99,6 +101,49 @@ class MobileServer:
 
     def stop(self):
         self._is_running = False
+
+    def _check_rate_limit(self, ip):
+        if ip not in self._auth_attempts:
+            self._auth_attempts[ip] = {"consecutive": 0, "recent": [], "lockout_until": 0}
+
+        state = self._auth_attempts[ip]
+        now = time.time()
+
+        if now < state["lockout_until"]:
+            remaining = int(state["lockout_until"] - now)
+            if remaining <= 0:
+                remaining = 1
+            return jsonify({"error": f"Too many failed attempts. Please wait {remaining} seconds.", "retry_after_seconds": remaining}), 429, {'Retry-After': str(remaining)}
+
+        # Clean up old failures
+        state["recent"] = [t for t in state["recent"] if now - t < 60]
+
+        if len(state["recent"]) >= 5:
+            remaining = 60 - int(now - state["recent"][0])
+            if remaining <= 0:
+                remaining = 60
+            return jsonify({"error": f"Too many failed attempts. Please wait {remaining} seconds.", "retry_after_seconds": remaining}), 429, {'Retry-After': str(remaining)}
+
+        return None
+
+    def _record_failure(self, ip):
+        if ip not in self._auth_attempts:
+            self._auth_attempts[ip] = {"consecutive": 0, "recent": [], "lockout_until": 0}
+        state = self._auth_attempts[ip]
+        now = time.time()
+        state["recent"].append(now)
+        state["consecutive"] += 1
+
+        if state["consecutive"] >= 10:
+            state["lockout_until"] = now + 15 * 60
+            remaining = 15 * 60
+            return jsonify({"error": f"Too many failed attempts. Please wait {remaining} seconds.", "retry_after_seconds": remaining}), 429, {'Retry-After': str(remaining)}
+
+        return None
+
+    def _record_success(self, ip):
+        if ip in self._auth_attempts:
+            self._auth_attempts[ip] = {"consecutive": 0, "recent": [], "lockout_until": 0}
 
     def _check_auth(self):
         """Verify session token or PIN authentication."""
@@ -132,11 +177,20 @@ class MobileServer:
         def login():
             error = None
             if request.method == 'POST':
+                ip = request.remote_addr
+                rate_limit_resp = self._check_rate_limit(ip)
+                if rate_limit_resp:
+                    return rate_limit_resp
+
                 provided_pin = request.form.get('pin', '').strip()
                 if provided_pin == self.pin:
+                    self._record_success(ip)
                     session['authenticated'] = True
                     return redirect(url_for('index'))
                 else:
+                    lockout_resp = self._record_failure(ip)
+                    if lockout_resp:
+                        return lockout_resp
                     error = 'Invalid PIN'
             return render_template_string(LOGIN_TEMPLATE, error=error)
 
@@ -147,16 +201,27 @@ class MobileServer:
 
         @app.route('/api/auth', methods=['POST'])
         def api_auth():
+            ip = request.remote_addr
+            rate_limit_resp = self._check_rate_limit(ip)
+            if rate_limit_resp:
+                return rate_limit_resp
+
             data = request.get_json(silent=True) or {}
             provided_pin = str(data.get('pin', '')).strip()
             provided_token = str(data.get('token', '')).strip()
+
             if provided_token == self.session_token or provided_pin == self.pin:
+                self._record_success(ip)
                 session['authenticated'] = True
                 return jsonify({
                     "success": True,
                     "token": self.session_token,
                     "message": "Authenticated successfully"
                 })
+
+            lockout_resp = self._record_failure(ip)
+            if lockout_resp:
+                return lockout_resp
             return jsonify({"success": False, "error": "Invalid PIN"}), 401
 
         @app.route('/')
