@@ -964,6 +964,33 @@ class StartupDialog:
         self.continue_btn.bind("<Enter>", lambda e: self._launch_hover(True))
         self.continue_btn.bind("<Leave>", lambda e: self._launch_hover(False))
 
+        # 📱 MOBILE MODE button (Secondary accent: emerald green)
+        self.mobile_mode_btn = tk.Button(
+            footer,
+            text="📱 MOBILE MODE",
+            bg="#2d6a4f",
+            fg="#ffffff",
+            font=("Segoe UI", sc(10), "bold"),
+            relief="flat", bd=0,
+            padx=int(16*s), pady=int(8*s),
+            cursor="hand2",
+            state="disabled",
+            command=self.launch_mobile_mode,
+            highlightthickness=0,
+        )
+        self.mobile_mode_btn.pack(side="right", padx=(0, 10))
+        self.mobile_mode_btn.bind("<Enter>", lambda e: self.mobile_mode_btn.config(bg="#1b4332") if str(self.mobile_mode_btn.cget("state")) != "disabled" else None)
+        self.mobile_mode_btn.bind("<Leave>", lambda e: self.mobile_mode_btn.config(bg="#2d6a4f") if str(self.mobile_mode_btn.cget("state")) != "disabled" else None)
+
+    def launch_mobile_mode(self):
+        file_to_open = getattr(self, "selected_excel_path", None) or self.db_path_var.get().strip()
+        self.win.destroy()
+        from ui.mobile_host_app import MobileHostApp
+        host = MobileHostApp(file_to_open)
+        host.run()
+        import sys
+        sys.exit(0)
+
     def _launch_hover(self, entering):
         state = str(self.continue_btn.cget("state"))
         if state == "disabled":
@@ -979,6 +1006,9 @@ class StartupDialog:
         # Enable if path is set and is not the placeholder
         valid = bool(path) and path != "No file selected..."
         self.continue_btn.config(state="normal" if valid else "disabled")
+        if hasattr(self, "mobile_mode_btn"):
+            self.mobile_mode_btn.config(state="normal" if valid else "disabled")
+            self.mobile_mode_btn.config(bg="#2d6a4f" if valid else "#888888")
         if valid:
             self.continue_btn.config(bg=self.C_PRIMARY)
             if hasattr(self, "ready_status_label"):

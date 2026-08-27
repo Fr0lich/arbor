@@ -204,6 +204,15 @@ if sys.stderr is None:
 
 if __name__ == "__main__":
     try:
+        # Check for lightweight Mobile Mode CLI flag
+        if "--mobile" in sys.argv or "-m" in sys.argv:
+            args = [a for a in sys.argv[1:] if a not in ("--mobile", "-m")]
+            target_file = args[0] if args else None
+            from ui.mobile_host_app import MobileHostApp
+            host = MobileHostApp(target_file)
+            host.run()
+            sys.exit(0)
+
         # Import heavy/third-party modules inside the try block to prevent silent startup/import crashes
         from models import AppState
         from ui.main_window import ObjectProgramUI

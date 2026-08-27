@@ -18,10 +18,10 @@ class PinggyTunnel:
         self.thread.start()
 
     def _run(self, callback):
-        # We use a.pinggy.io
+        # We use a.pinggy.io on port 443 to bypass university firewall restrictions
         cmd = [
             'ssh', '-p', '443',
-            '-R0:localhost:{}'.format(self.port),
+            f'-R0:localhost:{self.port}',
             'a.pinggy.io',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'ServerAliveInterval=30'
@@ -36,8 +36,8 @@ class PinggyTunnel:
                 bufsize=1
             )
 
-            # Read output to find URL
-            url_pattern = re.compile(r'(https://[a-zA-Z0-9.-]+\.pinggy\.link)')
+            # Robust URL matching pattern for pinggy domains
+            url_pattern = re.compile(r'(https://[a-zA-Z0-9.-]+\.pinggy\.[a-z]+)')
 
             for line in self.process.stdout:
                 if self._stop_event.is_set():
@@ -58,21 +58,24 @@ class PinggyTunnel:
     def stop(self):
         self._stop_event.set()
         if self.process:
-            self.process.terminate()
             try:
-                self.process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
+                self.process.terminate()
+                self.process.wait(timeout=1.5)
+            except Exception:
+                try:
+                    self.process.kill()
+                except Exception:
+                    pass
         self.process = None
+
 
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # doesn't even have to be reachable
         s.connect(('10.255.255.255', 1))
-        IP = s.getsockname()[0]
+        ip = s.getsockname()[0]
     except Exception:
-        IP = '127.0.0.1'
+        ip = '127.0.0.1'
     finally:
         s.close()
-    return IP
+    return ip

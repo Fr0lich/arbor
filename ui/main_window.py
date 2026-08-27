@@ -2407,6 +2407,7 @@ class ObjectProgramUI(
         popup.add_command(label="Save As...", command=self.save_as)
         popup.add_command(label="Export filtered list...", command=self.export_filtered_list)
         popup.add_separator()
+        popup.add_command(label="📱 Mobile Companion...", command=self.open_mobile_dialog)
         popup.add_command(label="Restore earlier autosave...", command=self.open_autosave_manager)
         popup.add_separator()
         popup.add_command(label="Exit", command=self.on_close)
@@ -3670,6 +3671,8 @@ class ObjectProgramUI(
         self.sb_buttons_frame.columnconfigure(0, weight=1)
         self.sb_buttons_frame.columnconfigure(1, weight=0)
         self.sb_buttons_frame.columnconfigure(2, weight=1)
+        self.sb_buttons_frame.columnconfigure(3, weight=0)
+        self.sb_buttons_frame.columnconfigure(4, weight=1)
 
         self.sb_settings_btn = ttk.Button(
             self.sb_buttons_frame,
@@ -3693,7 +3696,7 @@ class ObjectProgramUI(
         )
         self.toolbar_buttons['MOBILE'] = self.sb_mobile_btn
         self.add_tooltip(self.sb_mobile_btn, "Connect your phone to edit records")
-        self.sb_mobile_btn.grid(row=0, column=2, sticky="nsew", padx=(2, 6), pady=3)
+        self.sb_mobile_btn.grid(row=0, column=2, sticky="nsew", padx=(2, 2), pady=3)
 
         sep2 = ttk.Separator(self.sb_buttons_frame, orient="vertical")
         sep2.grid(row=0, column=3, sticky="ns", pady=3)
@@ -3706,7 +3709,7 @@ class ObjectProgramUI(
         )
         self.toolbar_buttons['HELP'] = self.sb_help_btn
         self.add_tooltip(self.sb_help_btn, "Open Help Window")
-        self.sb_help_btn.grid(row=0, column=2, sticky="nsew", padx=(2, 6), pady=3)
+        self.sb_help_btn.grid(row=0, column=4, sticky="nsew", padx=(2, 6), pady=3)
 
 
         # Left stats group
@@ -3830,6 +3833,10 @@ class ObjectProgramUI(
         # HISTORY — recent objects popup
         btn_hist = _nav_btn(nav_links_frame, "RECENT",  self.open_recent_popup)
         self.add_tooltip(btn_hist, "View recently visited objects")
+
+        # MOBILE — opens mobile companion dialog
+        btn_mob = _nav_btn(nav_links_frame, "📱 MOBILE", self.open_mobile_dialog)
+        self.add_tooltip(btn_mob, "Connect your phone to review & edit records remotely")
 
         # 1px separator before secondary controls
         tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)
