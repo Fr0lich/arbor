@@ -628,8 +628,15 @@ class UnifiedSettingsWindow:
     def _build_tab_layout(self):
         c = self._create_scrollable_tab("layout")
 
+        btn_start_tutorial = ttk.Button(
+            c, text="Start Layout Tutorial",
+            command=lambda: __import__('ui.tutorial', fromlist=['TutorialManager']).TutorialManager().start_tutorial("layout_settings", self.win, force=True)
+        )
+        btn_start_tutorial.pack(anchor="ne", padx=10, pady=5)
+
         # Card 1: Workspace Panels
         card1 = self._create_card(c, "Workspace Panel Visibility")
+        card1.tutorial_id = "layout_toggles"
 
         def _apply_if_dynamic():
             """If dynamic update mode is active, immediately push panel changes to the host."""
@@ -829,8 +836,15 @@ class UnifiedSettingsWindow:
     def _build_tab_focus(self):
         c = self._create_scrollable_tab("focus")
 
+        btn_start_tutorial = ttk.Button(
+            c, text="Start Focus Tutorial",
+            command=lambda: __import__('ui.tutorial', fromlist=['TutorialManager']).TutorialManager().start_tutorial("focus_settings", self.win, force=True)
+        )
+        btn_start_tutorial.pack(anchor="ne", padx=10, pady=5)
+
         # Card 1: Focus Master Switches
         card1 = self._create_card(c, "Focus Mode Controls")
+        card1.tutorial_id = "focus_options"
         create_toggle_row(card1, "Enable Focus Mode", self.var_focus_mode, ui_ref=self.app or self)
         create_toggle_row(card1, "Dynamic Problem Fallback", self.var_focus_fallback,
                           ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["focus_fallback"])
@@ -845,6 +859,7 @@ class UnifiedSettingsWindow:
         # Card 3: Per-field visibility (from app.focus_visibility_vars if available)
         if self.draft_focus_visibility_vars:
             card3 = self._create_card(c, "Registration Field Visibility in Focus Mode")
+            card3.tutorial_id = "focus_fields"
             for field_name, var in sorted(self.draft_focus_visibility_vars.items()):
                 create_toggle_row(card3, field_name, var)
         elif self.app is not None:
@@ -861,6 +876,7 @@ class UnifiedSettingsWindow:
 
         # ── Layout Presets ──
         card1 = self._create_card(c, "Layout Presets Manager")
+        card1.tutorial_id = "layout_presets"
 
         r1 = tk.Frame(card1, bg=self.COLORS["card_bg"])
         r1.pack(fill="x", pady=sc(4))
@@ -1003,6 +1019,7 @@ class UnifiedSettingsWindow:
 
         # ── Focus Presets ──
         card2 = self._create_card(c, "Focus Presets Manager")
+        card2.tutorial_id = "focus_presets"
 
         rf1 = tk.Frame(card2, bg=self.COLORS["card_bg"])
         rf1.pack(fill="x", pady=sc(4))
