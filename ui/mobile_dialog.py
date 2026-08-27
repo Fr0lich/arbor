@@ -188,7 +188,16 @@ class MobileDialog:
 
         # 4. Start Pinggy SSH Tunnel in background
         self.tunnel = PinggyTunnel(self.port)
-        self.tunnel.start(self.on_tunnel_ready)
+        self.tunnel.start(self.on_tunnel_ready, self.on_tunnel_status)
+
+    def on_tunnel_status(self, status):
+        def update_status():
+            self.status_lbl.config(text=status, fg="#d95c14")
+            self.status_dot.config(fg="#d95c14")
+            self.tunnel_status_lbl.config(text="Tunnel: Disconnected", fg="#d95c14")
+            self.feed_list.insert(tk.END, status)
+            self.feed_list.see(tk.END)
+        self.win.after(0, update_status)
 
     def on_tunnel_ready(self, url):
         def update_ui():

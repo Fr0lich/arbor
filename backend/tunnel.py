@@ -14,12 +14,12 @@ class PinggyTunnel:
         self.thread = None
         self._stop_event = threading.Event()
 
-    def start(self, callback):
+    def start(self, url_callback, status_callback=None):
         self._stop_event.clear()
-        self.thread = threading.Thread(target=self._run, args=(callback,), daemon=True)
+        self.thread = threading.Thread(target=self._run, args=(url_callback, status_callback), daemon=True)
         self.thread.start()
 
-    def _run(self, callback):
+    def _run(self, url_callback, status_callback):
         # We use a.pinggy.io on port 443 with -T (disable pseudo-terminal) for clean non-blocking IO
         cmd = [
             'ssh',
@@ -38,42 +38,79 @@ class PinggyTunnel:
             # CREATE_NO_WINDOW prevents console allocation hangs on Windows
             flags = subprocess.CREATE_NO_WINDOW
 
+        attempt = 0
+        backoff = 2
+
         try:
-            self.process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                creationflags=flags
-            )
-
-            # Robust URL matching pattern
-            url_pattern = re.compile(r'(https://[a-zA-Z0-9.-]+\.pinggy\.[a-z]+)')
-
-            # Read with non-blocking check
             while not self._stop_event.is_set():
-                line = self.process.stdout.readline()
-                if not line:
-                    if self.process.poll() is not None:
-                        break
-                    time.sleep(0.1)
-                    continue
+                try:
+                    self.process = subprocess.Popen(
+                        cmd,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1,
+                        creationflags=flags
+                    )
 
-                match = url_pattern.search(line)
-                if match and not self.public_url:
-                    self.public_url = match.group(1)
-                    if callback:
-                        callback(self.public_url)
+                    # Robust URL matching pattern
+                    url_pattern = re.compile(r'(https://[a-zA-Z0-9.-]+\.pinggy\.[a-z]+)')
+                    connected = False
+
+                    # Read with non-blocking check
+                    while not self._stop_event.is_set():
+                        line = self.process.stdout.readline()
+                        if not line:
+                            if self.process.poll() is not None:
+                                break
+                            time.sleep(0.1)
+                            continue
+
+                        match = url_pattern.search(line)
+                        if match and not connected:
+                            self.public_url = match.group(1)
+                            connected = True
+                            attempt = 0
+                            backoff = 2
+                            if url_callback:
+                                url_callback(self.public_url)
+
+                    if self.process and not self._stop_event.is_set():
+                        self.process.wait()
+
+                    if self._stop_event.is_set():
+                        break
+
+                except Exception as e:
+                    logging.error(f"Tunnel error: {e}")
+
+                finally:
+                    self.public_url = None
+
+                if self._stop_event.is_set():
                     break
 
-            if self.process and not self._stop_event.is_set():
-                self.process.wait()
-        except Exception as e:
-            logging.error(f"Tunnel error: {e}")
+                attempt += 1
+                if attempt > 3:
+                    if status_callback:
+                        status_callback("🟡 Tunnel disconnected (Local Wi-Fi still active)")
+                    break
+
+                self._stop_event.wait(timeout=backoff)
+                backoff = min(backoff * 2, 30)
+
         finally:
-            self.public_url = None
+            if self.process:
+                try:
+                    self.process.terminate()
+                    self.process.wait(timeout=1.0)
+                except Exception:
+                    try:
+                        self.process.kill()
+                    except Exception:
+                        pass
+                self.process = None
 
     def stop(self):
         self._stop_event.set()
