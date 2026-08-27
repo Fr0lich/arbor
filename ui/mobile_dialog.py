@@ -14,21 +14,24 @@ class MobileDialog:
 
         self.win = tk.Toplevel(root)
         self.win.title("Arbor Mobile Companion")
-        self.win.geometry("540x620")
-        self.win.minsize(500, 580)
+        self.win.geometry("540x630")
+        self.win.minsize(500, 590)
         self.win.transient(root)
         self.win.grab_set()
 
         # Center on screen
         self.win.update_idletasks()
         x = root.winfo_x() + (root.winfo_width() // 2) - (540 // 2)
-        y = root.winfo_y() + (root.winfo_height() // 2) - (620 // 2)
+        y = root.winfo_y() + (root.winfo_height() // 2) - (630 // 2)
         self.win.geometry(f"+{max(0, x)}+{max(0, y)}")
 
         self.server = getattr(self.parent_ui, '_mobile_server_instance', None)
         self.tunnel = None
         self.port = 5055
         self.qr_image_ref = None
+        self.local_url_with_token = ""
+        self.public_url_with_token = ""
+        self.current_qr_mode = "local"  # "local" or "public"
 
         self.build_ui()
         self.start_session()
@@ -44,17 +47,17 @@ class MobileDialog:
         title = tk.Label(hdr_frame, text="📱 Arbor Mobile Companion", font=("Segoe UI", 15, "bold"), bg="#ffffff", fg="#1b4332")
         title.pack(anchor="w")
 
-        subtitle = tk.Label(hdr_frame, text="Inspect physical specimens and record data on your phone in real-time.", bg="#ffffff", fg="#5a655e", font=("Segoe UI", 9))
+        subtitle = tk.Label(hdr_frame, text="Scan the QR code below to inspect & edit records on your phone.", bg="#ffffff", fg="#5a655e", font=("Segoe UI", 9))
         subtitle.pack(anchor="w")
 
         # Status Bar Pill
         self.status_bar = tk.Frame(main, bg="#e8f5e9", bd=1, relief="solid", padx=10, pady=6)
         self.status_bar.pack(fill="x", pady=(0, 10))
 
-        self.status_dot = tk.Label(self.status_bar, text="●", fg="#d97706", bg="#e8f5e9", font=("Segoe UI", 12))
+        self.status_dot = tk.Label(self.status_bar, text="●", fg="#2e7d32", bg="#e8f5e9", font=("Segoe UI", 12))
         self.status_dot.pack(side="left", padx=(0, 6))
 
-        self.status_lbl = tk.Label(self.status_bar, text="Starting secure tunnel & local server...", bg="#e8f5e9", fg="#1b4332", font=("Segoe UI", 9, "bold"))
+        self.status_lbl = tk.Label(self.status_bar, text="🟢 Local Server Ready — Connecting public tunnel...", bg="#e8f5e9", fg="#1b4332", font=("Segoe UI", 9, "bold"))
         self.status_lbl.pack(side="left")
 
         # Middle Content Frame (QR Code + Connection Details)
@@ -65,29 +68,39 @@ class MobileDialog:
         qr_container = tk.Frame(mid_frame, bg="#ffffff", bd=1, relief="solid", padx=6, pady=6)
         qr_container.pack(side="left", padx=(0, 14))
 
-        self.qr_label = tk.Label(qr_container, bg="#ffffff", text="Generating\nQR Code...", font=("Segoe UI", 9), width=22, height=10)
+        self.qr_label = tk.Label(qr_container, bg="#ffffff", width=24, height=11)
         self.qr_label.pack()
+
+        # QR Mode Selector Buttons
+        mode_btn_frame = tk.Frame(qr_container, bg="#ffffff")
+        mode_btn_frame.pack(fill="x", pady=(4, 0))
+
+        self.btn_qr_local = tk.Button(mode_btn_frame, text="📶 Local Wi-Fi", font=("Segoe UI", 7, "bold"), bg="#1b4332", fg="white", relief="flat", padx=4, pady=1, command=lambda: self.switch_qr("local"))
+        self.btn_qr_local.pack(side="left", expand=True, fill="x", padx=1)
+
+        self.btn_qr_public = tk.Button(mode_btn_frame, text="🌐 Public Pinggy", font=("Segoe UI", 7), bg="#e0e3df", fg="#333", relief="flat", padx=4, pady=1, command=lambda: self.switch_qr("public"))
+        self.btn_qr_public.pack(side="right", expand=True, fill="x", padx=1)
 
         # Connection Info Grid
         info_grid = tk.Frame(mid_frame, bg="#fbfbf9")
         info_grid.pack(side="left", fill="both", expand=True)
 
-        tk.Label(info_grid, text="1. Scan QR with phone camera", font=("Segoe UI", 9, "bold"), bg="#fbfbf9", fg="#1b4332").pack(anchor="w", pady=(0, 4))
+        tk.Label(info_grid, text="1. Scan QR with phone camera", font=("Segoe UI", 9, "bold"), bg="#fbfbf9", fg="#1b4332").pack(anchor="w", pady=(0, 2))
         tk.Label(info_grid, text="Or open this link on your phone:", font=("Segoe UI", 8), bg="#fbfbf9", fg="#5a655e").pack(anchor="w")
 
-        self.url_var = tk.StringVar(value="Waiting for tunnel...")
+        self.url_var = tk.StringVar(value="Initializing...")
         self.url_entry = ttk.Entry(info_grid, textvariable=self.url_var, font=("Consolas", 8), state="readonly")
-        self.url_entry.pack(fill="x", pady=(2, 6))
+        self.url_entry.pack(fill="x", pady=(2, 4))
 
         pin_frame = tk.Frame(info_grid, bg="#fbfbf9")
         pin_frame.pack(fill="x", pady=2)
-        tk.Label(pin_frame, text="Access PIN: ", font=("Segoe UI", 9, "bold"), bg="#fbfbf9", fg="#1b4332").pack(side="left")
+        tk.Label(pin_frame, text="PIN: ", font=("Segoe UI", 9, "bold"), bg="#fbfbf9", fg="#1b4332").pack(side="left")
         self.pin_var = tk.StringVar(value="----")
         self.pin_badge = tk.Label(pin_frame, textvariable=self.pin_var, font=("Consolas", 11, "bold"), bg="#1b4332", fg="#ffffff", padx=8, pady=1)
         self.pin_badge.pack(side="left")
 
-        self.local_ip_lbl = tk.Label(info_grid, text="Local LAN IP: detecting...", font=("Segoe UI", 8), bg="#fbfbf9", fg="#5a655e")
-        self.local_ip_lbl.pack(anchor="w", pady=(6, 0))
+        self.tunnel_status_lbl = tk.Label(info_grid, text="Tunnel: Connecting to Eduroam bypass...", font=("Segoe UI", 8, "italic"), bg="#fbfbf9", fg="#d97706")
+        self.tunnel_status_lbl.pack(anchor="w", pady=(4, 0))
 
         # Desktop Lock Notice
         lock_notice = tk.Frame(main, bg="#fffbeb", bd=1, relief="solid", padx=10, pady=6)
@@ -117,6 +130,32 @@ class MobileDialog:
 
         self.win.protocol("WM_DELETE_WINDOW", self.on_close)
 
+    def _render_qr(self, url_to_encode):
+        """Instant QR Code generation and display."""
+        try:
+            qr = qrcode.QRCode(box_size=3, border=1)
+            qr.add_data(url_to_encode)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="#1b4332", back_color="white")
+            self.qr_image_ref = ImageTk.PhotoImage(img)
+            self.qr_label.config(image=self.qr_image_ref, text="")
+        except Exception:
+            self.qr_label.config(text=f"Scan URL:\n{url_to_encode[:25]}...")
+
+    def switch_qr(self, mode):
+        self.current_qr_mode = mode
+        if mode == "local":
+            self.btn_qr_local.config(bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+            self.btn_qr_public.config(bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+            self.url_var.set(self.local_url_with_token)
+            self._render_qr(self.local_url_with_token)
+        else:
+            self.btn_qr_public.config(bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+            self.btn_qr_local.config(bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+            url = self.public_url_with_token or self.local_url_with_token
+            self.url_var.set(url)
+            self._render_qr(url)
+
     def start_session(self):
         # 1. Commit active desktop typing before locking
         if hasattr(self.parent_ui, "commit_current_object"):
@@ -140,32 +179,32 @@ class MobileDialog:
 
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
-        self.local_ip_lbl.config(text=f"Direct Hotspot / Local IP: http://{local_ip}:{self.port}")
+        self.local_url_with_token = f"http://{local_ip}:{self.port}/?token={self.server.session_token}"
+        self.url_var.set(self.local_url_with_token)
 
-        # 3. Start Pinggy SSH Tunnel
-        self.status_lbl.config(text="Establishing secure Eduroam bypass tunnel (Pinggy)...")
+        # 3. Render QR Code IMMEDIATELY (0ms wait)
+        self._render_qr(self.local_url_with_token)
+        self.feed_list.insert(tk.END, f"Local host active at http://{local_ip}:{self.port}")
+
+        # 4. Start Pinggy SSH Tunnel in background
         self.tunnel = PinggyTunnel(self.port)
         self.tunnel.start(self.on_tunnel_ready)
 
     def on_tunnel_ready(self, url):
         def update_ui():
-            url_with_token = f"{url}?token={self.server.session_token}"
-            self.url_var.set(url_with_token)
+            self.public_url_with_token = f"{url}?token={self.server.session_token}"
             self.status_dot.config(fg="#2e7d32")
-            self.status_lbl.config(text="🟢 Online & Secure — Ready to inspect", fg="#1b4332")
+            self.status_lbl.config(text="🟢 Public Tunnel Live & Secure", fg="#1b4332")
+            self.tunnel_status_lbl.config(text=f"Public: {url}", fg="#2e7d32", font=("Segoe UI", 8))
             
-            # Generate QR Code
-            try:
-                qr = qrcode.QRCode(box_size=3, border=1)
-                qr.add_data(url_with_token)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="#1b4332", back_color="white")
-                self.qr_image_ref = ImageTk.PhotoImage(img)
-                self.qr_label.config(image=self.qr_image_ref, text="")
-            except Exception as e:
-                self.qr_label.config(text="Scan URL\nin phone browser")
+            # Switch to public URL if user hasn't forced local
+            if self.current_qr_mode == "local":
+                # Prompt user that public is ready
+                self.btn_qr_public.config(text="🌐 Public (Ready)")
+            else:
+                self.switch_qr("public")
 
-            self.feed_list.insert(tk.END, f"Public tunnel ready at {url}")
+            self.feed_list.insert(tk.END, f"Public tunnel established: {url}")
             self.feed_list.see(tk.END)
 
         self.root.after(0, update_ui)
@@ -182,7 +221,6 @@ class MobileDialog:
             self.tunnel.stop()
             self.tunnel = None
 
-        # Reload active desktop record from DataFrame
         if hasattr(self.parent_ui, "load_object") and self.app_state.current_object_id:
             try:
                 self.parent_ui.load_object(self.app_state.current_object_id)

@@ -233,3 +233,31 @@ def test_mobile_filtering_and_pagination(mock_app_state):
     res_paged = client.get('/api/objects?limit=1&offset=0', headers=headers)
     assert len(res_paged.json["objects"]) == 1
     assert res_paged.json["total_matching"] == 3
+
+
+def test_get_local_ip():
+    from backend.mobile_server import get_local_ip
+    ip = get_local_ip()
+    assert isinstance(ip, str)
+    assert len(ip.split(".")) == 4
+
+
+def test_mobile_host_app_lifecycle(mock_app_state):
+    import tkinter as tk
+    from ui.mobile_host_app import MobileHostApp
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        host = MobileHostApp(root=root, app=mock_app_state)
+        assert host.server is not None
+        assert host.app == mock_app_state
+        assert host.url_var.get().startswith("http://")
+        if host.autosave_job:
+            root.after_cancel(host.autosave_job)
+        if host.tunnel:
+            host.tunnel.stop()
+        if host.server:
+            host.server.stop()
+    finally:
+        root.destroy()

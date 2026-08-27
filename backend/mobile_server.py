@@ -42,15 +42,30 @@ log.setLevel(logging.ERROR)
 
 
 def get_local_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # 1. Direct UDP gateway probe
     try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('10.255.255.255', 1))
         ip = s.getsockname()[0]
-    except Exception:
-        ip = '127.0.0.1'
-    finally:
         s.close()
-    return ip
+        if ip and not ip.startswith('127.'):
+            return ip
+    except Exception:
+        pass
+
+    # 2. Enumerate host IP list prioritizing private LAN / Wi-Fi ranges
+    try:
+        host_ips = socket.gethostbyname_ex(socket.gethostname())[2]
+        for ip in host_ips:
+            if ip.startswith(('192.168.', '172.', '10.')) and not ip.startswith('127.'):
+                return ip
+        for ip in host_ips:
+            if not ip.startswith('127.'):
+                return ip
+    except Exception:
+        pass
+
+    return '127.0.0.1'
 
 
 class MobileServer:

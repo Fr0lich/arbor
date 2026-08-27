@@ -18,31 +18,43 @@ class MobileHostApp:
     """Lightweight companion host application for Arbor.
     
     Bypasses building the heavy 9,000+ line Tkinter desktop interface,
-    allowing near-instant startup, minimal RAM (< 40MB), and long battery life.
+    allowing instant startup (< 200ms), minimal RAM (< 40MB), and long battery life.
     """
 
-    def __init__(self, file_path=None):
-        self.root = tk.Tk()
+    def __init__(self, root=None, app=None, file_path=None):
+        if root is not None:
+            self.root = root
+            self.root.deiconify()
+        else:
+            self.root = tk.Tk()
+
         self.root.title("Arbor Mobile Host")
-        self.root.geometry("460x560")
-        self.root.minsize(420, 500)
+        self.root.geometry("480x580")
+        self.root.minsize(440, 520)
         self.root.configure(bg="#ffffff")
 
-        self.app = AppState()
+        self.app = app if app is not None else AppState()
         self.server = None
         self.tunnel = None
         self.port = 5055
         self.qr_image_ref = None
+        self.local_url_with_token = ""
+        self.public_url_with_token = ""
+        self.current_qr_mode = "local"
         self.autosave_job = None
 
-        self._init_database(file_path)
+        if self.app.df_reg is None or self.app.df_reg.empty:
+            self._init_database(file_path)
+        else:
+            if not self.app.excel_path and file_path:
+                self.app.excel_path = os.path.abspath(file_path)
+                self.app.output_path = self.app.excel_path
         self._build_ui()
         self._start_services()
         self._schedule_autosave()
 
     def _init_database(self, file_path):
         if not file_path or not os.path.exists(file_path):
-            # Check recent preferences
             prefs = config.load_prefs()
             last_file = prefs.get("last_opened_file")
             if last_file and os.path.exists(last_file):
@@ -116,10 +128,10 @@ class MobileHostApp:
         self.status_bar = tk.Frame(main, bg="#e8f5e9", bd=1, relief="solid", padx=10, pady=6)
         self.status_bar.pack(fill="x", pady=(0, 10))
 
-        self.status_dot = tk.Label(self.status_bar, text="●", fg="#d97706", bg="#e8f5e9", font=("Segoe UI", 11))
+        self.status_dot = tk.Label(self.status_bar, text="●", fg="#2e7d32", bg="#e8f5e9", font=("Segoe UI", 11))
         self.status_dot.pack(side="left", padx=(0, 6))
 
-        self.status_lbl = tk.Label(self.status_bar, text="Starting tunnel & mobile server...", bg="#e8f5e9", fg="#1b4332", font=("Segoe UI", 9, "bold"))
+        self.status_lbl = tk.Label(self.status_bar, text="🟢 Local Server Ready — Connecting public tunnel...", bg="#e8f5e9", fg="#1b4332", font=("Segoe UI", 9, "bold"))
         self.status_lbl.pack(side="left")
 
         # QR & Info Container
@@ -129,15 +141,24 @@ class MobileHostApp:
         qr_box = tk.Frame(mid, bg="#ffffff", bd=1, relief="solid", padx=4, pady=4)
         qr_box.pack(side="left", padx=(0, 12))
 
-        self.qr_label = tk.Label(qr_box, bg="#ffffff", text="Generating\nQR...", font=("Segoe UI", 8), width=18, height=8)
+        self.qr_label = tk.Label(qr_box, bg="#ffffff", width=20, height=9)
         self.qr_label.pack()
+
+        mode_btn_frame = tk.Frame(qr_box, bg="#ffffff")
+        mode_btn_frame.pack(fill="x", pady=(3, 0))
+
+        self.btn_qr_local = tk.Button(mode_btn_frame, text="📶 Local", font=("Segoe UI", 7, "bold"), bg="#1b4332", fg="white", relief="flat", padx=3, pady=1, command=lambda: self.switch_qr("local"))
+        self.btn_qr_local.pack(side="left", expand=True, fill="x", padx=1)
+
+        self.btn_qr_public = tk.Button(mode_btn_frame, text="🌐 Public", font=("Segoe UI", 7), bg="#e0e3df", fg="#333", relief="flat", padx=3, pady=1, command=lambda: self.switch_qr("public"))
+        self.btn_qr_public.pack(side="right", expand=True, fill="x", padx=1)
 
         info = tk.Frame(mid, bg="#fbfbf9")
         info.pack(side="left", fill="both", expand=True)
 
         tk.Label(info, text="Scan with Phone Camera:", font=("Segoe UI", 9, "bold"), bg="#fbfbf9", fg="#1b4332").pack(anchor="w")
 
-        self.url_var = tk.StringVar(value="Waiting for tunnel...")
+        self.url_var = tk.StringVar(value="Initializing...")
         self.url_entry = ttk.Entry(info, textvariable=self.url_var, font=("Consolas", 8), state="readonly")
         self.url_entry.pack(fill="x", pady=(2, 4))
 
@@ -148,8 +169,8 @@ class MobileHostApp:
         self.pin_badge = tk.Label(pin_row, textvariable=self.pin_var, font=("Consolas", 11, "bold"), bg="#1b4332", fg="#ffffff", padx=6, pady=1)
         self.pin_badge.pack(side="left")
 
-        self.local_ip_lbl = tk.Label(info, text="Direct Hotspot: detecting...", font=("Segoe UI", 8), bg="#fbfbf9", fg="#5a655e")
-        self.local_ip_lbl.pack(anchor="w", pady=(4, 0))
+        self.tunnel_lbl = tk.Label(info, text="Tunnel: Establishing...", font=("Segoe UI", 8, "italic"), bg="#fbfbf9", fg="#d97706")
+        self.tunnel_lbl.pack(anchor="w", pady=(4, 0))
 
         # Live Feed
         feed_frame = tk.LabelFrame(main, text="Session Activity Log", bg="#ffffff", font=("Segoe UI", 9, "bold"), fg="#1b4332", padx=6, pady=4)
@@ -171,6 +192,31 @@ class MobileHostApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+    def _render_qr(self, url_to_encode):
+        try:
+            qr = qrcode.QRCode(box_size=3, border=1)
+            qr.add_data(url_to_encode)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="#1b4332", back_color="white")
+            self.qr_image_ref = ImageTk.PhotoImage(img)
+            self.qr_label.config(image=self.qr_image_ref, text="")
+        except Exception:
+            self.qr_label.config(text="Scan URL\nin browser")
+
+    def switch_qr(self, mode):
+        self.current_qr_mode = mode
+        if mode == "local":
+            self.btn_qr_local.config(bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+            self.btn_qr_public.config(bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+            self.url_var.set(self.local_url_with_token)
+            self._render_qr(self.local_url_with_token)
+        else:
+            self.btn_qr_public.config(bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+            self.btn_qr_local.config(bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+            url = self.public_url_with_token or self.local_url_with_token
+            self.url_var.set(url)
+            self._render_qr(url)
+
     def _start_services(self):
         self.server = MobileServer(
             self.app,
@@ -181,28 +227,23 @@ class MobileHostApp:
         self.server.start()
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
-        self.local_ip_lbl.config(text=f"Direct Hotspot: http://{local_ip}:{self.port}")
+        self.local_url_with_token = f"http://{local_ip}:{self.port}/?token={self.server.session_token}"
+        self.url_var.set(self.local_url_with_token)
+
+        # Render QR code immediately (0ms wait)
+        self._render_qr(self.local_url_with_token)
+        self.feed_list.insert(tk.END, f"Local host active at http://{local_ip}:{self.port}")
 
         self.tunnel = PinggyTunnel(self.port)
         self.tunnel.start(self._on_tunnel_ready)
 
     def _on_tunnel_ready(self, url):
         def update():
-            url_with_token = f"{url}?token={self.server.session_token}"
-            self.url_var.set(url_with_token)
+            self.public_url_with_token = f"{url}?token={self.server.session_token}"
             self.status_dot.config(fg="#2e7d32")
-            self.status_lbl.config(text="🟢 Online & Secure (Pinggy Port 443)", fg="#1b4332")
-
-            try:
-                qr = qrcode.QRCode(box_size=3, border=1)
-                qr.add_data(url_with_token)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="#1b4332", back_color="white")
-                self.qr_image_ref = ImageTk.PhotoImage(img)
-                self.qr_label.config(image=self.qr_image_ref, text="")
-            except Exception:
-                self.qr_label.config(text="Scan URL\nin browser")
-
+            self.status_lbl.config(text="🟢 Public Tunnel Live & Secure", fg="#1b4332")
+            self.tunnel_lbl.config(text=f"Public: {url}", fg="#2e7d32", font=("Segoe UI", 8))
+            self.btn_qr_public.config(text="🌐 Public (Ready)")
             self.feed_list.insert(tk.END, f"Public tunnel live: {url}")
             self.feed_list.see(tk.END)
         self.root.after(0, update)
@@ -215,12 +256,10 @@ class MobileHostApp:
         self.root.after(0, log)
 
     def _schedule_autosave(self):
-        # Auto-save every 3 minutes if dirty
         def tick():
             if self.app.dirty:
                 try:
                     with self.app.df_lock:
-                        # Write pickle or direct excel backup
                         backup_path = self.app.excel_path + ".autosave"
                         SQLiteRepository.export_to_excel(
                             sqlite_path=None,

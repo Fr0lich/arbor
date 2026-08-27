@@ -983,13 +983,9 @@ class StartupDialog:
         self.mobile_mode_btn.bind("<Leave>", lambda e: self.mobile_mode_btn.config(bg="#2d6a4f") if str(self.mobile_mode_btn.cget("state")) != "disabled" else None)
 
     def launch_mobile_mode(self):
-        file_to_open = getattr(self, "selected_excel_path", None) or self.db_path_var.get().strip()
+        self.mobile_mode = True
+        self.completed = True
         self.win.destroy()
-        from ui.mobile_host_app import MobileHostApp
-        host = MobileHostApp(file_to_open)
-        host.run()
-        import sys
-        sys.exit(0)
 
     def _launch_hover(self, entering):
         state = str(self.continue_btn.cget("state"))

@@ -278,7 +278,15 @@ if __name__ == "__main__":
             root.destroy()
             sys.exit(0)
 
-        # Dialog completed successfully. Now construct the heavy Main Window UI.
+        # If user launched directly into Mobile Mode from StartupDialog
+        if getattr(dialog, "mobile_mode", False):
+            from ui.mobile_host_app import MobileHostApp
+            selected_path = getattr(dialog, "selected_excel_path", None) or dialog.db_path_var.get().strip()
+            host = MobileHostApp(root=root, app=app, file_path=selected_path)
+            host.run()
+            sys.exit(0)
+
+        # Dialog completed successfully for Full Desktop UI. Now construct Main Window UI.
         ui = ObjectProgramUI(root, app)
         ui_ref[0] = ui
 
