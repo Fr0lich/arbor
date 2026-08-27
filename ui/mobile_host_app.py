@@ -235,7 +235,16 @@ class MobileHostApp:
         self.feed_list.insert(tk.END, f"Local host active at http://{local_ip}:{self.port}")
 
         self.tunnel = PinggyTunnel(self.port)
-        self.tunnel.start(self._on_tunnel_ready)
+        self.tunnel.start(self._on_tunnel_ready, self._on_tunnel_status)
+
+    def _on_tunnel_status(self, status):
+        def update_status():
+            self.status_lbl.config(text=status, fg="#d95c14")
+            self.status_dot.config(fg="#d95c14")
+            self.tunnel_lbl.config(text="Tunnel: Disconnected", fg="#d95c14")
+            self.feed_list.insert(tk.END, status)
+            self.feed_list.see(tk.END)
+        self.root.after(0, update_status)
 
     def _on_tunnel_ready(self, url):
         def update():
