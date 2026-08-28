@@ -356,15 +356,7 @@ class MobileServer:
             token_param = request.args.get('token')
             if token_param == self.session_token:
                 session['authenticated'] = True
-            html_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mobile_frontend.html")
-            template_content = INDEX_TEMPLATE
-            if os.path.exists(html_path):
-                try:
-                    with open(html_path, "r", encoding="utf-8") as f:
-                        template_content = f.read()
-                except Exception:
-                    pass
-            return render_template_string(template_content, token=self.session_token)
+            return render_template_string(INDEX_TEMPLATE, token=self.session_token)
 
         # -------------------------------------------------------------
         # REST API (Conforming to arbor-mobile-companion / src/api.ts)
@@ -1232,6 +1224,11 @@ LOGIN_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
+# WARNING TO AI AGENTS: DO NOT CREATE OR MODIFY AN EXTERNAL `mobile_frontend.html` FILE.
+# The user explicitly prefers maintaining a Vanilla HTML/JS frontend directly within this
+# INDEX_TEMPLATE string to ensure the Python server remains self-contained without
+# external build dependencies or file resolution issues. All frontend modifications for
+# the mobile application MUST be done inside this string below.
 INDEX_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
