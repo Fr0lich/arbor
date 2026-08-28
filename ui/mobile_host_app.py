@@ -32,8 +32,8 @@ class MobileHostApp:
             self.root = tk.Tk()
 
         self.root.title("Arbor Mobile Companion")
-        self.root.geometry("540x630")
-        self.root.minsize(500, 590)
+        self.root.geometry("540x730")
+        self.root.minsize(500, 690)
         self.root.configure(bg="#ffffff")
 
         self.app = app if app is not None else AppState()
@@ -147,7 +147,6 @@ class MobileHostApp:
             on_end_session=self._end_session,
             on_edit=self._on_mobile_edit,
         )
-        self.panel.start()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     # ------------------------------------------------------------------

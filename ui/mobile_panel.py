@@ -102,8 +102,55 @@ class MobilePanel:
         )
         self._db_info_lbl.pack(anchor="w")
 
+        # ── Setup Screen ──────────────────────────────────────────────
+        self.setup_frame = tk.Frame(main, bg="#ffffff")
+        self.setup_frame.pack(fill="both", expand=True, pady=(10, 0))
+
+        tk.Label(
+            self.setup_frame,
+            text="Choose Network Mode:",
+            font=("Segoe UI", 10, "bold"),
+            bg="#ffffff",
+            fg="#1b4332",
+        ).pack(anchor="w", pady=(0, 5))
+
+        self.network_choice = tk.StringVar(value="public")
+
+        tk.Radiobutton(
+            self.setup_frame,
+            text="Public (Internet) - Generates a secure link accessible anywhere.",
+            variable=self.network_choice,
+            value="public",
+            bg="#ffffff",
+            font=("Segoe UI", 9),
+            cursor="hand2"
+        ).pack(anchor="w")
+
+        tk.Radiobutton(
+            self.setup_frame,
+            text="LAN Only - Connect devices on the same Wi-Fi network.",
+            variable=self.network_choice,
+            value="local",
+            bg="#ffffff",
+            font=("Segoe UI", 9),
+            cursor="hand2"
+        ).pack(anchor="w", pady=(0, 15))
+
+        self.start_btn = ttk.Button(
+            self.setup_frame,
+            text="▶ Start Mobile Session",
+            command=self._on_start_btn_clicked,
+            cursor="hand2",
+        )
+        self.start_btn.pack(fill="x", ipady=4)
+
+
+        # ── Active Frame (Hidden initially) ───────────────────────────
+        self.active_frame = tk.Frame(main, bg="#ffffff")
+        # Do not pack active_frame yet
+
         # ── Status pill ───────────────────────────────────────────────
-        self.status_bar = tk.Frame(main, bg="#e8f5e9", bd=1, relief="solid", padx=10, pady=6)
+        self.status_bar = tk.Frame(self.active_frame, bg="#e8f5e9", bd=1, relief="solid", padx=10, pady=6)
         self.status_bar.pack(fill="x", pady=(0, 10))
 
         self.status_dot = tk.Label(
@@ -126,7 +173,7 @@ class MobilePanel:
         self.client_badge.pack(side="right", padx=(0, 6))
 
         # ── QR + connection info ──────────────────────────────────────
-        mid = tk.Frame(main, bg="#fbfbf9", bd=1, relief="solid", padx=12, pady=12)
+        mid = tk.Frame(self.active_frame, bg="#fbfbf9", bd=1, relief="solid", padx=12, pady=12)
         mid.pack(fill="x", pady=(0, 10))
 
         # QR box
@@ -220,7 +267,7 @@ class MobilePanel:
         self.tunnel_lbl.pack(anchor="w", pady=(4, 0))
 
         # ── Session notice ────────────────────────────────────────────
-        notice = tk.Frame(main, bg="#fffbeb", bd=1, relief="solid", padx=10, pady=6)
+        notice = tk.Frame(self.active_frame, bg="#fffbeb", bd=1, relief="solid", padx=10, pady=6)
         notice.pack(fill="x", pady=(0, 10))
         tk.Label(
             notice,
@@ -236,7 +283,7 @@ class MobilePanel:
 
         # ── Activity feed ─────────────────────────────────────────────
         feed_frame = tk.LabelFrame(
-            main,
+            self.active_frame,
             text="Recent Mobile Activity",
             bg="#ffffff",
             font=("Segoe UI", 9, "bold"),
@@ -263,7 +310,7 @@ class MobilePanel:
         self.feed_list.insert(tk.END, "Session initialized. Ready for mobile connections.")
 
         # ── Bottom button ─────────────────────────────────────────────
-        bottom = tk.Frame(main, bg="#ffffff")
+        bottom = tk.Frame(self.active_frame, bg="#ffffff")
         bottom.pack(fill="x")
 
         self._end_btn = ttk.Button(
@@ -278,8 +325,19 @@ class MobilePanel:
     # Public API
     # ------------------------------------------------------------------
 
+    def _on_start_btn_clicked(self):
+        self.setup_frame.pack_forget()
+        self.active_frame.pack(fill="both", expand=True)
+        self._start_services()
+
     def start(self):
-        """Start (or reuse) MobileServer and launch localhost.run tunnel."""
+        """Dummy method to not break existing caller assumptions.
+        Server now actually starts upon user interacting with UI.
+        """
+        pass
+
+    def _start_services(self):
+        """Start (or reuse) MobileServer and conditionally launch tunnel."""
         # Start or reuse MobileServer
         if self.server is None:
             self.server = MobileServer(
@@ -310,19 +368,27 @@ class MobilePanel:
         except Exception:
             pass
 
-        # Show connecting placeholder — public QR renders in _on_tunnel_ready()
-        self.url_var.set("🔄 Connecting public tunnel…")
-        self.qr_label.config(
-            image="",
-            text="🔄 Connecting\npublic tunnel…",
-            font=("Segoe UI", 9, "italic"),
-            fg="#d97706",
-        )
-        self.log(f"Local LAN fallback: http://{local_ip}:{self.port}")
+        choice = self.network_choice.get()
+        if choice == "public":
+            # Show connecting placeholder — public QR renders in _on_tunnel_ready()
+            self.url_var.set("🔄 Connecting public tunnel…")
+            self.qr_label.config(
+                image="",
+                text="🔄 Connecting\npublic tunnel…",
+                font=("Segoe UI", 9, "italic"),
+                fg="#d97706",
+            )
+            self.log(f"Local LAN fallback: http://{local_ip}:{self.port}")
 
-        # Start localhost.run tunnel in background
-        self.tunnel = PinggyTunnel(self.port)
-        self.tunnel.start(self._on_tunnel_ready, self._on_tunnel_status)
+            # Start localhost.run tunnel in background
+            self.tunnel = PinggyTunnel(self.port)
+            self.tunnel.start(self._on_tunnel_ready, self._on_tunnel_status)
+        else:
+            # Local only mode
+            self.tunnel_lbl.config(text="Tunnel: Disabled (LAN Only)", fg="#5a655e")
+            self.status_lbl.config(text="🟢 Local Server Ready", fg="#1b4332")
+            self.switch_qr("local")
+            self.log(f"Server started in LAN-only mode: http://{local_ip}:{self.port}")
 
 
     def stop(self):

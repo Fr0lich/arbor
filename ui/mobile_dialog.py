@@ -23,15 +23,15 @@ class MobileDialog:
         # Build modal window
         self.win = tk.Toplevel(root)
         self.win.title("Arbor Mobile Companion")
-        self.win.geometry("540x630")
-        self.win.minsize(500, 590)
+        self.win.geometry("540x730")
+        self.win.minsize(500, 690)
         self.win.transient(root)
         self.win.grab_set()
 
         # Center on parent
         self.win.update_idletasks()
         x = root.winfo_x() + (root.winfo_width() // 2) - (540 // 2)
-        y = root.winfo_y() + (root.winfo_height() // 2) - (630 // 2)
+        y = root.winfo_y() + (root.winfo_height() // 2) - (730 // 2)
         self.win.geometry(f"+{max(0, x)}+{max(0, y)}")
 
         # Commit any active desktop typing before locking
@@ -58,7 +58,6 @@ class MobileDialog:
             on_edit=self._on_mobile_edit,
             reuse_server=self.server,
         )
-        self.panel.start()
 
         # Store server reference on parent UI for future reuse
         self.parent_ui._mobile_server_instance = self.panel.server

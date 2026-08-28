@@ -251,6 +251,8 @@ def test_mobile_host_app_lifecycle(mock_app_state):
     root.withdraw()
     try:
         host = MobileHostApp(root=root, app=mock_app_state)
+        # Simulate pressing start button
+        host.panel._on_start_btn_clicked()
         assert host.server is not None
         assert host.app == mock_app_state
         assert "Connecting" in host.url_var.get()
