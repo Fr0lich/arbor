@@ -236,6 +236,10 @@ Arbor is executed on high-resolution, variable-DPI displays.
 - **Use `.autosave.json`:** Temporary background sessions are serialized into the secure JSON format (`.autosave.json`). Ensure any custom UI state is serializable or properly decoupled from visual Tkinter widgets.
 - **Edit Source, Not Artifacts:** If a file is a compiled build artifact, do not edit it directly. Trace the code back to its Python source under the `ui/` directory and recompile accordingly.
 
+### Rule 5: Icons & `pytablericons`
+- **Preference for `pytablericons`:** When adding or updating iconography within the UI, you must use the `pytablericons` package.
+- **Pre-rendering Icons:** To prevent performance overhead and Tkinter garbage collection issues (e.g., icons disappearing during window resizes), always pre-render `ImageTk.PhotoImage` icons using `TablerIcons.load()` and store strong references in a dictionary cache during UI initialization. Do not instantiate icons dynamically within rendering or resize loops.
+
 ---
 
 ## 6. Template: User Intentions Behind UI Designs
