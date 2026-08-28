@@ -6142,15 +6142,35 @@ class ObjectProgramUI(
 
             self.log_action("EDIT", oid)
 
+            # Invalidate row and problem caches so list view updates correctly
+            self._invalidate_row_cache()
+            s_oid = str(oid)
+            self._problem_cache.pop(oid, None)
+            self._problem_cache.pop(s_oid, None)
+            if s_oid.isdigit():
+                self._problem_cache.pop(int(s_oid), None)
+
             # If the edited object is currently displayed, refresh it
             if self.app.current_object_id == oid:
                 self.load_object(oid)
-                self.commit_current_object()
+                # DO NOT call self.commit_current_object() here. The UI is locked
+                # by the modal mobile dialog, and calling commit would overwrite
+                # the fresh mobile edits with stale text currently in the UI widgets.
 
             self.update_dirty_ui()
             self.update_object_count()
             self._update_accordion_badges()
             self.update_review_progress()
+            self.refresh_list()
+
+            # Trigger an immediate secure autosave
+            if hasattr(self, '_autosave_job') and self._autosave_job:
+                try:
+                    self.root.after_cancel(self._autosave_job)
+                except Exception:
+                    pass
+                self._autosave_job = None
+            self.root.after(50, lambda: self._autosave_tick(skip_commit=True))
 
     def on_close(self):
         if self.app.dirty:

@@ -85,14 +85,15 @@ class AutosaveMixin:
         )
 
 
-    def _autosave_tick(self):
+    def _autosave_tick(self, skip_commit=False):
         try:
             if getattr(self, '_save_in_progress', False):
                 # Background save still running — skip this tick
                 return
             if self.app.dirty and self.app.excel_path:
                 current_dirty = self.app.dirty
-                self.commit_current_object()
+                if not skip_commit:
+                    self.commit_current_object()
                 autosave_path = self._autosave_path()
 
                 def on_autosave_complete(success, err=None):
