@@ -4,7 +4,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 
 ## Detailed Findings
 
-### Fix `AdvancedSettingsWindow.save_settings` KeyError
+### [COMPLETED] Fix `AdvancedSettingsWindow.save_settings` KeyError
 * **Why it matters:** Tests and runtime execution fail when trying to save advanced settings because `save_settings` assumes every item in `ADVANCED_SETTINGS_SCHEMA` has a corresponding Tk variable, but "button" types (like `action_dark_mode`) do not.
 * **Impact:** High (Breaks core functionality and test suite)
 * **Effort:** Small
@@ -22,7 +22,7 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Effort:** Small
 * **Recommended change:** Use Tkinter `bindtags`. Insert a custom tag (e.g., `MouseWheelTag`) into the `bindtags` tuple of widgets, and use `bind_class("MouseWheelTag", "<MouseWheel>", handler)`.
 
-### Robust Boolean Parsing in Settings
+### [COMPLETED] Robust Boolean Parsing in Settings
 * **Why it matters:** The pattern `if isinstance(old_val, str): old_val = (old_val.lower() == "true")` is brittle and fails on unexpected types or numeric inputs.
 * **Impact:** Medium (Reliability)
 * **Effort:** Small
@@ -128,13 +128,13 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 
 ## 1. Top 10 Quick Wins (Low Effort, High/Medium Impact)
 
-1. **Fix `AdvancedSettingsWindow.save_settings` KeyError** (High Impact)
+1. **Fix `AdvancedSettingsWindow.save_settings` KeyError** (High Impact) [COMPLETED]
 2. **Optimize `_normalise_dataframes` dynamically added columns** (High Impact) [COMPLETED]
 3. **Remove Misleading `.empty` Checks on Columns** (High Impact) [COMPLETED]
 4. **Make `calamine` a Hard Dependency** (High Impact)
 5. **Update Deprecated Pandas `.append`** (High Impact)
 6. **Eliminate Recursive Tkinter Event Bindings** (Medium Impact)
-7. **Robust Boolean Parsing in Settings** (Medium Impact)
+7. **Robust Boolean Parsing in Settings** (Medium Impact) [COMPLETED]
 8. **Optimize Pandas Vectorized Conditionals** (Medium Impact)
 9. **Safely Handle `tk.TclError` in Callbacks** (Medium Impact)
 10. **Global Regex Pattern Instantiation** (Low Impact)
