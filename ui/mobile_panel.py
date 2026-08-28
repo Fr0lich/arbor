@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 import qrcode
 from PIL import ImageTk
+from config import sc
 
 from backend.mobile_server import MobileServer, get_local_ip
 from backend.tunnel import PinggyTunnel
@@ -83,7 +84,7 @@ class MobilePanel:
         tk.Label(
             hdr,
             text="📱 Arbor Mobile Companion",
-            font=("Segoe UI", 15, "bold"),
+            font=("Lora", sc(15), "bold"),
             bg="#ffffff",
             fg="#1b4332",
         ).pack(anchor="w")
@@ -93,12 +94,12 @@ class MobilePanel:
             text="Scan the QR code to inspect & edit records on your phone.",
             bg="#ffffff",
             fg="#5a655e",
-            font=("Segoe UI", 9),
+            font=("Inter", sc(9)),
         ).pack(anchor="w")
 
         # DB info line (filled in after server start when we know the path)
         self._db_info_lbl = tk.Label(
-            hdr, text="", bg="#ffffff", fg="#5a655e", font=("Segoe UI", 8, "italic")
+            hdr, text="", bg="#ffffff", fg="#5a655e", font=("Inter", sc(8), "italic")
         )
         self._db_info_lbl.pack(anchor="w")
 
@@ -109,7 +110,7 @@ class MobilePanel:
         tk.Label(
             self.setup_frame,
             text="Choose Network Mode:",
-            font=("Segoe UI", 10, "bold"),
+            font=("Inter", sc(10), "bold"),
             bg="#ffffff",
             fg="#1b4332",
         ).pack(anchor="w", pady=(0, 5))
@@ -122,7 +123,7 @@ class MobilePanel:
             variable=self.network_choice,
             value="public",
             bg="#ffffff",
-            font=("Segoe UI", 9),
+            font=("Inter", sc(9)),
             cursor="hand2"
         ).pack(anchor="w")
 
@@ -132,7 +133,7 @@ class MobilePanel:
             variable=self.network_choice,
             value="local",
             bg="#ffffff",
-            font=("Segoe UI", 9),
+            font=("Inter", sc(9)),
             cursor="hand2"
         ).pack(anchor="w", pady=(0, 15))
 
@@ -154,7 +155,7 @@ class MobilePanel:
         self.status_bar.pack(fill="x", pady=(0, 10))
 
         self.status_dot = tk.Label(
-            self.status_bar, text="●", fg="#2e7d32", bg="#e8f5e9", font=("Segoe UI", 12)
+            self.status_bar, text="●", fg="#2e7d32", bg="#e8f5e9", font=("Inter", sc(12))
         )
         self.status_dot.pack(side="left", padx=(0, 6))
 
@@ -163,12 +164,12 @@ class MobilePanel:
             text="🟢 Local Server Ready — Connecting public tunnel...",
             bg="#e8f5e9",
             fg="#1b4332",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", sc(9), "bold"),
         )
         self.status_lbl.pack(side="left")
 
         self.client_badge = tk.Label(
-            self.status_bar, text="📱 Offline", bg="#e8f5e9", fg="#5a655e", font=("Segoe UI", 9)
+            self.status_bar, text="📱 Offline", bg="#e8f5e9", fg="#5a655e", font=("Inter", sc(9))
         )
         self.client_badge.pack(side="right", padx=(0, 6))
 
@@ -189,7 +190,7 @@ class MobilePanel:
         self.btn_qr_public = tk.Button(
             mode_btn_frame,
             text="🌐 Public (Internet)",
-            font=("Segoe UI", 7, "bold"),
+            font=("Inter", sc(7), "bold"),
             bg="#1b4332",
             fg="white",
             relief="flat",
@@ -203,7 +204,7 @@ class MobilePanel:
         self.btn_qr_local = tk.Button(
             mode_btn_frame,
             text="📶 LAN only",
-            font=("Segoe UI", 7),
+            font=("Inter", sc(7)),
             bg="#e0e3df",
             fg="#333",
             relief="flat",
@@ -221,7 +222,7 @@ class MobilePanel:
         tk.Label(
             info,
             text="1. Scan QR with phone camera",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", sc(9), "bold"),
             bg="#fbfbf9",
             fg="#1b4332",
         ).pack(anchor="w", pady=(0, 2))
@@ -229,27 +230,27 @@ class MobilePanel:
         tk.Label(
             info,
             text="Or open this link on your phone:",
-            font=("Segoe UI", 8),
+            font=("Inter", sc(8)),
             bg="#fbfbf9",
             fg="#5a655e",
         ).pack(anchor="w")
 
         self.url_var = tk.StringVar(value="Initializing...")
         self.url_entry = ttk.Entry(
-            info, textvariable=self.url_var, font=("Consolas", 8), state="readonly"
+            info, textvariable=self.url_var, font=("JetBrains Mono", sc(8)), state="readonly"
         )
         self.url_entry.pack(fill="x", pady=(2, 4))
 
         pin_row = tk.Frame(info, bg="#fbfbf9")
         pin_row.pack(fill="x", pady=2)
         tk.Label(
-            pin_row, text="PIN: ", font=("Segoe UI", 9, "bold"), bg="#fbfbf9", fg="#1b4332"
+            pin_row, text="PIN: ", font=("Inter", sc(9), "bold"), bg="#fbfbf9", fg="#1b4332"
         ).pack(side="left")
         self.pin_var = tk.StringVar(value="----")
         self.pin_badge = tk.Label(
             pin_row,
             textvariable=self.pin_var,
-            font=("Consolas", 11, "bold"),
+            font=("JetBrains Mono", sc(11), "bold"),
             bg="#1b4332",
             fg="#ffffff",
             padx=8,
@@ -260,7 +261,7 @@ class MobilePanel:
         self.tunnel_lbl = tk.Label(
             info,
             text="Tunnel: Establishing...",
-            font=("Segoe UI", 8, "italic"),
+            font=("Inter", sc(8), "italic"),
             bg="#fbfbf9",
             fg="#d97706",
         )
@@ -277,7 +278,7 @@ class MobilePanel:
             ),
             bg="#fffbeb",
             fg="#92400e",
-            font=("Segoe UI", 8),
+            font=("Inter", sc(8)),
             justify="left",
         ).pack(anchor="w")
 
@@ -286,7 +287,7 @@ class MobilePanel:
             self.active_frame,
             text="Recent Mobile Activity",
             bg="#ffffff",
-            font=("Segoe UI", 9, "bold"),
+            font=("Inter", sc(9), "bold"),
             fg="#1b4332",
             padx=8,
             pady=6,
@@ -296,7 +297,7 @@ class MobilePanel:
         self.feed_list = tk.Listbox(
             feed_frame,
             bg="#fbfbf9",
-            font=("Segoe UI", 9),
+            font=("Inter", sc(9)),
             bd=0,
             highlightthickness=1,
             selectmode="none",
@@ -375,7 +376,7 @@ class MobilePanel:
             self.qr_label.config(
                 image="",
                 text="🔄 Connecting\npublic tunnel…",
-                font=("Segoe UI", 9, "italic"),
+                font=("Inter", sc(9), "italic"),
                 fg="#d97706",
             )
             self.log(f"Local LAN fallback: http://{local_ip}:{self.port}")
@@ -425,13 +426,13 @@ class MobilePanel:
         """Toggle the QR code between local and public URL."""
         self.current_qr_mode = mode
         if mode == "local":
-            self.btn_qr_local.config(bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
-            self.btn_qr_public.config(bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+            self.btn_qr_local.config(bg="#1b4332", fg="white", font=("Inter", sc(7), "bold"))
+            self.btn_qr_public.config(bg="#e0e3df", fg="#333", font=("Inter", sc(7)))
             self.url_var.set(self.local_url_with_token)
             self._render_qr(self.local_url_with_token)
         else:
-            self.btn_qr_public.config(bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
-            self.btn_qr_local.config(bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+            self.btn_qr_public.config(bg="#1b4332", fg="white", font=("Inter", sc(7), "bold"))
+            self.btn_qr_local.config(bg="#e0e3df", fg="#333", font=("Inter", sc(7)))
             url = self.public_url_with_token or self.local_url_with_token
             self.url_var.set(url)
             self._render_qr(url)
@@ -450,7 +451,7 @@ class MobilePanel:
             self.public_url_with_token = f"{url}?token={self.server.session_token}"
             self.status_dot.config(fg="#2e7d32")
             self.status_lbl.config(text="🟢 Public Tunnel Live & Secure", fg="#1b4332")
-            self.tunnel_lbl.config(text=f"Public: {url}", fg="#2e7d32", font=("Segoe UI", 8))
+            self.tunnel_lbl.config(text=f"Public: {url}", fg="#2e7d32", font=("Inter", sc(8)))
             self.btn_qr_public.config(text="🌐 Public (Internet) ✓")
             # Always switch to the public QR as soon as the tunnel is ready
             self.switch_qr("public")
@@ -464,11 +465,11 @@ class MobilePanel:
                 self.client_badge.config(
                     text=f"📱 Phone Connected ({active_count} Online)",
                     fg="#2e7d32",
-                    font=("Segoe UI", 9, "bold"),
+                    font=("Inter", sc(9), "bold"),
                 )
             else:
                 self.client_badge.config(
-                    text="📱 Offline", fg="#5a655e", font=("Segoe UI", 9)
+                    text="📱 Offline", fg="#5a655e", font=("Inter", sc(9))
                 )
         self.root.after(0, _update)
 
