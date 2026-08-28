@@ -677,6 +677,60 @@ class MobileServer:
                 "facets": facets
             })
 
+
+        @app.route('/api/object/<oid>/history', methods=['GET'])
+        def get_object_history(oid):
+            if not getattr(self.app_state, 'historical_dbs', None):
+                return jsonify({"historical_data": {}})
+
+            oid = str(oid).strip()
+            suggestions = {}
+
+            with self.app_state.df_lock:
+                for db in self.app_state.historical_dbs:
+                    db_name = db.get("name", "Unknown DB")
+                    reg_by_id = db.get("reg_by_id")
+
+                    if reg_by_id is not None:
+                        # Try exact match first
+                        if oid in reg_by_id.index:
+                            row = reg_by_id.loc[oid]
+                        else:
+                            # Try int match if numeric
+                            try:
+                                if oid.isdigit() and int(oid) in reg_by_id.index:
+                                    row = reg_by_id.loc[int(oid)]
+                                else:
+                                    continue
+                            except Exception:
+                                continue
+
+                        if isinstance(row, pd.DataFrame):
+                            row = row.iloc[0]
+
+                        for col in row.index:
+                            val = row[col]
+                            if pd.isna(val):
+                                continue
+                            val_str = str(val).strip()
+                            if not val_str or val_str.lower() == "nan":
+                                continue
+
+                            if col not in suggestions:
+                                suggestions[col] = {}
+
+                            if val_str not in suggestions[col]:
+                                suggestions[col][val_str] = []
+
+                            if db_name not in suggestions[col][val_str]:
+                                suggestions[col][val_str].append(db_name)
+
+            return jsonify({
+                "id": str(oid),
+                "historical_data": suggestions
+            })
+
+
         @app.route('/api/object/<oid>', methods=['GET'])
         def get_object_detail(oid):
             if self.app_state.df_reg is None:
@@ -1441,6 +1495,24 @@ INDEX_TEMPLATE = """
           </div>
         </div>
 
+
+        <!-- Historical Records & Conflicts Card -->
+        <div id="historicalDataCard" class="hidden bg-surface border border-ember-border rounded-[2px] p-3 space-y-2.5 shadow-xs">
+          <div class="flex items-center justify-between border-b border-tonal2 pb-2">
+            <div class="flex items-center gap-1.5 text-xs font-sans font-semibold text-ink">
+              <span class="text-ember">📖</span>
+              <span>Historical Database Suggestions</span>
+              <span id="historicalCountBadge" class="font-mono text-[10px] text-ember-dark bg-ember-light border border-ember-border px-1.5 py-0.2 rounded-[2px]">
+                0 available
+              </span>
+            </div>
+          </div>
+
+          <div id="historicalDataContainer" class="space-y-3 pt-1">
+             <!-- Dynamically injected fields go here -->
+          </div>
+        </div>
+
         <!-- Archival Scans / Photo Gallery Card -->
         <div class="bg-surface border border-bordercol rounded-[2px] p-3 space-y-2.5">
           <div class="flex items-center justify-between">
@@ -1808,6 +1880,164 @@ INDEX_TEMPLATE = """
     let autoSaveTimer = null;
     let wakeLockSentinel = null;
 
+    let historicalData = {};
+    let revertState = {}; // field: originalValue
+
+    async function fetchHistoricalData(oid) {
+      try {
+        const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}/history`);
+        historicalData = data.historical_data || {};
+        renderHistoricalData();
+      } catch (err) {
+        console.error("Failed to fetch historical data:", err);
+      }
+    }
+
+    function renderHistoricalData() {
+      const card = document.getElementById('historicalDataCard');
+      const container = document.getElementById('historicalDataContainer');
+      const badge = document.getElementById('historicalCountBadge');
+
+      if (!historicalData || Object.keys(historicalData).length === 0) {
+        card.classList.add('hidden');
+        return;
+      }
+
+      let html = '';
+      let fieldCount = 0;
+
+      for (const [field, valuesMap] of Object.entries(historicalData)) {
+        if (Object.keys(valuesMap).length === 0) continue;
+
+        let currentVal = '';
+        if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
+           currentVal = currentRecord.registration[field];
+        } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
+           currentVal = currentRecord.observation[field];
+        }
+
+        let currentValDisp = currentVal ? String(currentVal) : "[BLANK]";
+
+        fieldCount++;
+
+        let suggestionsHtml = '';
+        for (const [val, sources] of Object.entries(valuesMap)) {
+            // Encode value for function call
+            const encodedVal = val.replace(/'/g, "\'").replace(/"/g, '&quot;');
+            const sourceStr = sources.join(', ');
+            suggestionsHtml += `
+                <button type="button" onclick="applyHistoricalValue('${field}', '${encodedVal}')" class="w-full text-left p-2 mt-1.5 bg-surface border border-bordercol rounded-[2px] hover:bg-tonal1 transition cursor-pointer touch-target-min touch-press">
+                    <div class="font-mono text-xs text-ink">${encodedVal}</div>
+                    <div class="font-sans text-[9px] text-ink-muted mt-0.5">Sources: ${sourceStr}</div>
+                </button>
+            `;
+        }
+
+        let undoBtn = '';
+        if (revertState.hasOwnProperty(field)) {
+             const orig = revertState[field].replace(/'/g, "\'").replace(/"/g, '&quot;');
+             undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[10px] text-ember hover:underline font-bold bg-ember-light px-1.5 py-0.5 border border-ember-border rounded-[2px]">Undo Change</button>`;
+        }
+
+        html += `
+          <div class="p-2.5 bg-tonal1 border border-bordercol rounded-[2px] shadow-sm">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-sans text-[11px] font-bold text-ink uppercase tracking-wider">${field}</span>
+              ${undoBtn}
+            </div>
+            <div class="text-xs font-mono text-ink-muted mb-2">Current: <span class="text-ink">${currentValDisp}</span></div>
+            <div class="text-[10px] font-sans font-medium text-ink-faint uppercase mb-1">Suggested Values:</div>
+            ${suggestionsHtml}
+          </div>
+        `;
+      }
+
+      if (fieldCount > 0) {
+        badge.textContent = `${fieldCount} field${fieldCount > 1 ? 's' : ''}`;
+        container.innerHTML = html;
+        card.classList.remove('hidden');
+      } else {
+        card.classList.add('hidden');
+      }
+    }
+
+    async function applyHistoricalValue(field, value) {
+        // Find input element for this field
+        const inputs = document.querySelectorAll(`[data-field="${field}"]`);
+        if (inputs.length === 0) {
+            showToast(`Field ${field} not found in form`, true);
+            return;
+        }
+
+        const input = inputs[0];
+
+        // Save revert state if not already saved
+        if (!revertState.hasOwnProperty(field)) {
+             revertState[field] = input.type === 'checkbox' ? (input.checked ? 'true' : 'false') : input.value;
+        }
+
+        // Apply
+        if (input.type === 'checkbox') {
+             input.checked = (value.toLowerCase() === 'true' || value === '1' || value === 'yes');
+        } else {
+             input.value = value;
+        }
+
+        // Clear related problems locally
+        if (currentRecord.observation) {
+            const probKeys = Object.keys(currentRecord.observation).filter(k => k === field + '_Problem' || (activeSchema.ui_sections.problems && activeSchema.ui_sections.problems.some(p => p.name === k && p.target === field))); // Assuming target might exist, or just clear exact match
+
+            // For Arbor, problem fields usually match `${field}_Problem` or similar, let's clear it
+            const exactProb = `${field}_Problem`;
+            if (currentRecord.observation.hasOwnProperty(exactProb)) {
+                 currentRecord.observation[exactProb] = false;
+                 const probToggle = document.getElementById(`prob_${exactProb}`);
+                 if (probToggle) probToggle.checked = false;
+            }
+        }
+
+        // Trigger save and update UI
+        triggerAutoSave();
+        showToast(`Applied historical value for ${field}`);
+
+        // Update local currentRecord so rendering reflects changes
+        if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
+             currentRecord.registration[field] = value;
+        } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
+             currentRecord.observation[field] = value;
+        }
+
+        renderHistoricalData();
+    }
+
+    async function undoHistoricalValue(field, originalValue) {
+        if (!revertState.hasOwnProperty(field)) return;
+
+        const inputs = document.querySelectorAll(`[data-field="${field}"]`);
+        if (inputs.length > 0) {
+            const input = inputs[0];
+            if (input.type === 'checkbox') {
+                 input.checked = (originalValue.toLowerCase() === 'true' || originalValue === '1' || originalValue === 'yes');
+            } else {
+                 input.value = originalValue;
+            }
+        }
+
+        if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
+             currentRecord.registration[field] = originalValue;
+        } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
+             currentRecord.observation[field] = originalValue;
+        }
+
+        delete revertState[field];
+
+        triggerAutoSave();
+        showToast(`Reverted ${field} to original value`);
+        renderHistoricalData();
+    }
+
+
+
     // Photo viewer state
     let photoUrls = [];
     let currentPhotoIdx = 0;
@@ -2156,6 +2386,10 @@ INDEX_TEMPLATE = """
 
         // Render Problems & Discrepancies
         renderDiscrepancies(data);
+
+        // Fetch Historical Data
+        revertState = {};
+        fetchHistoricalData(oid);
 
       } catch (err) {
         console.error("Failed to load specimen details:", err);
