@@ -1129,14 +1129,14 @@
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="text-xs font-bold text-ink">${fName}</label>
-              <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>
+              <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium touch-target-min flex items-center justify-center p-2 -mr-2">⚑ Flag</button>
             </div>
             <select
               id="${inputId}"
               data-section="${section}"
               data-field="${fName}"
-              onchange="triggerAutoSave()"
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern cursor-pointer"
+              onchange="forceAutoSave()"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink font-sans outline-none focus:border-fern cursor-pointer touch-target-min"
             >
               ${optionsHtml}
             </select>
@@ -1148,18 +1148,20 @@
       if (fType === 'checkbox' || fType === 'bool') {
         const isChecked = (String(value).toLowerCase() === 'true' || value === true || value === '1' || value === 'yes');
         return `
-          <div class="flex items-center justify-between py-1">
-            <label class="text-xs font-bold text-ink">${fName}</label>
-            <input
-              type="checkbox"
-              id="${inputId}"
-              data-section="${section}"
-              data-field="${fName}"
-              ${isChecked ? 'checked' : ''}
-              onchange="triggerAutoSave()"
-              class="w-4 h-4 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
-            />
-          </div>
+          <label class="flex items-center justify-between py-1 touch-target-min cursor-pointer group">
+            <span class="text-xs font-bold text-ink">${fName}</span>
+            <div class="p-2 -mr-2">
+              <input
+                type="checkbox"
+                id="${inputId}"
+                data-section="${section}"
+                data-field="${fName}"
+                ${isChecked ? 'checked' : ''}
+                onchange="forceAutoSave()"
+                class="w-4 h-4 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
+              />
+            </div>
+          </label>
         `;
       }
 
@@ -1169,7 +1171,7 @@
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="text-xs font-bold text-ink">${fName}</label>
-              <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>
+              <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium touch-target-min flex items-center justify-center p-2 -mr-2">⚑ Flag</button>
             </div>
             <textarea
               id="${inputId}"
@@ -1177,7 +1179,8 @@
               data-field="${fName}"
               rows="2"
               oninput="triggerAutoSave()"
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
+              onblur="forceAutoSave()"
+              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink font-sans outline-none focus:border-fern touch-target-min"
             >${value || ''}</textarea>
           </div>
         `;
@@ -1188,7 +1191,7 @@
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="text-xs font-bold text-ink">${fName} ${isReadOnly ? '<span class="text-[9px] text-ink-faint font-normal">(Locked)</span>' : ''}</label>
-            ${!isReadOnly ? `<button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>` : ''}
+            ${!isReadOnly ? `<button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium touch-target-min flex items-center justify-center p-2 -mr-2">⚑ Flag</button>` : ''}
           </div>
           <input
             type="text"
@@ -1196,7 +1199,7 @@
             data-section="${section}"
             data-field="${fName}"
             value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()"'}
+            ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none touch-target-min"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink font-sans outline-none focus:border-fern touch-target-min" oninput="triggerAutoSave()" onblur="forceAutoSave()"'}
           />
         </div>
       `;
@@ -1249,7 +1252,7 @@
           const pLabel = pName.replace('_Problem', '').replace(/_/g, ' ');
           const isFlagged = (record.observation && (String(record.observation[pName]).toLowerCase() === 'true' || record.observation[pName] === true || record.observation[pName] === '1'));
           return `
-            <label class="flex items-center gap-1.5 p-1.5 border border-bordercol rounded-[2px] hover:bg-tonal1 cursor-pointer">
+            <label class="flex items-center gap-1.5 p-1.5 border border-bordercol rounded-[2px] hover:bg-tonal1 cursor-pointer touch-target-min">
               <input
                 type="checkbox"
                 id="prob_${pName}"
@@ -1334,7 +1337,12 @@
       const syncStatus = document.getElementById('footerSyncStatus');
       syncStatus.innerHTML = '<span class="font-mono text-ember font-medium animate-pulse">Saving changes...</span>';
       clearTimeout(autoSaveTimer);
-      autoSaveTimer = setTimeout(saveCurrentEdits, 500);
+      autoSaveTimer = setTimeout(saveCurrentEdits, 800);
+    }
+
+    function forceAutoSave() {
+      clearTimeout(autoSaveTimer);
+      saveCurrentEdits();
     }
 
     async function saveCurrentEdits() {
