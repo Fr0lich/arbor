@@ -428,7 +428,8 @@ class HistoricalSuggestionsMixin:
     def update_history_indicator(self, oid):
 
         if not self.app.historical_dbs:
-            self.history_indicator_label.config(text="")
+            if hasattr(self, 'history_indicator_label'):
+                self.history_indicator_label.config(text="")
             return
 
 

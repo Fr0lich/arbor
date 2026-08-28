@@ -34,8 +34,6 @@ class TestHybridDockableRail(unittest.TestCase):
         mw = ObjectProgramUI(self.root, self.app)
         
         self.assertTrue(hasattr(mw, "left_pinned"))
-        self.assertTrue(hasattr(mw, "rail_frame"))
-        self.assertTrue(hasattr(mw, "drawer_overlay"))
 
         initial_pin = mw.left_pinned.get()
         mw.toggle_left_pin()

@@ -38,6 +38,7 @@ _NORMALIZE_SPACE_PATTERN = re.compile(r'\s+')
 import uuid
 
 from collections import OrderedDict
+import socket
 import config
 from config import sc
 from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
@@ -569,6 +570,44 @@ class ObjectProgramUI(
 
         self.loading_object = False
         self.initializing = True
+
+    def _check_internet_connection(self, manual=False):
+        if manual:
+            try:
+                self._online_label.config(text="STATUS: CHECKING")
+                self._online_dot.itemconfig(self._online_dot_id, fill="#aaaaaa")
+            except Exception:
+                pass
+
+        def _check_worker():
+            is_online = False
+            try:
+                # Fast connection test to Cloudflare DNS
+                socket.create_connection(("1.1.1.1", 53), timeout=1.5)
+                is_online = True
+            except OSError:
+                pass
+
+            self.root.after(0, lambda: self._update_online_status_ui(is_online))
+
+        import threading
+        threading.Thread(target=_check_worker, daemon=True).start()
+
+        # Schedule next periodic check
+        if self._internet_check_job:
+            self.root.after_cancel(self._internet_check_job)
+        self._internet_check_job = self.root.after(60000, self._check_internet_connection)
+
+    def _update_online_status_ui(self, is_online):
+        try:
+            if is_online:
+                self._online_label.config(text="STATUS: ONLINE")
+                self._online_dot.itemconfig(self._online_dot_id, fill="#3a7d44")
+            else:
+                self._online_label.config(text="STATUS: OFFLINE")
+                self._online_dot.itemconfig(self._online_dot_id, fill="#d9534f")
+        except Exception:
+            pass
 
 
         self.object_id_var = tk.StringVar()
@@ -3888,12 +3927,23 @@ class ObjectProgramUI(
         # Online status dot + label
         status_dot_frame = ttk.Frame(status_container)
         status_dot_frame.pack(anchor="center", side="right")
-        self._online_dot = tk.Canvas(status_dot_frame, width=8, height=8,
-                                     highlightthickness=0, bg=nav_bar_bg)
-        self._online_dot.create_oval(1, 1, 7, 7, fill="#3a7d44", outline="")
+
+        self._online_dot = tk.Canvas(status_dot_frame, width=10, height=10,
+                                     highlightthickness=0, bg=nav_bar_bg, cursor="hand2")
+        self._online_dot_id = self._online_dot.create_oval(1, 1, 9, 9, fill="#3a7d44", outline="")
         self._online_dot.pack(side="left", padx=(0, 4))
-        tk.Label(status_dot_frame, text="STATUS: ONLINE", bg=nav_bar_bg,
-                 fg="#444748", font=("Courier New", sc(9))).pack(side="left")
+
+        self._online_label = tk.Label(status_dot_frame, text="STATUS: CHECKING", bg=nav_bar_bg,
+                 fg="#444748", font=("Courier New", sc(9)), cursor="hand2")
+        self._online_label.pack(side="left")
+
+        # Bind click to trigger a manual check
+        self._online_dot.bind("<Button-1>", lambda e: self._check_internet_connection(manual=True))
+        self._online_label.bind("<Button-1>", lambda e: self._check_internet_connection(manual=True))
+
+        # Start periodic check
+        self._internet_check_job = None
+        self._check_internet_connection()
 
         # Data status badge (saved / unsaved)
         self.data_status = tk.Label(
@@ -9033,8 +9083,10 @@ class ObjectProgramUI(
         step(0)
 
     def update_reviewed_button_state(self):
+        if not hasattr(self, 'reviewed_button'):
+            return
         oid = self.app.current_object_id
-        large_size = self.large_reviewed_button_var.get()
+        large_size = getattr(self, "large_reviewed_button_var", tk.BooleanVar(value=True)).get()
         padx_val = sc(32) if large_size else sc(18)
         pady_val = sc(14) if large_size else sc(8)
 

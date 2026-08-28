@@ -41,6 +41,8 @@ class ImageHandlerMixin:
 
 
     def update_image_view_button(self):
+        if not hasattr(self, 'view_btn'):
+            return
 
         if self.image_mode == "folder":
             if not self.view_btn.winfo_ismapped():
@@ -438,10 +440,12 @@ class ImageHandlerMixin:
         self._image_paths = paths
         self._current_image_index = 0
 
-        self.image_count_label.config(text=f"{len(paths)} images")
+        if hasattr(self, 'image_count_label'):
+            self.image_count_label.config(text=f"{len(paths)} images")
 
         if not paths:
-            self.images_missing_label.config(text="No images found")
+            if hasattr(self, 'images_missing_label'):
+                self.images_missing_label.config(text="No images found")
             self.ensure_no_image_label()
             self.no_image_label.pack(pady=20)
             return
