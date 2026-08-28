@@ -3684,19 +3684,7 @@ class ObjectProgramUI(
         self.add_tooltip(self.sb_settings_btn, "Open Application Settings")
         self.sb_settings_btn.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
 
-        sep = ttk.Separator(self.sb_buttons_frame, orient="vertical")
-        sep.grid(row=0, column=1, sticky="ns", pady=3)
 
-        # --- Mobile App Button ---
-        self.sb_mobile_btn = ttk.Button(
-            self.sb_buttons_frame,
-            text="📱 MOBILE",
-            style="Nav.TButton",
-            command=self.open_mobile_dialog
-        , cursor="hand2")
-        self.toolbar_buttons['MOBILE'] = self.sb_mobile_btn
-        self.add_tooltip(self.sb_mobile_btn, "Connect your phone to edit records")
-        self.sb_mobile_btn.grid(row=0, column=2, sticky="nsew", padx=(2, 2), pady=3)
 
         sep2 = ttk.Separator(self.sb_buttons_frame, orient="vertical")
         sep2.grid(row=0, column=3, sticky="ns", pady=3)
