@@ -1,0 +1,6 @@
+1. **Add `evtSource` to global state**: Define `let evtSource = null;` at the top of the script tag in `mobile_frontend.html` to allow global tracking of the EventSource connection.
+2. **Implement Visibility Resync**: Add a `visibilitychange` event listener. When a mobile device's screen turns off, the `EventSource` connection often drops or stalls. Listening to `visibilitychange` allows the UI to automatically resync the connection and fetch fresh data when the user unlocks their phone or returns to the app.
+3. **Enhance `setupEventSource` & Add Reconnection Logic**: Update `setupEventSource()` to close any existing connection before opening a new one. Add `onerror` and `onopen` listeners to detect when the connection becomes shaky or is restored.
+4. **Add Resync UI**: Add a `reconnectNow()` function and a new floating "reconnect banner" HTML snippet in `mobile_frontend.html` that appears when `evtSource.onerror` triggers, allowing the user to explicitly force a resynchronization.
+5. **Complete pre commit steps**: Ensure proper testing, verification, review, and reflection are done by completing pre-commit steps.
+6. **Submit the change**: Create a PR or submit the code and provide the "Next Suggested Missions" in the final output.
