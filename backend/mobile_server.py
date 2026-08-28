@@ -1238,10 +1238,10 @@ INDEX_TEMPLATE = """
               type="button"
               id="btnWakeLock"
               onclick="toggleWakeLock()"
-              class="p-2 rounded-[2px] border transition-colors touch-target-min bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center justify-center"
+              class="p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center"
               title="Toggle Walk Mode (Prevent Screen Sleep)"
             >
-              <span id="wakeLockIcon" class="text-sm leading-none">☀️</span>
+              <span id="wakeLockIcon" class="text-sm leading-none">🌙</span>
             </button>
 
             <!-- Desktop Connection Pill Button -->
@@ -1854,18 +1854,21 @@ INDEX_TEMPLATE = """
       if (wakeLockSentinel) {
         await wakeLockSentinel.release();
         wakeLockSentinel = null;
-        btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center justify-center';
+        btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center';
+        icon.innerText = '🌙';
         icon.classList.remove('animate-spin-slow');
         showToast('Walk Mode Deactivated (Sleep Allowed)');
       } else if ('wakeLock' in navigator) {
         try {
           wakeLockSentinel = await navigator.wakeLock.request('screen');
-          btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-fern-light text-fern-dark border-fern-border flex items-center justify-center';
+          btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center justify-center';
+          icon.innerText = '☀️';
           icon.classList.add('animate-spin-slow');
           showToast('Walk Mode Active (Screen Sleep Prevented)');
           wakeLockSentinel.addEventListener('release', () => {
             wakeLockSentinel = null;
-            btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center justify-center';
+            btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center';
+            icon.innerText = '🌙';
             icon.classList.remove('animate-spin-slow');
           });
         } catch (err) {
