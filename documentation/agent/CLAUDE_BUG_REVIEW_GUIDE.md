@@ -6,6 +6,15 @@ This document is designed to help Claude (or other AI agents) efficiently review
 
 ---
 
+## Agent Safety & Workflow Directives
+Before executing any refactoring or bug-fixing tasks, all AI agents must strictly adhere to the following workflow rules:
+
+1. **Prioritize Stability Over Speed:** Always optimize for maintaining and protecting existing application behavior. Do not sacrifice safety or correctness for execution speed.
+2. **Plan Before Execution:** Do not write code or implement fixes immediately upon receiving a prompt. First, formulate a plan: explain your understanding of the issue, outline the safest path forward, and explicitly list the exact files you intend to touch.
+3. **Capture and Automate Learnings:** Whenever you resolve a complex issue or discover a necessary workflow after trial and error, you MUST document the solution in your memory. Additionally, if the solution involves specific build, test, or execution steps, add those commands to a `Makefile` (or the relevant script) and explicitly instruct yourself to use that script for similar future tasks.
+
+---
+
 ## 1. Performance Bottlenecks
 
 Arbor relies heavily on Pandas for data manipulation and Tkinter for its desktop UI. Performance issues often stem from inefficient loops or excessive UI recalculations.
