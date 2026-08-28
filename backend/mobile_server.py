@@ -515,16 +515,39 @@ class MobileServer:
                 matched_indices = df_reg.index
 
                 # Text search across config-defined registration columns
-                if query:
-                    mask = pd.Series(False, index=matched_indices)
-                    mask |= df_reg.index.astype(str).str.lower().str.contains(query, regex=False)
+                is_search_active = bool(query)
+                if is_search_active:
+                    idx_str = df_reg.index.astype(str).str.lower()
+
+                    # p1: exact ID match
+                    p1_mask = idx_str == query
+
+                    # p2: partial ID match
+                    p2_mask = idx_str.str.contains(query, regex=False) & ~p1_mask
+
+                    # p3: genus/species match
+                    genus_col = df_reg["Genus"].fillna("").astype(str).str.lower() if "Genus" in df_reg.columns else pd.Series("", index=df_reg.index)
+                    species_col = df_reg["Species"].fillna("").astype(str).str.lower() if "Species" in df_reg.columns else pd.Series("", index=df_reg.index)
+                    gen_spec = genus_col + " " + species_col
+                    p3_mask = gen_spec.str.contains(query, regex=False) & ~(p1_mask | p2_mask)
+
+                    # p4: family match
+                    family_col = df_reg["Family"].fillna("").astype(str).str.lower() if "Family" in df_reg.columns else pd.Series("", index=df_reg.index)
+                    p4_mask = family_col.str.contains(query, regex=False) & ~(p1_mask | p2_mask | p3_mask)
+
+                    # p5: other columns match
+                    p5_mask = pd.Series(False, index=df_reg.index)
                     search_cols = ["Genus", "Species", "Family", "Author", "Collector", "Box Label", "Cabinet", "Variant"]
                     if self.app_state.config and "registration" in self.app_state.config.get("ui_sections", {}):
                         search_cols = [f["name"] for f in self.app_state.config["ui_sections"]["registration"] if isinstance(f, dict) and f.get("name")]
+
                     for col in search_cols:
-                        if col in df_reg.columns:
-                            mask |= df_reg[col].fillna("").astype(str).str.lower().str.contains(query, regex=False)
-                    matched_indices = matched_indices[mask]
+                        if col in df_reg.columns and col not in ["Genus", "Species", "Family"]:
+                            p5_mask |= df_reg[col].fillna("").astype(str).str.lower().str.contains(query, regex=False)
+                    p5_mask = p5_mask & ~(p1_mask | p2_mask | p3_mask | p4_mask)
+
+                    all_matched_list = df_reg.index[p1_mask].tolist() + df_reg.index[p2_mask].tolist() + df_reg.index[p3_mask].tolist() + df_reg.index[p4_mask].tolist() + df_reg.index[p5_mask].tolist()
+                    matched_indices = pd.Index(all_matched_list)
 
                 # Status filter
                 if status_filter != 'all' and rev_col and df_obs is not None:
@@ -597,7 +620,7 @@ class MobileServer:
                 facets["pending_count"] = pending_count
 
                 # Sorting logic
-                if sort_by in ['id', 'genus', 'cabinet']:
+                if sort_by in ['id', 'genus', 'cabinet'] and not is_search_active:
                     ascending = (sort_dir == 'asc')
                     if sort_by == 'id':
                         # Use numeric sorting if possible, otherwise string sorting
