@@ -486,18 +486,16 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         self._setup_virtual_card_bindtag()
 
-        # Keyboard Navigation bindings for Detailed Mode
-        self.bind("<Up>", self._on_keypress_up)
-        self.bind("<Down>", self._on_keypress_down)
-        self.bind("<Return>", self._on_keypress_return)
-
-        # Also bind to the inner widgets that actually get the focus
-        self.canvas.bind("<Up>", self._on_keypress_up)
-        self.canvas.bind("<Down>", self._on_keypress_down)
-        self.canvas.bind("<Return>", self._on_keypress_return)
-        self.tree.bind("<Up>", self._on_keypress_up)
-        self.tree.bind("<Down>", self._on_keypress_down)
-        self.tree.bind("<Return>", self._on_keypress_return)
+        # Keyboard Navigation bindings for Detailed and Compact Mode
+        for target_widget in (self, self.canvas, self.tree):
+            target_widget.bind("<Up>", self._on_keypress_up)
+            target_widget.bind("<Down>", self._on_keypress_down)
+            target_widget.bind("<Prior>", self._on_keypress_page_up)
+            target_widget.bind("<Next>", self._on_keypress_page_down)
+            target_widget.bind("<Home>", self._on_keypress_home)
+            target_widget.bind("<End>", self._on_keypress_end)
+            target_widget.bind("<space>", self._on_keypress_space)
+            target_widget.bind("<Return>", self._on_keypress_return)
 
         # Initial active view check
         self._trace_id = None
@@ -550,6 +548,58 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.selection_set(new_idx)
         self.see(new_idx)
         self.event_generate("<<ListboxSelect>>")
+        return "break"
+
+    def _on_keypress_home(self, event):
+        if not self.items_list:
+            return "break"
+        self.selection_clear()
+        self.selection_set(0)
+        self.see(0)
+        self.event_generate("<<ListboxSelect>>")
+        return "break"
+
+    def _on_keypress_end(self, event):
+        if not self.items_list:
+            return "break"
+        last_idx = len(self.items_list) - 1
+        self.selection_clear()
+        self.selection_set(last_idx)
+        self.see(last_idx)
+        self.event_generate("<<ListboxSelect>>")
+        return "break"
+
+    def _on_keypress_page_up(self, event):
+        if not self.items_list:
+            return "break"
+        first_sel = self.selected_iids[0] if self.selected_iids else self.items_list[0]
+        curr_idx = self._oid_to_index.get(first_sel, 0)
+        new_idx = max(0, curr_idx - 10)
+        self.selection_clear()
+        self.selection_set(new_idx)
+        self.see(new_idx)
+        self.event_generate("<<ListboxSelect>>")
+        return "break"
+
+    def _on_keypress_page_down(self, event):
+        if not self.items_list:
+            return "break"
+        first_sel = self.selected_iids[0] if self.selected_iids else self.items_list[0]
+        curr_idx = self._oid_to_index.get(first_sel, 0)
+        new_idx = min(len(self.items_list) - 1, curr_idx + 10)
+        self.selection_clear()
+        self.selection_set(new_idx)
+        self.see(new_idx)
+        self.event_generate("<<ListboxSelect>>")
+        return "break"
+
+    def _on_keypress_space(self, event):
+        """Toggle reviewed status for the active object directly from keyboard."""
+        if not self.selected_iids:
+            return "break"
+        active_oid = self.selected_iids[0]
+        if hasattr(self.main_window, "_toggle_reviewed_for_id"):
+            self.main_window._toggle_reviewed_for_id(active_oid)
         return "break"
 
     def _on_keypress_return(self, event):

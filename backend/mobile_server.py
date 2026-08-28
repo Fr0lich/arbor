@@ -1405,6 +1405,21 @@ INDEX_TEMPLATE = """
 
   <div class="w-full h-screen flex flex-col relative overflow-hidden bg-canvas mx-auto max-w-md border-x border-bordercol shadow-xl">
 
+    <!-- Persistent Offline / Disconnected Warning Banner -->
+    <div id="offlineBanner" class="hidden bg-ember-light border-b border-ember-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-ember-dark shrink-0 transition-all shadow-xs" role="alert" aria-live="assertive">
+      <div class="flex items-center gap-2">
+        <span class="text-sm">⚠</span>
+        <span>Connection to host lost. Reconnecting...</span>
+      </div>
+      <button
+        type="button"
+        onclick="setupEventSource()"
+        class="min-h-[32px] px-2.5 py-1 bg-ember text-white rounded-[2px] font-bold text-[11px] touch-press shrink-0"
+      >
+        Retry
+      </button>
+    </div>
+
     <!-- ========================================== -->
     <!-- VIEW: SPECIMEN LIST                        -->
     <!-- ========================================== -->
@@ -1442,15 +1457,17 @@ INDEX_TEMPLATE = """
             <button
               type="button"
               onclick="openModal('connectionModal')"
+              id="connStatusBtn"
               class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
               title="Desktop Connection Status"
+              aria-live="polite"
             >
               <span class="relative flex h-2 w-2">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
+                <span id="connPingDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
+                <span id="connPingDot" class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
               </span>
               <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
-                12ms
+                Live
               </span>
             </button>
           </div>
@@ -1489,12 +1506,12 @@ INDEX_TEMPLATE = """
         </div>
 
         <!-- Filter Pill Tabs -->
-        <div class="flex items-center gap-1.5 mt-2.5 overflow-x-auto no-scrollbar pb-0.5" id="filterPills">
+        <div class="flex items-center gap-2 mt-2.5 overflow-x-auto no-scrollbar pb-1" id="filterPills">
           <button
             type="button"
             onclick="setStatusFilter('all')"
             id="pill-all"
-            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors bg-ink text-white border-ink"
+            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center justify-center bg-ink text-white border-ink"
           >
             All (0)
           </button>
@@ -1503,7 +1520,7 @@ INDEX_TEMPLATE = """
             type="button"
             onclick="setStatusFilter('pending')"
             id="pill-pending"
-            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1"
+            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-surface text-ink-muted border-bordercol hover:bg-tonal1"
           >
             <span>🕒</span>
             <span>Unreviewed (0)</span>
@@ -1513,7 +1530,7 @@ INDEX_TEMPLATE = """
             type="button"
             onclick="setStatusFilter('flagged')"
             id="pill-flagged"
-            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ember-light text-ember-dark border-ember-border hover:bg-ember-light/80"
+            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-ember-light text-ember-dark border-ember-border hover:bg-ember-light/80"
           >
             <span>⚠</span>
             <span>Flagged (0)</span>
@@ -1523,19 +1540,19 @@ INDEX_TEMPLATE = """
             type="button"
             onclick="setStatusFilter('reviewed')"
             id="pill-reviewed"
-            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-fern-light text-fern-dark border-fern-border hover:bg-fern-light/80"
+            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-fern-light text-fern-dark border-fern-border hover:bg-fern-light/80"
           >
             <span>✓</span>
             <span>Reviewed (0)</span>
           </button>
 
-          <div class="w-px h-4 bg-tonal2 mx-0.5"></div>
+          <div class="w-px h-6 bg-bordercol mx-0.5 shrink-0"></div>
 
           <button
             type="button"
             onclick="toggleNoImageFilter()"
             id="pill-no-image"
-            class="px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1"
+            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-surface text-ink-muted border-bordercol hover:bg-tonal1"
           >
             <span>📷</span>
             <span>No Image</span>
@@ -1744,13 +1761,13 @@ INDEX_TEMPLATE = """
         <div class="px-4 py-2.5">
           <!-- Mini Status Ticker Bar -->
           <div class="flex items-center justify-between text-[11px] mb-2 pb-1.5 border-b border-tonal2">
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5" aria-live="polite">
               <span class="relative flex h-2 w-2">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
+                <span id="footerConnDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
+                <span id="footerConnDot" class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
               </span>
               <span class="font-mono text-ink-muted" id="footerTickerHost">
-                Host Linked (12ms)
+                Host Connected
               </span>
             </div>
 
@@ -2078,12 +2095,12 @@ INDEX_TEMPLATE = """
                 const encodedVal = val.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const sourceStr = sources.join(', ');
                 suggestionsHtml += `
-                    <div id="hist_sug_${fNameClean}_${encodedVal}" class="p-2 mt-1.5 bg-surface border border-bordercol rounded-[2px] cursor-pointer touch-target-min touch-press transition group" onclick="stageHistoricalValue('${field}', '${encodedVal}')">
-                        <div class="flex items-center justify-between">
-                            <div class="font-mono text-xs text-ink group-[.staged]:font-bold group-[.staged]:text-ember">${encodedVal}</div>
-                            <button type="button" class="hidden group-[.staged]:block bg-ember text-white px-2 py-1 text-[10px] rounded-[2px] font-bold shadow-sm" onclick="event.stopPropagation(); applyHistoricalValue('${field}', '${encodedVal}')">Apply</button>
+                    <div id="hist_sug_${fNameClean}_${encodedVal}" class="p-2.5 mt-1.5 bg-surface border border-bordercol rounded-[2px] cursor-pointer touch-target-min touch-press transition group" onclick="stageHistoricalValue('${field}', '${encodedVal}')">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="font-mono text-xs text-ink group-[.staged]:font-bold group-[.staged]:text-ember truncate">${encodedVal}</div>
+                            <button type="button" class="hidden group-[.staged]:inline-flex min-h-[36px] bg-ember text-white px-3 py-1.5 text-xs rounded-[2px] font-bold shadow-xs items-center justify-center shrink-0" onclick="event.stopPropagation(); applyHistoricalValue('${field}', '${encodedVal}')">Apply</button>
                         </div>
-                        <div class="font-sans text-[9px] text-ink-muted mt-0.5">Sources: ${sourceStr}</div>
+                        <div class="font-sans text-[10px] text-ink-muted mt-1">Sources: <span class="font-mono">${sourceStr}</span></div>
                     </div>
                 `;
             }
@@ -2091,15 +2108,15 @@ INDEX_TEMPLATE = """
             let undoBtn = '';
             if (revertState.hasOwnProperty(field)) {
                  const orig = revertState[field].replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                 undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[10px] text-ember hover:underline font-bold bg-ember-light px-1.5 py-0.5 border border-ember-border rounded-[2px]">Undo Change</button>`;
+                 undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[11px] text-ember hover:underline font-bold bg-ember-light px-2 py-1 border border-ember-border rounded-[2px] touch-press">Undo Change</button>`;
             }
 
             container.innerHTML = `
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-[10px] font-sans font-bold text-ink-muted uppercase">History Suggestions</span>
+                <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-[10px] font-sans font-bold text-ink-muted uppercase tracking-wider">History Suggestions</span>
                     ${undoBtn}
                 </div>
-                <div class="text-xs font-mono text-ink-muted mb-2">Current: <span class="text-ink">${currentValDisp}</span></div>
+                <div class="text-xs font-mono text-ink-muted mb-2">Current: <span class="text-ink font-semibold">${currentValDisp}</span></div>
                 ${suggestionsHtml}
             `;
 
@@ -2121,15 +2138,19 @@ INDEX_TEMPLATE = """
         const container = document.getElementById(`history_container_${fNameClean}`);
         if (!container) return;
 
-        // Remove 'staged' class from all suggestions in this container
+        // Reset all suggestion cards in this container
         const suggestions = container.querySelectorAll('[id^="hist_sug_"]');
-        suggestions.forEach(sug => sug.classList.remove('staged', 'bg-tonal2', 'border-ember'));
+        suggestions.forEach(sug => {
+            sug.classList.remove('staged', 'bg-ember-light', 'border-ember', 'ring-1', 'ring-ember');
+            sug.classList.add('bg-surface', 'border-bordercol');
+        });
 
-        // Add 'staged' class to the clicked suggestion
+        // Apply distinct staged styling to selected card
         const suggestionId = `hist_sug_${fNameClean}_${value}`;
         const selectedSug = document.getElementById(suggestionId);
         if (selectedSug) {
-            selectedSug.classList.add('staged', 'bg-tonal2', 'border-ember');
+            selectedSug.classList.remove('bg-surface', 'border-bordercol');
+            selectedSug.classList.add('staged', 'bg-ember-light', 'border-ember', 'ring-1', 'ring-ember');
         }
     }
 
@@ -2154,6 +2175,12 @@ INDEX_TEMPLATE = """
         } else {
              input.value = value;
         }
+
+        // Micro-interaction: Flash the updated input with fern border to confirm receipt
+        input.classList.add('ring-2', 'ring-fern', 'border-fern');
+        setTimeout(() => {
+            input.classList.remove('ring-2', 'ring-fern', 'border-fern');
+        }, 1200);
 
         // Clear related problems locally
         if (currentRecord.observation) {
@@ -2247,7 +2274,7 @@ INDEX_TEMPLATE = """
     function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
       toast.textContent = msg;
-      toast.className = `fixed top-4 left-4 right-4 max-w-sm mx-auto ${isError ? 'bg-red-700' : 'bg-fern-dark'} text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity`;
+      toast.className = `fixed top-4 left-4 right-4 max-w-sm mx-auto ${isError ? 'bg-ember-dark' : 'bg-fern-dark'} text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity`;
       toast.classList.remove('hidden');
       setTimeout(() => toast.classList.add('hidden'), 2200);
     }
@@ -2277,13 +2304,15 @@ INDEX_TEMPLATE = """
         // 3. Populate Discrepancy Field Select Options
         populateDiscrepancyFields();
 
-        // 4. Setup SSE live events + reconnect on mobile wake
+        // 4. Setup SSE live events + reconnect on mobile wake & network online
         setupEventSource();
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
             setupEventSource();  // closes stale connection and opens a fresh one
           }
         });
+        window.addEventListener('online', () => setupEventSource());
+        window.addEventListener('offline', () => updateConnectionState('disconnected'));
       } catch (err) {
         console.error("Initialization error:", err);
         document.getElementById('headerDbName').textContent = 'Database Connected';
@@ -2293,10 +2322,49 @@ INDEX_TEMPLATE = """
 
     let _evtSource = null;
 
+    function updateConnectionState(state) {
+      const badge = document.getElementById('pingBadge');
+      const footerHost = document.getElementById('footerTickerHost');
+      const dotHeader = document.getElementById('connPingDot');
+      const dotHeaderAnim = document.getElementById('connPingDotAnimate');
+      const dotFooter = document.getElementById('footerConnDot');
+      const dotFooterAnim = document.getElementById('footerConnDotAnimate');
+      const offlineBanner = document.getElementById('offlineBanner');
+
+      if (state === 'connected') {
+        if (badge) badge.textContent = 'Live';
+        if (footerHost) footerHost.textContent = 'Host Connected';
+        if (offlineBanner) offlineBanner.classList.add('hidden');
+        [dotHeader, dotFooter].forEach(d => { if (d) d.className = 'relative inline-flex rounded-full h-2 w-2 bg-fern'; });
+        [dotHeaderAnim, dotFooterAnim].forEach(d => { if (d) d.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern'; });
+      } else if (state === 'connecting') {
+        if (badge) badge.textContent = 'Connecting...';
+        if (footerHost) footerHost.textContent = 'Connecting to host...';
+        [dotHeader, dotFooter].forEach(d => { if (d) d.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember'; });
+        [dotHeaderAnim, dotFooterAnim].forEach(d => { if (d) d.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember'; });
+      } else {
+        if (badge) badge.textContent = 'Offline';
+        if (footerHost) footerHost.textContent = 'Host Disconnected';
+        if (offlineBanner) offlineBanner.classList.remove('hidden');
+        [dotHeader, dotFooter].forEach(d => { if (d) d.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember-dark'; });
+        [dotHeaderAnim, dotFooterAnim].forEach(d => { if (d) d.className = 'hidden'; });
+      }
+    }
+
     function setupEventSource() {
       try {
         if (_evtSource) { _evtSource.close(); _evtSource = null; }
+        updateConnectionState('connecting');
         _evtSource = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
+
+        _evtSource.onopen = function() {
+          updateConnectionState('connected');
+        };
+
+        _evtSource.onerror = function() {
+          updateConnectionState('disconnected');
+        };
+
         _evtSource.onmessage = function(e) {
           try {
             const data = JSON.parse(e.data);
@@ -2309,7 +2377,9 @@ INDEX_TEMPLATE = """
             }
           } catch(err) {}
         };
-      } catch(err) {}
+      } catch(err) {
+        updateConnectionState('disconnected');
+      }
     }
 
     // ==========================================
@@ -2355,7 +2425,7 @@ INDEX_TEMPLATE = """
       const clearBtn = document.getElementById('searchClearBtn');
       if (searchQuery) clearBtn.classList.remove('hidden');
       else clearBtn.classList.add('hidden');
-      searchDebounceTimer = setTimeout(fetchList, 200);
+      searchDebounceTimer = setTimeout(fetchList, 350);
     }
 
     function clearSearch() {
@@ -2367,18 +2437,31 @@ INDEX_TEMPLATE = """
 
     function setStatusFilter(status) {
       activeStatusFilter = status;
+      const filterStyles = {
+        all: {
+          active: 'bg-ink text-white border-ink font-semibold',
+          inactive: 'bg-surface text-ink-muted border-bordercol hover:bg-tonal1'
+        },
+        pending: {
+          active: 'bg-ink text-white border-ink font-semibold',
+          inactive: 'bg-surface text-ink-muted border-bordercol hover:bg-tonal1'
+        },
+        flagged: {
+          active: 'bg-ember text-white border-ember shadow-xs font-semibold',
+          inactive: 'bg-ember-light text-ember-dark border-ember-border hover:bg-ember-light/80'
+        },
+        reviewed: {
+          active: 'bg-fern text-white border-fern shadow-xs font-semibold',
+          inactive: 'bg-fern-light text-fern-dark border-fern-border hover:bg-fern-light/80'
+        }
+      };
+
       ['all', 'pending', 'flagged', 'reviewed'].forEach(s => {
         const pill = document.getElementById(`pill-${s}`);
         if (!pill) return;
-        if (s === status) {
-          pill.className = s === 'reviewed' 
-            ? 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border bg-fern text-white border-fern'
-            : (s === 'flagged' 
-              ? 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border bg-ember text-white border-ember'
-              : 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border bg-ink text-white border-ink');
-        } else {
-          pill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center gap-1.5';
-        }
+        const isSelected = (s === status);
+        const styleRule = filterStyles[s];
+        pill.className = `min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center justify-center gap-1.5 ${isSelected ? styleRule.active : styleRule.inactive}`;
       });
       fetchList();
     }
@@ -2392,9 +2475,9 @@ INDEX_TEMPLATE = """
       noImageFilterActive = !noImageFilterActive;
       const pill = document.getElementById('pill-no-image');
       if (noImageFilterActive) {
-        pill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ink text-white border-ink';
+        pill.className = 'min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center justify-center gap-1.5 transition-colors bg-ink text-white border-ink';
       } else {
-        pill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
+        pill.className = 'min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center justify-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
       }
       fetchList();
     }
@@ -2531,11 +2614,15 @@ INDEX_TEMPLATE = """
         const facets = res.facets || {};
         const revCount = facets.reviewed_count || 0;
         const pendCount = facets.pending_count || 0;
+        const flaggedCount = facets.flagged_count !== undefined 
+          ? facets.flagged_count 
+          : objectList.filter(o => o.has_flags).length;
         const total = res.total_matching !== undefined ? res.total_matching : objectList.length;
 
         document.getElementById('matchingCount').textContent = total;
         document.getElementById('pill-all').textContent = `All (${total})`;
         document.getElementById('pill-pending').innerHTML = `<span>🕒</span> <span>Unreviewed (${pendCount})</span>`;
+        document.getElementById('pill-flagged').innerHTML = `<span>⚠</span> <span>Flagged (${flaggedCount})</span>`;
         document.getElementById('pill-reviewed').innerHTML = `<span>✓</span> <span>Reviewed (${revCount})</span>`;
         document.getElementById('connModalReviewed').textContent = `${revCount} / ${total} items`;
 
@@ -2672,11 +2759,33 @@ INDEX_TEMPLATE = """
         document.getElementById('btnNextSpecimen').disabled = (idx === objectList.length - 1);
       }
 
+      // Set Instant Loading State (Clears stale specimen data)
+      document.getElementById('detailAccession').textContent = `#${oid}`;
+      document.getElementById('detailScientificName').innerHTML = '<span class="text-ink-muted animate-pulse font-serif italic">Loading specimen record...</span>';
+      document.getElementById('detailAuthor').textContent = '';
+      document.getElementById('detailFamily').textContent = '';
+      document.getElementById('detailTopLocation').textContent = 'Location: Retrieving...';
+      document.getElementById('detailReviewStatusBadge').innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-tonal2 text-ink-muted border border-bordercol animate-pulse">⏳ LOADING</span>';
+      
+      // Skeleton placeholders for accordions
+      document.getElementById('detailAccordionsContainer').innerHTML = `
+        <div class="bg-surface border border-bordercol rounded-[2px] p-4 space-y-3 animate-pulse">
+          <div class="h-4 bg-tonal2 rounded-[2px] w-1/3"></div>
+          <div class="h-9 bg-tonal1 rounded-[2px] w-full"></div>
+          <div class="h-9 bg-tonal1 rounded-[2px] w-full"></div>
+        </div>
+      `;
+
       // Reset Photo State
       document.getElementById('photoPlaceholder').classList.remove('hidden');
       document.getElementById('specimenImg').classList.add('hidden');
       document.getElementById('photoWatermark').classList.add('hidden');
       document.getElementById('specimenImg').src = '';
+      const thumbStrip = document.getElementById('photoThumbStrip');
+      if (thumbStrip) {
+        thumbStrip.classList.add('hidden');
+        thumbStrip.innerHTML = '';
+      }
 
       try {
         const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}`);
@@ -2700,15 +2809,36 @@ INDEX_TEMPLATE = """
 
         updateReviewButtonUI();
 
-        // Load Photos
+        // Load Photos & Thumbnails
         photoUrls = (data.images && data.images.online_urls) ? data.images.online_urls : [];
         document.getElementById('photoCountBadge').textContent = `${photoUrls.length} available`;
+        const mainContainer = document.getElementById('photoMainContainer');
+        const placeholder = document.getElementById('photoPlaceholder');
+        const specimenImg = document.getElementById('specimenImg');
+        const watermark = document.getElementById('photoWatermark');
+
         if (photoUrls.length > 0) {
           currentPhotoIdx = 0;
-          document.getElementById('specimenImg').src = photoUrls[0];
-          document.getElementById('photoPlaceholder').classList.add('hidden');
-          document.getElementById('specimenImg').classList.remove('hidden');
-          document.getElementById('photoWatermark').classList.remove('hidden');
+          specimenImg.src = photoUrls[0];
+          placeholder.classList.add('hidden');
+          specimenImg.classList.remove('hidden');
+          watermark.classList.remove('hidden');
+          mainContainer.classList.add('cursor-pointer');
+          mainContainer.classList.remove('cursor-default');
+          renderPhotoThumbnails();
+        } else {
+          placeholder.innerHTML = `
+            <span class="text-2xl text-ink-faint">📷</span>
+            <p class="font-sans text-xs font-semibold text-ink-muted">No Archival Scans Attached</p>
+            <p class="font-mono text-[10px] text-ink-faint">Attach images in desktop catalog</p>
+          `;
+          placeholder.classList.remove('hidden');
+          specimenImg.classList.add('hidden');
+          watermark.classList.add('hidden');
+          mainContainer.classList.remove('cursor-pointer');
+          mainContainer.classList.add('cursor-default');
+          const strip = document.getElementById('photoThumbStrip');
+          if (strip) { strip.classList.add('hidden'); strip.innerHTML = ''; }
         }
 
         // Render Dynamic Forms Driven by config.py
@@ -2723,6 +2853,8 @@ INDEX_TEMPLATE = """
 
       } catch (err) {
         console.error("Failed to load specimen details:", err);
+        document.getElementById('detailScientificName').textContent = 'Error Loading Specimen';
+        showToast('Failed to load specimen data from host', true);
       }
     }
 
@@ -2830,11 +2962,31 @@ INDEX_TEMPLATE = """
       const containerId = `history_container_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
       const historyControls = `
-        <button type="button" id="${toggleBtnId}" onclick="toggleHistoryContainer('${fName}')" class="hidden text-[10px] text-ember hover:underline font-medium ml-2">📖 History</button>
+        <button
+          type="button"
+          id="${toggleBtnId}"
+          onclick="toggleHistoryContainer('${fName}')"
+          class="hidden min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-medium text-ember bg-ember-light border border-ember-border rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1"
+          title="View historical value suggestions"
+        >
+          <span>📖</span>
+          <span>History</span>
+        </button>
+        ${!isReadOnly ? `
+          <button
+            type="button"
+            onclick="openAddDiscrepancyModal('${fName}')"
+            class="min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-medium text-ink-muted hover:text-ember bg-tonal1 hover:bg-tonal2 border border-bordercol rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1"
+            title="Flag discrepancy for ${fName}"
+          >
+            <span>⚑</span>
+            <span>Flag</span>
+          </button>
+        ` : ''}
       `;
 
       const historyContainerHtml = `
-        <div id="${containerId}" class="hidden mt-2 p-2 bg-tonal1 border border-bordercol rounded-[2px] shadow-sm">
+        <div id="${containerId}" class="hidden mt-2 p-2.5 bg-tonal1 border border-bordercol rounded-[2px] shadow-xs">
            <!-- History suggestions injected here -->
         </div>
       `;
@@ -2846,20 +2998,17 @@ INDEX_TEMPLATE = """
           .join('');
 
         return `
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-bold text-ink">${fName}</label>
-              <div>
-                ${historyControls}
-                <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium ml-2">⚑ Flag</button>
-              </div>
+          <div class="space-y-1">
+            <div class="flex items-center justify-between min-h-[32px]">
+              <label for="${inputId}" class="text-xs font-bold text-ink">${fName}</label>
+              <div class="flex items-center">${historyControls}</div>
             </div>
             <select
               id="${inputId}"
               data-section="${section}"
               data-field="${fName}"
               onchange="triggerAutoSave()" onblur="saveCurrentEdits()"
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern cursor-pointer"
+              class="w-full min-h-[44px] bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern cursor-pointer"
             >
               ${optionsHtml}
             </select>
@@ -2872,35 +3021,36 @@ INDEX_TEMPLATE = """
       if (fType === 'checkbox' || fType === 'bool') {
         const isChecked = (String(value).toLowerCase() === 'true' || value === true || value === '1' || value === 'yes');
         return `
-          <div class="flex items-center justify-between py-1">
-            <label class="text-xs font-bold text-ink">${fName}</label>
-            <div>
-              ${historyControls}
-              <input
-                type="checkbox"
-                id="${inputId}"
-                data-section="${section}"
-                data-field="${fName}"
-                ${isChecked ? 'checked' : ''}
-                onchange="triggerAutoSave()"
-                class="w-4 h-4 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer ml-2 align-middle"
-              />
+          <div class="space-y-1">
+            <div class="flex items-center justify-between min-h-[44px] py-1">
+              <label for="${inputId}" class="flex-1 text-xs font-bold text-ink cursor-pointer flex items-center">${fName}</label>
+              <div class="flex items-center gap-1.5">
+                ${historyControls}
+                <label class="min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="${inputId}"
+                    data-section="${section}"
+                    data-field="${fName}"
+                    ${isChecked ? 'checked' : ''}
+                    onchange="triggerAutoSave()"
+                    class="w-5 h-5 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
+                  />
+                </label>
+              </div>
             </div>
+            ${historyContainerHtml}
           </div>
-          ${historyContainerHtml}
         `;
       }
 
       // Multiline
       if (fType === 'multiline') {
         return `
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-bold text-ink">${fName}</label>
-              <div>
-                ${historyControls}
-                <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium ml-2">⚑ Flag</button>
-              </div>
+          <div class="space-y-1">
+            <div class="flex items-center justify-between min-h-[32px]">
+              <label for="${inputId}" class="text-xs font-bold text-ink">${fName}</label>
+              <div class="flex items-center">${historyControls}</div>
             </div>
             <textarea
               id="${inputId}"
@@ -2917,13 +3067,10 @@ INDEX_TEMPLATE = """
 
       // Standard Text or Readonly
       return `
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <label class="text-xs font-bold text-ink">${fName} ${isReadOnly ? '<span class="text-[9px] text-ink-faint font-normal">(Locked)</span>' : ''}</label>
-            <div>
-              ${historyControls}
-              ${!isReadOnly ? `<button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium ml-2">⚑ Flag</button>` : ''}
-            </div>
+        <div class="space-y-1">
+          <div class="flex items-center justify-between min-h-[32px]">
+            <label for="${inputId}" class="text-xs font-bold text-ink">${fName} ${isReadOnly ? '<span class="text-[9px] text-ink-faint font-normal font-mono">(Locked)</span>' : ''}</label>
+            <div class="flex items-center">${historyControls}</div>
           </div>
           <input
             type="text"
@@ -2931,7 +3078,7 @@ INDEX_TEMPLATE = """
             data-section="${section}"
             data-field="${fName}"
             value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()" onblur="saveCurrentEdits()"'}
+            ${isReadOnly ? 'readonly class="w-full min-h-[44px] bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full min-h-[44px] bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()" onblur="saveCurrentEdits()"'}
           />
           ${historyContainerHtml}
         </div>
@@ -2969,7 +3116,7 @@ INDEX_TEMPLATE = """
             <button
               type="button"
               onclick="resolveDiscrepancy('${iss.id}')"
-              class="px-2 py-1 bg-white hover:bg-ember-light border border-ember-border text-ember-dark font-bold text-[10px] rounded-[2px] shrink-0"
+              class="min-h-[44px] px-3 py-1.5 bg-surface hover:bg-ember-light border border-ember-border text-ember-dark font-bold text-xs rounded-[2px] shrink-0 touch-target-min touch-press flex items-center justify-center"
             >
               Resolve
             </button>
@@ -2985,15 +3132,15 @@ INDEX_TEMPLATE = """
           const pLabel = pName.replace('_Problem', '').replace(/_/g, ' ');
           const isFlagged = (record.observation && (String(record.observation[pName]).toLowerCase() === 'true' || record.observation[pName] === true || record.observation[pName] === '1'));
           return `
-            <label class="flex items-center gap-1.5 p-1.5 border border-bordercol rounded-[2px] hover:bg-tonal1 cursor-pointer">
+            <label class="touch-target-min min-h-[44px] flex items-center gap-2 p-2.5 border rounded-[2px] transition-colors touch-press cursor-pointer ${isFlagged ? 'border-ember bg-ember-light text-ember-dark font-semibold' : 'border-bordercol bg-surface text-ink hover:bg-tonal1'}">
               <input
                 type="checkbox"
                 id="prob_${pName}"
                 ${isFlagged ? 'checked' : ''}
                 onchange="toggleProblemFlag('${pName}')"
-                class="w-3.5 h-3.5 text-ember rounded-[1px]"
+                class="w-4 h-4 text-ember rounded-[2px] border-bordercol focus:ring-ember cursor-pointer shrink-0"
               />
-              <span class="truncate text-[11px] ${isFlagged ? 'text-ember font-bold' : 'text-ink'}">${pLabel}</span>
+              <span class="truncate font-sans text-xs select-none">${pLabel}</span>
             </label>
           `;
         }).join('');
@@ -3117,7 +3264,7 @@ INDEX_TEMPLATE = """
         });
         document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium">✓ Synced to host</span>';
       } catch (err) {
-        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-red-600 font-medium">⚠ Sync Error</span>';
+        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-ember-dark font-medium">⚠ Sync Error</span>';
       }
     }
 
@@ -3145,17 +3292,49 @@ INDEX_TEMPLATE = """
     }
 
     // ==========================================
-    // FULLSCREEN PHOTO VIEWER MODAL
+    // FULLSCREEN PHOTO VIEWER MODAL & THUMBNAIL STRIP
     // ==========================================
+    function renderPhotoThumbnails() {
+      const strip = document.getElementById('photoThumbStrip');
+      if (!strip) return;
+      if (!photoUrls || photoUrls.length <= 1) {
+        strip.classList.add('hidden');
+        strip.innerHTML = '';
+        return;
+      }
+
+      strip.classList.remove('hidden');
+      strip.innerHTML = photoUrls.map((url, idx) => `
+        <button
+          type="button"
+          onclick="selectSpecimenPhoto(${idx})"
+          class="min-w-[44px] min-h-[44px] w-12 h-12 rounded-[2px] border-2 overflow-hidden shrink-0 touch-target-min touch-press transition-all ${idx === currentPhotoIdx ? 'border-fern ring-2 ring-fern-border' : 'border-bordercol opacity-70 hover:opacity-100'}"
+          title="View Scan ${idx + 1}"
+          aria-label="View archival scan ${idx + 1}"
+        >
+          <img src="${url}" alt="Thumbnail ${idx + 1}" class="w-full h-full object-cover" />
+        </button>
+      `).join('');
+    }
+
+    function selectSpecimenPhoto(idx) {
+      if (!photoUrls || !photoUrls[idx]) return;
+      currentPhotoIdx = idx;
+      const mainImg = document.getElementById('specimenImg');
+      mainImg.src = photoUrls[idx];
+      document.getElementById('photoPlaceholder').classList.add('hidden');
+      mainImg.classList.remove('hidden');
+      renderPhotoThumbnails();
+    }
+
     function openFullscreenPhoto() {
       if (!photoUrls || photoUrls.length === 0) return;
-      currentPhotoIdx = 0;
       photoZoom = 1;
       photoRotation = 0;
       photoPan = { x: 0, y: 0 };
       updatePhotoTransform();
-      document.getElementById('photoViewerImg').src = photoUrls[0];
-      document.getElementById('photoViewerCounter').textContent = `(1/${photoUrls.length})`;
+      document.getElementById('photoViewerImg').src = photoUrls[currentPhotoIdx] || photoUrls[0];
+      document.getElementById('photoViewerCounter').textContent = `(${currentPhotoIdx + 1}/${photoUrls.length})`;
       openModal('photoViewerModal');
     }
 

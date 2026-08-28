@@ -760,8 +760,14 @@ class LayoutSettingsMixin:
             }
 
             self.root.configure(background=bg_color)
-            if hasattr(self, "title_problem_count_label"):
+            if hasattr(self, "header_id_badge") and self.header_id_badge.winfo_exists():
+                self.header_id_badge.configure(bg="#252538", fg="#e8ebe9", highlightbackground="#45475a")
+            if hasattr(self, "title_label") and self.title_label.winfo_exists():
+                self.title_label.configure(bg="#212622", fg="#e8ebe9")
+            if hasattr(self, "title_problem_count_label") and self.title_problem_count_label.winfo_exists():
                 self.title_problem_count_label.configure(bg="#212622")
+            if hasattr(self, "location_summary_label") and self.location_summary_label.winfo_exists():
+                self.location_summary_label.configure(bg="#212622", fg="#9399b2")
             if hasattr(self, "image_canvas"):
                 self.image_canvas.configure(background=field_bg, highlightbackground=border_color)
             if hasattr(self, "problem_canvas"):
@@ -959,8 +965,14 @@ class LayoutSettingsMixin:
             }
 
             self.root.configure(background=bg_color)
-            if hasattr(self, "title_problem_count_label"):
+            if hasattr(self, "header_id_badge") and self.header_id_badge.winfo_exists():
+                self.header_id_badge.configure(bg="#e9ece5", fg="#2c302e", highlightbackground="#c4c7c7")
+            if hasattr(self, "title_label") and self.title_label.winfo_exists():
+                self.title_label.configure(bg="#ffffff", fg="#2c302e")
+            if hasattr(self, "title_problem_count_label") and self.title_problem_count_label.winfo_exists():
                 self.title_problem_count_label.configure(bg="#ffffff")
+            if hasattr(self, "location_summary_label") and self.location_summary_label.winfo_exists():
+                self.location_summary_label.configure(bg="#ffffff", fg="#757d77")
 
             if hasattr(self, "image_canvas"):
                 self.image_canvas.configure(background="#f2f5f1", highlightbackground="#d0d0d0")

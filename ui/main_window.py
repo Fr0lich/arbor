@@ -1249,7 +1249,7 @@ class ObjectProgramUI(
         # Create O(1) lookup dictionary for registration config
         reg_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("registration", [])}
 
-        # Generate card layout inside the tab frame
+        # Generate collapsible accordion card layout inside the tab frame
         for c in card_defs:
             card_id = c["id"]
             card_title = c["title"]
@@ -1258,40 +1258,73 @@ class ObjectProgramUI(
             
             # Card frame (outer container with 1px border)
             card_frame = tk.Frame(tab_frame, bg=card_bg, highlightthickness=1, highlightbackground=border_color, bd=0)
-            card_frame.pack(fill="x", padx=10, pady=8)
+            card_frame.pack(fill="x", padx=sc(10), pady=sc(6))
             
-            self.card_frames[card_id] = {
-                "frame": card_frame,
-                "fields": fields_to_render
-            }
-            
-            # Header panel inside card
-            header_frame = tk.Frame(card_frame, bg=header_bg, padx=8, pady=6)
+            # Header panel (interactive accordion trigger)
+            header_frame = tk.Frame(card_frame, bg=header_bg, padx=sc(8), pady=sc(6), cursor="hand2")
             header_frame.pack(fill="x")
             
-            icon_lbl = tk.Label(header_frame, text=icon, font=("Segoe UI", sc(11)), bg=header_bg, fg=fg_color)
-            icon_lbl.pack(side="left", padx=(0, 6))
+            toggle_lbl = tk.Label(
+                header_frame, text="▼",
+                font=("Inter", sc(9), "bold"),
+                bg=header_bg, fg=fg_color, cursor="hand2"
+            )
+            toggle_lbl.pack(side="left", padx=(sc(2), sc(4)))
+
+            icon_lbl = tk.Label(header_frame, text=icon, font=("Segoe UI Symbol", sc(11)), bg=header_bg, fg=fg_color, cursor="hand2")
+            icon_lbl.pack(side="left", padx=(0, sc(6)))
             
-            title_lbl = tk.Label(header_frame, text=card_title, font=("Hanken Grotesk", sc(11), "bold"), bg=header_bg, fg=fg_color)
+            title_lbl = tk.Label(header_frame, text=card_title, font=("Inter", sc(10), "bold"), bg=header_bg, fg=fg_color, cursor="hand2")
             title_lbl.pack(side="left")
+
+            # Problem count badge inside card header
+            badge_lbl = tk.Label(
+                header_frame, text="",
+                font=("JetBrains Mono", sc(8), "bold"),
+                bg=header_bg, fg="#c93a40"
+            )
+            badge_lbl.pack(side="left", padx=(sc(8), 0))
             
             if card_id == "taxonomy":
                 import config
                 prefs = config.load_prefs()
                 show_gbif = prefs.get("enable_gbif", False)
 
-                self.gbif_btn = tk.Label(header_frame, text="🔍 Check GBIF", font=("Segoe UI", sc(9), "bold"), bg="#2b8a3e", fg="#ffffff", cursor="hand2", padx=6, pady=2)
+                self.gbif_btn = tk.Label(header_frame, text="🔍 Check GBIF", font=("Inter", sc(8), "bold"), bg="#2b8a3e", fg="#ffffff", cursor="hand2", padx=sc(6), pady=sc(2))
                 if show_gbif:
-                    self.gbif_btn.pack(side="right", padx=6)
+                    self.gbif_btn.pack(side="right", padx=sc(6))
                 self.gbif_btn.bind("<Button-1>", lambda e: self.check_gbif_action())
                 self.gbif_btn.bind("<Enter>", lambda e, w=self.gbif_btn: w.config(bg="#3bc954"))
                 self.gbif_btn.bind("<Leave>", lambda e, w=self.gbif_btn: w.config(bg="#2b8a3e"))
 
             # Card content area
-            body_frame = tk.Frame(card_frame, bg=card_bg, padx=12, pady=12)
+            body_frame = tk.Frame(card_frame, bg=card_bg, padx=sc(10), pady=sc(8))
             body_frame.pack(fill="x")
-            
             body_frame.columnconfigure(0, weight=1)
+
+            # Accordion toggle callback
+            def _make_toggle_handler(b_frame, t_lbl, tc):
+                def _handler(event=None):
+                    if b_frame.winfo_manager():
+                        b_frame.pack_forget()
+                        t_lbl.config(text="▶")
+                    else:
+                        b_frame.pack(fill="x")
+                        t_lbl.config(text="▼")
+                    tc.configure(scrollregion=tc.bbox("all"))
+                return _handler
+
+            toggle_cmd = _make_toggle_handler(body_frame, toggle_lbl, tab_canvas)
+            for w in (header_frame, toggle_lbl, icon_lbl, title_lbl):
+                w.bind("<Button-1>", toggle_cmd)
+
+            self.card_frames[card_id] = {
+                "frame": card_frame,
+                "body": body_frame,
+                "toggle_lbl": toggle_lbl,
+                "badge_lbl": badge_lbl,
+                "fields": fields_to_render
+            }
             
             current_row = 0
             for fname in fields_to_render:
@@ -4218,36 +4251,53 @@ class ObjectProgramUI(
         self.middle_frame = middle
         panes.add(middle, weight=3)
 
-        # Center header: compact single row (ID | title on left, location on right)
+        # Center header: compact single row (ID badge | Scholarly Serif title on left, location on right)
         center_header = ttk.Frame(middle, style="MiddlePane.TFrame")
         center_header.pack(fill="x", pady=0)
         # 1px bottom border via a separator-like thin frame
         ttk.Separator(middle, orient="horizontal").pack(fill="x")
 
-        # LEFT: ID monospace + specimen title
-        self.title_label = ttk.Label(
+        # LEFT: Technical Monospace Accession ID badge
+        self.header_id_badge = tk.Label(
             center_header,
-            font=("Segoe UI", sc(20), "bold"),
-            style="MiddlePane.TLabel"
+            text="",
+            font=("JetBrains Mono", sc(11), "bold"),
+            bg="#e9ece5",
+            fg="#2c302e",
+            padx=sc(8),
+            pady=sc(2),
+            relief="solid",
+            bd=1,
+            highlightbackground="#c4c7c7",
+            highlightthickness=1
         )
-        self.title_label.pack(side="left", anchor="center", padx=(8, 0), pady=6)
+        self.header_id_badge.pack(side="left", anchor="center", padx=(sc(8), sc(4)), pady=sc(6))
+
+        # Scholarly Serif botanical scientific name
+        self.title_label = tk.Label(
+            center_header,
+            font=("Lora", sc(16), "bold italic"),
+            bg="#ffffff",
+            fg="#2c302e"
+        )
+        self.title_label.pack(side="left", anchor="center", padx=(sc(4), 0), pady=sc(6))
 
         self.title_problem_count_label = tk.Label(
             center_header,
-            font=("Segoe UI", sc(12), "bold"),
+            font=("Inter", sc(10), "bold"),
             fg="#c93a40",
             bg="#ffffff"
         )
-        self.title_problem_count_label.pack(side="left", anchor="center", padx=(6, 0), pady=6)
+        self.title_problem_count_label.pack(side="left", anchor="center", padx=(sc(6), 0), pady=sc(6))
 
-        # RIGHT: location summary (muted, monospace)
-        self.location_summary_label = ttk.Label(
+        # RIGHT: location summary (Technical Monospace)
+        self.location_summary_label = tk.Label(
             center_header,
-            font=("Courier New", sc(9)),
-            foreground="#444748",
-            style="MiddlePane.TLabel"
+            font=("JetBrains Mono", sc(9)),
+            foreground="#757d77",
+            bg="#ffffff"
         )
-        self.location_summary_label.pack(side="right", anchor="center", padx=(0, 8), pady=6)
+        self.location_summary_label.pack(side="right", anchor="center", padx=(0, sc(8)), pady=sc(6))
 
         # Middle Top (images) - packed directly in middle column since Problem Flags is relocated
 
@@ -4448,85 +4498,80 @@ class ObjectProgramUI(
         # Stitch: Fixed action bar — packed at BOTTOM before canvas
         # so it is always visible regardless of scroll position.
         # -------------------------------------------------------
-        # Fixed action bar inside reg_outer (moves Reviewed button to very bottom)
+        # Fixed action bar inside reg_outer (Bottom docked)
         ttk.Separator(self.reg_outer, orient="horizontal").pack(fill="x", side="bottom")
-        action_bar = ttk.Frame(self.reg_outer, padding=(8, 6), style="RightPane.TFrame")
+        action_bar = ttk.Frame(self.reg_outer, padding=(sc(8), sc(4)), style="RightPane.TFrame")
         action_bar.pack(fill="x", side="bottom")
         self.right_panes.pack(fill="both", expand=True)
 
-        # Row 1: Mark Reviewed button (large green, full-width)
-        action_row1 = ttk.Frame(action_bar, style="RightPane.TFrame")
-        action_row1.pack(fill="x", pady=(0, 2))
-
-        self.reviewed_var = tk.BooleanVar()
+        # Row 1: Mark Reviewed button (Full width, clear high-contrast call to action)
         large_size = self.large_reviewed_button_var.get()
-        padx_val = sc(32) if large_size else sc(18)
-        pady_val = sc(14) if large_size else sc(10)
+        pady_val = sc(10) if large_size else sc(6)
         
         self.reviewed_button = tk.Button(
-            action_row1,
-            text="✓ MARK AS REVIEWED",
-            font=("Hanken Grotesk", sc(11), "bold"),
+            action_bar,
+            text="✓ MARK AS REVIEWED (Ctrl+Enter)",
+            font=("Inter", sc(10), "bold"),
             relief="flat", bd=0, cursor="hand2",
-            padx=padx_val, pady=pady_val,
+            pady=pady_val,
             highlightthickness=0,
             command=self._on_reviewed_clicked
         )
         self.reviewed_button.tutorial_id = "reviewed_button"
-        self.reviewed_button.pack(fill="x", expand=True)
+        self.reviewed_button.pack(fill="x", expand=True, pady=(0, sc(3)))
 
+        self.reviewed_var = tk.BooleanVar()
         self.reviewed_var.trace_add("write", lambda *args: self.update_reviewed_button_state())
         self.reviewed_button.bind("<Enter>", self._on_reviewed_btn_enter)
         self.reviewed_button.bind("<Leave>", self._on_reviewed_btn_leave)
         self.reviewed_button.bind("<ButtonPress-1>", self._on_reviewed_btn_press)
         self.reviewed_button.bind("<ButtonRelease-1>", self._on_reviewed_btn_release)
 
-        # Row 1b: Secondary action — clear problems checkbutton + status indicators
-        action_row1b = ttk.Frame(action_bar, style="RightPane.TFrame")
-        action_row1b.pack(fill="x", pady=(4, 0))
+        # Row 2: Compact 3-option flow + status indicators
+        action_row2 = ttk.Frame(action_bar, style="RightPane.TFrame")
+        action_row2.pack(fill="x")
 
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2d" if is_dark else "#ffffff"
         fg_col = "#e8ebe9" if is_dark else "#2c302e"
         bg_pane = "#212622" if is_dark else "#fbfaf8"
 
-        # Grid frame for checkboxes (prevents horizontal overflow)
-        grid_frame = ttk.Frame(action_row1b, style="RightPane.TFrame")
+        grid_frame = ttk.Frame(action_row2, style="RightPane.TFrame")
         grid_frame.pack(side="left", fill="both", expand=True)
 
         self.clear_problems_var = tk.BooleanVar(value=False)
         self.clear_problems_cb = tk.Checkbutton(
             grid_frame,
-            text="Clear Problems & Mark Reviewed",
+            text="Clear Problems",
             variable=self.clear_problems_var,
             command=self._clear_problems_and_mark_reviewed,
-            font=("Segoe UI", sc(9.5)),
+            font=("Inter", sc(8.5)),
             bg=bg_pane, fg=fg_col,
             activebackground=bg_pane, activeforeground=fg_col,
             selectcolor=bg_col,
             relief="flat", bd=0, highlightthickness=0,
             cursor="hand2",
-            padx=sc(4), pady=sc(3)  # U2-B: explicit padding for larger click target
+            padx=sc(2), pady=0
         )
-        self.clear_problems_cb.grid(row=0, column=0, sticky="w", padx=2, pady=1)
+        self.clear_problems_cb.grid(row=0, column=0, sticky="w", padx=(0, sc(6)))
         self.add_tooltip(
             self.clear_problems_cb,
-            "Uncheck all problem flags and mark this object as reviewed (stays on current object)"
+            "Uncheck all problem flags and mark this object as reviewed"
         )
 
         self.auto_next_cb = tk.Checkbutton(
             grid_frame,
-            text="Auto-next after review",
+            text="Auto-next",
             variable=self.auto_advance_var,
-            font=("Segoe UI", sc(9.5)),
+            font=("Inter", sc(8.5)),
             bg=bg_pane, fg=fg_col,
             activebackground=bg_pane, activeforeground=fg_col,
             selectcolor=bg_col,
             relief="flat", bd=0, highlightthickness=0,
             cursor="hand2",
-            padx=sc(4), pady=sc(3)  # U2-B: explicit padding for larger click target
+            padx=sc(2), pady=0
         )
-        self.auto_next_cb.grid(row=0, column=1, sticky="w", padx=2, pady=1)
+        self.auto_next_cb.grid(row=0, column=1, sticky="w", padx=(0, sc(6)))
         self.add_tooltip(
             self.auto_next_cb,
             "Automatically advance to the next item when marked as reviewed"
@@ -4534,42 +4579,41 @@ class ObjectProgramUI(
 
         self.auto_next_history_cb = tk.Checkbutton(
             grid_frame,
-            text="Auto-next with Historical Suggestion",
+            text="Auto+Hist",
             variable=self.auto_advance_history_var,
-            font=("Segoe UI", sc(9.5)),
+            font=("Inter", sc(8.5)),
             bg=bg_pane, fg=fg_col,
             activebackground=bg_pane, activeforeground=fg_col,
             selectcolor=bg_col,
             relief="flat", bd=0, highlightthickness=0,
             cursor="hand2",
-            padx=sc(4), pady=sc(3)
+            padx=sc(2), pady=0
         )
-        self.auto_next_history_cb.grid(row=1, column=0, columnspan=2, sticky="w", padx=2, pady=1)
+        self.auto_next_history_cb.grid(row=0, column=2, sticky="w")
         self.add_tooltip(
             self.auto_next_history_cb,
-            "Automatically advance to the next unreviewed item with historical suggestions when marked as reviewed"
+            "Automatically advance to the next unreviewed item with historical suggestions"
         )
 
-        # Status frame for labels (stacked vertically on the right)
-        status_frame = ttk.Frame(action_row1b, style="RightPane.TFrame")
-        status_frame.pack(side="right", fill="y", padx=4)
+        # Status frame for labels (right-aligned in Row 2)
+        status_frame = ttk.Frame(action_row2, style="RightPane.TFrame")
+        status_frame.pack(side="right", fill="y", padx=sc(2))
 
         self.reviewed_time_label = ttk.Label(
             status_frame,
             text="",
-            foreground="gray",
-            font=("Segoe UI", sc(8))
+            foreground="#757d77",
+            font=("JetBrains Mono", sc(8))
         )
-        self.reviewed_time_label.pack(side="bottom", anchor="e")
+        self.reviewed_time_label.pack(side="right", anchor="e")
 
-        # Unsaved indicator dot on the right
         self.data_status_action = ttk.Label(
             status_frame,
             text="",
-            foreground="gray",
-            font=("Segoe UI", sc(8))
+            foreground="#757d77",
+            font=("JetBrains Mono", sc(8))
         )
-        self.data_status_action.pack(side="top", anchor="e")
+        self.data_status_action.pack(side="right", anchor="e", padx=(0, sc(4)))
 
         # Notebook (tabbed) registration body - packed LAST so it fills the middle of reg_data_frame
         self.reg_notebook = ttk.Notebook(self.reg_data_frame)
@@ -5943,7 +5987,8 @@ class ObjectProgramUI(
 
             self.object_id_var.set(oid)
 
-            self.title_label.config(text=self.object_title(oid))
+            if hasattr(self, "header_id_badge") and self.header_id_badge.winfo_exists():
+                self.header_id_badge.config(text=f"ID: {oid}")
 
             reg_dict = self._get_reg_dict()
             obs_dict = self._get_obs_dict()
@@ -5957,6 +6002,10 @@ class ObjectProgramUI(
                         reg = reg.to_dict()
                 except Exception:
                     reg = {}
+            genus = str(reg.get("Genus", "") or "").strip()
+            species = str(reg.get("Species", "") or "").strip()
+            taxon_name = f"{genus} {species}".strip() if (genus or species) else "Unidentified Specimen"
+            self.title_label.config(text=taxon_name)
             obs = obs_dict.get(oid)
             if obs is None:
                 try:
@@ -9291,21 +9340,24 @@ class ObjectProgramUI(
                 tint = "#5c1e1e" if is_dark else "#ffdad6"
 
         norm_fg     = "#e8ebe9" if is_dark else "#2c302e"
-        bar_normal  = "#181c19" if is_dark else "#f2f5f1"  # matches ttk.Frame bg — invisible
+        bar_normal  = "#1e1e2d" if is_dark else "#ffffff"  # matches card bg
 
-        # 1. Border bar
+        # 1. Border bar (3px vertical indicator)
         bar = self.prob_border_bars.get(field_name)
-        if bar:
+        if bar and bar.winfo_exists():
             try:
                 bar.config(bg=bar_active if is_active else bar_normal)
             except Exception:
                 pass
 
-        # 2. Label
+        # 2. Label (Systematic Sans with WCAG AA contrast)
         lbl = self.prob_label_widgets.get(field_name)
-        if lbl:
+        if lbl and lbl.winfo_exists():
             try:
-                lbl.config(foreground=err_fg if is_active else norm_fg)
+                lbl.config(
+                    foreground=err_fg if is_active else norm_fg,
+                    font=("Inter", sc(10), "bold" if is_active else "bold")
+                )
             except Exception:
                 pass
 
@@ -9316,27 +9368,41 @@ class ObjectProgramUI(
         self._update_accordion_badges()
 
     def _update_accordion_badges(self):
-        """Iterate all accordion groups and count active problems within their fields."""
-        if not hasattr(self, "_accordion_groups"):
-            return
-            
+        """Iterate all accordion cards/groups and count active problems within their fields."""
         field_to_problem = {v: k for k, v in self.problem_to_field.items()}
-        for g_name, data in self._accordion_groups.items():
-            badge_label = data.get("badge_label")
-            if not badge_label:
-                continue
-                
-            count = 0
-            for field in data.get("fields", []):
-                prob_col = field_to_problem.get(field)
-                if prob_col and prob_col in self.problem_vars and self.problem_vars[prob_col].get():
-                    count += 1
-                    
-            if count > 0:
-                text = f"[{count} problem{'s' if count > 1 else ''}]"
-                badge_label.config(text=text)
-            else:
-                badge_label.config(text="")
+        
+        # Update card_frames accordion badges
+        if hasattr(self, "card_frames"):
+            for card_id, data in self.card_frames.items():
+                badge_label = data.get("badge_lbl")
+                if not badge_label or not badge_label.winfo_exists():
+                    continue
+                count = 0
+                for field in data.get("fields", []):
+                    prob_col = field_to_problem.get(field)
+                    if prob_col and prob_col in self.problem_vars and self.problem_vars[prob_col].get():
+                        count += 1
+                if count > 0:
+                    badge_label.config(text=f"[{count} ⚠]")
+                else:
+                    badge_label.config(text="")
+
+        # Update legacy _accordion_groups if present
+        if hasattr(self, "_accordion_groups"):
+            for g_name, data in self._accordion_groups.items():
+                badge_label = data.get("badge_label")
+                if not badge_label or not badge_label.winfo_exists():
+                    continue
+                count = 0
+                for field in data.get("fields", []):
+                    prob_col = field_to_problem.get(field)
+                    if prob_col and prob_col in self.problem_vars and self.problem_vars[prob_col].get():
+                        count += 1
+                if count > 0:
+                    text = f"[{count} problem{'s' if count > 1 else ''}]"
+                    badge_label.config(text=text)
+                else:
+                    badge_label.config(text="")
 
     def _update_all_problem_row_styles(self, enable_hl_override=None, color_override=None):
         """Refresh styling for every mapped problem field.
