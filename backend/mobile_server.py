@@ -1522,23 +1522,6 @@ INDEX_TEMPLATE = """
         </div>
 
 
-        <!-- Historical Records & Conflicts Card -->
-        <div id="historicalDataCard" class="hidden bg-surface border border-ember-border rounded-[2px] p-3 space-y-2.5 shadow-xs">
-          <div class="flex items-center justify-between border-b border-tonal2 pb-2">
-            <div class="flex items-center gap-1.5 text-xs font-sans font-semibold text-ink">
-              <span class="text-ember">📖</span>
-              <span>Historical Database Suggestions</span>
-              <span id="historicalCountBadge" class="font-mono text-[10px] text-ember-dark bg-ember-light border border-ember-border px-1.5 py-0.2 rounded-[2px]">
-                0 available
-              </span>
-            </div>
-          </div>
-
-          <div id="historicalDataContainer" class="space-y-3 pt-1">
-             <!-- Dynamically injected fields go here -->
-          </div>
-        </div>
-
         <!-- Archival Scans / Photo Gallery Card -->
         <div class="bg-surface border border-bordercol rounded-[2px] p-3 space-y-2.5">
           <div class="flex items-center justify-between">
@@ -1873,78 +1856,92 @@ INDEX_TEMPLATE = """
       try {
         const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}/history`);
         historicalData = data.historical_data || {};
-        renderHistoricalData();
+        injectHistoricalData();
       } catch (err) {
         console.error("Failed to fetch historical data:", err);
       }
     }
 
-    function renderHistoricalData() {
-      const card = document.getElementById('historicalDataCard');
-      const container = document.getElementById('historicalDataContainer');
-      const badge = document.getElementById('historicalCountBadge');
-
-      if (!historicalData || Object.keys(historicalData).length === 0) {
-        card.classList.add('hidden');
-        return;
-      }
-
-      let html = '';
-      let fieldCount = 0;
-
-      for (const [field, valuesMap] of Object.entries(historicalData)) {
-        if (Object.keys(valuesMap).length === 0) continue;
-
-        let currentVal = '';
-        if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
-           currentVal = currentRecord.registration[field];
-        } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
-           currentVal = currentRecord.observation[field];
+    function injectHistoricalData() {
+        if (!historicalData || Object.keys(historicalData).length === 0) {
+            return;
         }
 
-        let currentValDisp = currentVal ? String(currentVal) : "[BLANK]";
+        for (const [field, valuesMap] of Object.entries(historicalData)) {
+            if (Object.keys(valuesMap).length === 0) continue;
 
-        fieldCount++;
+            const fNameClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
+            const toggleBtn = document.getElementById(`history_toggle_${fNameClean}`);
+            const container = document.getElementById(`history_container_${fNameClean}`);
 
-        let suggestionsHtml = '';
-        for (const [val, sources] of Object.entries(valuesMap)) {
-            // Encode value for function call
-            const encodedVal = val.replace(/'/g, "\'").replace(/"/g, '&quot;');
-            const sourceStr = sources.join(', ');
-            suggestionsHtml += `
-                <button type="button" onclick="applyHistoricalValue('${field}', '${encodedVal}')" class="w-full text-left p-2 mt-1.5 bg-surface border border-bordercol rounded-[2px] hover:bg-tonal1 transition cursor-pointer touch-target-min touch-press">
-                    <div class="font-mono text-xs text-ink">${encodedVal}</div>
-                    <div class="font-sans text-[9px] text-ink-muted mt-0.5">Sources: ${sourceStr}</div>
-                </button>
+            if (!toggleBtn || !container) continue;
+
+            let currentVal = '';
+            if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
+               currentVal = currentRecord.registration[field];
+            } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
+               currentVal = currentRecord.observation[field];
+            }
+            let currentValDisp = currentVal ? String(currentVal) : "[BLANK]";
+
+            let suggestionsHtml = '';
+            for (const [val, sources] of Object.entries(valuesMap)) {
+                const encodedVal = val.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const sourceStr = sources.join(', ');
+                suggestionsHtml += `
+                    <div id="hist_sug_${fNameClean}_${encodedVal}" class="p-2 mt-1.5 bg-surface border border-bordercol rounded-[2px] cursor-pointer touch-target-min touch-press transition group" onclick="stageHistoricalValue('${field}', '${encodedVal}')">
+                        <div class="flex items-center justify-between">
+                            <div class="font-mono text-xs text-ink group-[.staged]:font-bold group-[.staged]:text-ember">${encodedVal}</div>
+                            <button type="button" class="hidden group-[.staged]:block bg-ember text-white px-2 py-1 text-[10px] rounded-[2px] font-bold shadow-sm" onclick="event.stopPropagation(); applyHistoricalValue('${field}', '${encodedVal}')">Apply</button>
+                        </div>
+                        <div class="font-sans text-[9px] text-ink-muted mt-0.5">Sources: ${sourceStr}</div>
+                    </div>
+                `;
+            }
+
+            let undoBtn = '';
+            if (revertState.hasOwnProperty(field)) {
+                 const orig = revertState[field].replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                 undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[10px] text-ember hover:underline font-bold bg-ember-light px-1.5 py-0.5 border border-ember-border rounded-[2px]">Undo Change</button>`;
+            }
+
+            container.innerHTML = `
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-sans font-bold text-ink-muted uppercase">History Suggestions</span>
+                    ${undoBtn}
+                </div>
+                <div class="text-xs font-mono text-ink-muted mb-2">Current: <span class="text-ink">${currentValDisp}</span></div>
+                ${suggestionsHtml}
             `;
+
+            // Unhide the toggle button since there is history available
+            toggleBtn.classList.remove('hidden');
         }
+    }
 
-        let undoBtn = '';
-        if (revertState.hasOwnProperty(field)) {
-             const orig = revertState[field].replace(/'/g, "\'").replace(/"/g, '&quot;');
-             undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[10px] text-ember hover:underline font-bold bg-ember-light px-1.5 py-0.5 border border-ember-border rounded-[2px]">Undo Change</button>`;
+    function toggleHistoryContainer(field) {
+        const fNameClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
+        const container = document.getElementById(`history_container_${fNameClean}`);
+        if (container) {
+            container.classList.toggle('hidden');
         }
+    }
 
-        html += `
-          <div class="p-2.5 bg-tonal1 border border-bordercol rounded-[2px] shadow-sm">
-            <div class="flex items-center justify-between mb-1">
-              <span class="font-sans text-[11px] font-bold text-ink uppercase tracking-wider">${field}</span>
-              ${undoBtn}
-            </div>
-            <div class="text-xs font-mono text-ink-muted mb-2">Current: <span class="text-ink">${currentValDisp}</span></div>
-            <div class="text-[10px] font-sans font-medium text-ink-faint uppercase mb-1">Suggested Values:</div>
-            ${suggestionsHtml}
-          </div>
-        `;
-      }
+    function stageHistoricalValue(field, value) {
+        const fNameClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
+        const container = document.getElementById(`history_container_${fNameClean}`);
+        if (!container) return;
 
-      if (fieldCount > 0) {
-        badge.textContent = `${fieldCount} field${fieldCount > 1 ? 's' : ''}`;
-        container.innerHTML = html;
-        card.classList.remove('hidden');
-      } else {
-        card.classList.add('hidden');
-      }
+        // Remove 'staged' class from all suggestions in this container
+        const suggestions = container.querySelectorAll('[id^="hist_sug_"]');
+        suggestions.forEach(sug => sug.classList.remove('staged', 'bg-tonal2', 'border-ember'));
+
+        // Add 'staged' class to the clicked suggestion
+        const suggestionId = `hist_sug_${fNameClean}_${value}`;
+        const selectedSug = document.getElementById(suggestionId);
+        if (selectedSug) {
+            selectedSug.classList.add('staged', 'bg-tonal2', 'border-ember');
+        }
     }
 
     async function applyHistoricalValue(field, value) {
@@ -1993,7 +1990,15 @@ INDEX_TEMPLATE = """
              currentRecord.observation[field] = value;
         }
 
-        renderHistoricalData();
+        // Re-inject history UI for this field to show new current value
+        injectHistoricalData();
+
+        // Hide the container after application
+        const fNameClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
+        const container = document.getElementById(`history_container_${fNameClean}`);
+        if (container) {
+            container.classList.add('hidden');
+        }
     }
 
     async function undoHistoricalValue(field, originalValue) {
@@ -2019,7 +2024,7 @@ INDEX_TEMPLATE = """
 
         triggerAutoSave();
         showToast(`Reverted ${field} to original value`);
-        renderHistoricalData();
+        injectHistoricalData();
     }
 
 
@@ -2485,6 +2490,19 @@ INDEX_TEMPLATE = """
       const isReadOnly = !!field.readonly;
       const inputId = `input_${section}_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
+      const toggleBtnId = `history_toggle_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      const containerId = `history_container_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+
+      const historyControls = `
+        <button type="button" id="${toggleBtnId}" onclick="toggleHistoryContainer('${fName}')" class="hidden text-[10px] text-ember hover:underline font-medium ml-2">📖 History</button>
+      `;
+
+      const historyContainerHtml = `
+        <div id="${containerId}" class="hidden mt-2 p-2 bg-tonal1 border border-bordercol rounded-[2px] shadow-sm">
+           <!-- History suggestions injected here -->
+        </div>
+      `;
+
       // Choice / Select
       if (fType === 'choice' && Array.isArray(field.choices)) {
         const optionsHtml = ['<option value="">Select option...</option>']
@@ -2495,7 +2513,10 @@ INDEX_TEMPLATE = """
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="text-xs font-bold text-ink">${fName}</label>
-              <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>
+              <div>
+                ${historyControls}
+                <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium ml-2">⚑ Flag</button>
+              </div>
             </div>
             <select
               id="${inputId}"
@@ -2506,6 +2527,7 @@ INDEX_TEMPLATE = """
             >
               ${optionsHtml}
             </select>
+            ${historyContainerHtml}
           </div>
         `;
       }
@@ -2516,16 +2538,20 @@ INDEX_TEMPLATE = """
         return `
           <div class="flex items-center justify-between py-1">
             <label class="text-xs font-bold text-ink">${fName}</label>
-            <input
-              type="checkbox"
-              id="${inputId}"
-              data-section="${section}"
-              data-field="${fName}"
-              ${isChecked ? 'checked' : ''}
-              onchange="triggerAutoSave()"
-              class="w-4 h-4 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
-            />
+            <div>
+              ${historyControls}
+              <input
+                type="checkbox"
+                id="${inputId}"
+                data-section="${section}"
+                data-field="${fName}"
+                ${isChecked ? 'checked' : ''}
+                onchange="triggerAutoSave()"
+                class="w-4 h-4 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer ml-2 align-middle"
+              />
+            </div>
           </div>
+          ${historyContainerHtml}
         `;
       }
 
@@ -2535,7 +2561,10 @@ INDEX_TEMPLATE = """
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="text-xs font-bold text-ink">${fName}</label>
-              <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>
+              <div>
+                ${historyControls}
+                <button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium ml-2">⚑ Flag</button>
+              </div>
             </div>
             <textarea
               id="${inputId}"
@@ -2545,6 +2574,7 @@ INDEX_TEMPLATE = """
               oninput="triggerAutoSave()"
               class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
             >${value || ''}</textarea>
+            ${historyContainerHtml}
           </div>
         `;
       }
@@ -2554,7 +2584,10 @@ INDEX_TEMPLATE = """
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="text-xs font-bold text-ink">${fName} ${isReadOnly ? '<span class="text-[9px] text-ink-faint font-normal">(Locked)</span>' : ''}</label>
-            ${!isReadOnly ? `<button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium">⚑ Flag</button>` : ''}
+            <div>
+              ${historyControls}
+              ${!isReadOnly ? `<button type="button" onclick="openAddDiscrepancyModal('${fName}')" class="text-[10px] text-ember hover:underline font-medium ml-2">⚑ Flag</button>` : ''}
+            </div>
           </div>
           <input
             type="text"
@@ -2564,6 +2597,7 @@ INDEX_TEMPLATE = """
             value="${value || ''}"
             ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()"'}
           />
+          ${historyContainerHtml}
         </div>
       `;
     }
