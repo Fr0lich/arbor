@@ -57,8 +57,7 @@ class ImageHandlerMixin:
 
 
     def _bind_image_scroll(self):
-        self.image_canvas.bind("<Enter>", lambda e: self.image_canvas.bind_all("<MouseWheel>", self._on_mousewheel))
-        self.image_canvas.bind("<Leave>", lambda e: self.image_canvas.unbind_all("<MouseWheel>"))
+        self.image_canvas.bind("<MouseWheel>", self._on_mousewheel)
 
 
     def _on_mousewheel(self, event):
@@ -878,8 +877,9 @@ class ImageHandlerMixin:
         def _on_thumb_scroll(event):
             self.thumb_canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        self.thumb_canvas.bind("<Enter>", lambda e: self.thumb_canvas.bind_all("<MouseWheel>", _on_thumb_scroll))
-        self.thumb_canvas.bind("<Leave>", lambda e: self.thumb_canvas.unbind_all("<MouseWheel>"))
+        self.thumb_canvas.bind("<MouseWheel>", _on_thumb_scroll)
+        if hasattr(self, "thumb_frame") and self.thumb_frame:
+            self.thumb_frame.bind("<MouseWheel>", _on_thumb_scroll)
 
         # Keyboard Navigation Auto-Scroll logic
         if active_card:

@@ -1229,8 +1229,8 @@ class ObjectProgramUI(
             return lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units")
 
         mw_scroller = _make_mousewheel_scroller(tab_canvas)
-        tab_container.bind("<Enter>", lambda e, mws=mw_scroller: tab_container.bind_all("<MouseWheel>", mws))
-        tab_container.bind("<Leave>", lambda e: tab_container.unbind_all("<MouseWheel>"))
+        tab_canvas.bind("<MouseWheel>", mw_scroller)
+        tab_frame.bind("<MouseWheel>", mw_scroller)
 
         tab_canvas.pack(side="left", fill="both", expand=True)
         tab_scroll.pack(side="right", fill="y")
@@ -3571,16 +3571,11 @@ class ObjectProgramUI(
                     if w < threshold:
                         # Use small icon version
                         icon = self._responsive_icons_cache.get(btn_name)
-                        if icon:
-                            if is_tk_button:
-                                btn.config(text="", image=icon, compound="center")
-                            else:
-                                btn.config(text="", image=icon, compound="center")
+                        if icon and str(btn.cget("image")) != str(icon):
+                            btn.config(text="", image=icon, compound="center")
                     else:
                         # Restore full text
-                        if is_tk_button:
-                            btn.config(text=full_text, image="", compound="none")
-                        else:
+                        if btn.cget("text") != full_text:
                             btn.config(text=full_text, image="", compound="none")
                 except Exception as e:
                     import sys
@@ -8676,9 +8671,11 @@ class ObjectProgramUI(
                 
         if focus_active and visible_count <= 0:
             self.no_problems_msg_label.config(text="No fields visible in Focus mode.")
-            self.no_problems_msg_label.grid(row=0, column=0, pady=15, sticky="ew")
+            if self.no_problems_msg_label.winfo_manager() != "grid":
+                self.no_problems_msg_label.grid(row=0, column=0, pady=15, sticky="ew")
         else:
-            self.no_problems_msg_label.grid_remove()
+            if self.no_problems_msg_label.winfo_manager() == "grid":
+                self.no_problems_msg_label.grid_remove()
 
         # Dynamically hide card frames if all of their fields are hidden in Focus Mode
         if hasattr(self, "card_frames") and hasattr(self, "card_defs_ordered"):
@@ -8692,9 +8689,12 @@ class ObjectProgramUI(
                     if row_frame and row_frame.winfo_manager() == "grid":
                         any_visible = True
                         break
-                card_frame.pack_forget()
                 if any_visible:
-                    card_frame.pack(fill="x", padx=10, pady=8)
+                    if card_frame.winfo_manager() != "pack":
+                        card_frame.pack(fill="x", padx=10, pady=8)
+                else:
+                    if card_frame.winfo_manager() == "pack":
+                        card_frame.pack_forget()
 
         if not skip_snap and self.snap_lock_var.get():
             self.snap_to_place(shrink=focus_active)

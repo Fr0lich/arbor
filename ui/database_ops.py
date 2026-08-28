@@ -554,7 +554,7 @@ class DatabaseOpsMixin:
             if hasattr(self, "_invalidate_row_cache"):
                 self._invalidate_row_cache()
 
-    def save_session(self, action):
+    def save_session(self, action, on_complete=None):
         """Persist the current session to disk asynchronously.
 
         P1-A: Replaced the blocking _write_excel() call with the existing
@@ -566,6 +566,8 @@ class DatabaseOpsMixin:
         self._sync_auto_problems_vectorized()
 
         if not self.validate_before_save(action):
+            if on_complete:
+                on_complete(False, "Validation failed")
             return
 
         self.log_action(action)
@@ -596,6 +598,8 @@ class DatabaseOpsMixin:
                     f"Failed to save to database: {err}",
                     ""
                 )
+            if on_complete:
+                on_complete(success, err)
 
         # show_saving_badge=True fires the "💾 Saving…" badge immediately
         # (before the background thread starts) for zero-latency feedback.
@@ -722,8 +726,10 @@ class DatabaseOpsMixin:
 
 
     def save_and_close(self):
-        self.save_session("SAVE_AND_CLOSE")
-        self.root.destroy()
+        def _on_close_done(success, err=None):
+            if success:
+                self.root.destroy()
+        self.save_session("SAVE_AND_CLOSE", on_complete=_on_close_done)
 
 
     def import_to_sqlite(self):
@@ -741,10 +747,31 @@ class DatabaseOpsMixin:
             df_reg, df_obs, df_photo, df_log = SQLiteRepository.import_from_excel(excel_path, sqlite_path, self.app.config)
 
             self.app.excel_path = sqlite_path
+            self.app.output_path = sqlite_path
             self.app.df_reg = df_reg
             self.app.df_obs = df_obs
             self.app.df_photo = df_photo
             self.app.df_log = df_log
+
+            if "ObjectID" in self.app.df_reg.columns:
+                self.app.df_reg.set_index("ObjectID", inplace=True)
+            if "ObjectID" in self.app.df_obs.columns:
+                self.app.df_obs.set_index("ObjectID", inplace=True)
+            if "ObjectID" in self.app.df_photo.columns:
+                self.app.df_photo.set_index("ObjectID", inplace=True)
+
+            self.app.initial_df_obs = self.app.df_obs.copy()
+
+            self.reg_by_id = self.app.df_reg
+            self.obs_by_id = self.app.df_obs
+            self.photo_by_id = self.app.df_photo
+
+            self.app.active_object_ids = list(self.app.df_reg.index)
+
+            self._precompute_startup_caches(self.app.df_reg, self.app.df_obs, self.app.df_photo)
+            self.invalidate_search_index()
+            self.build_search_index()
+
             self.refresh_list()
             self._hide_progress("Import successful")
             self.show_banner("Imported and backed up successfully!", "success")
@@ -785,6 +812,12 @@ class DatabaseOpsMixin:
 
         self._show_progress("Preparing export...", 4)
 
+        with self.app.df_lock:
+            df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
+            df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
+            df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None
+            df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
+
         def _on_progress(step, total, label):
             self.root.after(0, lambda s=step, t=total, l=label: (
                 self.image_scan_progress.configure(value=s, maximum=t),
@@ -798,10 +831,10 @@ class DatabaseOpsMixin:
                     source_path if is_sqlite else None, excel_path,
                     self.app.config,
                     progress_callback=_on_progress,
-                    df_reg=self.app.df_reg,
-                    df_obs=self.app.df_obs,
-                    df_log=self.app.df_log,
-                    df_photo=self.app.df_photo
+                    df_reg=df_reg_copy,
+                    df_obs=df_obs_copy,
+                    df_log=df_log_copy,
+                    df_photo=df_photo_copy
                 )
                 self.root.after(0, lambda: (
                     self._hide_progress("Export complete"),

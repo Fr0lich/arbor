@@ -79,22 +79,17 @@ class FilterManager:
 
                 raw_val = reg_row.get(field, "")
 
-                is_missing = (
-                    raw_val is None or
-                    (isinstance(raw_val, float) and pd.isna(raw_val)) or
-                    (isinstance(raw_val, str) and raw_val.strip() == "")
-                )
+                if raw_val is None or (isinstance(raw_val, float) and pd.isna(raw_val)):
+                    raw_str = ""
+                else:
+                    raw_str = str(raw_val).strip()
 
+                is_missing = (raw_str == "")
                 if not is_missing:
                     return obs_val
 
-                is_unknown = (
-                    raw_val is None or
-                    (isinstance(raw_val, float) and pd.isna(raw_val)) or
-                    str(raw_val).strip().lower() in ("", "unknown", "?", "ukjent")
-                )
-
-                auto_val = is_missing and not is_unknown
+                is_explicitly_unknown = raw_str.lower() in ("unknown", "?", "ukjent", "-")
+                auto_val = is_missing and not is_explicitly_unknown
 
             return obs_val or auto_val
 
