@@ -5,7 +5,7 @@ This document catalogues all current features implemented in the **arbor** proje
 ---
 
 ## 1. Core Workflow Features
-*   **Excel Sync & Repository Auto-Backup**: Keeps data loaded into local memory from Excel files, autosaves changes every 2 minutes (.autosave.xlsx), and tracks file modifications.
+*   **Excel Sync & Repository Auto-Backup**: Keeps data loaded into local memory from Excel files, autosaves changes every 2 minutes (.autosave.json), and tracks file modifications.
 *   **Checked/Reviewed Statusing**: Allows users to mark records as  Reviewed. Displays a checkbox column in the object list and records review times.
 *   **High-DPI Compatibility**: Automatically checks system scaling settings upon launch to adapt font sizes and dimensions dynamically for clear laptop viewports.
 
