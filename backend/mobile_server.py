@@ -481,20 +481,35 @@ class MobileServer:
                 df_reg = self.app_state.df_reg
                 df_obs = self.app_state.df_obs
 
+                def _clean_val(val):
+                    if val is None or pd.isna(val):
+                        return ""
+                    if isinstance(val, float) and val.is_integer():
+                        return str(int(val))
+                    s = str(val).strip()
+                    return "" if s.lower() in ("nan", "none", "<na>") else s
+
                 def _get_combined(col_name, indices):
-                    """Helper to efficiently combine columns using in-place update instead of combine_first."""
-                    result = pd.Series(index=indices, dtype=str)
-                    if col_name in df_reg.columns:
-                        result = df_reg[col_name].reindex(indices)
-                    if df_obs is not None and col_name in df_obs.columns:
-                        obs_col = df_obs[col_name].reindex(indices).dropna()
-                        if not obs_col.empty:
-                            if result.empty or result.isna().all():
-                                result = pd.Series(index=indices, dtype=str)
-                                result.update(obs_col)
-                            else:
-                                result.update(obs_col)
-                    return result
+                    """Helper to efficiently combine columns across registration and observation data safely."""
+                    has_reg = col_name in df_reg.columns
+                    has_obs = df_obs is not None and col_name in df_obs.columns
+
+                    if not has_reg and not has_obs:
+                        return pd.Series("", index=indices, dtype=object)
+
+                    if has_reg and not has_obs:
+                        return df_reg[col_name].reindex(indices)
+
+                    if has_obs and not has_reg:
+                        return df_obs[col_name].reindex(indices)
+
+                    # Both exist: overlay non-null/non-empty observation values onto registration values
+                    reg_col = df_reg[col_name].reindex(indices).astype(object)
+                    obs_col = df_obs[col_name].reindex(indices).astype(object)
+                    obs_str = obs_col.map(_clean_val)
+                    valid_mask = obs_str != ""
+                    reg_col[valid_mask] = obs_col[valid_mask]
+                    return reg_col
 
                 rev_col = "Reviewed" if (df_obs is not None and "Reviewed" in df_obs.columns) else None
                 matched_indices = df_reg.index
@@ -522,26 +537,26 @@ class MobileServer:
 
                 # Cabinet filter
                 if cabinet_filter:
-                    combined_cabinets = _get_combined("Cabinet", matched_indices)
-                    mask = combined_cabinets.fillna("").astype(str).str.lower() == cabinet_filter
+                    combined_cabinets = _get_combined("Cabinet", matched_indices).map(_clean_val).str.lower()
+                    mask = combined_cabinets == cabinet_filter
                     matched_indices = matched_indices[mask]
 
                 # Room filter
                 if room_filter:
-                    combined_rooms = _get_combined("Room", matched_indices)
-                    mask = combined_rooms.fillna("").astype(str).str.lower() == room_filter
+                    combined_rooms = _get_combined("Room", matched_indices).map(_clean_val).str.lower()
+                    mask = combined_rooms == room_filter
                     matched_indices = matched_indices[mask]
 
                 # Genus filter
                 if genus_filter:
                     if "Genus" in df_reg.columns:
-                        mask = df_reg["Genus"].reindex(matched_indices).fillna("").astype(str).str.lower() == genus_filter
+                        mask = df_reg["Genus"].reindex(matched_indices).map(_clean_val).str.lower() == genus_filter
                         matched_indices = matched_indices[mask]
 
                 # Collector filter
                 if collector_filter:
                     if "Collector" in df_reg.columns:
-                        mask = df_reg["Collector"].reindex(matched_indices).fillna("").astype(str).str.lower().str.contains(collector_filter, regex=False)
+                        mask = df_reg["Collector"].reindex(matched_indices).map(_clean_val).str.lower().str.contains(collector_filter, regex=False)
                         matched_indices = matched_indices[mask]
 
                 # Has problems filter
@@ -553,7 +568,7 @@ class MobileServer:
 
                     for p_col in problems:
                         combined_prob = _get_combined(p_col, matched_indices)
-                        mask |= combined_prob.astype(str).str.strip().str.lower().isin(["true", "1", "yes", "t"])
+                        mask |= combined_prob.map(_clean_val).str.lower().isin(["true", "1", "yes", "t"])
 
                     if has_problems_filter in ["true", "1", "yes", "t"]:
                         matched_indices = matched_indices[mask]
@@ -566,8 +581,7 @@ class MobileServer:
                 facets = {}
 
                 # 1. Cabinets facet
-                cabinet_series = _get_combined("Cabinet", matched_indices)
-                cabinet_series = cabinet_series.fillna("").astype(str).str.strip()
+                cabinet_series = _get_combined("Cabinet", matched_indices).map(_clean_val)
                 cabinet_series = cabinet_series[cabinet_series != ""]
                 facets["cabinets"] = cabinet_series.value_counts().to_dict()
 
@@ -597,13 +611,12 @@ class MobileServer:
                             matched_indices = matched_indices.sort_values(ascending=ascending)
                     elif sort_by == 'genus':
                         if "Genus" in df_reg.columns:
-                            sort_series = df_reg["Genus"].reindex(matched_indices).fillna("").astype(str)
+                            sort_series = df_reg["Genus"].reindex(matched_indices).map(_clean_val)
                             matched_indices = matched_indices[sort_series.argsort()]
                             if not ascending:
                                 matched_indices = matched_indices[::-1]
                     elif sort_by == 'cabinet':
-                        sort_series = _get_combined("Cabinet", matched_indices)
-                        sort_series = sort_series.fillna("").astype(str)
+                        sort_series = _get_combined("Cabinet", matched_indices).map(_clean_val)
                         matched_indices = matched_indices[sort_series.argsort()]
                         if not ascending:
                             matched_indices = matched_indices[::-1]
@@ -634,25 +647,27 @@ class MobileServer:
                     reg_row = paged_reg_dict.get(oid, {})
                     obs_row = paged_obs_dict.get(oid)
 
-                    genus = str(reg_row.get("Genus", "") or "")
-                    species = str(reg_row.get("Species", "") or "")
-                    family = str(reg_row.get("Family", "") or "")
-                    author = str(reg_row.get("Author", "") or "")
-                    collector = str(reg_row.get("Collector", "") or "")
-                    collection_date = str(reg_row.get("Collection Date", "") or "")
+                    genus = _clean_val(reg_row.get("Genus"))
+                    species = _clean_val(reg_row.get("Species"))
+                    family = _clean_val(reg_row.get("Family"))
+                    author = _clean_val(reg_row.get("Author"))
+                    collector = _clean_val(reg_row.get("Collector"))
+                    collection_date = _clean_val(reg_row.get("Collection Date"))
                     sci_name = f"{genus} {species} {author}".strip() if (genus or species) else f"Specimen #{oid}"
 
                     rev_val = False
                     if rev_col and obs_row is not None:
-                        v = str(obs_row.get(rev_col, "")).strip().lower()
+                        v = _clean_val(obs_row.get(rev_col)).lower()
                         rev_val = v in ["true", "1", "yes"]
 
                     loc = {}
                     for lcol, key_name in loc_keys.items():
-                        if obs_row is not None and lcol in obs_cols:
-                            loc[key_name] = str(obs_row.get(lcol, "") or "")
-                        elif lcol in reg_cols:
-                            loc[key_name] = str(reg_row.get(lcol, "") or "")
+                        if obs_row is not None and lcol in obs_cols and _clean_val(obs_row.get(lcol)):
+                            loc[key_name] = _clean_val(obs_row.get(lcol))
+                        elif lcol in reg_cols and _clean_val(reg_row.get(lcol)):
+                            loc[key_name] = _clean_val(reg_row.get(lcol))
+                        else:
+                            loc[key_name] = ""
 
                     objects.append({
                         "id": str(oid),

@@ -323,3 +323,38 @@ def test_problem_audit_logging(mock_app_state):
     assert "MissingLabel" in log_entry["ProblemsChanged"]
     assert "Shelf" in log_entry["LocationChanged"]
     assert "Shelf 9" in log_entry["LocationChangedValues"]
+
+
+def test_mobile_objects_mixed_and_numeric_dtypes(mock_app_state):
+    # Set numeric/integer cabinet and problem flags in df_obs and df_reg
+    mock_app_state.df_reg["Cabinet"] = [101, 102, 103]  # integers in df_reg
+    mock_app_state.df_obs["Cabinet"] = [201, None, 203]  # integers & NaNs in df_obs
+    mock_app_state.df_obs["MissingLabel"] = [True, False, False]
+
+    server = MobileServer(mock_app_state, port=5094)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Test /api/objects GET request
+    res = client.get('/api/objects', headers=headers)
+    assert res.status_code == 200
+    data = res.json
+    assert data["total_matching"] == 3
+    assert "cabinets" in data["facets"]
+    # 201 should override 101, 102 should be fallback, 203 should override 103
+    assert "201" in data["facets"]["cabinets"]
+    assert "102" in data["facets"]["cabinets"]
+    assert "203" in data["facets"]["cabinets"]
+
+    # Test filtering by cabinet (numeric string)
+    res_filt = client.get('/api/objects?cabinet=201', headers=headers)
+    assert res_filt.status_code == 200
+    assert res_filt.json["total_matching"] == 1
+    assert res_filt.json["objects"][0]["id"] == "1024"
+
+    # Test filtering by has_problems
+    res_prob = client.get('/api/objects?has_problems=true', headers=headers)
+    assert res_prob.status_code == 200
+    assert res_prob.json["total_matching"] == 1
+    assert res_prob.json["objects"][0]["id"] == "1024"
+
