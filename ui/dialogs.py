@@ -356,19 +356,26 @@ class StartupDialog:
         self._bind_canvas_mousewheel(canvas, outer)
 
     def _bind_canvas_mousewheel(self, canvas, frame=None):
-        """Bind mousewheel recursively to canvas and all child widgets so trackpads scroll anywhere."""
+        """Bind mousewheel using a custom bindtag instead of recursive widget walking."""
+        tag = "StartupDialogScroll"
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            try:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except Exception:
+                pass
 
-        def _bind_recursive(w):
-            w.bind("<MouseWheel>", _on_mousewheel, add="+")
+        canvas.bind_class(tag, "<MouseWheel>", _on_mousewheel)
+
+        def _apply_tag(w):
+            current_tags = list(w.bindtags())
+            if tag not in current_tags:
+                w.bindtags((tag,) + tuple(current_tags))
             for child in w.winfo_children():
-                _bind_recursive(child)
+                _apply_tag(child)
 
-        canvas.bind("<MouseWheel>", _on_mousewheel, add="+")
+        canvas.bind("<MouseWheel>", _on_mousewheel)
         if frame:
-            _bind_recursive(frame)
-            self.win.after(100, lambda: _bind_recursive(frame))
+            _apply_tag(frame)
 
 
 
@@ -1234,7 +1241,15 @@ class StartupDialog:
         self.progress_bar_adv.pack(fill="x", pady=4)
         self.progress_bar_adv.pack_forget()
 
-        ttk.Button(frame, text="Done", command=adv_win.destroy, cursor="hand2").pack(anchor="e", pady=(8, 0))
+        def _close_adv():
+            try:
+                adv_win.grab_release()
+            except Exception:
+                pass
+            adv_win.destroy()
+
+        adv_win.protocol("WM_DELETE_WINDOW", _close_adv)
+        ttk.Button(frame, text="Done", command=_close_adv, cursor="hand2").pack(anchor="e", pady=(8, 0))
 
         # Point old progress_bar references to the advanced one
         self.progress_bar = self.progress_bar_adv

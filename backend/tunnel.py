@@ -123,6 +123,9 @@ class ResilientSSHTunnel:
                     url_deadline = time.time() + 12  # 12s per provider attempt
 
                     while not self._stop_event.is_set():
+                        if self.process.poll() is not None:
+                            break
+
                         line = self.process.stdout.readline()
                         if not line:
                             if self.process.poll() is not None:
@@ -131,9 +134,16 @@ class ResilientSSHTunnel:
                                 logging.warning(f"Tunnel {target_host}: no URL received within 12s")
                                 if status_callback and attempt >= len(providers):
                                     status_callback("🟡 Tunnel timeout — check network / firewall")
-                                self.process.terminate()
+                                try:
+                                    self.process.terminate()
+                                    self.process.wait(timeout=1.0)
+                                except Exception:
+                                    try:
+                                        self.process.kill()
+                                    except Exception:
+                                        pass
                                 break
-                            time.sleep(0.1)
+                            time.sleep(0.05)
                             continue
 
                         match = url_pattern.search(line)
@@ -149,11 +159,21 @@ class ResilientSSHTunnel:
                             logging.warning(f"Tunnel {target_host}: no URL received within 12s")
                             if status_callback and attempt >= len(providers):
                                 status_callback("🟡 Tunnel timeout — check network / firewall")
-                            self.process.terminate()
+                            try:
+                                self.process.terminate()
+                                self.process.wait(timeout=1.0)
+                            except Exception:
+                                try:
+                                    self.process.kill()
+                                except Exception:
+                                    pass
                             break
 
                     if self.process and not self._stop_event.is_set():
-                        self.process.wait()
+                        try:
+                            self.process.wait(timeout=0.5)
+                        except Exception:
+                            pass
 
                     if self._stop_event.is_set():
                         break
@@ -162,6 +182,15 @@ class ResilientSSHTunnel:
                     logging.error(f"Tunnel error with {target_host}: {e}")
 
                 finally:
+                    if self.process and self._stop_event.is_set():
+                        try:
+                            self.process.terminate()
+                            self.process.wait(timeout=1.0)
+                        except Exception:
+                            try:
+                                self.process.kill()
+                            except Exception:
+                                pass
                     self.public_url = None
 
                 if self._stop_event.is_set():

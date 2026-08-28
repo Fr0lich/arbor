@@ -945,9 +945,11 @@ class ObjectProgramUI(
         prefs = config.load_prefs()
         show_gbif = prefs.get("enable_gbif", False)
         if show_gbif:
-            self.gbif_btn.pack(side="right", padx=6)
+            if self.gbif_btn.winfo_manager() != "pack":
+                self.gbif_btn.pack(side="right", padx=6)
         else:
-            self.gbif_btn.pack_forget()
+            if self.gbif_btn.winfo_manager() == "pack":
+                self.gbif_btn.pack_forget()
 
     def check_gbif_action(self):
         if not self.app.current_object_id:
@@ -2746,7 +2748,7 @@ class ObjectProgramUI(
         self.app.df_reg.loc[oid] = state["reg"]
         self.app.df_obs.loc[oid] = state["obs"]
     
-        self._invalidate_row_cache()
+        self._invalidate_row_cache(oid=oid)
         self.invalidate_search_index()
         self.refresh_list()
 
@@ -2837,7 +2839,7 @@ class ObjectProgramUI(
         self.app.df_reg.loc[oid] = state["reg"]
         self.app.df_obs.loc[oid] = state["obs"]
 
-        self._invalidate_row_cache()
+        self._invalidate_row_cache(oid=oid)
         self.invalidate_search_index()
         self.refresh_list()
 
@@ -3452,9 +3454,12 @@ class ObjectProgramUI(
     def toggle_search_panel(self):
         if hasattr(self, "search_bar_frame"):
             if self.show_search_var.get():
-                self.search_bar_frame.pack(fill="x", padx=0, pady=(0, 2), before=self.search_bar_frame.master.winfo_children()[1] if len(self.search_bar_frame.master.winfo_children()) > 1 else None)
+                if self.search_bar_frame.winfo_manager() != "pack":
+                    before_w = self.search_bar_frame.master.winfo_children()[1] if len(self.search_bar_frame.master.winfo_children()) > 1 else None
+                    self.search_bar_frame.pack(fill="x", padx=0, pady=(0, 2), before=before_w)
             else:
-                self.search_bar_frame.pack_forget()
+                if self.search_bar_frame.winfo_manager() == "pack":
+                    self.search_bar_frame.pack_forget()
                 
 
     def _sync_middle_panes(self):
@@ -3483,7 +3488,8 @@ class ObjectProgramUI(
     def toggle_location_panel(self):
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get():
             if hasattr(self, 'loc_container'):
-                self.loc_container.pack_forget()
+                if self.loc_container.winfo_manager() == "pack":
+                    self.loc_container.pack_forget()
                 if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
                     if str(self.left_bottom_container) in self.left_panes.panes():
                         self.left_panes.forget(self.left_bottom_container)
@@ -3495,28 +3501,35 @@ class ObjectProgramUI(
                 if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
                     if str(self.left_bottom_container) not in self.left_panes.panes():
                         self.left_panes.add(self.left_bottom_container, weight=0)
-                self.loc_container.pack(side="top", fill="x")
+                if self.loc_container.winfo_manager() != "pack":
+                    self.loc_container.pack(side="top", fill="x")
 
     def toggle_images_panel(self):
         self._sync_middle_panes()
             
     def toggle_image_tools(self):
-        self.image_toolbar.pack_forget()
         if self.show_image_tools_var.get():
-            self.image_toolbar.pack(before=self.image_box, fill="x", pady=(2, 4))
+            if self.image_toolbar.winfo_manager() != "pack":
+                self.image_toolbar.pack(before=self.image_box, fill="x", pady=(2, 4))
+        else:
+            if self.image_toolbar.winfo_manager() == "pack":
+                self.image_toolbar.pack_forget()
 
     def toggle_bulk_edit_btn(self):
         if hasattr(self, 'bulk_edit_btn'):
             import config
             advanced_prefs = config.load_prefs().get("advanced", {})
             if not advanced_prefs.get("enable_bulk_editor", False):
-                self.bulk_edit_btn.pack_forget()
+                if self.bulk_edit_btn.winfo_manager() == "pack":
+                    self.bulk_edit_btn.pack_forget()
                 return
 
             if self.show_bulk_edit_var.get():
-                self.bulk_edit_btn.pack(side="bottom", fill="x", pady=(2, 0))
+                if self.bulk_edit_btn.winfo_manager() != "pack":
+                    self.bulk_edit_btn.pack(side="bottom", fill="x", pady=(2, 0))
             else:
-                self.bulk_edit_btn.pack_forget()
+                if self.bulk_edit_btn.winfo_manager() == "pack":
+                    self.bulk_edit_btn.pack_forget()
 
 
 
@@ -5365,9 +5378,29 @@ class ObjectProgramUI(
 
 #------
 
-    def _invalidate_row_cache(self):
+    def _invalidate_row_cache(self, oid=None):
         """Mark the refresh_list() row-dict caches as stale so they are rebuilt on next refresh."""
         self._row_cache_dirty = True
+        self._cached_reg_dict = None
+        self._cached_obs_dict = None
+        self._cached_reviewed_dict = None
+        self._cached_genus_dict = None
+        self._cached_species_dict = None
+
+        if oid is None:
+            if hasattr(self, "_problem_cache") and self._problem_cache is not None:
+                self._problem_cache.clear()
+            if hasattr(self, "_history_cache") and self._history_cache is not None:
+                self._history_cache.clear()
+        else:
+            if hasattr(self, "_problem_cache") and self._problem_cache is not None:
+                self._problem_cache.pop(oid, None)
+                s_oid = str(oid)
+                self._problem_cache.pop(s_oid, None)
+                if s_oid.isdigit():
+                    self._problem_cache.pop(int(s_oid), None)
+            if hasattr(self, "invalidate_history_cache"):
+                self.invalidate_history_cache(oid)
 
     def _get_obs_dict(self):
         if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_obs_dict", None) is None:
@@ -7542,72 +7575,64 @@ class ObjectProgramUI(
 #----------
 
     def is_problem_active(self, oid, prob_col):
+        obs_dict = self._get_obs_dict() if hasattr(self, "_get_obs_dict") else None
+        reg_dict = self._get_reg_dict() if hasattr(self, "_get_reg_dict") else None
+
+        obs_row = {}
+        if obs_dict is not None:
+            obs_row = obs_dict.get(oid)
+            if obs_row is None and str(oid).isdigit():
+                obs_row = obs_dict.get(int(oid), {})
+            if obs_row is None:
+                obs_row = {}
+        elif hasattr(self, "obs_by_id") and self.obs_by_id is not None and oid in self.obs_by_id.index:
+            r = self.obs_by_id.loc[oid]
+            obs_row = r.iloc[0].to_dict() if isinstance(r, pd.DataFrame) else r.to_dict()
 
         if prob_col == "Other_problem":
-            val = self.app.df_obs.loc[oid, prob_col]
-            if isinstance(val, pd.Series):
-                return bool(val.iloc[0])
-            return bool(val)
+            return bool(obs_row.get(prob_col, False))
 
-      
         if prob_col == "Reviewed":
-            val = self.app.df_obs.loc[oid, REVIEWED_COLUMN]
-            if isinstance(val, pd.Series):
-                return bool(val.iloc[0])
-            return bool(val)
-
-        if oid not in self.obs_by_id.index:
-            return False
+            return bool(obs_row.get(REVIEWED_COLUMN, False))
 
         if prob_col == "Has_Images":
             if self.image_mode == "online":
                 return True
             elif self.image_mode == "offline":
                 return False
-            val = self.app.df_obs.loc[oid, "Images_Missing"]
-            if isinstance(val, pd.Series):
-                return not bool(val.iloc[0])
-            return not bool(val)
+            return not bool(obs_row.get("Images_Missing", False))
 
         if prob_col == "Images_Missing":
             if self.image_mode in ("online", "offline"):
                 return False
-            val = self.app.df_obs.loc[oid, "Images_Missing"]
-            if isinstance(val, pd.Series):
-                return bool(val.iloc[0])
-            return bool(val)
+            return bool(obs_row.get("Images_Missing", False))
 
-      
-        obs_dict = self._get_obs_dict()
-        obs = obs_dict.get(oid) or self.obs_by_id.loc[oid]
-        if isinstance(obs, pd.DataFrame):
-            obs = obs.iloc[0]
+        reg_row = {}
+        if reg_dict is not None:
+            reg_row = reg_dict.get(oid)
+            if reg_row is None and str(oid).isdigit():
+                reg_row = reg_dict.get(int(oid), {})
+            if reg_row is None:
+                reg_row = {}
+        elif hasattr(self, "reg_by_id") and self.reg_by_id is not None and oid in self.reg_by_id.index:
+            r = self.reg_by_id.loc[oid]
+            reg_row = r.iloc[0].to_dict() if isinstance(r, pd.DataFrame) else r.to_dict()
 
-        reg_dict = self._get_reg_dict()
-        reg = reg_dict.get(oid) or self.reg_by_id.loc[oid]
-        if isinstance(reg, pd.DataFrame):
-            reg = reg.iloc[0]
-
-      
-        value = obs.get(prob_col, False)
+        value = obs_row.get(prob_col, False)
         if isinstance(value, pd.Series):
             value = value.iloc[0]
 
         obs_val = bool(value)
-
-      
         auto_val = False
 
-   
         if prob_col in self.problem_to_field:
             field = self.problem_to_field.get(prob_col)
-            if not field or field not in reg:
+            if not field or field not in reg_row:
                 return obs_val
 
-            raw_val = reg.get(field, "")
+            raw_val = reg_row.get(field, "")
             if isinstance(raw_val, pd.Series):
                 raw_val = raw_val.iloc[0]
-
 
 
 

@@ -205,9 +205,9 @@ class MobileHostApp:
                 except Exception as e:
                     debug_error("MobileHost autosave", str(e))
 
-            self.autosave_job = self.root.after(180000, tick)
+            self.autosave_job = self.root.after(60000, tick)
 
-        self.autosave_job = self.root.after(180000, tick)
+        self.autosave_job = self.root.after(60000, tick)
 
     # ------------------------------------------------------------------
     # Session end

@@ -246,3 +246,84 @@ def test_unknown_fixed_removes_yellow_highlights():
     assert status_badge.cget("text") == "UNREV"
 
     root.destroy()
+
+def test_invalidate_row_cache_and_undo_redo_sync():
+    """Verifies that _invalidate_row_cache properly clears problem caches and undo/redo updates problem flags."""
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except Exception:
+        pytest.skip("Tkinter display not available")
+
+    df_reg = pd.DataFrame({
+        "ObjectID": ["OBJ1"],
+        "Genus": ["Pinus"],
+        "Species": ["sylvestris"]
+    }).set_index("ObjectID")
+
+    df_obs = pd.DataFrame({
+        "ObjectID": ["OBJ1"],
+        "Genus_Problem": [False],
+        "Species_Problem": [False],
+        "Reviewed": [False]
+    }).set_index("ObjectID")
+
+    app = MockApp(df_reg, df_obs)
+    mw = create_mock_ui(root, app)
+    mw.load_object("OBJ1")
+
+    # Pre-populate problem cache
+    mw._problem_cache["OBJ1"] = False
+    assert mw._problem_cache.get("OBJ1") is False
+
+    # Perform an edit that introduces a problem
+    mw.reg_vars["Genus"].set("")
+    mw.commit_current_object()
+
+    # Verify problem cache is cleared/invalidated for OBJ1
+    assert "OBJ1" not in mw._problem_cache or mw._problem_cache["OBJ1"] is True
+    assert mw.is_problem_active("OBJ1", "Genus_Problem") is True
+
+    # Test Undo
+    mw.undo()
+    assert mw.reg_vars["Genus"].get() == "Pinus"
+    assert mw.is_problem_active("OBJ1", "Genus_Problem") is False
+
+    # Test Redo
+    mw.redo()
+    assert mw.reg_vars["Genus"].get() == ""
+    assert mw.is_problem_active("OBJ1", "Genus_Problem") is True
+
+    root.destroy()
+
+def test_is_problem_active_safe_lookup_nonexistent_ids():
+    """Verifies that is_problem_active safely returns False for non-existent IDs without raising KeyError."""
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except Exception:
+        pytest.skip("Tkinter display not available")
+
+    df_reg = pd.DataFrame({
+        "ObjectID": ["OBJ1"],
+        "Genus": ["Pinus"],
+        "Species": ["sylvestris"]
+    }).set_index("ObjectID")
+
+    df_obs = pd.DataFrame({
+        "ObjectID": ["OBJ1"],
+        "Genus_Problem": [False],
+        "Species_Problem": [False],
+        "Reviewed": [False]
+    }).set_index("ObjectID")
+
+    app = MockApp(df_reg, df_obs)
+    mw = create_mock_ui(root, app)
+
+    # Calling with a non-existent ObjectID should safely return False
+    assert mw.is_problem_active("NON_EXISTENT", "Other_problem") is False
+    assert mw.is_problem_active("NON_EXISTENT", "Reviewed") is False
+    assert mw.is_problem_active("NON_EXISTENT", "Genus_Problem") is False
+    assert mw.is_problem_active(99999, "Genus_Problem") is False
+
+    root.destroy()

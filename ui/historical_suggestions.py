@@ -364,8 +364,12 @@ class HistoricalSuggestionsMixin:
         presence_set = set()
         total = len(self.app.active_object_ids)
 
+        # Thread-safe snapshot of historical_dbs
+        with getattr(self.app, "df_lock", threading.RLock()):
+            hist_dbs = list(getattr(self.app, "historical_dbs", []) or [])
+
         # Populate presence_set from historical_dbs
-        for db in getattr(self.app, "historical_dbs", []):
+        for db in hist_dbs:
             reg_by_id = db.get("reg_by_id")
             if reg_by_id is not None:
                 for hist_id in reg_by_id.index:
@@ -376,11 +380,12 @@ class HistoricalSuggestionsMixin:
                         presence_set.add(int(s_id))
 
         for i, oid in enumerate(self.app.active_object_ids):
-            # Update progress bar
-            self.root.after(0, lambda current=i, max_val=total: (
-                getattr(self, "image_scan_progress", None) and self.image_scan_progress.configure(value=current, maximum=max_val),
-                getattr(self, "progress_label", None) and self.progress_label.config(text=f"Scanning suggestions... {current}/{max_val}")
-            ))
+            # Throttled progress update to avoid flooding the Tkinter event loop
+            if i % 25 == 0 or i == total - 1:
+                self.root.after(0, lambda current=i, max_val=total: (
+                    getattr(self, "image_scan_progress", None) and self.image_scan_progress.configure(value=current, maximum=max_val),
+                    getattr(self, "progress_label", None) and self.progress_label.config(text=f"Scanning suggestions... {current}/{max_val}")
+                ))
 
             suggs = self.collect_historical_suggestions(oid, show_all_override=False)
             has_valid = False

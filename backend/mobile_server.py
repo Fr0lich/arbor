@@ -71,18 +71,23 @@ def _apply_dataframe_updates(target_df, updates, changed_fields, changed_values,
                 changed_values.append(f'{k}: "" -> "{new_v}"')
 
 def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fields, changed_values):
-    location_names = {"building", "room", "cabinet", "shelf", "drawer", "box", "location", "aisle", "unittray", "tray", "barcode"}
-    problem_names = set()
-    if getattr(app_state, "config", None) and isinstance(app_state.config, dict) and "ui_sections" in app_state.config:
-        ui_sec = app_state.config["ui_sections"]
-        if "location" in ui_sec and isinstance(ui_sec["location"], list):
-            for l_item in ui_sec["location"]:
-                if isinstance(l_item, dict) and "name" in l_item:
-                    location_names.add(l_item["name"].lower())
-        if "problems" in ui_sec and isinstance(ui_sec["problems"], list):
-            for p_item in ui_sec["problems"]:
-                if isinstance(p_item, dict) and "name" in p_item:
-                    problem_names.add(p_item["name"].lower())
+    # Lazy-build and cache the name sets — config is immutable per session so this is safe.
+    # Avoids rebuilding the sets from config on every single audit log write.
+    if not getattr(app_state, '_audit_set_cache', None):
+        _loc = {"building", "room", "cabinet", "shelf", "drawer", "box", "location", "aisle", "unittray", "tray", "barcode"}
+        _prob = set()
+        if getattr(app_state, "config", None) and isinstance(app_state.config, dict) and "ui_sections" in app_state.config:
+            ui_sec = app_state.config["ui_sections"]
+            if "location" in ui_sec and isinstance(ui_sec["location"], list):
+                for l_item in ui_sec["location"]:
+                    if isinstance(l_item, dict) and "name" in l_item:
+                        _loc.add(l_item["name"].lower())
+            if "problems" in ui_sec and isinstance(ui_sec["problems"], list):
+                for p_item in ui_sec["problems"]:
+                    if isinstance(p_item, dict) and "name" in p_item:
+                        _prob.add(p_item["name"].lower())
+        app_state._audit_set_cache = (_loc, _prob)
+    location_names, problem_names = app_state._audit_set_cache
 
     loc_fields = []
     loc_values = []
@@ -214,7 +219,9 @@ class MobileServer:
             self._is_running = False
 
     def stop(self):
-        self._is_running = False
+        # Flask server intentionally kept alive as a persistent singleton.
+        # Only clean up the firewall rule; the server thread keeps running
+        # so subsequent MobilePanel re-opens can reuse it without a port conflict.
         self._remove_firewall_rule()
 
 
@@ -551,13 +558,23 @@ class MobileServer:
                     matched_indices = pd.Index(all_matched_list)
 
                 # Status filter
-                if status_filter != 'all' and rev_col and df_obs is not None:
-                    rev_series = df_obs.reindex(matched_indices)[rev_col].astype(str).str.strip().str.lower()
-                    is_rev = rev_series.isin(["true", "1", "yes"])
-                    if status_filter == 'reviewed':
-                        matched_indices = matched_indices[is_rev]
-                    elif status_filter == 'pending':
-                        matched_indices = matched_indices[~is_rev]
+                if status_filter != 'all':
+                    if rev_col and df_obs is not None:
+                        rev_series = df_obs.reindex(matched_indices)[rev_col].astype(str).str.strip().str.lower()
+                        is_rev = rev_series.isin(["true", "1", "yes"])
+                        if status_filter == 'reviewed':
+                            matched_indices = matched_indices[is_rev]
+                        elif status_filter == 'pending':
+                            matched_indices = matched_indices[~is_rev]
+                    if status_filter == 'flagged':
+                        prob_cols = []
+                        if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                            prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+                        flagged_mask = pd.Series(False, index=matched_indices)
+                        for p_col in prob_cols:
+                            combined_prob = _get_combined(p_col, matched_indices)
+                            flagged_mask |= combined_prob.map(_clean_val).str.lower().isin(["true", "1", "yes", "t"])
+                        matched_indices = matched_indices[flagged_mask]
 
                 # Cabinet filter
                 if cabinet_filter:
@@ -954,7 +971,19 @@ class MobileServer:
                 # 2. Apply registration updates
                 _apply_dataframe_updates(self.app_state.df_reg, reg_updates, changed_fields, changed_values, oid, allowed_columns=allowed_reg_cols if allowed_reg_cols else None)
 
-                # 3. Apply observation updates
+                # 3. Ensure df_obs has a row for this OID before applying observation updates.
+                # Use dtype-matched defaults (False for bool cols, "" for all others) to prevent
+                # pandas from coercing bool columns to object dtype on pd.concat.
+                if self.app_state.df_obs is not None and oid not in self.app_state.df_obs.index:
+                    empty_vals = {}
+                    for col in self.app_state.df_obs.columns:
+                        dtype = self.app_state.df_obs[col].dtype
+                        empty_vals[col] = False if pd.api.types.is_bool_dtype(dtype) else ""
+                    new_obs_row = pd.DataFrame([empty_vals], index=[oid])
+                    new_obs_row.index.name = self.app_state.df_obs.index.name or "ObjectID"
+                    self.app_state.df_obs = pd.concat([self.app_state.df_obs, new_obs_row])
+
+                # 4. Apply observation updates
                 _apply_dataframe_updates(self.app_state.df_obs, updates, changed_fields, changed_values, oid, fallback_df=self.app_state.df_reg, allowed_columns=allowed_obs_cols if allowed_obs_cols else None)
 
                 # 4. Handle Reviewed Status
@@ -993,6 +1022,9 @@ class MobileServer:
                 if len(self.recent_edits) > 20:
                     self.recent_edits.pop()
 
+                # Write under lock so rapid sequential edits don't race with the Tkinter event handler
+                self.app_state._mobile_last_edited_oid = oid
+
             self.broadcast_event("record_updated", {"id": oid})
 
             # 8. Notify desktop UI
@@ -1004,9 +1036,8 @@ class MobileServer:
 
             if self.root_tk:
                 try:
-                    self.app_state._mobile_last_edited_oid = oid
                     self.root_tk.event_generate("<<MobileEdit>>", when="tail")
-                except Exception as e:
+                except Exception:
                     pass
 
             return jsonify({
@@ -1188,7 +1219,19 @@ class MobileServer:
                     # 2. Apply registration updates
                     _apply_dataframe_updates(self.app_state.df_reg, reg_updates, changed_fields, changed_values, oid, allowed_columns=allowed_reg_cols if allowed_reg_cols else None)
 
-                    # 3. Apply observation updates
+                    # 3. Ensure df_obs has a row for this OID before applying observation updates.
+                    # Use dtype-matched defaults (False for bool cols, "" for all others) to prevent
+                    # pandas from coercing bool columns to object dtype on pd.concat.
+                    if self.app_state.df_obs is not None and oid not in self.app_state.df_obs.index:
+                        empty_vals = {}
+                        for col in self.app_state.df_obs.columns:
+                            dtype = self.app_state.df_obs[col].dtype
+                            empty_vals[col] = False if pd.api.types.is_bool_dtype(dtype) else ""
+                        new_obs_row = pd.DataFrame([empty_vals], index=[oid])
+                        new_obs_row.index.name = self.app_state.df_obs.index.name or "ObjectID"
+                        self.app_state.df_obs = pd.concat([self.app_state.df_obs, new_obs_row])
+
+                    # 4. Apply observation updates
                     _apply_dataframe_updates(self.app_state.df_obs, obs_updates, changed_fields, changed_values, oid, fallback_df=self.app_state.df_reg, allowed_columns=allowed_obs_cols if allowed_obs_cols else None)
 
                     # 4. Handle Reviewed Status
@@ -1230,6 +1273,8 @@ class MobileServer:
                 if updated_ids:
                     self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
                     self.app_state.dirty = True
+                    # Write under lock so rapid sequential edits don't race with the Tkinter event handler
+                    self.app_state._mobile_last_edited_oid = updated_ids[-1]
 
             if not updated_ids:
                 return jsonify({"success": True, "updated_count": 0, "updated_ids": []})
@@ -1243,9 +1288,8 @@ class MobileServer:
 
             if self.root_tk:
                 try:
-                    self.app_state._mobile_last_edited_oid = updated_ids[-1]
                     self.root_tk.event_generate("<<MobileEdit>>", when="tail")
-                except Exception as e:
+                except Exception:
                     pass
 
             return jsonify({
@@ -2233,8 +2277,13 @@ INDEX_TEMPLATE = """
         // 3. Populate Discrepancy Field Select Options
         populateDiscrepancyFields();
 
-        // 4. Setup SSE live events if available
+        // 4. Setup SSE live events + reconnect on mobile wake
         setupEventSource();
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            setupEventSource();  // closes stale connection and opens a fresh one
+          }
+        });
       } catch (err) {
         console.error("Initialization error:", err);
         document.getElementById('headerDbName').textContent = 'Database Connected';
@@ -2242,15 +2291,18 @@ INDEX_TEMPLATE = """
       }
     }
 
+    let _evtSource = null;
+
     function setupEventSource() {
       try {
-        const evtSource = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
-        evtSource.onmessage = function(e) {
+        if (_evtSource) { _evtSource.close(); _evtSource = null; }
+        _evtSource = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
+        _evtSource.onmessage = function(e) {
           try {
             const data = JSON.parse(e.data);
             if (data.type === 'record_updated') {
               if (document.getElementById('listView').classList.contains('hidden') && currentOid === data.data.id) {
-                // Background notification
+                // Background notification — no action needed
               } else if (!document.getElementById('listView').classList.contains('hidden')) {
                 fetchList();
               }
@@ -2597,6 +2649,15 @@ INDEX_TEMPLATE = """
     // SPECIMEN DETAIL VIEW & DYNAMIC FORM ENGINE
     // ==========================================
     async function loadSpecimen(oid) {
+      // Flush any pending debounced save for the outgoing specimen BEFORE currentOid changes.
+      // Without this, navigating via prev/next saves the old form data under the new specimen's OID.
+      if (autoSaveTimer !== null) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = null;
+        if (currentOid && currentOid !== oid) {
+          await saveCurrentEdits();
+        }
+      }
       currentOid = oid;
       showDetailView();
 
@@ -2797,7 +2858,7 @@ INDEX_TEMPLATE = """
               id="${inputId}"
               data-section="${section}"
               data-field="${fName}"
-              onchange="triggerAutoSave()"
+              onchange="triggerAutoSave()" onblur="saveCurrentEdits()"
               class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern cursor-pointer"
             >
               ${optionsHtml}
@@ -2846,7 +2907,7 @@ INDEX_TEMPLATE = """
               data-section="${section}"
               data-field="${fName}"
               rows="2"
-              oninput="triggerAutoSave()"
+              oninput="triggerAutoSave()" onblur="saveCurrentEdits()"
               class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
             >${value || ''}</textarea>
             ${historyContainerHtml}
@@ -2870,7 +2931,7 @@ INDEX_TEMPLATE = """
             data-section="${section}"
             data-field="${fName}"
             value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()"'}
+            ${isReadOnly ? 'readonly class="w-full bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()" onblur="saveCurrentEdits()"'}
           />
           ${historyContainerHtml}
         </div>
@@ -3009,7 +3070,7 @@ INDEX_TEMPLATE = """
       const syncStatus = document.getElementById('footerSyncStatus');
       syncStatus.innerHTML = '<span class="font-mono text-ember font-medium animate-pulse">Saving changes...</span>';
       clearTimeout(autoSaveTimer);
-      autoSaveTimer = setTimeout(saveCurrentEdits, 500);
+      autoSaveTimer = setTimeout(saveCurrentEdits, 800);  // 800ms per guide requirement
     }
 
     async function saveCurrentEdits() {
@@ -3021,7 +3082,7 @@ INDEX_TEMPLATE = """
       // Collect all dynamic inputs
       document.querySelectorAll('[data-section="registration"]').forEach(input => {
         const f = input.getAttribute('data-field');
-        regPayload[f] = input.value;
+        regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
       });
 
       document.querySelectorAll('[data-section="observation"]').forEach(input => {

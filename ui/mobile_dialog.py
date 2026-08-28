@@ -91,8 +91,8 @@ class MobileDialog:
     # ------------------------------------------------------------------
 
     def _on_mobile_edit(self, oid, summary):
-        try:
-            self.app_state._mobile_last_edited_oid = oid
-            self.root.event_generate("<<MobileEdit>>", when="tail")
-        except Exception:
-            pass
+        # <<MobileEdit>> is already fired by MobileServer.update_object() directly on root_tk.
+        # Do NOT fire it a second time here — that would cause double load_object(), double
+        # refresh_list(), and double autosave in the main window handler.
+        # This method is retained as a documented hook for future dialog-specific reactions.
+        pass
