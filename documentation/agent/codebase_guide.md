@@ -9,20 +9,23 @@ This document serves as a guide to help you understand the architecture of the *
 The application is written in Python using the standard library **Tkinter** for UI layout, and **Pandas** + **Openpyxl** to read and write Excel databases. It consists of the following files:
 
 `
-arbor/
+.
 ├── main.py               # Application entry point & DPI config
 ├── config.py             # Global scaling, preferences, and database schemas
 ├── models.py             # Local database state and filters representation
 ├── repository.py         # Read/write connector interfacing with Excel files
 ├── utils.py              # Common visual and error logger helper functions
+├── backend/              # Mobile companion app, search, and external integrations
+│   ├── mobile_server.py  # Flask server and UI templates for mobile editing
+│   ├── search.py         # Core search and filtering functionality
+│   └── tunnel.py         # Local tunnel orchestration
 └── ui/                   # UI layout and popups folder
     ├── main_window.py    # The main workspace window layout (primary layout)
-    ├── dialogs.py        # Dialogue popups (zoomable image, startup, etc.)
-    ├── tutorial.py       # Interactive walkthrough overlays
-    ├── bulk_edit.py      # Bulk Excel modification windows
-    ├── group_editor.py   # Group taxonomy customization manager
-    ├── historical_resolver.py # Version discrepancy resolution
-    └── new_database_wizard.py # Layout setup wizard for new sheets
+    ├── dialogs.py        # Various dialog popups (startup, GBIF, etc.)
+    ├── unified_settings.py # Settings dashboard and preferences configuration
+    ├── dashboard.py      # Database overview and statistics dashboard
+    ├── widgets.py        # Reusable custom UI components (buttons, scroll frames)
+    └── ...               # Additional modules for features (bulk_edit, logs, etc.)
 `
 
 ---
@@ -58,8 +61,8 @@ This file builds the main user workspace. It is structured into multiple layers 
 
 ### Key UI Subsections inside ui/main_window.py:
 
-*   **uild_ui()** (around line 4258): Organizes the container frames, grid columns, status bar, and binds global keyboard shortcuts.
-*   **uild_sections()** (around line 862): Dynamically creates input fields (Entry boxes, Multiline text boxes, and Dropdowns) based on the schemas defined in config.py.
+*   **build_ui()** (around line 3637): Organizes the container frames, grid columns, status bar, and binds global keyboard shortcuts.
+*   **build_sections()** (around line 1128): Dynamically creates input fields (Entry boxes, Multiline text boxes, and Dropdowns) based on the schemas defined in config.py.
 *   **_toggle_reviewed_for_id()**: Toggles checkmark status of selected object IDs, triggering visual indicators.
 *   **Keyboard Hotkeys**: Binds common physical navigation controls for review efficiency:
     *   Spacebar: Check/uncheck problem indicators.
