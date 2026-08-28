@@ -801,15 +801,50 @@ class MobileServer:
             if "Reviewed" in obs_dict:
                 rev_val = str(obs_dict["Reviewed"]).strip().lower() in ["true", "1", "yes"]
 
-            online_urls = []
-            if self.app_state.config:
-                pattern = self.app_state.config.get("image_url_pattern", "")
-                if pattern:
-                    online_urls.append(pattern.replace("{id}", oid))
+            import config as app_config
+            prefs = app_config.load_prefs() or {}
+            pattern_override = prefs.get("image_url_pattern_override", prefs.get("advanced", {}).get("image_url_pattern_override", "")).strip()
 
-            if not online_urls:
-                padded = oid.zfill(4) if oid.isdigit() else oid
-                online_urls.append(f"https://www.unimus.no/photos/image/jpeg/O-V-OE-{padded}.jpg")
+            if pattern_override:
+                pattern = pattern_override
+            else:
+                pattern = ""
+                if self.app_state.config:
+                    pattern = self.app_state.config.get("image_url_pattern", "")
+                if not pattern:
+                    pattern = "https://www.unimus.no/photos/image/jpeg/O-V-OE-{num:04d}{suffix}.jpg"
+
+            online_urls = []
+            suffixes = ["", "-01", "-02", "-03"]
+            is_numeric = str(oid).isdigit()
+
+            for s in suffixes:
+                if "{id}" in pattern:
+                    if "{suffix}" in pattern:
+                        url = pattern.replace("{id}", str(oid)).replace("{suffix}", s)
+                    else:
+                        url = pattern.replace("{id}", f"{oid}{s}")
+                elif "{num" in pattern and "{suffix}" in pattern:
+                    if is_numeric:
+                        num = int(oid)
+                        url = pattern.format(num=num, suffix=s)
+                    else:
+                        url = f"{pattern.rstrip('/')}/{oid}{s}"
+                elif "{num" in pattern:
+                    if is_numeric:
+                        num = int(oid)
+                        url = pattern.format(num=num)
+                        if s:
+                            if "." in url.rsplit("/", 1)[-1]:
+                                base, ext = url.rsplit(".", 1)
+                                url = f"{base}{s}.{ext}"
+                            else:
+                                url = f"{url}{s}"
+                    else:
+                        url = f"{pattern.rstrip('/')}/{oid}{s}"
+                else:
+                    url = f"{pattern}{oid}{s}"
+                online_urls.append(url)
 
             flagged_issues = []
             if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
