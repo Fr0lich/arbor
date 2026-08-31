@@ -604,6 +604,55 @@ def test_status_flags_and_six_tier_badge_parity():
     assert upd_data["success"] is True
     assert upd_data["has_flags"] is True
 
+def test_mobile_undo_redo(mock_app_state):
+    server = MobileServer(mock_app_state, port=5103)
+    client = server.flask_app.test_client()
+
+    # Authenticate
+    client.post('/api/auth', json={"pin": server.pin})
+    token = server.session_token
+    headers = {"X-Session-Token": token}
+
+    # Verify initial state
+    assert mock_app_state.df_reg.at["1024", "Species"] == "sylvestris"
+
+    # 1. Update the record
+    upd_payload = {
+        "id": "1024",
+        "reviewed": True,
+        "registration": {"Species": "mugo"},
+        "observation": {"Cabinet": "C-14"}
+    }
+    client.post('/api/update', json=upd_payload, headers=headers)
+
+    assert mock_app_state.df_reg.at["1024", "Species"] == "mugo"
+    assert mock_app_state.df_obs.at["1024", "Cabinet"] == "C-14"
+
+    # 2. Check recent_edits endpoint
+    recent_res = client.get('/api/recent_edits', headers=headers)
+    assert recent_res.status_code == 200
+    edits = recent_res.json["edits"]
+    assert len(edits) == 1
+    assert edits[0]["oid"] == "1024"
+    assert "mugo" not in edits[0]["summary"] # Only field names are in summary
+
+    # 3. Call Undo
+    undo_res = client.post('/api/undo', json={"oid": "1024"}, headers=headers)
+    assert undo_res.status_code == 200
+
+    # Verify rollback in DataFrames
+    assert mock_app_state.df_reg.at["1024", "Species"] == "sylvestris"
+    assert mock_app_state.df_obs.at["1024", "Cabinet"] == "C-12"
+
+    # Verify recent_edits is cleared
+    recent_res_2 = client.get('/api/recent_edits', headers=headers)
+    assert len(recent_res_2.json["edits"]) == 0
+
+    # Verify log_records is cleaned
+    log_oids = [log.get("ObjectID") for log in mock_app_state._log_records]
+    assert "1024" not in log_oids
+
+
 def test_mobile_back_button_navigation_template():
     """Verify INDEX_TEMPLATE contains the leave confirmation modal, history API integration, and popstate handling."""
     from backend.mobile_server import INDEX_TEMPLATE
