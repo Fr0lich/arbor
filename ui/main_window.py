@@ -8415,10 +8415,13 @@ class ObjectProgramUI(
             df_obs_exp = self.app.df_obs.loc[ids].reset_index()
             df_merged = df_reg_exp.merge(df_obs_exp, on="ObjectID", suffixes=("", "_obs"))
 
+            from utils import sanitize_df_for_excel
+            df_merged_safe = sanitize_df_for_excel(df_merged)
+
             if path.lower().endswith(".csv"):
-                df_merged.to_csv(path, index=False, encoding="utf-8-sig")
+                df_merged_safe.to_csv(path, index=False, encoding="utf-8-sig")
             else:
-                df_merged.to_excel(path, index=False, engine="openpyxl")
+                df_merged_safe.to_excel(path, index=False, engine="openpyxl")
 
             self.system_status.config(
                 text=f"Exported {len(ids)} objects  {os.path.basename(path)}"

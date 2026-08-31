@@ -14,6 +14,30 @@ def fmt_pandas_val(val):
     return str(val)
 
 
+def sanitize_df_for_excel(df: pd.DataFrame) -> pd.DataFrame:
+    """Sanitize DataFrame string columns to prevent CSV/Excel formula injection.
+
+    Prepends a single quote to strings starting with dangerous characters
+    (=, +, -, @, \t, \r, cmd|) to force Excel to treat them as plain text.
+    """
+    if df is None or df.empty:
+        return df
+
+    df_safe = df.copy()
+    dangerous_starts = ('=', '+', '-', '@', '\t', '\r')
+
+    for col in df_safe.columns:
+        if df_safe[col].dtype.name == 'category':
+            df_safe[col] = df_safe[col].astype('object')
+        df_safe[col] = df_safe[col].map(
+            lambda x: f"'{x}" if isinstance(x, str) and (
+                str(x).lstrip().startswith(dangerous_starts) or
+                str(x).lstrip().lower().startswith("cmd|")
+            ) else x
+        )
+    return df_safe
+
+
 def parse_bool(val) -> bool:
     if isinstance(val, bool):
         return val

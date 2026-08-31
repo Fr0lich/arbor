@@ -1,0 +1,4 @@
+## 2024-05-27 - [Excel CSV Injection]
+**Vulnerability:** Saving DataFrames to Excel or CSV without sanitizing fields allows for CSV/Excel injection, leading to arbitrary code execution if a user opens the exported file in Excel and executes the malicious payload (like `=cmd|' /C calc'!A0`).
+**Learning:** This codebase frequently uses pandas `.to_excel()` and `.to_csv()` to export user-provided data directly to spreadsheets (e.g. `export_to_excel` in `repository.py`, `export_filtered_list` in `main_window.py`). If this data contains characters like `=`, `+`, `-`, `@`, `\t`, `\r` at the start, Excel treats it as a formula.
+**Prevention:** Implement a `sanitize_for_excel` function in `utils.py` and apply it to DataFrames before exporting to CSV or Excel to prepend a single quote (`'`) to strings starting with those dangerous characters.
