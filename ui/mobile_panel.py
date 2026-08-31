@@ -415,9 +415,17 @@ class MobilePanel:
     def _is_alive(self):
         """Check if widget hierarchy is still valid and not destroyed."""
         try:
-            return bool(self.winfo_exists()) and bool(getattr(self, 'client_badge', None)) and bool(self.client_badge.winfo_exists())
+            return (
+                hasattr(self, "_main")
+                and self._main is not None
+                and bool(self._main.winfo_exists())
+                and hasattr(self, "client_badge")
+                and self.client_badge is not None
+                and bool(self.client_badge.winfo_exists())
+            )
         except Exception:
             return False
+
 
     def stop(self):
         """Stop the tunnel (does not save data — wrapper handles that)."""

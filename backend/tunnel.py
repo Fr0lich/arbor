@@ -34,12 +34,15 @@ def ensure_ssh_key():
         return None
 
 
+_ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+
+
 class ResilientSSHTunnel:
     """Resilient SSH reverse tunnel.
 
     Primary provider: Serveo (serveo.net, port 22), which delivers public HTTPS
     URLs in ~1.5s without registration, accounts, or auth requirements.
-    Fallback providers are tried if Serveo is unreachable.
+    Fallback providers (Pinggy, Localhost.run) are tried if Serveo is unreachable.
     """
 
     def __init__(self, port):
@@ -74,13 +77,13 @@ class ResilientSSHTunnel:
                 'a.pinggy.io',
                 '443',
                 f'0:127.0.0.1:{self.port}',
-                re.compile(r'(https://[a-zA-Z0-9.-]+\.(?:pinggy\.io|pinggy\.net|pinggy-free\.link|pinggy\.link))')
+                re.compile(r'(https://[a-zA-Z0-9.-]+?\.(?:free\.pinggy\.net|run\.pinggy-free\.link|a\.pinggy\.link|pinggy\.link))')
             ),
             (
                 'nokey@localhost.run',
                 '22',
                 f'80:127.0.0.1:{self.port}',
-                re.compile(r'(https://[a-zA-Z0-9]+\.lhr\.life)')
+                re.compile(r'(https://[a-zA-Z0-9-]+\.lhr\.(?:life|rocks))')
             )
         ]
 
@@ -95,12 +98,18 @@ class ResilientSSHTunnel:
                 provider_idx = attempt % len(providers)
                 target_host, target_port, forward_rule, url_pattern = providers[provider_idx]
 
+                if status_callback and attempt > 0:
+                    status_callback(f"🔄 Connecting via {target_host.split('@')[-1]}...")
+
                 cmd = [
                     'ssh',
+                    '-T',
                     '-p', target_port,
                     '-o', 'StrictHostKeyChecking=no',
                     '-o', f'UserKnownHostsFile={known_hosts_null}',
-                    '-o', 'ServerAliveInterval=30',
+                    '-o', 'LogLevel=ERROR',
+                    '-o', 'ServerAliveInterval=15',
+                    '-o', 'ServerAliveCountMax=3',
                     '-o', 'ConnectTimeout=10',
                     '-R', forward_rule,
                     target_host
@@ -133,7 +142,7 @@ class ResilientSSHTunnel:
                             if not connected and time.time() > url_deadline:
                                 logging.warning(f"Tunnel {target_host}: no URL received within 12s")
                                 if status_callback and attempt >= len(providers):
-                                    status_callback("🟡 Tunnel timeout — check network / firewall")
+                                    status_callback("🟡 Tunnel timeout — trying next provider...")
                                 try:
                                     self.process.terminate()
                                     self.process.wait(timeout=1.0)
@@ -146,9 +155,18 @@ class ResilientSSHTunnel:
                             time.sleep(0.05)
                             continue
 
-                        match = url_pattern.search(line)
+                        clean_line = _ANSI_ESCAPE_RE.sub('', line).strip()
+                        if not clean_line:
+                            continue
+
+                        # Explicitly skip promo links
+                        if "dashboard.pinggy.io" in clean_line or "admin.localhost.run" in clean_line or "admin.pinggy.io" in clean_line:
+                            continue
+
+                        match = url_pattern.search(clean_line)
                         if match and not connected:
-                            self.public_url = match.group(1)
+                            url = match.group(1).rstrip('/')
+                            self.public_url = url
                             connected = True
                             attempt = 0
                             backoff = 2
@@ -158,7 +176,7 @@ class ResilientSSHTunnel:
                         if not connected and time.time() > url_deadline:
                             logging.warning(f"Tunnel {target_host}: no URL received within 12s")
                             if status_callback and attempt >= len(providers):
-                                status_callback("🟡 Tunnel timeout — check network / firewall")
+                                status_callback("🟡 Tunnel timeout — trying next provider...")
                             try:
                                 self.process.terminate()
                                 self.process.wait(timeout=1.0)
@@ -177,6 +195,7 @@ class ResilientSSHTunnel:
 
                     if self._stop_event.is_set():
                         break
+
 
                 except Exception as e:
                     logging.error(f"Tunnel error with {target_host}: {e}")
