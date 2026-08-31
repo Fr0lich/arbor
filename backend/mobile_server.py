@@ -715,11 +715,43 @@ class MobileServer:
                 ui_sections = self.app_state.config.get("ui_sections", {})
                 image_url_pattern = self.app_state.config.get("image_url_pattern", "")
 
+
+            vocabulary = {}
+            vocab_fields = ["Genus", "Species", "Family", "Collector", "Building", "Cabinet"]
+
+            # Fast set caching for vocabulary
+            if not hasattr(self.app_state, "vocabulary_cache") or getattr(self.app_state, "dirty", False):
+                with self.app_state.df_lock:
+                    if self.app_state.df_reg is not None:
+                        for f in vocab_fields:
+                            if f in self.app_state.df_reg.columns:
+                                uniq = self.app_state.df_reg[f].dropna().astype(str).unique()
+                                valid = {v.strip() for v in uniq if v.strip() and v.strip() != "?" and v.strip().lower() != "unknown"}
+                                if f in vocabulary:
+                                    vocabulary[f].update(valid)
+                                else:
+                                    vocabulary[f] = valid
+                    if self.app_state.df_obs is not None:
+                        for f in vocab_fields:
+                            if f in self.app_state.df_obs.columns:
+                                uniq = self.app_state.df_obs[f].dropna().astype(str).unique()
+                                valid = {v.strip() for v in uniq if v.strip() and v.strip() != "?" and v.strip().lower() != "unknown"}
+                                if f in vocabulary:
+                                    vocabulary[f].update(valid)
+                                else:
+                                    vocabulary[f] = valid
+                for f in vocabulary:
+                    vocabulary[f] = sorted(list(vocabulary[f]))
+                self.app_state.vocabulary_cache = vocabulary
+            else:
+                vocabulary = self.app_state.vocabulary_cache
+
             return jsonify({
                 "database_name": db_name,
                 "config_name": self.app_state.config_name or "",
                 "ui_sections": ui_sections,
-                "image_url_pattern": image_url_pattern
+                "image_url_pattern": image_url_pattern,
+                "vocabulary": vocabulary
             })
 
 
@@ -4088,8 +4120,14 @@ INDEX_TEMPLATE = """
             data-section="${section}"
             data-field="${fName}"
             value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full min-h-[44px] bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : `class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}" oninput="triggerAutoSave()" onblur="saveCurrentEdits()"`}
+            ${isReadOnly ? 'readonly class="w-full min-h-[44px] bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : `class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}" oninput="handleVocabInput(this, '${fName}')" onchange="handleVocabChange(this)" onblur="saveCurrentEdits()"`}
+            ${activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName] && !isReadOnly ? `list="datalist_${section}_${fName}"` : ''}
           />
+          ${activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName] && !isReadOnly ? `
+          <datalist id="datalist_${section}_${fName}">
+            ${activeSchema.vocabulary[fName].map(v => `<option value="${v}"></option>`).join('')}
+          </datalist>
+          ` : ''}
           ${historyContainerHtml}
         </div>
       `;
@@ -4465,6 +4503,33 @@ INDEX_TEMPLATE = """
     // ==========================================
     // AUTO-SAVE & PRIMARY ACTION: MARK REVIEWED
     // ==========================================
+
+
+    function handleVocabInput(input, fName) {
+      triggerAutoSave();
+    }
+
+    function handleVocabChange(input) {
+      if (input.value && input.value.trim() !== '') {
+        const val = input.value.trim();
+        const fName = input.getAttribute('data-field');
+        if (val !== '?') {
+            // Check if matches vocab but different casing
+            if (activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName]) {
+                const match = activeSchema.vocabulary[fName].find(v => v.toLowerCase() === val.toLowerCase());
+                if (match) {
+                    input.value = match;
+                } else {
+                    input.value = val; // Trimmed
+                }
+            } else {
+                input.value = val; // Trimmed
+            }
+        }
+      }
+      triggerAutoSave();
+    }
+
     function triggerAutoSave() {
       const syncStatus = document.getElementById('footerSyncStatus');
       syncStatus.innerHTML = '<span class="font-mono text-ember font-medium animate-pulse">Saving changes...</span>';
