@@ -1,4 +1,5 @@
 import tkinter as tk
+from ui.state import app_bus, DATABASE_UPDATED
 from ui.mobile_panel import MobilePanel
 
 
@@ -85,10 +86,7 @@ class MobileDialog:
             except Exception:
                 pass
 
-        if hasattr(self.parent_ui, "update_dirty_ui"):
-            self.parent_ui.update_dirty_ui()
-        if hasattr(self.parent_ui, "update_review_progress"):
-            self.parent_ui.update_review_progress()
+        app_bus.publish(DATABASE_UPDATED)
 
         if hasattr(self.parent_ui, "_update_push_to_phone_state"):
             self.parent_ui.root.after(100, self.parent_ui._update_push_to_phone_state)

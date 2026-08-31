@@ -19,7 +19,7 @@ from ui.log_viewer import LogViewerMixin
 from backend.data_store import ObjectDataStore
 from backend.task_queue import app_worker
 from ui.layout_manager import LayoutStateManager
-from ui.state import app_bus, PROBLEM_STATE_CHANGED, OBJECT_DATA_CHANGED
+from ui.state import app_bus, PROBLEM_STATE_CHANGED, OBJECT_DATA_CHANGED, DATABASE_UPDATED
 import ui.help_dialogs as help_dialogs
 import ui.ignored_words_dialog as ignored_words_dialog
 from ui.presets_panel import PresetsManager
@@ -3206,7 +3206,7 @@ class ObjectProgramUI(
             highlightbackground=config.DRAWER_THEME.get("drawer_border", "#c4c7c7")
         )
         self.root.bind_all("<Button-1>", self._on_global_click_for_drawer, add="+")
-        self.root.bind("<<MobileEdit>>", self._on_mobile_edit)
+        self.app_bus.subscribe(DATABASE_UPDATED, self._on_database_updated_event)
 
         self.review_progress_label = None
         self.review_progress = None
@@ -5107,35 +5107,43 @@ class ObjectProgramUI(
             self._mobile_dialog.win.focus_force()
             self._update_push_to_phone_state()
 
-    def _on_mobile_edit(self, event=None):
-        """Called when the mobile server fires <<MobileEdit>>"""
-        if getattr(self.app, '_mobile_last_edited_oid', None):
-            oid = self.app._mobile_last_edited_oid
-            self.app._mobile_last_edited_oid = None
+    def _on_database_updated_event(self, **kwargs):
+        self.root.after(0, lambda: self._do_database_update(**kwargs))
 
-            self.log_action("EDIT", oid)
+    def _do_database_update(self, **kwargs):
+        # If this update came from a mobile edit
+        if kwargs.get("mobile_edit"):
+            if getattr(self.app, '_mobile_last_edited_oid', None):
+                oid = self.app._mobile_last_edited_oid
+                self.app._mobile_last_edited_oid = None
+                self.log_action("EDIT", oid)
+                self._invalidate_row_cache()
+                s_oid = str(oid)
+                self._problem_cache.pop(oid, None)
+                self._problem_cache.pop(s_oid, None)
 
-            # Invalidate row and problem caches so list view updates correctly
-            self._invalidate_row_cache()
-            s_oid = str(oid)
-            self._problem_cache.pop(oid, None)
-            self._problem_cache.pop(s_oid, None)
-            if s_oid.isdigit():
-                self._problem_cache.pop(int(s_oid), None)
+                # Only reload UI if we are looking at the edited object
+                if self.app.current_object_id in (oid, s_oid):
+                    self.load_object(oid)
 
-            # If the edited object is currently displayed, refresh it
-            if self.app.current_object_id == oid:
-                self.load_object(oid)
-                # DO NOT call self.commit_current_object() here. The UI is locked
-                # by the modal mobile dialog, and calling commit would overwrite
-                # the fresh mobile edits with stale text currently in the UI widgets.
+        # Always update the core dirty UI elements
+        self.update_dirty_ui()
+        self.update_review_progress()
+        self.update_object_count()
 
-            self.update_dirty_ui()
-            self.update_object_count()
+        # Optional refreshes depending on caller
+        if kwargs.get("refresh_list"):
+            self.refresh_list()
+        if kwargs.get("invalidate_search"):
+            self.invalidate_search_index()
+        if kwargs.get("update_accordion_badges") or kwargs.get("mobile_edit"):
             self._update_accordion_badges()
-            self.update_review_progress()
+
+        # The mobile edit used to refresh the list implicitly
+        if kwargs.get("mobile_edit") and not kwargs.get("refresh_list"):
             self.refresh_list()
 
+        if kwargs.get("mobile_edit"):
             # Trigger an immediate secure autosave
             if hasattr(self, '_autosave_job') and self._autosave_job:
                 try:

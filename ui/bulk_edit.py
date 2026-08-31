@@ -1,4 +1,5 @@
 import tkinter as tk
+from ui.state import app_bus, DATABASE_UPDATED
 from tkinter import ttk, messagebox
 import config
 import utils
@@ -400,9 +401,7 @@ class BulkEditWindow:
 
         self.main_window._hide_progress("Bulk apply complete")
         self.app.dirty = True
-        self.main_window.update_dirty_ui()
-        self.main_window.invalidate_search_index()
-        self.main_window.refresh_list()
+        app_bus.publish(DATABASE_UPDATED, refresh_list=True, invalidate_search=True)
         
         # If currently looking at one of the affected, reload
         if self.app.current_object_id in oids:

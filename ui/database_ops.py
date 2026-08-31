@@ -4,6 +4,7 @@ from tkinter import filedialog, messagebox
 import threading
 from datetime import datetime
 import pandas as pd
+from ui.state import app_bus, DATABASE_UPDATED
 from utils import debug_error
 from repository import ExcelRepository, REVIEWED_COLUMN
 
@@ -275,9 +276,7 @@ class DatabaseOpsMixin:
 
         self.initializing = False
         self.app.dirty = False
-        self.update_dirty_ui()
-        self.update_review_progress()
-        self.update_object_count()
+        app_bus.publish(DATABASE_UPDATED)
 
         self.system_status.config(text="Excel loaded - loading images...")
         self.image_scan_progress.configure(value=85)
@@ -578,7 +577,7 @@ class DatabaseOpsMixin:
         def _on_save_complete(success, err=None):
             if success:
                 self.app.dirty = False
-                self.update_dirty_ui()  # sets badge to "✓ Saved HH:MM"
+                app_bus.publish(DATABASE_UPDATED)  # sets badge to "✓ Saved HH:MM"
                 self.system_status.config(text=f"Saved: {basename}")
                 self.show_banner(f"Database saved: {basename}", "success")
                 # Clean up autosave file now that a real save succeeded
@@ -698,7 +697,7 @@ class DatabaseOpsMixin:
                             self.app.excel_path = path
                             self.app.output_path = path
                             self.app.dirty = False
-                            self.update_dirty_ui()
+                            app_bus.publish(DATABASE_UPDATED)
                             self.system_status.config(text=f"Saved: {os.path.basename(path)}")
                             self._hide_progress("Export complete")
                             self.show_banner(f"Exported to: {path}", "success")

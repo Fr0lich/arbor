@@ -1,4 +1,5 @@
 import tkinter as tk
+from ui.state import app_bus, DATABASE_UPDATED
 from tkinter import ttk, messagebox
 import pandas as pd
 import config
@@ -610,12 +611,7 @@ class AddObjectsWizard:
                 pass
 
         self.app.dirty = True
-        if hasattr(self.main_window, 'update_dirty_ui'):
-            self.main_window.update_dirty_ui()
-        if hasattr(self.main_window, 'update_object_count'):
-            self.main_window.update_object_count()
-        if hasattr(self.main_window, 'update_review_progress'):
-            self.main_window.update_review_progress()
+        app_bus.publish(DATABASE_UPDATED)
 
         messagebox.showinfo("Success", f"Successfully created {len(oids)} object(s).", parent=self.main_window.root)
         self.win.destroy()

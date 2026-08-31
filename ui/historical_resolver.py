@@ -1,4 +1,5 @@
 import tkinter as tk
+from ui.state import app_bus, DATABASE_UPDATED
 from tkinter import ttk
 import tkinter.font as tkFont
 from config import sc
@@ -417,7 +418,7 @@ class HistoricalConflictResolverWindow:
                     prob_values=prob_changed_values
                 )
  
-                self.main_app.update_dirty_ui()
+                app_bus.publish(DATABASE_UPDATED)
                 self.update_stats()
                 
                 # Visual feedback on card
@@ -531,7 +532,7 @@ class HistoricalConflictResolverWindow:
                 prob_values=prob_changed_values
             )
 
-        self.main_app.update_dirty_ui()
+        app_bus.publish(DATABASE_UPDATED)
         self.update_stats()
         self.win.destroy()
 
