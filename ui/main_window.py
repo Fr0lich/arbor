@@ -6,6 +6,13 @@ It integrates various mixins (Autosave, ImageHandler, Suggestions, etc.) and con
 dynamic database visualizer window using Tkinter.
 """
 
+from utils import debug_error
+from models import AppState
+from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
+from config import sc
+import config
+from collections import OrderedDict
+import uuid
 from ui.widgets import ToggleSwitch, TreeviewListboxWrapper
 from ui.autosave_handler import AutosaveMixin
 from ui.image_handler import ImageHandlerMixin
@@ -35,14 +42,6 @@ _NUMERIC_OID_PATTERN = re.compile(r"\b(\d+)\b")
 _NORMALIZE_NON_WORD_PATTERN = re.compile(r'[^\w\s]')
 _NORMALIZE_SPACE_PATTERN = re.compile(r'\s+')
 
-import uuid
-
-from collections import OrderedDict
-import config
-from config import sc
-from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
-from models import AppState
-from utils import debug_error
 
 def is_light_color(color, widget=None):
     if not color:
@@ -55,11 +54,13 @@ def is_light_color(color, widget=None):
             hex_color = color.lstrip('#')
             if len(hex_color) == 3:
                 hex_color = "".join(c*2 for c in hex_color)
-            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+            r, g, b = int(hex_color[0:2], 16), int(
+                hex_color[2:4], 16), int(hex_color[4:6], 16)
     except Exception:
         return True
     brightness = (r * 299 + g * 587 + b * 114) / 1000
     return brightness > 127
+
 
 def adjust_color_brightness(color, factor, widget=None):
     if not color:
@@ -72,32 +73,35 @@ def adjust_color_brightness(color, factor, widget=None):
             hex_color = color.lstrip('#')
             if len(hex_color) == 3:
                 hex_color = "".join(c*2 for c in hex_color)
-            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+            r, g, b = int(hex_color[0:2], 16), int(
+                hex_color[2:4], 16), int(hex_color[4:6], 16)
     except Exception:
         return color
-    
+
     r = max(0, min(255, int(r * (1 + factor))))
     g = max(0, min(255, int(g * (1 + factor))))
     b = max(0, min(255, int(b * (1 + factor))))
-    
+
     return f"#{r:02x}{g:02x}{b:02x}"
+
 
 def make_tk_button_hoverable(btn, hover_bg=None, hover_fg=None):
     orig_bg = btn.cget("bg")
     orig_fg = btn.cget("fg")
-    
+
     if not hover_bg:
         active_bg = btn.cget("activebackground")
         if active_bg and active_bg != orig_bg:
             hover_bg = active_bg
         else:
-            hover_bg = adjust_color_brightness(orig_bg, -0.1 if is_light_color(orig_bg, btn) else 0.1, btn)
-            
+            hover_bg = adjust_color_brightness(
+                orig_bg, -0.1 if is_light_color(orig_bg, btn) else 0.1, btn)
+
     btn._orig_bg = orig_bg
     btn._orig_fg = orig_fg
     btn._hover_bg = hover_bg
     btn._hover_fg = hover_fg
-    
+
     def on_enter(e):
         if btn.cget("state") != "disabled":
             h_bg = getattr(btn, "_hover_bg", hover_bg)
@@ -116,6 +120,7 @@ def make_tk_button_hoverable(btn, hover_bg=None, hover_fg=None):
     btn.bind("<Enter>", on_enter, add="+")
     btn.bind("<Leave>", on_leave, add="+")
 
+
 def _apply_hover_to_all_tk_buttons(parent, main_ui=None):
     for child in parent.winfo_children():
         if child.winfo_class() == "Button":
@@ -125,11 +130,12 @@ def _apply_hover_to_all_tk_buttons(parent, main_ui=None):
                 make_tk_button_hoverable(child)
         _apply_hover_to_all_tk_buttons(child, main_ui)
 
+
 class LabelWrapper:
     def __init__(self, real_label, ui):
         self.real = real_label
         self.ui = ui
-        
+
     def config(self, cnf=None, **kw):
         if cnf is not None:
             kw.update(cnf)
@@ -141,22 +147,22 @@ class LabelWrapper:
             return self.real.config(**kw)
         except Exception:
             pass
-            
+
     def configure(self, cnf=None, **kw):
         return self.config(cnf, **kw)
-        
+
     def cget(self, option):
         return self.real.cget(option)
-        
+
     def __getitem__(self, key):
         return self.real[key]
-        
+
     def __setitem__(self, key, value):
         self.real[key] = value
         if key == "text":
             if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
                 self.ui._loading_window.update_status_text(value)
-                
+
     def __getattr__(self, name):
         return getattr(self.real, name)
 
@@ -165,35 +171,35 @@ class ProgressbarWrapper:
     def __init__(self, real_progressbar, ui):
         self.real = real_progressbar
         self.ui = ui
-        
+
     def configure(self, cnf=None, **kw):
         if cnf is not None:
             kw.update(cnf)
         value = kw.get("value")
         maximum = kw.get("maximum")
-        
+
         if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
             self.ui._loading_window.update_progress_bar(value, maximum)
         try:
             return self.real.configure(**kw)
         except Exception:
             pass
-            
+
     def config(self, cnf=None, **kw):
         return self.configure(cnf, **kw)
-        
+
     def cget(self, option):
         return self.real.cget(option)
-        
+
     def __getitem__(self, key):
         return self.real[key]
-        
+
     def __setitem__(self, key, value):
         self.real[key] = value
         if key == "value":
             if hasattr(self.ui, "_loading_window") and self.ui._loading_window and self.ui._loading_window.win.winfo_exists():
                 self.ui._loading_window.update_progress_bar(value=value)
-                
+
     def __getattr__(self, name):
         return getattr(self.real, name)
 
@@ -201,8 +207,8 @@ class ProgressbarWrapper:
 # requests are imported lazily inside the methods that need them so that startup
 # time is not spent loading unused subsystems.
 
-MAX_IMAGE_CACHE = 40
 
+MAX_IMAGE_CACHE = 40
 
 
 class ToolTipManager:
@@ -256,7 +262,6 @@ class ToolTipManager:
             self.tooltip = None
 
 
-
 class ObjectProgramUI(
     AutosaveMixin,
     ImageHandlerMixin,
@@ -266,7 +271,7 @@ class ObjectProgramUI(
     DatabaseOpsMixin,
     LogViewerMixin
 ):
-# ---------- UI helpers ----------
+    # ---------- UI helpers ----------
 
     def _has_history(self, oid) -> bool:
         presence = getattr(self, "_history_presence_set", None)
@@ -311,16 +316,12 @@ class ObjectProgramUI(
 
     def __init__(self, root, app: AppState):
 
-
-
-
         self.root = root
         self.app = app
         self._loading_window = None
 
         if self.app.undo_stacks is None:
             self.app.undo_stacks = {}
-
 
         self.object_loaded = False
         self._image_paths = []
@@ -344,39 +345,56 @@ class ObjectProgramUI(
 
         self.problem_vars = {}
         self.prob_border_bars = {}   # tk.Frame border bar per mapped problem field
-        self.prob_label_widgets = {} # ttk.Label per mapped problem field
+        self.prob_label_widgets = {}  # ttk.Label per mapped problem field
         self.location_vars = {}
         self.filter_vars = {}
         self.images_missing_var = tk.StringVar(value="")
-        
+
         self.toolbar_buttons = {}
         self.toolbar_vars = {}
-        
+
         import config
         _init_prefs = config.load_prefs() or {}
-        
-        self.left_pinned = tk.BooleanVar(value=_init_prefs.get("left_pinned", True))
+
+        self.left_pinned = tk.BooleanVar(
+            value=_init_prefs.get("left_pinned", True))
         self._drawer_anim_job = None
         self._drawer_current_width = 0
         self._drawer_is_open = False
 
-        self.show_list_var = tk.BooleanVar(value=_init_prefs.get("show_list", True))
-        self.show_search_var = tk.BooleanVar(value=_init_prefs.get("show_search", True))
-        self.show_images_var = tk.BooleanVar(value=_init_prefs.get("show_images", True))
-        self.location_in_center_var = tk.BooleanVar(value=_init_prefs.get("location_in_center", False))
-        self.show_image_tools_var = tk.BooleanVar(value=_init_prefs.get("show_image_tools", True))
-        self.show_bulk_edit_var = tk.BooleanVar(value=_init_prefs.get("show_bulk_edit", True))
-        self.show_reg_var = tk.BooleanVar(value=_init_prefs.get("show_reg", True))
-        
-        self.snap_lock_var = tk.BooleanVar(value=_init_prefs.get("snap_lock", False))
-        self.image_stack_var = tk.BooleanVar(value=_init_prefs.get("image_stack", False))
-        self.focus_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("focus_dynamic_update", True))
-        self.layout_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("layout_dynamic_update", True))
-        self.large_reviewed_button_var = tk.BooleanVar(value=_init_prefs.get("large_reviewed_button", True))
-        self.auto_advance_var = tk.BooleanVar(value=_init_prefs.get("auto_advance_on_review", True))
-        self.auto_advance_history_var = tk.BooleanVar(value=_init_prefs.get("auto_advance_history", False))
-        self.auto_resolve_conflicts_var = tk.BooleanVar(value=_init_prefs.get("auto_resolve_conflicts", False))
-        self.strict_input_validation_var = tk.BooleanVar(value=_init_prefs.get("strict_input_validation", False))
+        self.show_list_var = tk.BooleanVar(
+            value=_init_prefs.get("show_list", True))
+        self.show_search_var = tk.BooleanVar(
+            value=_init_prefs.get("show_search", True))
+        self.show_images_var = tk.BooleanVar(
+            value=_init_prefs.get("show_images", True))
+        self.location_in_center_var = tk.BooleanVar(
+            value=_init_prefs.get("location_in_center", False))
+        self.show_image_tools_var = tk.BooleanVar(
+            value=_init_prefs.get("show_image_tools", True))
+        self.show_bulk_edit_var = tk.BooleanVar(
+            value=_init_prefs.get("show_bulk_edit", True))
+        self.show_reg_var = tk.BooleanVar(
+            value=_init_prefs.get("show_reg", True))
+
+        self.snap_lock_var = tk.BooleanVar(
+            value=_init_prefs.get("snap_lock", False))
+        self.image_stack_var = tk.BooleanVar(
+            value=_init_prefs.get("image_stack", False))
+        self.focus_dynamic_update_var = tk.BooleanVar(
+            value=_init_prefs.get("focus_dynamic_update", True))
+        self.layout_dynamic_update_var = tk.BooleanVar(
+            value=_init_prefs.get("layout_dynamic_update", True))
+        self.large_reviewed_button_var = tk.BooleanVar(
+            value=_init_prefs.get("large_reviewed_button", True))
+        self.auto_advance_var = tk.BooleanVar(
+            value=_init_prefs.get("auto_advance_on_review", True))
+        self.auto_advance_history_var = tk.BooleanVar(
+            value=_init_prefs.get("auto_advance_history", False))
+        self.auto_resolve_conflicts_var = tk.BooleanVar(
+            value=_init_prefs.get("auto_resolve_conflicts", False))
+        self.strict_input_validation_var = tk.BooleanVar(
+            value=_init_prefs.get("strict_input_validation", False))
 
         def _on_auto_advance_changed(*args):
             try:
@@ -397,17 +415,18 @@ class ObjectProgramUI(
                 pass
 
         self.auto_advance_var.trace_add("write", _on_auto_advance_changed)
-        self.auto_advance_history_var.trace_add("write", _on_auto_advance_history_changed)
-
-
+        self.auto_advance_history_var.trace_add(
+            "write", _on_auto_advance_history_changed)
 
         self.image_render_cache = OrderedDict()
         self.dark_mode_active = False
         if getattr(sys, 'frozen', False):
             _app_base_dir = os.path.dirname(sys.executable)
         else:
-            _app_base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.ignored_words_file = os.path.join(_app_base_dir, "ignored_words.json")
+            _app_base_dir = os.path.dirname(
+                os.path.dirname(os.path.abspath(__file__)))
+        self.ignored_words_file = os.path.join(
+            _app_base_dir, "ignored_words.json")
         self.ignored_words = []
         self.ignored_words_variations = tk.BooleanVar(value=True)
         self.load_ignored_words()
@@ -417,10 +436,12 @@ class ObjectProgramUI(
         self.filter_window = None
         self.history_window = None
         self.recent_window = None
-        self.sort_directions = {"ID": True, "Genus": True, "Species": True, "Status": True}
+        self.sort_directions = {"ID": True,
+                                "Genus": True, "Species": True, "Status": True}
         self.status_badge_colors = {
             "saved":     {"bg": "#d4edda", "fg": "#155724"},
-            "saving":    {"bg": "#e8f4fd", "fg": "#1565c0"},   # U2-F: zero-latency "Saving…" state
+            # U2-F: zero-latency "Saving…" state
+            "saving":    {"bg": "#e8f4fd", "fg": "#1565c0"},
             "autosaved": {"bg": "#e2f0fe", "fg": "#0a58ca"},
             "unsaved":   {"bg": "#fff3cd", "fg": "#856404"},
             "error":     {"bg": "#f8d7da", "fg": "#721c24"}
@@ -435,7 +456,6 @@ class ObjectProgramUI(
         self.image_index = {}   # ObjectID -> list of file paths
         self.image_status = {}
         self.image_cache = OrderedDict()  # url -> ImageTk.PhotoImage
-
 
         # Lazy-initialized on first image fetch; see _get_http_session()
         self.http = None
@@ -477,18 +497,16 @@ class ObjectProgramUI(
 
         show_all = False
 
-
-
-        
-
         self.root.bind("<Left>", self._safe_nav_left)
         self.root.bind("<Right>", self._safe_nav_right)
-        
+
         self.root.bind("<Control-n>", lambda e: self.add_new_object())
         self.root.bind("<Control-N>", lambda e: self._quick_new_object())
-        self.root.bind("<Control-D>", lambda e: self._duplicate_current_object())
-        self.root.bind("<Control-Delete>", lambda e: self.delete_current_object())
-        
+        self.root.bind(
+            "<Control-D>", lambda e: self._duplicate_current_object())
+        self.root.bind("<Control-Delete>",
+                       lambda e: self.delete_current_object())
+
         # Database Statistics shortcut
         self.root.bind("<Control-j>", lambda e: self.show_statistics())
         self.root.bind("<Control-s>", lambda e: self.save_session("SAVE"))
@@ -497,9 +515,12 @@ class ObjectProgramUI(
         self.root.bind("<Control-y>", self.redo)
         self.root.bind("<Control-n>", self._shortcut_new_object)
         self.root.bind("<F1>", lambda e: self.show_shortcuts())
-        self.root.bind("<Control-r>", lambda e: self.mark_current_as_reviewed())
-        self.root.bind("<Control-Return>", lambda e: self.mark_current_as_reviewed())
-        self.root.bind("<Control-KP_Enter>", lambda e: self.mark_current_as_reviewed())
+        self.root.bind(
+            "<Control-r>", lambda e: self.mark_current_as_reviewed())
+        self.root.bind("<Control-Return>",
+                       lambda e: self.mark_current_as_reviewed())
+        self.root.bind("<Control-KP_Enter>",
+                       lambda e: self.mark_current_as_reviewed())
 
         self.root.bind("<space>", self._toggle_problem_checkbox)
 
@@ -509,9 +530,6 @@ class ObjectProgramUI(
         self.root.bind("<Control-e>", self._focus_first_reg)
         self.root.bind("<Control-Prior>", lambda e: self._switch_reg_tab(-1))
         self.root.bind("<Control-Next>", lambda e: self._switch_reg_tab(1))
-
-        
-
 
         self.root.bind("<Control-l>", self._focus_first_location)
         self.root.bind("<Control-p>", self._focus_first_problem)
@@ -524,7 +542,6 @@ class ObjectProgramUI(
         self.root.bind("<Alt-Left>", lambda e: self.go_back())
         self.root.bind("<Alt-Right>", lambda e: self.go_forward())
 
-
         self.root.bind("<Control-b>", self._next_image_shortcut)
         self.root.bind("<Shift-Left>", self._prev_image_shortcut)
         self.root.bind("<Shift-Right>", self._next_image_shortcut)
@@ -534,7 +551,6 @@ class ObjectProgramUI(
         self.root.bind("<Alt-r>", lambda e: self.rotate_image())
         self.root.bind("<Control-R>", lambda e: self.rotate_image())
         self.root.bind("<Control-Key-0>", lambda e: self.reset_image_view())
-
 
         self.root.bind("<Control-Delete>", self._shortcut_delete_object)
         self.root.bind("<Control-Shift-N>", self._shortcut_quick_new_object)
@@ -556,10 +572,7 @@ class ObjectProgramUI(
         self.root.bind("<F7>", self.toggle_reg_panel_shortcut)
         self.root.bind("<F8>", self.toggle_images_panel_shortcut)
 
-
-
         self._skip_validation_once = False
-
 
         self.field_undo_stack = []
         self.loaded_problem_states = {}
@@ -570,20 +583,20 @@ class ObjectProgramUI(
         self.loading_object = False
         self.initializing = True
 
-
         self.object_id_var = tk.StringVar()
         self._init_focus_prefs()
         self.data_presets_menu = tk.Menu(self.root, tearoff=0)
         self.load_data_preset_menu = tk.Menu(self.data_presets_menu, tearoff=0)
-        self.data_presets_menu.add_command(label="Save Current Fields as Preset...", command=self.save_data_preset_dialog)
-        self.data_presets_menu.add_cascade(label="Load Preset", menu=self.load_data_preset_menu)
+        self.data_presets_menu.add_command(
+            label="Save Current Fields as Preset...", command=self.save_data_preset_dialog)
+        self.data_presets_menu.add_cascade(
+            label="Load Preset", menu=self.load_data_preset_menu)
         self._refresh_load_data_preset_menu()
         self.build_ui()
         self.apply_saved_layout()
         self._autosave_job = None
         self.root.bind("<Button-1>", self._hide_search_if_outside)
         style = ttk.Style(self.root)
-
 
         self.filter_location_vars = {
             "Building": tk.StringVar(value=""),
@@ -596,13 +609,11 @@ class ObjectProgramUI(
             foreground="red"
         )
 
-
         style.configure(
             "HistoryHighlight.TLabel",
             background="#fff3a3",   # lys gul
             font=("Segoe UI", sc(10), "bold")
         )
-
 
         self.update_history_button_state()
         style.configure(
@@ -616,7 +627,6 @@ class ObjectProgramUI(
         # U2-E: Automatically apply hover to all tk.Button elements in main UI
         _apply_hover_to_all_tk_buttons(self.root, self)
         self._apply_pin_state()
-
 
     def _get_http_session(self):
         """Return the shared requests.Session, creating it on first call.
@@ -690,59 +700,59 @@ class ObjectProgramUI(
         self.filter_vars["Any_Problem"] = tk.BooleanVar(value=False)
         # Status combination filters
         self.filter_vars["Reviewed_With_Problem"] = tk.BooleanVar(value=False)
-        self.filter_vars["Problem_With_History"]  = tk.BooleanVar(value=False)
-        self.filter_vars["Has_History"]           = tk.BooleanVar(value=False)
+        self.filter_vars["Problem_With_History"] = tk.BooleanVar(value=False)
+        self.filter_vars["Has_History"] = tk.BooleanVar(value=False)
 
-
-
-        
         self.build_sections()
 
-#-- BUILD SECTIONS
+# -- BUILD SECTIONS
 
     def _init_focus_prefs(self):
         import config
         prefs = config.load_prefs() or {}
         if "focus_presets" not in prefs:
             prefs["focus_presets"] = {}
-            
-        self.focus_mode_var.set(prefs.get("focus_mode", prefs.get("focus_mode_active", False)))
+
+        self.focus_mode_var.set(
+            prefs.get("focus_mode", prefs.get("focus_mode_active", False)))
         self.focus_fallback_var.set(prefs.get("focus_fallback", True))
-        
+
         saved_vis = prefs.get("focus_visibility", {})
-        
-        self.focus_visibility_vars["Problems"] = tk.BooleanVar(value=saved_vis.get("Problems", prefs.get("focus_sec_problems", True)))
-        self.focus_visibility_vars["Location"] = tk.BooleanVar(value=saved_vis.get("Location", prefs.get("focus_sec_location", True)))
-        
+
+        self.focus_visibility_vars["Problems"] = tk.BooleanVar(
+            value=saved_vis.get("Problems", prefs.get("focus_sec_problems", True)))
+        self.focus_visibility_vars["Location"] = tk.BooleanVar(
+            value=saved_vis.get("Location", prefs.get("focus_sec_location", True)))
+
         # Note: Dynamic registration fields will be initialized in build_sections()
 
     def _rebuild_focus_registration_menu(self):
         if not hasattr(self, "focus_reg_menu"):
             return
         self.focus_reg_menu.delete(0, 'end')
-        
+
         if getattr(self.app, "config", None) and "ui_sections" in self.app.config:
             import config
             prefs = config.load_prefs() or {}
             saved_vis = prefs.get("focus_visibility", {})
-            
+
             for field in self.app.config["ui_sections"].get("registration", []):
                 name = field["name"]
                 if name not in self.focus_visibility_vars:
-                    self.focus_visibility_vars[name] = tk.BooleanVar(value=saved_vis.get(name, True))
-                    
+                    self.focus_visibility_vars[name] = tk.BooleanVar(
+                        value=saved_vis.get(name, True))
+
                 self.focus_reg_menu.add_checkbutton(
-                    label=name, 
-                    variable=self.focus_visibility_vars[name], 
+                    label=name,
+                    variable=self.focus_visibility_vars[name],
                     command=self.update_reg_fields_visibility
                 )
 
-
-
     def _create_loc_widget(self, parent, name, ftype, field_def, font_family, font_size, bg_col, fg_col, bd_col, is_horiz=False):
         var = self.location_vars.get(name)
-        if not var: return None
-        
+        if not var:
+            return None
+
         is_dark = getattr(self, "dark_mode_active", False)
         # Determine theme colors
         lbl_fg = "#a6adc8" if is_dark else "#444748"
@@ -752,17 +762,17 @@ class ObjectProgramUI(
         cb_fg = "#e8ebe9" if is_dark else "#000000"
         cb_active_bg = "#181c19" if is_dark else bg_col
         cb_active_fg = "#e8ebe9" if is_dark else "#000000"
-        
+
         container = tk.Frame(parent, bg=bg_col)
-        
+
         if ftype == "checkbox":
             cb_frame = tk.Frame(container, bg=bg_col)
             cb_frame.pack(fill="x")
-            
+
             # Custom checkbox style
             cb = tk.Checkbutton(
                 cb_frame, cursor="hand2",
-                text="ACTIVE LOAN" if is_horiz else "ACTIVE LOAN STATUS", 
+                text="ACTIVE LOAN" if is_horiz else "ACTIVE LOAN STATUS",
                 variable=var,
                 onvalue="True", offvalue="False",
                 command=lambda n=name, v=var: self._on_checkbox_change(n, v),
@@ -779,12 +789,12 @@ class ObjectProgramUI(
             if is_horiz:
                 # Label on top
                 lbl = tk.Label(container, text=name.upper(), font=("JetBrains Mono", sc(font_size-2), "bold"),
-                             bg=bg_col, fg=lbl_fg, anchor="w")
-                lbl.pack(fill="x", pady=(0,2))
+                               bg=bg_col, fg=lbl_fg, anchor="w")
+                lbl.pack(fill="x", pady=(0, 2))
             else:
                 # Label on left
                 lbl = tk.Label(container, text=name.upper(), width=14, font=("JetBrains Mono", sc(font_size), "bold"),
-                             bg=bg_col, fg=lbl_fg, anchor="w")
+                               bg=bg_col, fg=lbl_fg, anchor="w")
                 lbl.pack(side="left")
 
             if ftype == "choice":
@@ -797,16 +807,19 @@ class ObjectProgramUI(
                     state="readonly" if name != "Stored as" else "normal",
                     font=(font_family, sc(font_size))
                 )
-                widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
+                widget.bind("<<ComboboxSelected>>",
+                            lambda e: self.commit_current_object())
                 if is_horiz:
                     widget.pack(fill="x", expand=True, ipady=sc(3))
                 else:
-                    widget.pack(side="left", fill="x", expand=True, ipady=sc(3))
+                    widget.pack(side="left", fill="x",
+                                expand=True, ipady=sc(3))
             else:
                 entry_container = tk.Frame(container, bg=bg_col)
                 widget = tk.Entry(
                     entry_container, textvariable=var,
-                    state="disabled" if field_def.get("readonly") else "normal",
+                    state="disabled" if field_def.get(
+                        "readonly") else "normal",
                     font=(font_family, sc(font_size)),
                     bg=entry_bg, fg=entry_fg,
                     insertbackground=entry_insert,
@@ -814,94 +827,103 @@ class ObjectProgramUI(
                     relief="flat"
                 )
                 widget.pack(fill="x", expand=True, ipady=sc(3))
-                
+
                 focus_line = tk.Frame(entry_container, height=sc(2), bg=bg_col)
                 focus_line.pack(fill="x", side="bottom")
-                
+
                 def make_focus_handlers(w, fl, ec, default_bg):
                     def on_focus_in(e):
-                        is_dark = self.dark_mode_active if hasattr(self, "dark_mode_active") else False
+                        is_dark = self.dark_mode_active if hasattr(
+                            self, "dark_mode_active") else False
                         fl.configure(bg="#a6e3a1" if is_dark else "#3a7d44")
+
                     def on_focus_out(e):
                         fl.configure(bg=default_bg)
                     w.bind("<FocusIn>", on_focus_in, add="+")
                     w.bind("<FocusOut>", on_focus_out, add="+")
-                    
-                make_focus_handlers(widget, focus_line, entry_container, bg_col)
-                
-                widget.bind("<FocusOut>", lambda e: self.commit_current_object())
-                
+
+                make_focus_handlers(widget, focus_line,
+                                    entry_container, bg_col)
+
+                widget.bind(
+                    "<FocusOut>", lambda e: self.commit_current_object())
+
                 if is_horiz:
                     entry_container.pack(fill="x", expand=True)
                 else:
                     entry_container.pack(side="left", fill="x", expand=True)
-        
+
         self.location_entries.append(widget)
         widget.bind("<Shift-Up>", self._location_nav_up)
         widget.bind("<Shift-Down>", self._location_nav_down)
         widget.bind("<Control-Up>", self._location_nav_up)
         widget.bind("<Control-Down>", self._location_nav_down)
         widget.bind("<Return>", self._location_nav_down)
-        
+
         return container
 
     def _build_presets_ui(self, parent_frame, bg_col, bd_col, is_horiz):
         presets_frame = tk.Frame(parent_frame, bg=bg_col)
-        
+
         import config
         prefs = config.load_prefs()
         preset_names = list(prefs.get("data_presets", {}).keys())
-        
+
         if not hasattr(self, "active_preset_var"):
             self.active_preset_var = tk.StringVar()
             if "Default" in preset_names:
                 self.active_preset_var.set("Default")
             elif preset_names:
                 self.active_preset_var.set(preset_names[0])
-                
+
         self.active_preset_cb = ttk.Combobox(
-            presets_frame, 
-            textvariable=self.active_preset_var, 
-            values=preset_names, 
-            state="normal", 
+            presets_frame,
+            textvariable=self.active_preset_var,
+            values=preset_names,
+            state="normal",
             width=8 if is_horiz else 12, cursor="hand2"
         )
         self.active_preset_cb.pack(side="left", padx=4)
-        self.add_tooltip(self.active_preset_cb, "The preset that will be applied when you press Ctrl+K")
-        
+        self.add_tooltip(self.active_preset_cb,
+                         "The preset that will be applied when you press Ctrl+K")
+
         def save_current_as_preset():
             name = self.active_preset_var.get().strip()
             if not name:
                 name = "Default"
                 self.active_preset_var.set(name)
-                
+
             prefs = config.load_prefs()
             if "data_presets" not in prefs:
                 prefs["data_presets"] = {}
-                
+
             vals = {}
             for k, var in self.location_vars.items():
                 v = var.get().strip()
                 if v:
                     vals[k] = v
-                    
+
             prefs["data_presets"][name] = vals
             config.save_prefs(prefs)
             self.app.config_prefs = prefs
-            
+
             names = list(prefs["data_presets"].keys())
             self.active_preset_cb["values"] = names
             self.system_status.config(text=f"Saved preset: {name}")
             self._refresh_load_data_preset_menu()
 
-        save_btn = ttk.Button(presets_frame, text="Save", width=5, command=save_current_as_preset, cursor="hand2")
+        save_btn = ttk.Button(presets_frame, text="Save", width=5,
+                              command=save_current_as_preset, cursor="hand2")
         save_btn.pack(side="left", padx=2)
-        self.add_tooltip(save_btn, "Save current Location fields to this preset")
-        
-        apply_btn = ttk.Button(presets_frame, text="Apply", width=5, command=self._apply_default_data_preset_shortcut, cursor="hand2")
+        self.add_tooltip(
+            save_btn, "Save current Location fields to this preset")
+
+        apply_btn = ttk.Button(presets_frame, text="Apply", width=5,
+                               command=self._apply_default_data_preset_shortcut, cursor="hand2")
         apply_btn.pack(side="left", padx=2)
-        self.add_tooltip(apply_btn, "Apply this preset to the fields above (Ctrl+K)")
-        
+        self.add_tooltip(
+            apply_btn, "Apply this preset to the fields above (Ctrl+K)")
+
         return presets_frame
 
     def _build_vertical_location_ui(self):
@@ -911,7 +933,8 @@ class ObjectProgramUI(
             mode="vertical",
             location_vars=self.location_vars,
             config_ref=getattr(self.app, "config", None),
-            live_callbacks={"on_commit": lambda *args: self.commit_current_object()},
+            live_callbacks={
+                "on_commit": lambda *args: self.commit_current_object()},
             dark_mode=is_dark
         )
         self.location_panel.pack(fill="both", expand=True)
@@ -923,13 +946,15 @@ class ObjectProgramUI(
         import config
         prefs = config.load_prefs() or {}
         is_dark = getattr(self, "dark_mode_active", False)
-        mode = "horizontal_2row" if prefs.get("location_2row", False) else "horizontal_1row"
+        mode = "horizontal_2row" if prefs.get(
+            "location_2row", False) else "horizontal_1row"
         self.location_panel_horiz = create_location_panel(
             self.loc_frame_horizontal,
             mode=mode,
             location_vars=self.location_vars,
             config_ref=getattr(self.app, "config", None),
-            live_callbacks={"on_commit": lambda *args: self.commit_current_object()},
+            live_callbacks={
+                "on_commit": lambda *args: self.commit_current_object()},
             dark_mode=is_dark
         )
         self.location_panel_horiz.pack(fill="both", expand=True)
@@ -937,10 +962,9 @@ class ObjectProgramUI(
             for w in self.location_panel_horiz.field_entries:
                 self.location_entries.append(w)
 
-
-
     def refresh_gbif_button(self):
-        if not hasattr(self, "gbif_btn"): return
+        if not hasattr(self, "gbif_btn"):
+            return
         import config
         prefs = config.load_prefs()
         show_gbif = prefs.get("enable_gbif", False)
@@ -959,7 +983,8 @@ class ObjectProgramUI(
         species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
 
         if not genus and not species:
-            messagebox.showinfo("GBIF Check", "Genus and Species are empty.", parent=self.root)
+            messagebox.showinfo(
+                "GBIF Check", "Genus and Species are empty.", parent=self.root)
             return
 
         import threading
@@ -967,7 +992,8 @@ class ObjectProgramUI(
         def run_check():
             import backend.gbif
             result = backend.gbif.check_gbif(genus, species)
-            self.root.after(0, lambda: self._on_gbif_result(result, genus, species))
+            self.root.after(0, lambda: self._on_gbif_result(
+                result, genus, species))
 
         if hasattr(self, "show_banner"):
             self.show_banner("Checking GBIF...", "info")
@@ -977,33 +1003,40 @@ class ObjectProgramUI(
         if hasattr(self, "hide_banner"):
             self.hide_banner()
         if not result:
-            messagebox.showwarning("GBIF Check", "Could not find a match for this scientific name or an error occurred.", parent=self.root)
+            messagebox.showwarning(
+                "GBIF Check", "Could not find a match for this scientific name or an error occurred.", parent=self.root)
             return
 
         # If it's a synonym, fetch the accepted name and then prompt to update
         if result.get("synonym") and result.get("acceptedUsageKey"):
             import backend.gbif
+
             def fetch_accepted():
-                acc = backend.gbif.get_accepted_name(result["acceptedUsageKey"])
-                self.root.after(0, lambda: self._process_gbif_updates(acc, old_genus, old_species, is_synonym=True))
+                acc = backend.gbif.get_accepted_name(
+                    result["acceptedUsageKey"])
+                self.root.after(0, lambda: self._process_gbif_updates(
+                    acc, old_genus, old_species, is_synonym=True))
             if hasattr(self, "show_banner"):
                 self.show_banner("Fetching accepted name...", "info")
             import threading
             threading.Thread(target=fetch_accepted, daemon=True).start()
             return
 
-        self._process_gbif_updates(result, old_genus, old_species, is_synonym=False)
+        self._process_gbif_updates(
+            result, old_genus, old_species, is_synonym=False)
 
     def _process_gbif_updates(self, result, old_genus, old_species, is_synonym=False):
         self.hide_banner()
         if not result:
             import tkinter.messagebox as mb
-            mb.showwarning("GBIF Check", "Could not fetch accepted name data.", parent=self.root)
+            mb.showwarning(
+                "GBIF Check", "Could not fetch accepted name data.", parent=self.root)
             return
 
         old_author = self.reg_vars.get("Author", tk.StringVar()).get().strip()
         old_family = self.reg_vars.get("Family", tk.StringVar()).get().strip()
-        old_higher_classification = self.reg_vars.get("Higher Classification", tk.StringVar()).get().strip()
+        old_higher_classification = self.reg_vars.get(
+            "Higher Classification", tk.StringVar()).get().strip()
 
         new_genus = result.get("genus", "")
         new_species = result.get("species", "")
@@ -1040,7 +1073,8 @@ class ObjectProgramUI(
                 "field": "Family",
                 "current": old_family,
                 "gbif": new_family,
-                "selected": not bool(old_family), # Default true if currently empty
+                # Default true if currently empty
+                "selected": not bool(old_family),
                 "data": {"family": new_family}
             })
 
@@ -1050,16 +1084,19 @@ class ObjectProgramUI(
                 "field": "Higher Classification",
                 "current": old_higher_classification,
                 "gbif": new_higher_classification,
-                "selected": not bool(old_higher_classification), # Default true if currently empty
+                # Default true if currently empty
+                "selected": not bool(old_higher_classification),
                 "data": {"higherClassification": new_higher_classification}
             })
 
         if not updates_available:
             import tkinter.messagebox as mb
             if result.get("matchType") == "EXACT":
-                mb.showinfo("GBIF Check", f"Name is up to date and valid.\nMatch: {result.get('scientificName')}", parent=self.root)
+                mb.showinfo(
+                    "GBIF Check", f"Name is up to date and valid.\nMatch: {result.get('scientificName')}", parent=self.root)
             else:
-                 mb.showinfo("GBIF Check", f"Match found (Type: {result.get('matchType')}). No significant updates available.", parent=self.root)
+                mb.showinfo(
+                    "GBIF Check", f"Match found (Type: {result.get('matchType')}). No significant updates available.", parent=self.root)
             return
 
         # Show custom dialog
@@ -1068,7 +1105,8 @@ class ObjectProgramUI(
         self.root.wait_window(dialog)
 
         if dialog.result_data:
-            self._apply_gbif_update(dialog.result_data, old_genus, old_species, old_author, old_family, old_higher_classification)
+            self._apply_gbif_update(dialog.result_data, old_genus, old_species,
+                                    old_author, old_family, old_higher_classification)
 
     def _apply_gbif_update(self, result, old_genus, old_species, old_author, old_family, old_higher_classification):
         if not result:
@@ -1094,8 +1132,9 @@ class ObjectProgramUI(
         if "author" in result:
             if "Author" in self.reg_vars:
                 self.reg_vars["Author"].set(result["author"])
-            if "genus" not in result: # If taxonomy wasn't updated, log just author
-                notes.append(f"Author updated from: {old_author or '(Empty)'}.")
+            if "genus" not in result:  # If taxonomy wasn't updated, log just author
+                notes.append(
+                    f"Author updated from: {old_author or '(Empty)'}.")
 
         # Update Family
         if "family" in result:
@@ -1107,9 +1146,11 @@ class ObjectProgramUI(
         # Update Higher Classification
         if "higherClassification" in result:
             if "Higher Classification" in self.reg_vars:
-                self.reg_vars["Higher Classification"].set(result["higherClassification"])
+                self.reg_vars["Higher Classification"].set(
+                    result["higherClassification"])
             if old_higher_classification:
-                notes.append(f"Higher Classification updated from: {old_higher_classification}.")
+                notes.append(
+                    f"Higher Classification updated from: {old_higher_classification}.")
 
         # Append notes to comment
         if notes and "Comment" in self.reg_vars and "Comment" in self.reg_entries:
@@ -1126,7 +1167,6 @@ class ObjectProgramUI(
             self.hide_banner()
             self.show_banner("Taxonomy updated from GBIF.", "success")
 
-
     def build_sections(self):
         self._rebuild_focus_registration_menu()
 
@@ -1137,7 +1177,8 @@ class ObjectProgramUI(
             name = field["name"]
             var = tk.BooleanVar()
             self.problem_vars[name] = var
-            var.trace_add("write", lambda *_, n=name: self.update_problems_default_view())
+            var.trace_add("write", lambda *_,
+                          n=name: self.update_problems_default_view())
 
         if not hasattr(self, "images_missing_var"):
             self.images_missing_var = tk.StringVar()
@@ -1145,7 +1186,7 @@ class ObjectProgramUI(
         if hasattr(self, "reg_notebook") and self.reg_notebook.winfo_exists():
             for tab in self.reg_notebook.tabs():
                 self.reg_notebook.forget(tab)
-    
+
         self.reg_vars.clear()
         self.reg_entries.clear()
         self.reg_row_frames.clear()
@@ -1165,9 +1206,10 @@ class ObjectProgramUI(
         self.prob_label_widgets.clear()
 
         # Build single Specimen Audit tab with cards
-        all_fields = [f["name"] for f in self.app.config["ui_sections"]["registration"]]
+        all_fields = [f["name"]
+                      for f in self.app.config["ui_sections"]["registration"]]
         self._reg_tabs = {}
-        
+
         # Define cards with themes, header icons and ordered fields
         card_defs = [
             {
@@ -1200,30 +1242,34 @@ class ObjectProgramUI(
 
         self.card_defs_ordered = [c["id"] for c in card_defs]
         self.card_frames = {}
-        
+
         is_dark = getattr(self, "dark_mode_active", False)
         card_bg = "#1e1e2d" if is_dark else "#ffffff"
         header_bg = "#252538" if is_dark else "#f5f5f5"
         border_color = "#313244" if is_dark else "#e2e2e2"
         fg_color = "#e8ebe9" if is_dark else "#2c302e"
-        
+
         # Create a single tab container for Specimen Audit
         tab_container = ttk.Frame(self.reg_notebook)
-        
+
         # Scrollable canvas inside the tab container
-        tab_canvas = tk.Canvas(tab_container, highlightthickness=0, bg="#1e1e2d" if is_dark else "#fbfaf8")
-        tab_scroll = ttk.Scrollbar(tab_container, orient="vertical", command=tab_canvas.yview)
+        tab_canvas = tk.Canvas(
+            tab_container, highlightthickness=0, bg="#1e1e2d" if is_dark else "#fbfaf8")
+        tab_scroll = ttk.Scrollbar(
+            tab_container, orient="vertical", command=tab_canvas.yview)
         tab_frame = ttk.Frame(tab_canvas, style="RightPane.TFrame")
 
         tab_frame.bind(
             "<Configure>",
             lambda e, tc=tab_canvas: tc.configure(scrollregion=tc.bbox("all"))
         )
-        tab_win_id = tab_canvas.create_window((0, 0), window=tab_frame, anchor="nw")
+        tab_win_id = tab_canvas.create_window(
+            (0, 0), window=tab_frame, anchor="nw")
         tab_canvas.configure(yscrollcommand=tab_scroll.set)
         tab_canvas.bind(
             "<Configure>",
-            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width) if getattr(tc, "_last_width", None) != e.width and not setattr(tc, "_last_width", e.width) else None
+            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width) if getattr(
+                tc, "_last_width", None) != e.width and not setattr(tc, "_last_width", e.width) else None
         )
 
         # Mousewheel scrolling specific to this tab
@@ -1247,7 +1293,8 @@ class ObjectProgramUI(
         self.reg_notebook.add(tab_container, text="General Data")
 
         # Create O(1) lookup dictionary for registration config
-        reg_config_dict = {f["name"]: f for f in self.app.config.get("ui_sections", {}).get("registration", [])}
+        reg_config_dict = {f["name"]: f for f in self.app.config.get(
+            "ui_sections", {}).get("registration", [])}
 
         # Generate collapsible accordion card layout inside the tab frame
         for c in card_defs:
@@ -1255,15 +1302,17 @@ class ObjectProgramUI(
             card_title = c["title"]
             icon = c["icon"]
             fields_to_render = c["fields"]
-            
+
             # Card frame (outer container with 1px border)
-            card_frame = tk.Frame(tab_frame, bg=card_bg, highlightthickness=1, highlightbackground=border_color, bd=0)
+            card_frame = tk.Frame(
+                tab_frame, bg=card_bg, highlightthickness=1, highlightbackground=border_color, bd=0)
             card_frame.pack(fill="x", padx=sc(10), pady=sc(6))
-            
+
             # Header panel (interactive accordion trigger)
-            header_frame = tk.Frame(card_frame, bg=header_bg, padx=sc(8), pady=sc(6), cursor="hand2")
+            header_frame = tk.Frame(card_frame, bg=header_bg, padx=sc(
+                8), pady=sc(6), cursor="hand2")
             header_frame.pack(fill="x")
-            
+
             toggle_lbl = tk.Label(
                 header_frame, text="▼",
                 font=("Inter", sc(9), "bold"),
@@ -1271,10 +1320,12 @@ class ObjectProgramUI(
             )
             toggle_lbl.pack(side="left", padx=(sc(2), sc(4)))
 
-            icon_lbl = tk.Label(header_frame, text=icon, font=("Segoe UI Symbol", sc(11)), bg=header_bg, fg=fg_color, cursor="hand2")
+            icon_lbl = tk.Label(header_frame, text=icon, font=(
+                "Segoe UI Symbol", sc(11)), bg=header_bg, fg=fg_color, cursor="hand2")
             icon_lbl.pack(side="left", padx=(0, sc(6)))
-            
-            title_lbl = tk.Label(header_frame, text=card_title, font=("Inter", sc(10), "bold"), bg=header_bg, fg=fg_color, cursor="hand2")
+
+            title_lbl = tk.Label(header_frame, text=card_title, font=(
+                "Inter", sc(10), "bold"), bg=header_bg, fg=fg_color, cursor="hand2")
             title_lbl.pack(side="left")
 
             # Problem count badge inside card header
@@ -1284,21 +1335,26 @@ class ObjectProgramUI(
                 bg=header_bg, fg="#c93a40"
             )
             badge_lbl.pack(side="left", padx=(sc(8), 0))
-            
+
             if card_id == "taxonomy":
                 import config
                 prefs = config.load_prefs()
                 show_gbif = prefs.get("enable_gbif", False)
 
-                self.gbif_btn = tk.Label(header_frame, text="🔍 Check GBIF", font=("Inter", sc(8), "bold"), bg="#2b8a3e", fg="#ffffff", cursor="hand2", padx=sc(6), pady=sc(2))
+                self.gbif_btn = tk.Label(header_frame, text="🔍 Check GBIF", font=("Inter", sc(
+                    8), "bold"), bg="#2b8a3e", fg="#ffffff", cursor="hand2", padx=sc(6), pady=sc(2))
                 if show_gbif:
                     self.gbif_btn.pack(side="right", padx=sc(6))
-                self.gbif_btn.bind("<Button-1>", lambda e: self.check_gbif_action())
-                self.gbif_btn.bind("<Enter>", lambda e, w=self.gbif_btn: w.config(bg="#3bc954"))
-                self.gbif_btn.bind("<Leave>", lambda e, w=self.gbif_btn: w.config(bg="#2b8a3e"))
+                self.gbif_btn.bind(
+                    "<Button-1>", lambda e: self.check_gbif_action())
+                self.gbif_btn.bind("<Enter>", lambda e,
+                                   w=self.gbif_btn: w.config(bg="#3bc954"))
+                self.gbif_btn.bind("<Leave>", lambda e,
+                                   w=self.gbif_btn: w.config(bg="#2b8a3e"))
 
             # Card content area
-            body_frame = tk.Frame(card_frame, bg=card_bg, padx=sc(10), pady=sc(8))
+            body_frame = tk.Frame(card_frame, bg=card_bg,
+                                  padx=sc(10), pady=sc(8))
             body_frame.pack(fill="x")
             body_frame.columnconfigure(0, weight=1)
 
@@ -1314,7 +1370,8 @@ class ObjectProgramUI(
                     tc.configure(scrollregion=tc.bbox("all"))
                 return _handler
 
-            toggle_cmd = _make_toggle_handler(body_frame, toggle_lbl, tab_canvas)
+            toggle_cmd = _make_toggle_handler(
+                body_frame, toggle_lbl, tab_canvas)
             for w in (header_frame, toggle_lbl, icon_lbl, title_lbl):
                 w.bind("<Button-1>", toggle_cmd)
 
@@ -1325,7 +1382,7 @@ class ObjectProgramUI(
                 "badge_lbl": badge_lbl,
                 "fields": fields_to_render
             }
-            
+
             current_row = 0
             for fname in fields_to_render:
                 field = reg_config_dict.get(fname)
@@ -1349,33 +1406,39 @@ class ObjectProgramUI(
                 if prob_col:
                     prob_var = self.problem_vars[prob_col]
 
-                    border_bar = tk.Frame(col0_frame, width=3, bd=0, highlightthickness=0)
+                    border_bar = tk.Frame(
+                        col0_frame, width=3, bd=0, highlightthickness=0)
                     border_bar.pack(side="left", fill="y", padx=(0, 2))
                     self.prob_border_bars[name] = border_bar
 
                     cb = ttk.Checkbutton(
                         col0_frame, text="", variable=prob_var, cursor="hand2",
                         command=lambda n=name, pc=prob_col: (
-                            self._update_problem_row_style(n, self.problem_vars[pc].get()),
+                            self._update_problem_row_style(
+                                n, self.problem_vars[pc].get()),
                             self.commit_current_object()
                         )
                     )
                     cb.pack(side="left")
-                    self.add_tooltip(cb, f"Flag as having a problem ({prob_col.replace('_', ' ')}). Tab + Space to toggle.")
+                    self.add_tooltip(
+                        cb, f"Flag as having a problem ({prob_col.replace('_', ' ')}). Tab + Space to toggle.")
 
                     prob_var.trace_add(
                         "write",
                         lambda *_, n=name, pc=prob_col: self.root.after_idle(
-                            lambda: self._update_problem_row_style(n, self.problem_vars[pc].get())
+                            lambda: self._update_problem_row_style(
+                                n, self.problem_vars[pc].get())
                         )
                     )
                 else:
-                    tk.Frame(col0_frame, width=3, bd=0, highlightthickness=0, bg=card_bg).pack(side="left", fill="y", padx=(0, 2))
+                    tk.Frame(col0_frame, width=3, bd=0, highlightthickness=0, bg=card_bg).pack(
+                        side="left", fill="y", padx=(0, 2))
                     spacer_lbl = tk.Frame(col0_frame, width=16, bg=card_bg)
                     spacer_lbl.pack(side="left")
 
                 # Col 1: Label with bold clean typography
-                lbl = tk.Label(frame, text=name, width=15, anchor="w", font=("Hanken Grotesk", sc(10), "bold"), bg=card_bg, fg=fg_color)
+                lbl = tk.Label(frame, text=name, width=15, anchor="w", font=(
+                    "Hanken Grotesk", sc(10), "bold"), bg=card_bg, fg=fg_color)
                 lbl.grid(row=0, column=1, sticky="w", padx=(0, 6))
                 if prob_col:
                     self.prob_label_widgets[name] = lbl
@@ -1385,8 +1448,10 @@ class ObjectProgramUI(
                     choices = field.get("choices", [])
                     if "" not in choices:
                         choices = [""] + choices
-                    widget = ttk.Combobox(frame, textvariable=var, values=choices, cursor="hand2")
-                    widget.bind("<<ComboboxSelected>>", lambda e: self.commit_current_object())
+                    widget = ttk.Combobox(
+                        frame, textvariable=var, values=choices, cursor="hand2")
+                    widget.bind("<<ComboboxSelected>>",
+                                lambda e: self.commit_current_object())
                 elif ftype == "checkbox":
                     widget = ttk.Checkbutton(
                         frame, cursor="hand2",
@@ -1394,7 +1459,8 @@ class ObjectProgramUI(
                         variable=var,
                         onvalue="True",
                         offvalue="False",
-                        command=lambda n=name, v=var: self._on_checkbox_change(n, v)
+                        command=lambda n=name, v=var: self._on_checkbox_change(
+                            n, v)
                     )
                 elif ftype == "multiline" or name in ("Conservation Status", "Observation", "Comment", "ProblemDescription", "Problem Description"):
                     widget = tk.Text(
@@ -1408,9 +1474,11 @@ class ObjectProgramUI(
                         font=("Hanken Grotesk", sc(10)),
                         undo=True, maxundo=-1, autoseparators=True
                     )
+
                     def bind_text_events(w):
                         w.bind("<KeyRelease>", self._on_text_change)
-                        w.bind("<FocusOut>", lambda e: self.commit_current_object(), add="+")
+                        w.bind("<FocusOut>",
+                               lambda e: self.commit_current_object(), add="+")
                     bind_text_events(widget)
                 else:
                     entry_container = tk.Frame(frame, bg=card_bg)
@@ -1425,25 +1493,33 @@ class ObjectProgramUI(
                         font=("Hanken Grotesk", sc(10))
                     )
                     widget.pack(fill="x", expand=True, ipady=sc(3))
-                    
-                    focus_line = tk.Frame(entry_container, height=sc(2), bg=card_bg)
+
+                    focus_line = tk.Frame(
+                        entry_container, height=sc(2), bg=card_bg)
                     focus_line.pack(fill="x", side="bottom")
-                    
+
                     def make_focus_handlers(w, fl, ec, default_bg):
                         def on_focus_in(e):
                             is_dark = getattr(self, "dark_mode_active", False)
-                            fl.configure(bg="#a6e3a1" if is_dark else "#3a7d44")
+                            fl.configure(
+                                bg="#a6e3a1" if is_dark else "#3a7d44")
+
                         def on_focus_out(e):
                             fl.configure(bg=default_bg)
                         w.bind("<FocusIn>", on_focus_in, add="+")
                         w.bind("<FocusOut>", on_focus_out, add="+")
-                        
-                    make_focus_handlers(widget, focus_line, entry_container, card_bg)
 
-                    widget.bind("<KeyRelease>", lambda e, n=name, w=widget: self._on_autocomplete_key(e, n, w), add="+")
-                    widget.bind("<KeyRelease>", lambda e: self.root.after(500, self._validate_fields), add="+")
-                    widget.bind("<FocusOut>", lambda e, n=name, w=widget: self._run_fuzzy_match(n, w), add="+")
-                    widget.bind("<FocusOut>", lambda e: self.commit_current_object(), add="+")
+                    make_focus_handlers(widget, focus_line,
+                                        entry_container, card_bg)
+
+                    widget.bind("<KeyRelease>", lambda e, n=name,
+                                w=widget: self._on_autocomplete_key(e, n, w), add="+")
+                    widget.bind("<KeyRelease>", lambda e: self.root.after(
+                        500, self._validate_fields), add="+")
+                    widget.bind("<FocusOut>", lambda e, n=name,
+                                w=widget: self._run_fuzzy_match(n, w), add="+")
+                    widget.bind(
+                        "<FocusOut>", lambda e: self.commit_current_object(), add="+")
 
                     if field.get("readonly"):
                         widget.configure(state="disabled")
@@ -1477,20 +1553,23 @@ class ObjectProgramUI(
         # -------- PROBLEMS TAB --------
         tab_container = ttk.Frame(self.reg_notebook)
         tab_canvas = tk.Canvas(tab_container, highlightthickness=0)
-        tab_scroll = ttk.Scrollbar(tab_container, orient="vertical", command=tab_canvas.yview)
+        tab_scroll = ttk.Scrollbar(
+            tab_container, orient="vertical", command=tab_canvas.yview)
         tab_frame = ttk.Frame(tab_canvas)
-        
+
         tab_frame.bind(
             "<Configure>",
             lambda e, tc=tab_canvas: tc.configure(scrollregion=tc.bbox("all"))
         )
-        tab_win_id = tab_canvas.create_window((0, 0), window=tab_frame, anchor="nw")
+        tab_win_id = tab_canvas.create_window(
+            (0, 0), window=tab_frame, anchor="nw")
         tab_canvas.configure(yscrollcommand=tab_scroll.set)
         tab_canvas.bind(
             "<Configure>",
-            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width) if getattr(tc, "_last_width", None) != e.width and not setattr(tc, "_last_width", e.width) else None
+            lambda e, tc=tab_canvas, twid=tab_win_id: tc.itemconfig(twid, width=e.width) if getattr(
+                tc, "_last_width", None) != e.width and not setattr(tc, "_last_width", e.width) else None
         )
-        
+
         tab_canvas.pack(side="left", fill="both", expand=True)
         tab_scroll.pack(side="right", fill="y")
 
@@ -1505,7 +1584,7 @@ class ObjectProgramUI(
         # Create a frame for the editable checkbuttons
         edit_frame = ttk.Frame(tab_frame, padding=12)
         edit_frame.pack(fill="x")
-        
+
         # Populate editable checkbuttons for all problems
         self.problem_checkbuttons = []
         for i, field in enumerate(self.app.config["ui_sections"]["problems"]):
@@ -1514,7 +1593,7 @@ class ObjectProgramUI(
             if not var:
                 var = tk.BooleanVar()
                 self.problem_vars[name] = var
-                
+
             cb = ttk.Checkbutton(
                 edit_frame, cursor="hand2",
                 text=name.replace("_", " "),
@@ -1528,13 +1607,13 @@ class ObjectProgramUI(
             col = i % 2
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=6)
             self.problem_checkbuttons.append(cb)
-            
+
         edit_frame.columnconfigure(0, weight=1)
         edit_frame.columnconfigure(1, weight=1)
-        
+
         # A separator before the summary list
         ttk.Separator(tab_frame, orient="horizontal").pack(fill="x", pady=10)
-        
+
         # Self.problem_frame for the active problems list (rebuilt dynamically)
         self.problem_frame = ttk.Frame(tab_frame, padding=12)
         self.problem_frame.pack(fill="both", expand=True)
@@ -1566,8 +1645,7 @@ class ObjectProgramUI(
         self.update_problems_default_view()
 
 
-
-#-------
+# -------
 
     def _safe_nav_left(self, event):
         if isinstance(self.root.focus_get(), (tk.Entry, ttk.Entry, tk.Text)):
@@ -1580,28 +1658,25 @@ class ObjectProgramUI(
         self.navigate_object(1)
 
 
-
-#----
-
-
-
+# ----
 
     def focus_first_empty_reg(self):
         for widget in self.reg_entry_list:
             try:
-                val = widget.get("1.0", "end").strip() if isinstance(widget, tk.Text) else widget.get().strip()
+                val = widget.get("1.0", "end").strip() if isinstance(
+                    widget, tk.Text) else widget.get().strip()
                 if not val:
                     widget.focus_set()
                     return
             except Exception:
                 continue
-#----
+# ----
 
     def open_history_shortcut(self, event=None):
         self.open_historical_suggestions()
- 
 
-#---
+
+# ---
 
     def _history_nav_down(self, event):
         if not hasattr(self, "_history_widgets"):
@@ -1612,11 +1687,10 @@ class ObjectProgramUI(
             return
 
         self._history_index = (self._history_index + 1) % total
-    
+
         w = self._history_widgets[self._history_index]
         w.focus_set()
-        w.invoke() 
-
+        w.invoke()
 
         for rb in self._history_widgets:
             try:
@@ -1625,7 +1699,6 @@ class ObjectProgramUI(
                 debug_error("Suppressed Error", str(e))
                 pass
 
-
         try:
             w._row_frame.configure(style="Hover.TFrame")
         except Exception as e:
@@ -1633,7 +1706,6 @@ class ObjectProgramUI(
             pass
 
         return "break"
-
 
     def _history_nav_up(self, event):
         if not hasattr(self, "_history_widgets"):
@@ -1649,14 +1721,12 @@ class ObjectProgramUI(
         w.focus_set()
         w.invoke()
 
-
         for rb in self._history_widgets:
             try:
                 rb._row_frame.configure(style="TFrame")
             except Exception as e:
                 debug_error("Suppressed Error", str(e))
                 pass
-
 
         try:
             w._row_frame.configure(style="Hover.TFrame")
@@ -1666,13 +1736,12 @@ class ObjectProgramUI(
 
         return "break"
 
-
     def _history_select(self, event):
         if not hasattr(self, "_history_widgets"):
             return "break"
 
         w = self._history_widgets[self._history_index]
-    
+
         try:
             w.invoke()
         except Exception as e:
@@ -1682,8 +1751,7 @@ class ObjectProgramUI(
         return "break"
 
 
-
-#--------
+# --------
 
     def _focus_first_reg(self, event=None):
         if self.reg_entries:
@@ -1710,20 +1778,21 @@ class ObjectProgramUI(
         return "break"
 
 
-#-------
+# -------
 
 
-
-
-#------ location shortcuts
+# ------ location shortcuts
 
     def _get_active_location_entries(self):
-        is_center = hasattr(self, "location_in_center_var") and self.location_in_center_var.get()
-        panel = getattr(self, "location_panel_horiz", None) if is_center else getattr(self, "location_panel", None)
+        is_center = hasattr(
+            self, "location_in_center_var") and self.location_in_center_var.get()
+        panel = getattr(self, "location_panel_horiz", None) if is_center else getattr(
+            self, "location_panel", None)
         if panel and hasattr(panel, "field_entries") and panel.field_entries:
             return panel.field_entries
         if self.location_entries:
-            visible = [w for w in self.location_entries if w.winfo_exists() and w.winfo_ismapped()]
+            visible = [
+                w for w in self.location_entries if w.winfo_exists() and w.winfo_ismapped()]
             if visible:
                 return visible
             return self.location_entries
@@ -1741,7 +1810,8 @@ class ObjectProgramUI(
         self.object_list.focus_set()
         if self.app.current_object_id in self.app.active_object_ids:
             try:
-                idx = self.app.active_object_ids.index(self.app.current_object_id)
+                idx = self.app.active_object_ids.index(
+                    self.app.current_object_id)
                 self.object_list.selection_clear(0, tk.END)
                 self.object_list.selection_set(idx)
                 self.object_list.see(idx)
@@ -1769,7 +1839,7 @@ class ObjectProgramUI(
         return "break"
 
 
-#------- problem shortcuts
+# ------- problem shortcuts
 
 
     def _focus_first_problem(self, event=None):
@@ -1779,7 +1849,6 @@ class ObjectProgramUI(
                     child.focus_set()
                     return "break"
         return "break"
-
 
     def _get_focused_problem_index(self):
         current = self.root.focus_get()
@@ -1828,7 +1897,7 @@ class ObjectProgramUI(
             return "break"
 
 
-#------ navigation helper
+# ------ navigation helper
 
     def _navigate_list(self, entries, step):
         current = self.root.focus_get()
@@ -1840,7 +1909,6 @@ class ObjectProgramUI(
         total = len(entries)
         new = (idx + step) % total
 
-       
         for w in entries:
             try:
                 w.configure(background="white")
@@ -1849,7 +1917,7 @@ class ObjectProgramUI(
                 pass
 
         entries[new].focus_set()
-    
+
         try:
             entries[new].configure(background="#d0ebff")
         except Exception as e:
@@ -1857,15 +1925,10 @@ class ObjectProgramUI(
             pass
 
 
+# ---- gallery toggle
 
 
-#---- gallery toggle
-
-
-
-
-
-#------
+# ------
 
 
     def push_undo_state(self):
@@ -1878,7 +1941,8 @@ class ObjectProgramUI(
             "obs": self.app.df_obs.loc[oid].copy(),
         }
 
-        from models import MAX_UNDO_PER_OBJECT  # P1-F: single constant, no scattered literals
+        # P1-F: single constant, no scattered literals
+        from models import MAX_UNDO_PER_OBJECT
         stack = self.app.undo_stacks.setdefault(oid, [])
 
         stack.append(state)
@@ -1892,14 +1956,8 @@ class ObjectProgramUI(
         if len(stack) > MAX_UNDO_PER_OBJECT:
             del stack[:10]
 
-
     def _clear_selection(self, var):
         var.set("")
-
-
-    
-
-
 
     def load_historical_databases(self):
         last_dir = __import__("config").get_last_dir("last_db_dir")
@@ -1920,7 +1978,8 @@ class ObjectProgramUI(
 
         for i, path in enumerate(paths, start=1):
             try:
-                df_reg, df_obs, *_ = ExcelRepository.load_excel(path, self.app.config)
+                df_reg, df_obs, * \
+                    _ = ExcelRepository.load_excel(path, self.app.config)
                 self.app.historical_dbs.append({
                     "name": f"ARK{i}",
                     "path": path,
@@ -1932,7 +1991,7 @@ class ObjectProgramUI(
                 messagebox.showwarning(
                     "Load failed",
                     f"Could not load {path}\n{e}"
-            )
+                )
 
         self.system_status.config(
             text=f"Loaded {len(self.app.historical_dbs)} earlier databases — pre-scanning..."
@@ -1946,10 +2005,6 @@ class ObjectProgramUI(
                 target=self._prescan_suggestions_worker,
                 daemon=True
             ).start()
-
-
-
-
 
     def _get_reg_by_id(self, db):
         if not db:
@@ -1969,76 +2024,76 @@ class ObjectProgramUI(
         return db.get("reg_by_id")
 
 
-       
-
-
-#----- tool tips
+# ----- tool tips
 
     def add_tooltip(self, widget, text):
         if not hasattr(self, "_tooltip_manager"):
             self._tooltip_manager = ToolTipManager()
 
         is_dark = getattr(self, "dark_mode_active", False)
-        widget.bind("<Enter>", lambda e, w=widget, t=text, d=is_dark: self._tooltip_manager.enter(w, t, d, e))
-        widget.bind("<Leave>", lambda e, w=widget: self._tooltip_manager.leave(w, e))
-        widget.bind("<ButtonPress>", lambda e, w=widget: self._tooltip_manager.leave(w, e), add="+")
+        widget.bind("<Enter>", lambda e, w=widget, t=text,
+                    d=is_dark: self._tooltip_manager.enter(w, t, d, e))
+        widget.bind("<Leave>", lambda e,
+                    w=widget: self._tooltip_manager.leave(w, e))
+        widget.bind("<ButtonPress>", lambda e,
+                    w=widget: self._tooltip_manager.leave(w, e), add="+")
 
-#---- Menu
-
+# ---- Menu
 
     def open_group_editor(self):
         if not getattr(self.app, 'config', None):
             from tkinter import messagebox
-            messagebox.showinfo("No database", "Please open a database first.", parent=self.root)
+            messagebox.showinfo(
+                "No database", "Please open a database first.", parent=self.root)
             return
-            
-        all_fields = [f["name"] for f in self.app.config.get("ui_sections", {}).get("registration", [])]
+
+        all_fields = [f["name"] for f in self.app.config.get(
+            "ui_sections", {}).get("registration", [])]
         current_groups = self.app.config.get("reg_groups", [])
-        
+
         def _on_save(new_groups):
             self.app.config["reg_groups"] = new_groups
-            
+
             # Save to user_prefs.json
-            import config, os
+            import config
+            import os
             prefs = config.load_prefs()
             if "custom_databases" not in prefs:
                 prefs["custom_databases"] = {}
-                
+
             profile_name = None
             for p_name, p_conf in prefs.get("custom_databases", {}).items():
                 if p_conf == self.app.config:
                     profile_name = p_name
                     break
-            
+
             if not profile_name:
                 if self.app.excel_path:
-                    profile_name = os.path.basename(self.app.excel_path).replace(".xlsx", "")
+                    profile_name = os.path.basename(
+                        self.app.excel_path).replace(".xlsx", "")
                 else:
                     profile_name = "CustomProfile"
-                    
+
             if profile_name in prefs.get("custom_databases", {}):
                 prefs["custom_databases"][profile_name]["reg_groups"] = new_groups
             else:
                 prefs["custom_databases"][profile_name] = self.app.config
-                
+
             config.save_prefs(prefs)
-            
+
             # Refresh UI
             self.build_sections()
             if self.app.current_object_id:
                 self.load_object(self.app.current_object_id)
-                
+
             self.show_banner("Field groups updated successfully.", "success")
-            
+
         from ui.group_editor import FieldGroupEditorDialog
-        FieldGroupEditorDialog(self.root, all_fields, current_groups, _on_save, self.app)
+        FieldGroupEditorDialog(self.root, all_fields,
+                               current_groups, _on_save, self.app)
 
 
-
-
-#-------- Def shortcuts
-
-
+# -------- Def shortcuts
 
     def _shortcut_new_object(self, event):
         widget = self.root.focus_get()
@@ -2057,41 +2112,42 @@ class ObjectProgramUI(
             return
         from ui.add_objects import AddObjectsWizard
         AddObjectsWizard(self.root, self.app, self)
-        
+
     def show_create_dropdown(self):
         btn = self.toolbar_buttons["CREATE"]
         x = btn.winfo_rootx()
         y = btn.winfo_rooty() + btn.winfo_height()
-        
+
         if hasattr(self, "create_dropdown") and self.create_dropdown and self.create_dropdown.winfo_exists():
             self.create_dropdown.destroy()
             self.create_dropdown = None
             return
-            
+
         win = tk.Toplevel(self.root)
         self.create_dropdown = win
         win.overrideredirect(True)
         win.transient(self.root)
-        
+
         is_dark = getattr(self, "dark_mode_active", False)
         bg_col = "#1e1e2d" if is_dark else "#ffffff"
         fg_col = "#e8ebe9" if is_dark else "#2c302e"
         border_col = "#313244" if is_dark else "#c4c7c7"
         hover_col = "#313244" if is_dark else "#e2e2e2"
-        
-        win.configure(bg=bg_col, highlightthickness=1, highlightbackground=border_col)
-        
+
+        win.configure(bg=bg_col, highlightthickness=1,
+                      highlightbackground=border_col)
+
         options = [
             ("New Object", self.add_new_object),
             ("New Database", self.create_new_database)
         ]
-        
+
         for label_text, cmd in options:
             lbl = tk.Label(
-                win, 
-                text=label_text, 
+                win,
+                text=label_text,
                 font=("Hanken Grotesk" if not is_dark else "Segoe UI", sc(10)),
-                bg=bg_col, 
+                bg=bg_col,
                 fg=fg_col,
                 anchor="w",
                 padx=16,
@@ -2099,26 +2155,26 @@ class ObjectProgramUI(
                 cursor="hand2"
             )
             lbl.pack(fill="x")
-            
+
             def make_hover_handlers(w=lbl):
                 w.bind("<Enter>", lambda e: w.configure(bg=hover_col))
                 w.bind("<Leave>", lambda e: w.configure(bg=bg_col))
-                
+
             make_hover_handlers(lbl)
-            
+
             def make_click_handler(c=cmd):
                 def on_click(e):
                     win.destroy()
                     self.create_dropdown = None
                     c()
                 return on_click
-                
+
             lbl.bind("<Button-1>", make_click_handler(cmd))
-            
+
         win.update_idletasks()
         width = max(sc(130), win.winfo_reqwidth())
         win.geometry(f"{width}x{win.winfo_reqheight()}+{x}+{y}")
-        
+
         def _dismiss_dropdown(event=None):
             if not win.winfo_exists():
                 return
@@ -2133,49 +2189,49 @@ class ObjectProgramUI(
                 self.create_dropdown = None
                 self.root.unbind("<Button-1>")
 
-        win.bind("<Escape>", lambda e: (win.destroy(), setattr(self, "create_dropdown", None), self.root.unbind("<Button-1>")))
+        win.bind("<Escape>", lambda e: (win.destroy(), setattr(
+            self, "create_dropdown", None), self.root.unbind("<Button-1>")))
         # Delay binding so the click that opened the dropdown doesn't immediately close it
-        self.root.after(100, lambda: self.root.bind("<Button-1>", _dismiss_dropdown))
-        
+        self.root.after(100, lambda: self.root.bind(
+            "<Button-1>", _dismiss_dropdown))
+
     def delete_current_object(self):
         oid = self.app.current_object_id
         if not oid:
             return
-            
+
         from tkinter import messagebox
         if not messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete object {oid}?"):
             return
-            
+
         if self.app.df_reg is not None and oid in self.app.df_reg.index:
             self.app.df_reg = self.app.df_reg.drop(index=oid)
         if self.app.df_obs is not None and oid in self.app.df_obs.index:
             self.app.df_obs = self.app.df_obs.drop(index=oid)
-            
+
         self.app.dirty = True
         self.update_dirty_ui()
         self._invalidate_row_cache()
         self.refresh_list()
 
-        
         if not self.app.df_reg.empty:
             self.load_object(self.app.df_reg.index[0])
         else:
             self.app.current_object_id = None
-            
+
     def _shortcut_quick_new_object(self, event):
         if self.app.df_reg is None:
             return
 
-        existing_ids = [int(x) for x in self.app.df_reg.index if str(x).isdigit()]
+        existing_ids = [int(x)
+                        for x in self.app.df_reg.index if str(x).isdigit()]
         oid = str(max(existing_ids) + 1 if existing_ids else 1)
 
-        
         new_reg_row = {col: "" for col in self.app.df_reg.columns}
         new_reg_row["ObjectID"] = oid
         new_reg_row["UID"] = uuid.uuid4().hex[:8]
         self.app.df_reg.loc[oid] = new_reg_row
 
-        
         new_obs_row = {col: False for col in self.problem_columns}
         new_obs_row.update({
             "Images_Missing": True
@@ -2186,7 +2242,6 @@ class ObjectProgramUI(
 
         self.app.df_obs.loc[oid] = new_obs_row
 
-        
         if not self.app.df_photo.empty:
             new_photo_row = {col: "" for col in self.app.df_photo.columns}
             self.app.df_photo.loc[oid] = new_photo_row
@@ -2195,30 +2250,28 @@ class ObjectProgramUI(
         self._invalidate_row_cache()
         self.invalidate_search_index()
         self.refresh_list()
-    
+
         idx = len(self.app.active_object_ids) - 1
         self.object_list.selection_clear(0, tk.END)
         self.object_list.selection_set(idx)
         self.object_list.see(idx)
 
         self.load_object(oid)
-    
+
         self.app.dirty = True
         self.update_dirty_ui()
 
         self.log_action("CREATE_OBJECT_FAST", ["ObjectID"], [f"Created {oid}"])
-
-
 
     def _shortcut_duplicate_object(self, event):
         oid = self.app.current_object_id
         if not oid:
             return
 
-        existing_ids = [int(x) for x in self.app.df_reg.index if str(x).isdigit()]
+        existing_ids = [int(x)
+                        for x in self.app.df_reg.index if str(x).isdigit()]
         new_oid = str(max(existing_ids) + 1 if existing_ids else 1)
-    
-  
+
         new_reg = self.app.df_reg.loc[[oid]].copy()
         new_reg.index = [new_oid]
         new_reg["ObjectID"] = new_oid
@@ -2226,12 +2279,10 @@ class ObjectProgramUI(
 
         self.app.df_reg = pd.concat([self.app.df_reg, new_reg])
 
-
         new_obs = self.app.df_obs.loc[[oid]].copy()
         new_obs.index = [new_oid]
         new_obs["ProblemDescription"] = ""
         self.app.df_obs = pd.concat([self.app.df_obs, new_obs])
-
 
         if not self.app.df_photo.empty and oid in self.app.df_photo.index:
             new_photo = self.app.df_photo.loc[[oid]].copy()
@@ -2242,14 +2293,14 @@ class ObjectProgramUI(
         self._invalidate_row_cache()
         self.invalidate_search_index()
         self.refresh_list()
-    
+
         idx = len(self.app.active_object_ids) - 1
         self.object_list.selection_clear(0, tk.END)
         self.object_list.selection_set(idx)
         self.object_list.see(idx)
 
         self.load_object(new_oid)
-    
+
         self.app.dirty = True
         self.update_dirty_ui()
 
@@ -2260,8 +2311,7 @@ class ObjectProgramUI(
         )
 
 
-
-#---
+# ---
 
 
     def enable_offline_mode(self):
@@ -2273,14 +2323,15 @@ class ObjectProgramUI(
         if self.app.current_object_id:
             self.load_images(self.app.current_object_id)
 
-#-------
+# -------
 
     def _on_text_change(self, event):
         self._store_field_state(event)
 
     def open_bulk_edit_window(self):
         sel = self.object_list.curselection()
-        pre_selected = [self.app.active_object_ids[i] for i in sel] if sel else []
+        pre_selected = [self.app.active_object_ids[i]
+                        for i in sel] if sel else []
         from ui.bulk_edit import BulkEditWindow
         BulkEditWindow(self.root, self.app, self, pre_selected)
 
@@ -2290,7 +2341,8 @@ class ObjectProgramUI(
             val = str(var.get()).strip().lower()
             if "Loaned out date" in self.reg_vars:
                 if val in ("true", "1"):
-                    self.reg_vars["Loaned out date"].set(datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
+                    self.reg_vars["Loaned out date"].set(
+                        datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
                 else:
                     self.reg_vars["Loaned out date"].set("")
         self.commit_current_object()
@@ -2315,7 +2367,6 @@ class ObjectProgramUI(
             " - Focus mode hides sections or fields that you do not need, making it ideal for small laptop screens."
         )
 
-  
         win = tk.Toplevel(self.root)
         win.title("User Guide")
         import utils
@@ -2348,7 +2399,6 @@ class ObjectProgramUI(
         txt.insert("1.0", message)
         txt.config(state="disabled")
 
-      
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
@@ -2359,7 +2409,6 @@ class ObjectProgramUI(
         ttk.Button(win, text="Close", command=lambda: (
             canvas.unbind_all("<MouseWheel>"), win.destroy()
         ), cursor="hand2").pack(side="bottom", pady=8)
-
 
     def show_quick_help(self):
         message = (
@@ -2379,13 +2428,11 @@ class ObjectProgramUI(
 
         messagebox.showinfo("Quick Start", message)
 
-
     def show_about(self):
         messagebox.showinfo(
             "About arbor",
             "Arbor Botanical Database Management System\nVersion 1.2"
         )
-
 
     def open_advanced_settings(self):
         """Shim: opens the unified settings window on the Advanced tab."""
@@ -2413,12 +2460,14 @@ class ObjectProgramUI(
     def refresh_styles_and_highlights(self, enable_hl_override=None, color_override=None):
         if hasattr(self, "apply_theme"):
             try:
-                self.apply_theme(enable_hl_override=enable_hl_override, color_override=color_override)
+                self.apply_theme(
+                    enable_hl_override=enable_hl_override, color_override=color_override)
             except Exception as e:
                 print(f"Error applying theme: {e}")
         if hasattr(self, "_update_all_problem_row_styles"):
             try:
-                self._update_all_problem_row_styles(enable_hl_override=enable_hl_override, color_override=color_override)
+                self._update_all_problem_row_styles(
+                    enable_hl_override=enable_hl_override, color_override=color_override)
             except Exception as e:
                 print(f"Error updating problem styles: {e}")
 
@@ -2431,19 +2480,25 @@ class ObjectProgramUI(
             popup.add_command(label="(No saved presets)", state="disabled")
         else:
             for name in sorted(saved.keys()):
-                popup.add_command(label=name, command=lambda n=name: self.apply_saved_data_preset(n))
+                popup.add_command(
+                    label=name, command=lambda n=name: self.apply_saved_data_preset(n))
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
     def show_file_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
-        popup.add_command(label="New Database", command=self.create_new_database)
+        popup.add_command(label="New Database",
+                          command=self.create_new_database)
         popup.add_command(label="Open Excel", command=self.open_excel)
-        popup.add_command(label="Save", command=lambda: self.save_session("SAVE"))
+        popup.add_command(
+            label="Save", command=lambda: self.save_session("SAVE"))
         popup.add_command(label="Save As...", command=self.save_as)
-        popup.add_command(label="Export filtered list...", command=self.export_filtered_list)
+        popup.add_command(label="Export filtered list...",
+                          command=self.export_filtered_list)
         popup.add_separator()
-        popup.add_command(label="📱 Mobile Companion...", command=self.open_mobile_dialog)
-        popup.add_command(label="Restore earlier autosave...", command=self.open_autosave_manager)
+        popup.add_command(label="📱 Mobile Companion...",
+                          command=self.open_mobile_dialog)
+        popup.add_command(label="Restore earlier autosave...",
+                          command=self.open_autosave_manager)
         popup.add_separator()
         popup.add_command(label="Exit", command=self.on_close)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
@@ -2451,22 +2506,23 @@ class ObjectProgramUI(
     def show_data_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
         popup.add_command(label="Load Books", command=self.load_books_file)
-        popup.add_command(label="Load earlier databases", command=self.load_historical_databases)
+        popup.add_command(label="Load earlier databases",
+                          command=self.load_historical_databases)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
     def show_images_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
         popup.add_command(label="Image Source", command=self.open_image_menu)
-        popup.add_command(label="Toggle image view", command=self.toggle_image_view)
+        popup.add_command(label="Toggle image view",
+                          command=self.toggle_image_view)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
     def show_create_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
         popup.add_command(label="New Object", command=self.add_new_object)
-        popup.add_command(label="New Database", command=self.create_new_database)
+        popup.add_command(label="New Database",
+                          command=self.create_new_database)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
-
-
 
     def _open_unified(self, tab="general"):
         """Open or switch-to-tab the unified settings window."""
@@ -2486,21 +2542,21 @@ class ObjectProgramUI(
             initial_tab=tab,
             live_callbacks={
                 "dark_mode":               self._live_dark_mode,
-                "show_list":               lambda v: (self.show_list_var.set(v), self.toggle_list_panel()),
-                "show_search":             lambda v: (self.show_search_var.set(v), self.toggle_search_panel()),
-                "show_reg":                lambda v: (self.show_reg_var.set(v), self.toggle_reg_panel()),
-                "show_images":             lambda v: (self.show_images_var.set(v), self.toggle_images_panel()),
-                "location_center":         lambda v: (self.location_in_center_var.set(v), self.toggle_location_panel()),
-                "location_2row":           lambda v: self._live_location_2row(v),
-                "problem_highlights":      lambda v: self.refresh_styles_and_highlights(enable_hl_override=v),
+                "show_list": lambda v: (self.show_list_var.set(v), self.toggle_list_panel()),
+                "show_search": lambda v: (self.show_search_var.set(v), self.toggle_search_panel()),
+                "show_reg": lambda v: (self.show_reg_var.set(v), self.toggle_reg_panel()),
+                "show_images": lambda v: (self.show_images_var.set(v), self.toggle_images_panel()),
+                "location_center": lambda v: (self.location_in_center_var.set(v), self.toggle_location_panel()),
+                "location_2row": lambda v: self._live_location_2row(v),
+                "problem_highlights": lambda v: self.refresh_styles_and_highlights(enable_hl_override=v),
                 "problem_highlight_color": lambda v: self.refresh_styles_and_highlights(color_override=v),
-                "large_reviewed_btn":      lambda v: (self.large_reviewed_button_var.set(v), self.update_reviewed_button_state()),
-                "snap_lock":               lambda v: self.snap_lock_var.set(v),
-                "show_image_tools":        lambda v: (self.show_image_tools_var.set(v), self.toggle_image_tools()),
-                "show_bulk_edit":          lambda v: (self.show_bulk_edit_var.set(v), self.toggle_bulk_edit_btn()),
-                "image_stack":             lambda v: self._live_image_stack(v),
-                "focus_mode":              lambda v: (self.focus_mode_var.set(v), self.update_reg_fields_visibility()),
-                "focus_fallback":          lambda v: (self.focus_fallback_var.set(v), self.update_reg_fields_visibility()),
+                "large_reviewed_btn": lambda v: (self.large_reviewed_button_var.set(v), self.update_reviewed_button_state()),
+                "snap_lock": lambda v: self.snap_lock_var.set(v),
+                "show_image_tools": lambda v: (self.show_image_tools_var.set(v), self.toggle_image_tools()),
+                "show_bulk_edit": lambda v: (self.show_bulk_edit_var.set(v), self.toggle_bulk_edit_btn()),
+                "image_stack": lambda v: self._live_image_stack(v),
+                "focus_mode": lambda v: (self.focus_mode_var.set(v), self.update_reg_fields_visibility()),
+                "focus_fallback": lambda v: (self.focus_fallback_var.set(v), self.update_reg_fields_visibility()),
             }
         )
         # Ensure the ref is cleared when the window is closed
@@ -2537,13 +2593,9 @@ class ObjectProgramUI(
     def batch_set_reviewed_false(self):
         self._batch_set_reviewed(False)
 
-
-
     def open_settings_window(self):
         """Shim: opens the unified settings window on the General tab."""
         self._open_unified("general")
-
-
 
     def open_help_window(self):
         if hasattr(self, "help_win") and self.help_win and self.help_win.winfo_exists():
@@ -2551,27 +2603,27 @@ class ObjectProgramUI(
             self.help_win.focus_set()
             self.help_win.lift()
             return
-            
+
         win = tk.Toplevel(self.root)
         self.help_win = win
         win.title("Help Center")
         win.resizable(True, True)
         win.transient(self.root)
-        
+
         import utils
         # Size of the dialog
         w_width = sc(400)
         w_height = sc(420)
         utils.center_and_fit_toplevel(win, w_width, w_height)
-        
+
         bg_color = "#181c19" if self.dark_mode_active else "#f2f5f1"
         win.configure(background=bg_color)
         win.bind("<Escape>", lambda e: win.destroy())
-        
+
         # Main padding frame
         frame = ttk.Frame(win, padding=sc(16))
         frame.pack(fill="both", expand=True)
-        
+
         # Header Title
         lbl_header = ttk.Label(
             frame,
@@ -2580,18 +2632,18 @@ class ObjectProgramUI(
             foreground="#2c302e" if not self.dark_mode_active else "#e8ebe9"
         )
         lbl_header.pack(anchor="w", pady=(0, 10))
-        
+
         ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 15))
-        
+
         # Options definition
         def run_help_cmd(cmd):
             win.destroy()
             cmd()
-            
+
         def start_main_tutorial():
             from ui.tutorial import TutorialManager
             TutorialManager().start_tutorial("main_tutorial", self.root, force=True)
-            
+
         def start_startup_tutorial():
             from ui.tutorial import TutorialManager
             TutorialManager().start_tutorial("startup_tutorial", self.root, force=True)
@@ -2601,29 +2653,33 @@ class ObjectProgramUI(
             TutorialManager().start_tutorial("historical_resolver", self.root, force=True)
 
         options = [
-            ("Interactive Tutorial", "Guided walkthrough of the main workspace.", start_main_tutorial),
-            ("Startup Tutorial", "Guided walkthrough of the welcome screen.", start_startup_tutorial),
-            ("Conflict Resolver Tutorial", "Guided walkthrough of the Historical Conflict Resolver.", start_hr_tutorial),
-            ("User Guide", "Complete guide and detailed documentation.", self.show_main_help),
-            ("Keyboard Shortcuts", "HUD cheat sheet for all keys and navigation.", self.show_shortcuts),
+            ("Interactive Tutorial",
+             "Guided walkthrough of the main workspace.", start_main_tutorial),
+            ("Startup Tutorial", "Guided walkthrough of the welcome screen.",
+             start_startup_tutorial),
+            ("Conflict Resolver Tutorial",
+             "Guided walkthrough of the Historical Conflict Resolver.", start_hr_tutorial),
+            ("User Guide", "Complete guide and detailed documentation.",
+             self.show_main_help),
+            ("Keyboard Shortcuts",
+             "HUD cheat sheet for all keys and navigation.", self.show_shortcuts),
             ("Quick Start", "Basic shortcuts and workflow summary.", self.show_quick_help),
             ("About", "Application version and build details.", self.show_about)
         ]
-        
+
         # Render options list
         for name, desc, cmd in options:
             btn_frame = ttk.Frame(frame)
             btn_frame.pack(fill="x", pady=sc(6))
-            
+
             btn = ttk.Button(
                 btn_frame,
                 text=name,
                 width=18,
                 command=lambda c=cmd: run_help_cmd(c),
-                style="Primary.TButton"
-            , cursor="hand2")
+                style="Primary.TButton", cursor="hand2")
             btn.pack(side="left", padx=(0, 10))
-            
+
             lbl_desc = ttk.Label(
                 btn_frame,
                 text=desc,
@@ -2631,19 +2687,18 @@ class ObjectProgramUI(
                 foreground="gray"
             )
             lbl_desc.pack(side="left", fill="x", expand=True)
-            
+
         # Footer
         close_btn = ttk.Button(
             frame,
             text="Close",
             command=win.destroy,
             style="Tool.TButton",
-            width=10
-        , cursor="hand2")
+            width=10, cursor="hand2")
         close_btn.pack(side="bottom", pady=(15, 0))
 
 
-#--------
+# --------
 
 
     def _store_field_state(self, event):
@@ -2679,7 +2734,7 @@ class ObjectProgramUI(
         if len(self.field_undo_stack) > 100:
             self.field_undo_stack.pop(0)
 
-#-- def toggle reviewed shortcut
+# -- def toggle reviewed shortcut
 
     def toggle_reviewed_shortcut(self, event=None):
         oid = self.app.current_object_id
@@ -2689,7 +2744,6 @@ class ObjectProgramUI(
         current = bool(self.reviewed_var.get())
         new = not current
 
-      
         self.push_undo_state()
 
         self.reviewed_var.set(new)
@@ -2706,7 +2760,7 @@ class ObjectProgramUI(
         self._list_dirty = True
         self.update_reviewed_button_state()
 
-#---
+# ---
 
     def toggle_focus_mode_shortcut(self, event=None):
         oid = self.app.current_object_id
@@ -2716,19 +2770,14 @@ class ObjectProgramUI(
         current = bool(self.focus_mode_var.get())
         new = not current
 
-
         self.push_undo_state()
-
 
         self.focus_mode_var.set(new)
 
-
         self.update_reg_fields_visibility()
-
 
         state = "SET" if new else "UNSET"
         self.log_action("FOCUS_MODE_TOGGLE", ["Focus Mode"], [state])
-
 
         self.system_status.config(
             text=f"Focus Mode = {new}",
@@ -2751,8 +2800,7 @@ class ObjectProgramUI(
         config.save_prefs(prefs)
 
 
-
-#--- def undo
+# --- def undo
 
     def undo(self, event=None):
         oid = self.app.current_object_id
@@ -2762,7 +2810,6 @@ class ObjectProgramUI(
         stack = self.app.undo_stacks.get(oid)
         if not stack:
             return
-
 
         current = {
             "reg": self.app.df_reg.loc[oid].copy(),
@@ -2780,7 +2827,7 @@ class ObjectProgramUI(
 
         self.app.df_reg.loc[oid] = state["reg"]
         self.app.df_obs.loc[oid] = state["obs"]
-    
+
         self._invalidate_row_cache(oid=oid)
         self.invalidate_search_index()
         self.refresh_list()
@@ -2791,8 +2838,7 @@ class ObjectProgramUI(
         self.update_dirty_ui()
 
 
-
-#---- def smart undo
+# ---- def smart undo
 
     def _smart_undo(self, event):
         widget = self.root.focus_get()
@@ -2810,7 +2856,7 @@ class ObjectProgramUI(
         return self.undo(event)
 
 
-#---- 
+# ----
 
     def undo_field(self, event):
         if not self.field_undo_stack:
@@ -2836,13 +2882,11 @@ class ObjectProgramUI(
             debug_error("Suppressed Error", str(e))
             pass
 
-     
         self.app.dirty = True
         self.update_dirty_ui()
 
 
-
-#---- def redo
+# ---- def redo
 
     def redo(self, event=None):
         oid = self.app.current_object_id
@@ -2852,8 +2896,6 @@ class ObjectProgramUI(
         stack = self.app.redo_stacks.get(oid, [])
         if len(stack) == 0:
             return
-
-
 
         current = {
             "reg": self.app.df_reg.loc[oid].copy(),
@@ -2881,7 +2923,7 @@ class ObjectProgramUI(
         self.app.dirty = True
         self.update_dirty_ui()
 
-#------
+# ------
     def _position_search_popup(self):
         entry = self.root.focus_get()
         if not isinstance(entry, ttk.Entry):
@@ -2905,12 +2947,14 @@ class ObjectProgramUI(
         self.root.focus_set()
 
         self.load_object(oid)
+
     def _search_move_down(self, event):
         if self.search_popup.state() == "normal" and self.search_listbox.size() > 0:
             self.search_listbox.focus_set()
             self.search_listbox.selection_clear(0, tk.END)
             self.search_listbox.selection_set(0)
             return "break"
+
     def _on_search_enter(self, event):
         if self.search_popup.state() == "normal":
             self._on_search_select()
@@ -2928,7 +2972,7 @@ class ObjectProgramUI(
         self.search_index = []
         return
 
-#---- progress bar
+# ---- progress bar
 
     def _show_progress(self, text="Working", maximum=100):
         if hasattr(self, "_loading_window") and self._loading_window and self._loading_window.win.winfo_exists():
@@ -2954,8 +2998,7 @@ class ObjectProgramUI(
         self.root.after(1500, lambda: self.system_status.config(text=""))
 
 
-
-#---- dirty state
+# ---- dirty state
 
     def update_dirty_ui(self):
         config_name = getattr(self.app, "config_name", None)
@@ -2968,7 +3011,7 @@ class ObjectProgramUI(
         self.root.title(title)
 
 
-#--- autosave
+# --- autosave
 
 
     def open_tab_config_editor(self):
@@ -2976,24 +3019,7 @@ class ObjectProgramUI(
         GroupEditorWindow(self.root, self.app, self)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#---------Image Scan
-
-
+# ---------Image Scan
 
     def _extract_numeric_object_id(self, filename):
         name = os.path.splitext(filename)[0]
@@ -3012,37 +3038,17 @@ class ObjectProgramUI(
 # ---------- Historical data ----------
 
 
-
-#-----
-
+# -----
 
 
+# ------
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-#------
-
-
-#--------- Books -------------
-
-
-
-
-
-
+# --------- Books -------------
 
     # ---------- Helpers ----------
+
+
     def object_title(self, oid):
         if oid not in self.reg_by_id.index:
             return f"{oid} Unknown"
@@ -3059,11 +3065,8 @@ class ObjectProgramUI(
 
         return f"{oid} {genus} {species}".strip()
 
-
-
-
-
     # ---------- FOCUS MANAGEMENT ----------
+
     def _build_focus_menu(self, menubar):
         menubar.add_command(label="Focus", command=self.open_focus_settings)
 
@@ -3077,22 +3080,22 @@ class ObjectProgramUI(
         preset = prefs.get("focus_presets", {}).get(name)
         if not preset:
             return
-            
+
         self.focus_mode_var.set(True)
         self.focus_fallback_var.set(preset.get("fallback", True))
         vis_state = preset.get("visibility", {})
         for k, v in self.focus_visibility_vars.items():
             if k in vis_state:
                 v.set(vis_state[k])
-                
+
         self.update_reg_fields_visibility()
-        self.system_status.config(text=f"Applied Focus Preset '{name}' and enabled Focus Mode.")
-        
+        self.system_status.config(
+            text=f"Applied Focus Preset '{name}' and enabled Focus Mode.")
+
         prefs["focus_mode_active"] = True
         config.save_prefs(prefs)
 
     # ---------- LAYOUT MANAGEMENT ----------
-
 
     def toggle_reg_panel(self):
         if self.show_reg_var.get():
@@ -3101,11 +3104,12 @@ class ObjectProgramUI(
         else:
             self.panes.forget(self.reg_outer)
 
-
     def _apply_default_data_preset_shortcut(self, event=None):
         # Trigger apply_active_preset on the active location panel if present
-        is_center = hasattr(self, "location_in_center_var") and self.location_in_center_var.get()
-        active_panel = getattr(self, "location_panel_horiz", None) if is_center else getattr(self, "location_panel", None)
+        is_center = hasattr(
+            self, "location_in_center_var") and self.location_in_center_var.get()
+        active_panel = getattr(self, "location_panel_horiz", None) if is_center else getattr(
+            self, "location_panel", None)
         if active_panel and hasattr(active_panel, "apply_active_preset"):
             active_panel.apply_active_preset()
             return "break"
@@ -3118,40 +3122,41 @@ class ObjectProgramUI(
 
     def save_data_preset_dialog(self):
         from tkinter import simpledialog
-        name = simpledialog.askstring("Save Data Preset", "Enter a name for this preset:")
+        name = simpledialog.askstring(
+            "Save Data Preset", "Enter a name for this preset:")
         if not name:
             return
-            
+
         import config
         prefs = config.load_prefs()
         if "data_presets" not in prefs:
             prefs["data_presets"] = {}
-            
+
         preset_data = {}
         for k, v in self.reg_vars.items():
             val = v.get().strip()
             if val:
                 preset_data[k] = val
-                
+
         prefs["data_presets"][name] = preset_data
         config.save_prefs(prefs)
-        
+
         # Also update active presets
         if hasattr(self, "active_preset_cb"):
             names = list(prefs["data_presets"].keys())
             self.active_preset_cb["values"] = names
             self.active_preset_var.set(name)
-            
+
         self._refresh_load_data_preset_menu()
         self.system_status.config(text=f"Saved preset '{name}'")
-        
+
     def apply_saved_data_preset(self, name):
         import config
         prefs = config.load_prefs()
         preset = prefs.get("data_presets", {}).get(name)
         if not preset:
             return
-            
+
         applied_count = 0
         modified_widgets = []
         for k, v in preset.items():
@@ -3179,7 +3184,7 @@ class ObjectProgramUI(
                         modified_widgets.append(self.location_entries[idx])
                         break
                 applied_count += 1
-                
+
         # Green Flash Animation
         for w in modified_widgets:
             if isinstance(w, ttk.Entry) or isinstance(w, ttk.Combobox):
@@ -3188,14 +3193,17 @@ class ObjectProgramUI(
                 orig_style = w.cget("style")
                 w.configure(style="Success.TEntry")
                 # Revert after 500ms
-                self.root.after(500, lambda wid=w, s=orig_style: wid.configure(style=s))
+                self.root.after(500, lambda wid=w,
+                                s=orig_style: wid.configure(style=s))
             elif isinstance(w, tk.Text):
                 orig_bg = w.cget("background")
                 w.configure(background="#d4edda")
-                self.root.after(500, lambda wid=w, bg=orig_bg: wid.configure(background=bg))
-                
+                self.root.after(500, lambda wid=w,
+                                bg=orig_bg: wid.configure(background=bg))
+
         self.commit_current_object()
-        self.system_status.config(text=f"Applied Data Preset '{name}' ({applied_count} fields)")
+        self.system_status.config(
+            text=f"Applied Data Preset '{name}' ({applied_count} fields)")
 
     def _refresh_load_data_preset_menu(self):
         self.load_data_preset_menu.delete(0, 'end')
@@ -3203,11 +3211,13 @@ class ObjectProgramUI(
         prefs = config.load_prefs()
         saved = prefs.get("data_presets", {})
         if not saved:
-            self.load_data_preset_menu.add_command(label="(No saved presets)", state="disabled")
+            self.load_data_preset_menu.add_command(
+                label="(No saved presets)", state="disabled")
             return
-            
+
         for name in saved.keys():
-            self.load_data_preset_menu.add_command(label=name, command=lambda n=name: self.apply_saved_data_preset(n))
+            self.load_data_preset_menu.add_command(
+                label=name, command=lambda n=name: self.apply_saved_data_preset(n))
 
     def toggle_list_panel_shortcut(self, event=None):
         self.show_list_var.set(not self.show_list_var.get())
@@ -3227,18 +3237,18 @@ class ObjectProgramUI(
     def toggle_left_pin(self, event=None):
         is_pinned = not self.left_pinned.get()
         self.left_pinned.set(is_pinned)
-        
+
         prefs = config.load_prefs() or {}
         prefs["left_pinned"] = is_pinned
         config.save_prefs(prefs)
-        
+
         self._apply_pin_state(animate=True)
         return "break"
 
     def _apply_pin_state(self, animate=False):
         if not hasattr(self, "left_content_frame") or not hasattr(self, "left_frame"):
             return
-            
+
         if self.left_pinned.get():
             # Hide overlay if currently active
             if hasattr(self, "_drawer_anim_job") and self._drawer_anim_job is not None:
@@ -3253,11 +3263,11 @@ class ObjectProgramUI(
                 self.drawer_overlay.place_forget()
 
             # Pack content frame directly into left_frame
-            self.left_content_frame.pack(in_=self.left_frame, side="left", fill="both", expand=True)
+            self.left_content_frame.pack(
+                in_=self.left_frame, side="left", fill="both", expand=True)
             if hasattr(self, "pin_btn"):
-                self.pin_btn.config(bg=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"))
-            
-
+                self.pin_btn.config(bg=config.RAIL_THEME.get(
+                    "icon_hover_bg", "#e9ece5"))
 
             target_sash = sc(300)
             if animate:
@@ -3271,9 +3281,8 @@ class ObjectProgramUI(
             # Unpinned mode: forget content frame from left_frame layout
             self.left_content_frame.pack_forget()
             if hasattr(self, "pin_btn"):
-                self.pin_btn.config(bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"))
-            
-
+                self.pin_btn.config(
+                    bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"))
 
             target_sash = sc(config.RAIL_THEME.get("rail_width", 40))
             if animate:
@@ -3288,12 +3297,12 @@ class ObjectProgramUI(
         import math
         if not hasattr(self, "panes"):
             return
-            
+
         try:
             start_sash = self.panes.sashpos(0)
         except Exception:
             start_sash = target_sash
-            
+
         distance = float(target_sash - start_sash)
         if abs(distance) < 2:
             try:
@@ -3301,9 +3310,10 @@ class ObjectProgramUI(
             except Exception:
                 pass
             return
-            
+
         duration = float(config.DRAWER_THEME.get("anim_duration_ms", 140))
-        step_interval = int(config.DRAWER_THEME.get("anim_step_interval_ms", 8))
+        step_interval = int(config.DRAWER_THEME.get(
+            "anim_step_interval_ms", 8))
         start_time = time.time() * 1000.0
 
         def _step():
@@ -3335,7 +3345,7 @@ class ObjectProgramUI(
     def handle_ctrl_f(self, event=None):
         if not self.left_pinned.get():
             self.toggle_left_pin()
-        
+
         if hasattr(self, "_inline_search_entry"):
             self._inline_search_entry.focus_set()
             try:
@@ -3356,12 +3366,13 @@ class ObjectProgramUI(
     def open_drawer(self):
         self._drawer_is_open = True
         if hasattr(self, "left_content_frame") and hasattr(self, "drawer_overlay"):
-            self.left_content_frame.pack(in_=self.drawer_overlay, fill="both", expand=True)
+            self.left_content_frame.pack(
+                in_=self.drawer_overlay, fill="both", expand=True)
             self.drawer_overlay.lift()
             self.left_content_frame.lift()
             if hasattr(self, "left_panes"):
                 self.left_panes.pack(fill="both", expand=True)
-        
+
         target_w = sc(config.DRAWER_THEME.get("drawer_width", 300))
         self._animate_drawer(target_w)
 
@@ -3400,7 +3411,8 @@ class ObjectProgramUI(
             return
 
         duration = float(config.DRAWER_THEME.get("anim_duration_ms", 140))
-        step_interval = int(config.DRAWER_THEME.get("anim_step_interval_ms", 8))
+        step_interval = int(config.DRAWER_THEME.get(
+            "anim_step_interval_ms", 8))
         start_w = float(self._drawer_current_width)
         distance = float(target_width - start_w)
 
@@ -3440,7 +3452,7 @@ class ObjectProgramUI(
         if w <= 0:
             self.drawer_overlay.place_forget()
             return
-            
+
         try:
             self.root.update_idletasks()
             rail_x = self.left_frame.winfo_rootx() - self.root.winfo_rootx()
@@ -3463,7 +3475,7 @@ class ObjectProgramUI(
             return
         if not hasattr(self, "drawer_overlay") or not self.drawer_overlay.winfo_exists():
             return
-            
+
         if self._drawer_is_open or self._drawer_current_width > 0:
             try:
                 widget = event.widget
@@ -3472,7 +3484,7 @@ class ObjectProgramUI(
                     if curr == self.drawer_overlay or curr == getattr(self, "rail_frame", None):
                         return
                     curr = getattr(curr, "master", None)
-                
+
                 self.close_drawer()
             except Exception:
                 pass
@@ -3483,22 +3495,23 @@ class ObjectProgramUI(
                 self.panes.insert(0, self.left_frame, weight=1)
         else:
             self.panes.forget(self.left_frame)
-            
+
     def toggle_search_panel(self):
         if hasattr(self, "search_bar_frame"):
             if self.show_search_var.get():
                 if self.search_bar_frame.winfo_manager() != "pack":
-                    before_w = self.search_bar_frame.master.winfo_children()[1] if len(self.search_bar_frame.master.winfo_children()) > 1 else None
-                    self.search_bar_frame.pack(fill="x", padx=0, pady=(0, 2), before=before_w)
+                    before_w = self.search_bar_frame.master.winfo_children()[1] if len(
+                        self.search_bar_frame.master.winfo_children()) > 1 else None
+                    self.search_bar_frame.pack(
+                        fill="x", padx=0, pady=(0, 2), before=before_w)
             else:
                 if self.search_bar_frame.winfo_manager() == "pack":
                     self.search_bar_frame.pack_forget()
-                
 
     def _sync_middle_panes(self):
         if not hasattr(self, 'middle_panes'):
             return
-            
+
         # Temporarily forget panes to manage ordering and visibility safely
         if hasattr(self, 'right_frame') and str(self.right_frame) in self.middle_panes.panes():
             self.middle_panes.forget(self.right_frame)
@@ -3511,8 +3524,10 @@ class ObjectProgramUI(
             self.middle_panes.add(self.right_frame, weight=3)
             self.refresh_image_view()
 
-        focus_active = hasattr(self, "focus_mode_var") and self.focus_mode_var.get()
-        show_loc = not (focus_active and not self.focus_visibility_vars.get("Location", tk.BooleanVar(value=True)).get())
+        focus_active = hasattr(
+            self, "focus_mode_var") and self.focus_mode_var.get()
+        show_loc = not (focus_active and not self.focus_visibility_vars.get(
+            "Location", tk.BooleanVar(value=True)).get())
 
         if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get() and show_loc:
             # U2-A: 130px minimum keeps location rows readable
@@ -3533,17 +3548,19 @@ class ObjectProgramUI(
             if hasattr(self, 'loc_container'):
                 if hasattr(self, 'left_panes') and hasattr(self, 'left_bottom_container'):
                     if str(self.left_bottom_container) not in self.left_panes.panes():
-                        self.left_panes.add(self.left_bottom_container, weight=0)
+                        self.left_panes.add(
+                            self.left_bottom_container, weight=0)
                 if self.loc_container.winfo_manager() != "pack":
                     self.loc_container.pack(side="top", fill="x")
 
     def toggle_images_panel(self):
         self._sync_middle_panes()
-            
+
     def toggle_image_tools(self):
         if self.show_image_tools_var.get():
             if self.image_toolbar.winfo_manager() != "pack":
-                self.image_toolbar.pack(before=self.image_box, fill="x", pady=(2, 4))
+                self.image_toolbar.pack(
+                    before=self.image_box, fill="x", pady=(2, 4))
         else:
             if self.image_toolbar.winfo_manager() == "pack":
                 self.image_toolbar.pack_forget()
@@ -3559,17 +3576,11 @@ class ObjectProgramUI(
 
             if self.show_bulk_edit_var.get():
                 if self.bulk_edit_btn.winfo_manager() != "pack":
-                    self.bulk_edit_btn.pack(side="bottom", fill="x", pady=(2, 0))
+                    self.bulk_edit_btn.pack(
+                        side="bottom", fill="x", pady=(2, 0))
             else:
                 if self.bulk_edit_btn.winfo_manager() == "pack":
                     self.bulk_edit_btn.pack_forget()
-
-
-
-
-
-
-
 
     def _toggle_toolbar_buttons(self):
         for name, btn in self.toolbar_buttons.items():
@@ -3612,7 +3623,8 @@ class ObjectProgramUI(
                     continue
 
                 try:
-                    is_tk_button = isinstance(btn, tk.Button) and not isinstance(btn, ttk.Button)
+                    is_tk_button = isinstance(
+                        btn, tk.Button) and not isinstance(btn, ttk.Button)
 
                     if w < threshold:
                         # Use small icon version
@@ -3622,10 +3634,12 @@ class ObjectProgramUI(
                     else:
                         # Restore full text
                         if btn.cget("text") != full_text:
-                            btn.config(text=full_text, image="", compound="none")
+                            btn.config(text=full_text, image="",
+                                       compound="none")
                 except Exception as e:
                     import sys
-                    print(f"Error making button {btn_name} responsive: {e}", file=sys.stderr)
+                    print(
+                        f"Error making button {btn_name} responsive: {e}", file=sys.stderr)
 
         self._responsive_resize_job = self.root.after(50, do_check)
 
@@ -3669,10 +3683,12 @@ class ObjectProgramUI(
             try:
                 # Render icon using TablerIcons (size 20 is good for standard buttons)
                 pil_img = TablerIcons.load(icon_enum, 20, '#555555', 1.5)
-                self._responsive_icons_cache[btn_name] = ImageTk.PhotoImage(pil_img)
+                self._responsive_icons_cache[btn_name] = ImageTk.PhotoImage(
+                    pil_img)
             except Exception as e:
                 import sys
-                print(f"Error loading icon for {btn_name}: {e}", file=sys.stderr)
+                print(
+                    f"Error loading icon for {btn_name}: {e}", file=sys.stderr)
 
     # ---------- UI ----------
     def build_ui(self):
@@ -3690,12 +3706,14 @@ class ObjectProgramUI(
         self._status_bar_frame.pack(side="bottom", fill="x")
 
         # --- Row 1: Buttons ---
-        self.sb_top = tk.Frame(self._status_bar_frame, bg=statusbar_bg, height=32)
+        self.sb_top = tk.Frame(self._status_bar_frame,
+                               bg=statusbar_bg, height=32)
         self.sb_top.pack(side="top", fill="x")
         self.sb_top.pack_propagate(False)
 
         # --- Row 2: Stats ---
-        self.sb_bottom = tk.Frame(self._status_bar_frame, bg=statusbar_bg, height=24)
+        self.sb_bottom = tk.Frame(
+            self._status_bar_frame, bg=statusbar_bg, height=24)
         self.sb_bottom.pack(side="top", fill="x")
         self.sb_bottom.pack_propagate(False)
 
@@ -3705,7 +3723,8 @@ class ObjectProgramUI(
         self._status_bar_labels = {}
 
         # Buttons (Row 1) in a frame matching left column width
-        self.sb_buttons_frame = tk.Frame(self.sb_top, bg=statusbar_bg, height=32)
+        self.sb_buttons_frame = tk.Frame(
+            self.sb_top, bg=statusbar_bg, height=32)
         self.sb_buttons_frame.pack(side="left", fill="y")
         self.sb_buttons_frame.grid_propagate(False)
         self.sb_buttons_frame.rowconfigure(0, weight=1)
@@ -3719,13 +3738,11 @@ class ObjectProgramUI(
             self.sb_buttons_frame,
             text="SETTINGS",
             style="Nav.TButton",
-            command=self._open_unified
-        , cursor="hand2")
+            command=self._open_unified, cursor="hand2")
         self.toolbar_buttons['SETTINGS'] = self.sb_settings_btn
         self.add_tooltip(self.sb_settings_btn, "Open Application Settings")
-        self.sb_settings_btn.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
-
-
+        self.sb_settings_btn.grid(
+            row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
 
         sep2 = ttk.Separator(self.sb_buttons_frame, orient="vertical")
         sep2.grid(row=0, column=3, sticky="ns", pady=3)
@@ -3734,12 +3751,11 @@ class ObjectProgramUI(
             self.sb_buttons_frame,
             text="HELP",
             style="Nav.TButton",
-            command=self.open_help_window
-        , cursor="hand2")
+            command=self.open_help_window, cursor="hand2")
         self.toolbar_buttons['HELP'] = self.sb_help_btn
         self.add_tooltip(self.sb_help_btn, "Open Help Window")
-        self.sb_help_btn.grid(row=0, column=4, sticky="nsew", padx=(2, 6), pady=3)
-
+        self.sb_help_btn.grid(
+            row=0, column=4, sticky="nsew", padx=(2, 6), pady=3)
 
         # Left stats group
         sb_left = tk.Frame(sb_bottom, bg=statusbar_bg)
@@ -3760,7 +3776,8 @@ class ObjectProgramUI(
         _sb_sep(sb_left)
         _sb_label(sb_left, "reviewed", "REVIEWED: —")
         _sb_sep(sb_left)
-        self._status_bar_problems_lbl = _sb_label(sb_left, "problems", "PROBLEMS: —")
+        self._status_bar_problems_lbl = _sb_label(
+            sb_left, "problems", "PROBLEMS: —")
         _sb_sep(sb_left)
         _sb_label(sb_left, "last_save", "LAST_SAVE: —")
         # U2-H: Filter-active badge — amber dot that appears when any filter is active.
@@ -3786,7 +3803,8 @@ class ObjectProgramUI(
             lbl.bind("<Leave>", lambda e: lbl.config(fg="#c8c8c8"))
             return lbl
 
-        _sb_link(sb_right, "DB_STATUS",  self.show_statistics)   # placeholder — connect later
+        # placeholder — connect later
+        _sb_link(sb_right, "DB_STATUS",  self.show_statistics)
         _sb_link(sb_right, "LOG_VIEWER", self.open_log_viewer_window)
 
         # ----------------------------------------------------------------
@@ -3814,7 +3832,8 @@ class ObjectProgramUI(
         ).pack(side="left", anchor="center")
 
         # 1px vertical separator after title
-        tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)
+        tk.Frame(nav_bar, bg=nav_border, width=1).pack(
+            side="left", fill="y", pady=8)
 
         # --- Nav link buttons ---
         # Each maps to an existing command. style="Nav.TButton" applied after apply_theme().
@@ -3834,29 +3853,30 @@ class ObjectProgramUI(
             Returns:
                 ttk.Button: The created styled button widget.
             """
-            btn = ttk.Button(parent, text=label, style="Nav.TButton", command=cmd, cursor="hand2")
+            btn = ttk.Button(parent, text=label,
+                             style="Nav.TButton", command=cmd, cursor="hand2")
             btn.pack(side="left", fill="y")
             self.toolbar_buttons[label] = btn
             self.toolbar_vars[label] = tk.BooleanVar(value=True)
             return btn
 
         # FILE — opens the file/open dialog
-        btn_file = _nav_btn(nav_links_frame, "FILE ▾",     self.show_file_dropdown)
+        btn_file = _nav_btn(nav_links_frame, "FILE ▾",
+                            self.show_file_dropdown)
         self.add_tooltip(btn_file, "Database file options")
-
-
-
 
         # DATA — opens data menu
         btn_dat = _nav_btn(nav_links_frame, "DATA",   self.open_load_data_menu)
         self.add_tooltip(btn_dat, "Load historical databases")
 
         # IMAGES — jump to next problem
-        btn_img = _nav_btn(nav_links_frame, "IMAGES ▾", self.show_images_dropdown)
+        btn_img = _nav_btn(nav_links_frame, "IMAGES ▾",
+                           self.show_images_dropdown)
         self.add_tooltip(btn_img, "Image source and view options")
 
         # CREATE — add new object or database
-        btn_create = _nav_btn(nav_links_frame, "CREATE",   self.show_create_dropdown)
+        btn_create = _nav_btn(nav_links_frame, "CREATE",
+                              self.show_create_dropdown)
         self.add_tooltip(btn_create, "Create a new object or database")
 
         # HISTORY — recent objects popup
@@ -3864,11 +3884,14 @@ class ObjectProgramUI(
         self.add_tooltip(btn_hist, "View recently visited objects")
 
         # MOBILE — opens mobile companion dialog
-        btn_mob = _nav_btn(nav_links_frame, "📱 MOBILE", self.open_mobile_dialog)
-        self.add_tooltip(btn_mob, "Connect your phone to review & edit records remotely")
+        btn_mob = _nav_btn(nav_links_frame, "📱 MOBILE",
+                           self.open_mobile_dialog)
+        self.add_tooltip(
+            btn_mob, "Connect your phone to review & edit records remotely")
 
         # 1px separator before secondary controls
-        tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)
+        tk.Frame(nav_bar, bg=nav_border, width=1).pack(
+            side="left", fill="y", pady=8)
 
         # --- Secondary toolbar controls (kept for feature compatibility) ---
         secondary_frame = ttk.Frame(nav_bar)
@@ -3890,41 +3913,50 @@ class ObjectProgramUI(
             secondary_frame, text="Last", style="Nav.TButton",
             command=self.goto_last_object, cursor="hand2")
         self.toolbar_buttons['Last'].pack(side="left", padx=2)
-        self.add_tooltip(self.toolbar_buttons['Last'], "Return to last visited object")
+        self.add_tooltip(
+            self.toolbar_buttons['Last'], "Return to last visited object")
 
-
-
-
-        tk.Frame(secondary_frame, bg=nav_border, width=1).pack(side="left", fill="y", pady=6)
+        tk.Frame(secondary_frame, bg=nav_border, width=1).pack(
+            side="left", fill="y", pady=6)
 
         self.toolbar_buttons['Next Problem'] = ttk.Button(
             secondary_frame, text="⚠ Next Problem", style="Primary.TButton",
             command=self.goto_next_problem, cursor="hand2")
         self.toolbar_buttons['Next Problem'].pack(side="left", padx=(4, 1))
-        self.add_tooltip(self.toolbar_buttons['Next Problem'], "Jump to next problem")
+        self.add_tooltip(
+            self.toolbar_buttons['Next Problem'], "Jump to next problem")
 
         self.next_history_btn = ttk.Button(
             secondary_frame, text="Next+Hist", style="Primary.TButton",
             command=self.goto_next_problem_with_history, state="disabled", cursor="hand2")
         self.next_history_btn.pack(side="left", padx=1)
         self.toolbar_buttons['Next+Hist'] = self.next_history_btn
-        self.add_tooltip(self.next_history_btn, "Jump to next object with suggestions")
+        self.add_tooltip(self.next_history_btn,
+                         "Jump to next object with suggestions")
 
-        tk.Frame(secondary_frame, bg=nav_border, width=1).pack(side="left", fill="y", pady=6)
-
-
-
-
-
-
-
-
+        tk.Frame(secondary_frame, bg=nav_border, width=1).pack(
+            side="left", fill="y", pady=6)
 
         self.show_all_history_var = tk.BooleanVar(value=False)
+        self.simultaneous_edit_var = tk.BooleanVar(value=False)
 
         # --- Right side: status indicators ---
         status_container = ttk.Frame(nav_bar)
         status_container.pack(side="right", fill="y", padx=(0, 16))
+
+        # Enable Simultaneous Edit Toggle (Only shown when active)
+        self.simultaneous_edit_frame = ttk.Frame(status_container)
+
+        simul_cb = ttk.Checkbutton(
+            self.simultaneous_edit_frame,
+            text="Enable Simultaneous Edit",
+            variable=self.simultaneous_edit_var,
+            command=self.toggle_simultaneous_edit,
+            cursor="hand2"
+        )
+        simul_cb.pack(side="left", padx=(0, 8))
+        self.simultaneous_edit_frame.pack(side="left", fill="y", padx=(0, 8))
+        self.simultaneous_edit_frame.pack_forget()  # Hidden by default
 
         # Online status dot + label
         status_dot_frame = ttk.Frame(status_container)
@@ -3973,7 +4005,8 @@ class ObjectProgramUI(
         )
         real_image_scan_progress.pack(side="right", padx=(0, 8))
         real_image_scan_progress.pack_forget()
-        self.image_scan_progress = ProgressbarWrapper(real_image_scan_progress, self)
+        self.image_scan_progress = ProgressbarWrapper(
+            real_image_scan_progress, self)
 
         # Sync toolbar_vars for all registered buttons
         for name in self.toolbar_buttons:
@@ -3991,19 +4024,19 @@ class ObjectProgramUI(
         panes.pack(fill="both", expand=True)
         self.panes = panes
 
-
-      
         left = ttk.Frame(panes)
         self.left_frame = left
         panes.add(left, weight=0)
-        self.left_frame.bind("<Configure>", self.on_left_frame_configure, add="+")
+        self.left_frame.bind(
+            "<Configure>", self.on_left_frame_configure, add="+")
 
         # Persistent Action Rail frame on the left edge
         rail = tk.Frame(
             left,
             bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
             highlightthickness=1,
-            highlightbackground=config.RAIL_THEME.get("rail_border", "#d1d1d1"),
+            highlightbackground=config.RAIL_THEME.get(
+                "rail_border", "#d1d1d1"),
             width=sc(config.RAIL_THEME.get("rail_width", 40))
         )
         rail.pack_propagate(False)
@@ -4020,7 +4053,8 @@ class ObjectProgramUI(
             bd=0, relief="flat", cursor="hand2",
             command=self.toggle_left_pin
         )
-        self.pin_btn.pack(side="top", fill="x", pady=(sc(6), sc(4)), padx=sc(4))
+        self.pin_btn.pack(side="top", fill="x",
+                          pady=(sc(6), sc(4)), padx=sc(4))
         self.add_tooltip(self.pin_btn, "Toggle Docked / Unpinned Focus Mode")
 
         self.drawer_btn = tk.Button(
@@ -4042,21 +4076,25 @@ class ObjectProgramUI(
             fg=config.RAIL_THEME.get("indicator_active_bg", "#C62828"),
             bd=0
         )
-        self.filter_indicator.pack(side="top", fill="x", pady=sc(4), padx=sc(4))
+        self.filter_indicator.pack(
+            side="top", fill="x", pady=sc(4), padx=sc(4))
         self.filter_indicator.pack_forget()
 
         # Content frame holding list, search, and location widgets (master is self.root to allow unclipped reparenting into drawer_overlay)
         self.left_content_frame = ttk.Frame(self.root)
-        self.left_content_frame.pack(in_=left, side="left", fill="both", expand=True)
+        self.left_content_frame.pack(
+            in_=left, side="left", fill="both", expand=True)
 
         # Floating Overlay Drawer Container (root-level floating frame, zero clipping)
         self.drawer_overlay = tk.Frame(
             self.root,
             bg=config.DRAWER_THEME.get("drawer_bg", "#ffffff"),
             highlightthickness=1,
-            highlightbackground=config.DRAWER_THEME.get("drawer_border", "#c4c7c7")
+            highlightbackground=config.DRAWER_THEME.get(
+                "drawer_border", "#c4c7c7")
         )
-        self.root.bind_all("<Button-1>", self._on_global_click_for_drawer, add="+")
+        self.root.bind_all(
+            "<Button-1>", self._on_global_click_for_drawer, add="+")
         self.root.bind("<<MobileEdit>>", self._on_mobile_edit)
 
         self.review_progress_label = None
@@ -4090,17 +4128,21 @@ class ObjectProgramUI(
         )
 
         # Create self.left_panes vertical paned window
-        self.left_panes = ttk.Panedwindow(self.left_content_frame, orient="vertical")
+        self.left_panes = ttk.Panedwindow(
+            self.left_content_frame, orient="vertical")
         self.left_panes.pack(fill="both", expand=True)
 
         # Bottom container in left column for Location, Settings, and Help
-        self.left_bottom_container = ttk.Frame(self.left_panes, style="LeftPane.TFrame")
+        self.left_bottom_container = ttk.Frame(
+            self.left_panes, style="LeftPane.TFrame")
 
-        self.left_bottom_sep = ttk.Separator(self.left_bottom_container, orient="horizontal")
+        self.left_bottom_sep = ttk.Separator(
+            self.left_bottom_container, orient="horizontal")
         self.left_bottom_sep.pack(fill="x", side="top")
 
         # --- Location container (relocated here) ---
-        loc_container = ttk.Frame(self.left_bottom_container, padding=(8, 6), style="LeftPane.TFrame")
+        loc_container = ttk.Frame(
+            self.left_bottom_container, padding=(8, 6), style="LeftPane.TFrame")
         self.loc_container = loc_container
         loc_container.pack(side="top", fill="x")
 
@@ -4110,28 +4152,25 @@ class ObjectProgramUI(
 
         # Settings and Help buttons relocated to status bar sb_top.
 
-
         # LIST container
         list_container = ttk.Frame(self.left_panes, style="LeftPane.TFrame")
         self.left_panes.add(list_container, weight=1)
         self.left_panes.add(self.left_bottom_container, weight=0)
 
         # ---------- FILTER ----------
-        self.toolbar_buttons['Filter'] = ttk.Button(sort_frame, text="Filter", style="Nav.TButton", command=self.open_filter_menu, cursor="hand2")
+        self.toolbar_buttons['Filter'] = ttk.Button(
+            sort_frame, text="Filter", style="Nav.TButton", command=self.open_filter_menu, cursor="hand2")
         self.toolbar_buttons['Filter'].pack(side="left", padx=(4, 0))
         self.filter_btn = self.toolbar_buttons['Filter']
         self.add_tooltip(self.toolbar_buttons['Filter'], "Ctrl+G")
 
         self.search_count_label = None
 
-
-
-
         # --- Sleek Integrated Search Bar ---
         search_container = tk.Frame(
-            list_container, 
-            bg="#ffffff", 
-            highlightthickness=1, 
+            list_container,
+            bg="#ffffff",
+            highlightthickness=1,
             highlightbackground="#d1d1d1"
         )
         self.search_bar_frame = search_container
@@ -4149,16 +4188,22 @@ class ObjectProgramUI(
             relief="flat", bd=0,
             insertbackground="#000000"
         )
-        self._inline_search_entry.pack(side="left", fill="x", expand=True, padx=(sc(8), sc(4)), pady=sc(5))
-        self._inline_search_entry.bind("<KeyRelease>",  self._on_inline_search_key)
-        self._inline_search_entry.bind("<Escape>",      self._clear_inline_search)
+        self._inline_search_entry.pack(
+            side="left", fill="x", expand=True, padx=(sc(8), sc(4)), pady=sc(5))
+        self._inline_search_entry.bind(
+            "<KeyRelease>",  self._on_inline_search_key)
+        self._inline_search_entry.bind(
+            "<Escape>",      self._clear_inline_search)
         self._inline_search_entry.bind("<FocusIn>",     self._search_focus_in)
         self._inline_search_entry.bind("<FocusOut>",    self._search_focus_out)
         self._inline_search_entry.bind("<Button-1>",    self._search_focus_in)
-        self._inline_search_entry.bind("<Return>",      self._on_search_bar_enter)
-        self._inline_search_entry.bind("<Down>",        self._on_search_arrow_down)
-        self._inline_search_entry.bind("<Up>",          self._on_search_arrow_up)
-        
+        self._inline_search_entry.bind(
+            "<Return>",      self._on_search_bar_enter)
+        self._inline_search_entry.bind(
+            "<Down>",        self._on_search_arrow_down)
+        self._inline_search_entry.bind(
+            "<Up>",          self._on_search_arrow_up)
+
         def _focus_list(event):
             self.object_list.focus_set()
             if not self.object_list.selection():
@@ -4167,7 +4212,7 @@ class ObjectProgramUI(
                     self.object_list.selection_set(children[0])
             return "break"
         self._inline_search_entry.bind("<Tab>", _focus_list)
-        
+
         # Placeholder setup
         self._inline_search_entry.insert(0, self._inline_search_placeholder)
         self._inline_search_entry.config(foreground="gray")
@@ -4182,18 +4227,20 @@ class ObjectProgramUI(
             relief="flat", bd=0, cursor="hand2",
             command=self._clear_inline_search
         )
-        self.toolbar_buttons['X'].pack(side="right", padx=(sc(4), sc(8)), pady=sc(4))
-        self.add_tooltip(self.toolbar_buttons['X'], "Clear Search (resets filter)")
+        self.toolbar_buttons['X'].pack(
+            side="right", padx=(sc(4), sc(8)), pady=sc(4))
+        self.add_tooltip(
+            self.toolbar_buttons['X'], "Clear Search (resets filter)")
 
         # Result count label embedded inside
         self._search_count_label = tk.Label(
-            search_container, 
-            text="", 
-            font=("JetBrains Mono", sc(9)), 
+            search_container,
+            text="",
+            font=("JetBrains Mono", sc(9)),
             bg="#ffffff", fg="gray"
         )
-        self._search_count_label.pack(side="right", padx=(sc(4), 0), pady=sc(4))
-    
+        self._search_count_label.pack(
+            side="right", padx=(sc(4), 0), pady=sc(4))
 
         # LIST (Upgraded ttk.Treeview Grid)
         list_scroll_frame = ttk.Frame(list_container, style="LeftPane.TFrame")
@@ -4203,7 +4250,6 @@ class ObjectProgramUI(
             list_scroll_frame,
             self
         )
-
 
         self.object_list_scroll = ttk.Scrollbar(
             list_scroll_frame,
@@ -4222,7 +4268,8 @@ class ObjectProgramUI(
         self.object_list.bind("<Return>", self._on_list_return)
         self.object_list.bind(
             "<MouseWheel>",
-            lambda e: self.object_list.yview_scroll(int(-1 * (e.delta / 120)), "units")
+            lambda e: self.object_list.yview_scroll(
+                int(-1 * (e.delta / 120)), "units")
         )
         self.object_list.bind("<Button-1>", self._on_list_click_pre, add="+")
         self.object_list.bind("<Button-3>", self._show_context_menu)
@@ -4230,20 +4277,23 @@ class ObjectProgramUI(
 
         # Context menu
         self.context_menu = tk.Menu(self.root, tearoff=0)
-        self.context_menu.add_command(label="Mark Selected as Reviewed", command=lambda: self._context_set_reviewed(True))
-        self.context_menu.add_command(label="Mark Selected as Not Reviewed", command=lambda: self._context_set_reviewed(False))
+        self.context_menu.add_command(
+            label="Mark Selected as Reviewed", command=lambda: self._context_set_reviewed(True))
+        self.context_menu.add_command(
+            label="Mark Selected as Not Reviewed", command=lambda: self._context_set_reviewed(False))
         self.context_menu.add_separator()
         advanced_prefs = config.load_prefs().get("advanced", {})
         if advanced_prefs.get("enable_bulk_editor", False):
-            self.context_menu.add_command(label="Bulk Edit Selected", command=self.open_bulk_edit_window)
-        self.context_menu.add_command(label="Duplicate Object", command=lambda: self._shortcut_duplicate_object(None))
-        self.context_menu.add_command(label="Delete Object", command=self.delete_current_object)
+            self.context_menu.add_command(
+                label="Bulk Edit Selected", command=self.open_bulk_edit_window)
+        self.context_menu.add_command(
+            label="Duplicate Object", command=lambda: self._shortcut_duplicate_object(None))
+        self.context_menu.add_command(
+            label="Delete Object", command=self.delete_current_object)
 
-        self.bulk_edit_btn = ttk.Button(list_container, text="Bulk Edit Selected", state="disabled", command=self.open_bulk_edit_window, cursor="hand2")
+        self.bulk_edit_btn = ttk.Button(list_container, text="Bulk Edit Selected",
+                                        state="disabled", command=self.open_bulk_edit_window, cursor="hand2")
         self.toggle_bulk_edit_btn()
-
-
-
 
         # Middle
 
@@ -4271,7 +4321,8 @@ class ObjectProgramUI(
             highlightbackground="#c4c7c7",
             highlightthickness=1
         )
-        self.header_id_badge.pack(side="left", anchor="center", padx=(sc(8), sc(4)), pady=sc(6))
+        self.header_id_badge.pack(
+            side="left", anchor="center", padx=(sc(8), sc(4)), pady=sc(6))
 
         # Scholarly Serif botanical scientific name
         self.title_label = tk.Label(
@@ -4280,7 +4331,8 @@ class ObjectProgramUI(
             bg="#ffffff",
             fg="#2c302e"
         )
-        self.title_label.pack(side="left", anchor="center", padx=(sc(4), 0), pady=sc(6))
+        self.title_label.pack(side="left", anchor="center",
+                              padx=(sc(4), 0), pady=sc(6))
 
         self.title_problem_count_label = tk.Label(
             center_header,
@@ -4288,7 +4340,8 @@ class ObjectProgramUI(
             fg="#c93a40",
             bg="#ffffff"
         )
-        self.title_problem_count_label.pack(side="left", anchor="center", padx=(sc(6), 0), pady=sc(6))
+        self.title_problem_count_label.pack(
+            side="left", anchor="center", padx=(sc(6), 0), pady=sc(6))
 
         # RIGHT: location summary (Technical Monospace)
         self.location_summary_label = tk.Label(
@@ -4297,7 +4350,8 @@ class ObjectProgramUI(
             foreground="#757d77",
             bg="#ffffff"
         )
-        self.location_summary_label.pack(side="right", anchor="center", padx=(0, sc(8)), pady=sc(6))
+        self.location_summary_label.pack(
+            side="right", anchor="center", padx=(0, sc(8)), pady=sc(6))
 
         # Middle Top (images) - packed directly in middle column since Problem Flags is relocated
 
@@ -4337,8 +4391,7 @@ class ObjectProgramUI(
             header,
             text="View: Gallery",
             style="Nav.TButton",
-            command=self.toggle_image_view
-        , cursor="hand2")
+            command=self.toggle_image_view, cursor="hand2")
         self.view_btn.pack(side="right")
         self.add_tooltip(self.view_btn, "Toggle Gallery / Stack View")
         self.update_image_view_button()
@@ -4347,8 +4400,7 @@ class ObjectProgramUI(
             header,
             text="Source...",
             style="Nav.TButton",
-            command=self.open_image_menu
-        , cursor="hand2")
+            command=self.open_image_menu, cursor="hand2")
         self.source_btn.pack(side="right", padx=(0, 4))
         self.add_tooltip(self.source_btn, "Select image source folder")
 
@@ -4381,7 +4433,8 @@ class ObjectProgramUI(
         )
         self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2))
 
-        image_box = ttk.Frame(right, relief="flat", padding=0, style="MiddlePane.TFrame")
+        image_box = ttk.Frame(right, relief="flat",
+                              padding=0, style="MiddlePane.TFrame")
         self.image_box = image_box
         image_box.pack(fill="both", expand=True)
 
@@ -4403,11 +4456,12 @@ class ObjectProgramUI(
 
         self.image_container.bind(
             "<Configure>",
-            lambda e: self.image_canvas.configure(scrollregion=self.image_canvas.bbox("all"))
+            lambda e: self.image_canvas.configure(
+                scrollregion=self.image_canvas.bbox("all"))
         )
 
         self.image_canvas.configure(yscrollcommand=self._on_image_scroll)
-        
+
         self.image_canvas.pack(side="left", fill="both", expand=True)
 
         self.image_canvas.bind("<ButtonPress-1>", self._on_pan_start)
@@ -4435,14 +4489,17 @@ class ObjectProgramUI(
         self.right_panes = ttk.Panedwindow(reg_outer, orient="vertical")
 
         # Create self.reg_data_frame
-        self.reg_data_frame = ttk.Frame(self.right_panes, style="RightPane.TFrame")
+        self.reg_data_frame = ttk.Frame(
+            self.right_panes, style="RightPane.TFrame")
         self.reg_data_frame.tutorial_id = "object_editor_frame"
         self.right_panes.add(self.reg_data_frame, weight=3)
 
         # Registration Header Panel (fixed top inside reg_data_frame)
-        reg_header = ttk.Frame(self.reg_data_frame, padding=(8, 6), style="RightPane.TFrame")
+        reg_header = ttk.Frame(self.reg_data_frame, padding=(
+            8, 6), style="RightPane.TFrame")
         reg_header.pack(fill="x", side="top")
-        ttk.Separator(self.reg_data_frame, orient="horizontal").pack(fill="x", side="top")
+        ttk.Separator(self.reg_data_frame, orient="horizontal").pack(
+            fill="x", side="top")
 
         ttk.Label(
             reg_header,
@@ -4481,7 +4538,8 @@ class ObjectProgramUI(
         )
 
         # Focus Mode toggle (stays in header)
-        self.focus_quick_frame = ttk.Frame(reg_header, style="RightPane.TFrame")
+        self.focus_quick_frame = ttk.Frame(
+            reg_header, style="RightPane.TFrame")
         self.focus_quick_frame.pack(side="right", padx=(0, 4))
 
         self.focus_problems_cb = ToggleSwitch(
@@ -4491,7 +4549,8 @@ class ObjectProgramUI(
             ui_ref=self
         )
         self.focus_problems_cb.pack(side="right", padx=(4, 0))
-        ttk.Label(self.focus_quick_frame, text="Focus Mode", font=("Hanken Grotesk", sc(9))).pack(side="right")
+        ttk.Label(self.focus_quick_frame, text="Focus Mode",
+                  font=("Hanken Grotesk", sc(9))).pack(side="right")
         self.update_focus_toggle_visibility()
 
         # -------------------------------------------------------
@@ -4499,15 +4558,17 @@ class ObjectProgramUI(
         # so it is always visible regardless of scroll position.
         # -------------------------------------------------------
         # Fixed action bar inside reg_outer (Bottom docked)
-        ttk.Separator(self.reg_outer, orient="horizontal").pack(fill="x", side="bottom")
-        action_bar = ttk.Frame(self.reg_outer, padding=(sc(8), sc(4)), style="RightPane.TFrame")
+        ttk.Separator(self.reg_outer, orient="horizontal").pack(
+            fill="x", side="bottom")
+        action_bar = ttk.Frame(self.reg_outer, padding=(
+            sc(8), sc(4)), style="RightPane.TFrame")
         action_bar.pack(fill="x", side="bottom")
         self.right_panes.pack(fill="both", expand=True)
 
         # Row 1: Mark Reviewed button (Full width, clear high-contrast call to action)
         large_size = self.large_reviewed_button_var.get()
         pady_val = sc(10) if large_size else sc(6)
-        
+
         self.reviewed_button = tk.Button(
             action_bar,
             text="✓ MARK AS REVIEWED (Ctrl+Enter)",
@@ -4521,11 +4582,14 @@ class ObjectProgramUI(
         self.reviewed_button.pack(fill="x", expand=True, pady=(0, sc(3)))
 
         self.reviewed_var = tk.BooleanVar()
-        self.reviewed_var.trace_add("write", lambda *args: self.update_reviewed_button_state())
+        self.reviewed_var.trace_add(
+            "write", lambda *args: self.update_reviewed_button_state())
         self.reviewed_button.bind("<Enter>", self._on_reviewed_btn_enter)
         self.reviewed_button.bind("<Leave>", self._on_reviewed_btn_leave)
-        self.reviewed_button.bind("<ButtonPress-1>", self._on_reviewed_btn_press)
-        self.reviewed_button.bind("<ButtonRelease-1>", self._on_reviewed_btn_release)
+        self.reviewed_button.bind(
+            "<ButtonPress-1>", self._on_reviewed_btn_press)
+        self.reviewed_button.bind(
+            "<ButtonRelease-1>", self._on_reviewed_btn_release)
 
         # Row 2: Compact 3-option flow + status indicators
         action_row2 = ttk.Frame(action_bar, style="RightPane.TFrame")
@@ -4553,7 +4617,8 @@ class ObjectProgramUI(
             cursor="hand2",
             padx=sc(2), pady=0
         )
-        self.clear_problems_cb.grid(row=0, column=0, sticky="w", padx=(0, sc(6)))
+        self.clear_problems_cb.grid(
+            row=0, column=0, sticky="w", padx=(0, sc(6)))
         self.add_tooltip(
             self.clear_problems_cb,
             "Uncheck all problem flags and mark this object as reviewed"
@@ -4627,32 +4692,27 @@ class ObjectProgramUI(
         self.split_frame = split
         self.prob_container = split
         self.problem_frame = split
-        self.pop_out_prob_btn = ttk.Button(split, cursor="hand2")  # Dummy to prevent attribute errors
-        self.problem_count_label = ttk.Label(split)  # Dummy to prevent attribute errors
+        # Dummy to prevent attribute errors
+        self.pop_out_prob_btn = ttk.Button(split, cursor="hand2")
+        # Dummy to prevent attribute errors
+        self.problem_count_label = ttk.Label(split)
 
         self.apply_theme()
 
 
-
-
-
-#-----
+# -----
 
     def _on_history_toggle(self):
-    
-      
+
         show_all = self.show_all_history_var.get()
 
-     
         if hasattr(self, "_history_cache"):
             self._history_cache.clear()
 
-    
         oid = self.app.current_object_id
         if oid:
             self.update_history_indicator(oid)
 
-      
         for w in self.root.winfo_children():
             if isinstance(w, tk.Toplevel) and "Information from earlier databases" in str(w.title()):
                 w.destroy()
@@ -4660,17 +4720,14 @@ class ObjectProgramUI(
                 break
 
 
-
-#----------
-     
+# ----------
 
 
-
-
-#------
+# ------
 
     def update_object_count(self):
-        count = len(self.app.active_object_ids) if self.app.active_object_ids else 0
+        count = len(
+            self.app.active_object_ids) if self.app.active_object_ids else 0
         total = len(self.app.df_reg) if self.app.df_reg is not None else 0
 
         if hasattr(self, "search_count_label") and self.search_count_label is not None:
@@ -4693,7 +4750,8 @@ class ObjectProgramUI(
                 df_obs = self.app.df_obs
 
                 # Reviewed percent — cheap column sum
-                rev = int(df_obs[REVIEWED_COLUMN].sum()) if REVIEWED_COLUMN in df_obs.columns else 0
+                rev = int(df_obs[REVIEWED_COLUMN].sum()
+                          ) if REVIEWED_COLUMN in df_obs.columns else 0
                 pct = int((rev / len(df_obs)) * 100)
                 self._status_bar_labels["reviewed"].config(
                     text=f"REVIEWED: {pct}%"
@@ -4707,12 +4765,14 @@ class ObjectProgramUI(
                             if c not in (REVIEWED_COLUMN, "ReviewedAt")
                             and str(df_obs[c].dtype) == "bool"
                         ]
-                        self._cached_problems_count = int((df_obs[prob_cols].any(axis=1)).sum()) if prob_cols else 0
+                        self._cached_problems_count = int(
+                            (df_obs[prob_cols].any(axis=1)).sum()) if prob_cols else 0
                     except Exception:
                         self._cached_problems_count = 0
 
                 problems_count = self._cached_problems_count
-                self._status_bar_labels["problems"].config(text=f"PROBLEMS: {problems_count}")
+                self._status_bar_labels["problems"].config(
+                    text=f"PROBLEMS: {problems_count}")
                 self._status_bar_problems_lbl.config(
                     fg="#ff6b6b" if problems_count > 0 else "#e2e2e2"
                 )
@@ -4721,7 +4781,8 @@ class ObjectProgramUI(
         # gives an at-a-glance signal that the list is filtered, even in low light.
         if hasattr(self, "_filter_active_badge"):
             total = len(self.app.df_reg) if self.app.df_reg is not None else 0
-            shown = len(self.app.active_object_ids) if self.app.active_object_ids else 0
+            shown = len(
+                self.app.active_object_ids) if self.app.active_object_ids else 0
             is_filtered = (shown < total) and total > 0
             self._filter_active_badge.config(
                 text=" ● FILTER" if is_filtered else "",
@@ -4729,15 +4790,13 @@ class ObjectProgramUI(
             )
 
 
-
-
-#------
+# ------
 
     def focus_search(self, event=None):
         """Ctrl+F / Ctrl+L: Open drawer if unpinned, then focus the inline live search bar."""
         if hasattr(self, "left_pinned") and not self.left_pinned.get():
             self.toggle_left_pin()
-        
+
         if hasattr(self, "_inline_search_entry"):
             self._inline_search_entry.focus_set()
             try:
@@ -4750,8 +4809,7 @@ class ObjectProgramUI(
         return "break"
 
 
-
-#------
+# ------
 
 
     def update_review_progress(self):
@@ -4767,7 +4825,6 @@ class ObjectProgramUI(
 
         percent = int((reviewed / total) * 100)
 
-      
         if hasattr(self, "review_progress") and self.review_progress is not None:
             try:
                 if self.review_progress.winfo_exists():
@@ -4786,20 +4843,13 @@ class ObjectProgramUI(
                 pass
 
 
-#-----
-
-
-
-
+# -----
 
     def _on_list_click_pre(self, event):
         if self.loading_object:
             return
         self.object_list.focus_set()
         self.commit_current_object()
-
-
-
 
     def open_load_data_menu(self):
         if (
@@ -4848,14 +4898,12 @@ class ObjectProgramUI(
         ttk.Button(
             frame,
             text="Load books",
-            command=lambda: run_cmd(self.load_books_file)
-        , cursor="hand2").pack(fill="x", pady=(0, 6))
+            command=lambda: run_cmd(self.load_books_file), cursor="hand2").pack(fill="x", pady=(0, 6))
 
         ttk.Button(
             frame,
             text="Load earlier databases",
-            command=lambda: run_cmd(self.load_historical_databases)
-        , cursor="hand2").pack(fill="x", pady=(0, 12))
+            command=lambda: run_cmd(self.load_historical_databases), cursor="hand2").pack(fill="x", pady=(0, 12))
 
         ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 12))
 
@@ -4865,10 +4913,6 @@ class ObjectProgramUI(
             variable=self.show_all_history_var,
             command=self._on_history_toggle
         ).pack(anchor="w")
-
-
-
-
 
     def build_search_popup(self):
         # Popup-vindu for sÃ¸ketreff
@@ -4888,9 +4932,8 @@ class ObjectProgramUI(
 
         self.search_listbox.bind("<Return>", self._on_search_select)
         self.search_listbox.bind("<Double-Button-1>", self._on_search_select)
-        self.search_listbox.bind("<Escape>", lambda e: self.search_popup.withdraw())
-
-
+        self.search_listbox.bind(
+            "<Escape>", lambda e: self.search_popup.withdraw())
 
     def _on_search_key(self, event):
         # The ObjectID entry is kept for exact ID jumps (press Enter).
@@ -4903,8 +4946,9 @@ class ObjectProgramUI(
         pass
 
 
+# --------
 
-#--------
+
     def show_shortcuts(self):
         # Create a beautiful Toplevel HUD window
         win = tk.Toplevel(self.root)
@@ -4925,14 +4969,14 @@ class ObjectProgramUI(
 
         win.configure(background=bg_color)
         win.transient(self.root)
-        
+
         # Close on Escape
         win.bind("<Escape>", lambda e: win.destroy())
-        
+
         # Title
         title_frame = tk.Frame(win, bg=bg_color)
         title_frame.pack(fill="x", padx=20, pady=(15, 10))
-        
+
         tk.Label(
             title_frame,
             text="Keyboard Shortcuts Cheat Sheet",
@@ -4940,11 +4984,11 @@ class ObjectProgramUI(
             fg=fg_title,
             bg=bg_color
         ).pack(side="left")
-        
+
         # Search Box
         search_frame = tk.Frame(win, bg=bg_color)
         search_frame.pack(fill="x", padx=20, pady=(0, 15))
-        
+
         tk.Label(
             search_frame,
             text="Search: ",
@@ -4952,35 +4996,39 @@ class ObjectProgramUI(
             fg=fg_label,
             bg=bg_color
         ).pack(side="left")
-        
+
         search_var = tk.StringVar()
-        search_ent = ttk.Entry(search_frame, textvariable=search_var, font=("Segoe UI", sc(10)))
+        search_ent = ttk.Entry(
+            search_frame, textvariable=search_var, font=("Segoe UI", sc(10)))
         search_ent.pack(side="left", fill="x", expand=True, padx=(5, 0))
         search_ent.focus_set()
-        
+
         # Content frame (Canvas + Scrollbar)
         content_outer = tk.Frame(win, bg=bg_color)
         content_outer.pack(fill="both", expand=True, padx=20, pady=(0, 10))
-        
+
         canvas = tk.Canvas(content_outer, bg=bg_color, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(content_outer, orient="vertical", command=canvas.yview)
+        scrollbar = ttk.Scrollbar(
+            content_outer, orient="vertical", command=canvas.yview)
         scroll_content = tk.Frame(canvas, bg=bg_color)
-        
+
         scroll_content.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        
-        window_id = canvas.create_window((0, 0), window=scroll_content, anchor="nw")
+
+        window_id = canvas.create_window(
+            (0, 0), window=scroll_content, anchor="nw")
         canvas.bind(
             "<Configure>",
-            lambda e: canvas.itemconfig(window_id, width=e.width) if getattr(canvas, "_last_width", None) != e.width and not setattr(canvas, "_last_width", e.width) else None
+            lambda e: canvas.itemconfig(window_id, width=e.width) if getattr(
+                canvas, "_last_width", None) != e.width and not setattr(canvas, "_last_width", e.width) else None
         )
         canvas.configure(yscrollcommand=scrollbar.set)
-        
+
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        
+
         # Shortcuts list
         shortcuts = [
             ("NAVIGATION", "-- / --", "Previous / Next object"),
@@ -5016,25 +5064,28 @@ class ObjectProgramUI(
             ("OBJECT MANAGEMENT", "Ctrl+Delete", "Delete current object"),
             ("HISTORY & TOOLS", "Ctrl+H", "Open historical suggestions resolver"),
             ("HISTORY & TOOLS", "Ctrl+G", "Open location/problem filter menu"),
-            ("HISTORY & RESOLVER", "Ctrl+A", "Apply resolved changes (resolver window only)"),
-            ("IMAGE NAVIGATION", "Shift+-- / Shift+--", "Previous / Next image in gallery"),
-            ("IMAGE NAVIGATION", "Double-click", "Open current image in external browser"),
+            ("HISTORY & RESOLVER", "Ctrl+A",
+             "Apply resolved changes (resolver window only)"),
+            ("IMAGE NAVIGATION", "Shift+-- / Shift+--",
+             "Previous / Next image in gallery"),
+            ("IMAGE NAVIGATION", "Double-click",
+             "Open current image in external browser"),
             ("IMAGE NAVIGATION", "Mouse wheel", "Scroll image gallery"),
         ]
-        
+
         # Draw shortcuts helper
         def draw_shortcuts(filter_text=""):
             for w in scroll_content.winfo_children():
                 w.destroy()
-                
+
             categories = {}
             filter_lower = filter_text.lower()
-            
+
             for cat, keys, desc in shortcuts:
                 if filter_lower and filter_lower not in cat.lower() and filter_lower not in keys.lower() and filter_lower not in desc.lower():
                     continue
                 categories.setdefault(cat, []).append((keys, desc))
-                
+
             if not categories:
                 tk.Label(
                     scroll_content,
@@ -5044,11 +5095,11 @@ class ObjectProgramUI(
                     bg=bg_color
                 ).pack(pady=20)
                 return
-                
+
             for cat, items in categories.items():
                 cat_frame = tk.Frame(scroll_content, bg=bg_color)
                 cat_frame.pack(fill="x", pady=(10, 5), anchor="w")
-                
+
                 # Category Header
                 tk.Label(
                     cat_frame,
@@ -5057,18 +5108,20 @@ class ObjectProgramUI(
                     fg=fg_cat,
                     bg=bg_color
                 ).pack(anchor="w", padx=5)
-                
+
                 # Grid of shortcuts
                 grid_frame = tk.Frame(scroll_content, bg=bg_color)
                 grid_frame.pack(fill="x", padx=15, pady=2, anchor="w")
                 grid_frame.columnconfigure(0, minsize=220)
                 grid_frame.columnconfigure(1, weight=1)
-                
+
                 for r, (keys, desc) in enumerate(items):
                     # Key label (capsule look)
-                    key_container = tk.Frame(grid_frame, bg=bg_key, bd=1, relief="ridge", padx=6, pady=3)
-                    key_container.grid(row=r, column=0, sticky="w", pady=3, padx=(0, 10))
-                    
+                    key_container = tk.Frame(
+                        grid_frame, bg=bg_key, bd=1, relief="ridge", padx=6, pady=3)
+                    key_container.grid(
+                        row=r, column=0, sticky="w", pady=3, padx=(0, 10))
+
                     # Split keys by '+' or '/' or ',' to draw individual keycaps if desired, or just show text
                     tk.Label(
                         key_container,
@@ -5077,7 +5130,7 @@ class ObjectProgramUI(
                         fg=fg_key,
                         bg=bg_key
                     ).pack()
-                    
+
                     # Description
                     tk.Label(
                         grid_frame,
@@ -5088,17 +5141,18 @@ class ObjectProgramUI(
                         wraplength=550,
                         justify="left"
                     ).grid(row=r, column=1, sticky="w", pady=3)
-                    
+
         # Initial draw
         draw_shortcuts()
-        
+
         # Search binding
-        search_var.trace_add("write", lambda *args: draw_shortcuts(search_var.get()))
-        
+        search_var.trace_add(
+            "write", lambda *args: draw_shortcuts(search_var.get()))
+
         # Footer
         footer = tk.Frame(win, bg=bg_color)
         footer.pack(fill="x", side="bottom", pady=10, padx=20)
-        
+
         tk.Label(
             footer,
             text="Press Escape to close this window.",
@@ -5106,26 +5160,26 @@ class ObjectProgramUI(
             fg=fg_footer,
             bg=bg_color
         ).pack(side="left")
-        
+
         ttk.Button(
             footer,
             text="Close",
-            command=win.destroy
-        , cursor="hand2").pack(side="right")
-
+            command=win.destroy, cursor="hand2").pack(side="right")
 
     # ---------- Logging ----------
-    def log_action(self, action, 
+    def log_action(self, action,
                    changed_fields=None, changed_values=None,
                    prob_fields=None, prob_values=None,
                    loc_fields=None, loc_values=None,
                    oid=None):
 
         target_oid = oid if oid is not None else self.app.current_object_id
-        
+
         # Helper to join lists into strings for logging
-        def jf(arr): return ", ".join(arr) if isinstance(arr, list) else (arr or "")
-        def jv(arr): return " | ".join(arr) if isinstance(arr, list) else (arr or "")
+        def jf(arr): return ", ".join(arr) if isinstance(
+            arr, list) else (arr or "")
+        def jv(arr): return " | ".join(
+            arr) if isinstance(arr, list) else (arr or "")
 
         has_any = bool(changed_fields or prob_fields or loc_fields)
         if not has_any and action != "SAVE":
@@ -5135,7 +5189,8 @@ class ObjectProgramUI(
 
         if not hasattr(self.app, "_log_records") or not self.app._log_records:
             if self.app.df_log is not None and not self.app.df_log.empty:
-                self.app._log_records = self.app.df_log.to_dict(orient="records")
+                self.app._log_records = self.app.df_log.to_dict(
+                    orient="records")
             else:
                 self.app._log_records = []
 
@@ -5146,7 +5201,8 @@ class ObjectProgramUI(
             last_entry = self.app._log_records[-1]
             if last_entry.get("Action") in ("EDIT", "REVIEWED", "NOT_REVIEWED") and last_entry.get("ObjectID") == target_oid:
                 # Update timestamp and action
-                last_entry["Timestamp"] = datetime.now().isoformat(timespec="seconds")
+                last_entry["Timestamp"] = datetime.now(
+                ).isoformat(timespec="seconds")
 
                 if action == "EDIT":
                     last_entry["Action"] = "EDIT"
@@ -5156,10 +5212,13 @@ class ObjectProgramUI(
                         last_entry["Action"] = action
 
                 # Merge ChangedFields
-                existing_cf = set(x.strip() for x in last_entry.get("ChangedFields", "").split(",") if x.strip() and x.strip() != "(no changes)")
-                new_cf = set(x.strip() for x in (cf_text or "").split(",") if x.strip() and x.strip() != "(no changes)")
+                existing_cf = set(x.strip() for x in last_entry.get("ChangedFields", "").split(
+                    ",") if x.strip() and x.strip() != "(no changes)")
+                new_cf = set(x.strip() for x in (cf_text or "").split(
+                    ",") if x.strip() and x.strip() != "(no changes)")
                 merged_cf = existing_cf.union(new_cf)
-                last_entry["ChangedFields"] = ", ".join(sorted(merged_cf)) if merged_cf else "(no changes)"
+                last_entry["ChangedFields"] = ", ".join(
+                    sorted(merged_cf)) if merged_cf else "(no changes)"
 
                 # Merge ChangedValues
                 existing_cv = last_entry.get("ChangedValues", "")
@@ -5168,10 +5227,13 @@ class ObjectProgramUI(
                     last_entry["ChangedValues"] = f"{existing_cv} | {new_cv}" if existing_cv else new_cv
 
                 # Merge ProblemsChanged
-                existing_pc = set(x.strip() for x in last_entry.get("ProblemsChanged", "").split(",") if x.strip())
-                new_pc = set(x.strip() for x in jf(prob_fields).split(",") if x.strip())
+                existing_pc = set(x.strip() for x in last_entry.get(
+                    "ProblemsChanged", "").split(",") if x.strip())
+                new_pc = set(x.strip()
+                             for x in jf(prob_fields).split(",") if x.strip())
                 merged_pc = existing_pc.union(new_pc)
-                last_entry["ProblemsChanged"] = ", ".join(sorted(merged_pc)) if merged_pc else ""
+                last_entry["ProblemsChanged"] = ", ".join(
+                    sorted(merged_pc)) if merged_pc else ""
 
                 # Merge ProblemsChangedValues
                 existing_pcv = last_entry.get("ProblemsChangedValues", "")
@@ -5180,10 +5242,13 @@ class ObjectProgramUI(
                     last_entry["ProblemsChangedValues"] = f"{existing_pcv} | {new_pcv}" if existing_pcv else new_pcv
 
                 # Merge LocationChanged
-                existing_lc = set(x.strip() for x in last_entry.get("LocationChanged", "").split(",") if x.strip())
-                new_lc = set(x.strip() for x in jf(loc_fields).split(",") if x.strip())
+                existing_lc = set(x.strip() for x in last_entry.get(
+                    "LocationChanged", "").split(",") if x.strip())
+                new_lc = set(x.strip()
+                             for x in jf(loc_fields).split(",") if x.strip())
                 merged_lc = existing_lc.union(new_lc)
-                last_entry["LocationChanged"] = ", ".join(sorted(merged_lc)) if merged_lc else ""
+                last_entry["LocationChanged"] = ", ".join(
+                    sorted(merged_lc)) if merged_lc else ""
 
                 # Replace LocationChangedValues entirely with the newest unified string
                 new_lcv = jv(loc_values)
@@ -5225,8 +5290,6 @@ class ObjectProgramUI(
         if not oid:
             return [], []
 
-
-
         reg_changed_fields = []
         reg_changed_values = []
         prob_changed_fields = []
@@ -5238,7 +5301,6 @@ class ObjectProgramUI(
         # -------- REG --------
         state_pushed = False
 
-
         def ensure_undo():
             nonlocal state_pushed
             if not state_pushed:
@@ -5246,9 +5308,9 @@ class ObjectProgramUI(
                 self.app.redo_stacks.setdefault(oid, []).clear()
                 state_pushed = True
 
-
         for col, widget in self.reg_entries.items():
-            old = utils.fmt_pandas_val(self.app.df_reg.at[oid, col] if oid in self.app.df_reg.index and col in self.app.df_reg.columns else "")
+            old = utils.fmt_pandas_val(
+                self.app.df_reg.at[oid, col] if oid in self.app.df_reg.index and col in self.app.df_reg.columns else "")
 
             if isinstance(widget, tk.Text):
                 new = widget.get("1.0", tk.END).strip()
@@ -5280,7 +5342,6 @@ class ObjectProgramUI(
                                     self._cached_obs_dict[oid][p_col] = False
                                 self.loaded_problem_states[p_col] = False
 
-
         # -------- PROBLEMS --------
         for col, var in self.problem_vars.items():
 
@@ -5289,7 +5350,8 @@ class ObjectProgramUI(
             # Check for edits against the underlying database state so auto-detected problems are saved
             db_val = False
             if col in self.app.df_obs.columns:
-                val = self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index else False
+                val = self.app.df_obs.at[oid,
+                                         col] if oid in self.app.df_obs.index else False
                 db_val = bool(val) if not pd.isna(val) else False
 
             if col not in self.app.df_obs.columns:
@@ -5309,7 +5371,7 @@ class ObjectProgramUI(
                     prob_changed_values.append(f'{col}: "{db_val}"  "{new}"')
                 else:
                     auto_prob_changed_fields.append(col)
-                
+
                 self._list_dirty = True
                 self.loaded_problem_states[col] = new
 
@@ -5317,7 +5379,8 @@ class ObjectProgramUI(
         if not skip_heavy:
             loc_changed = False
             for col, var in self.location_vars.items():
-                old = utils.fmt_pandas_val(self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
+                old = utils.fmt_pandas_val(
+                    self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
                 new = var.get()
 
                 if old != new:
@@ -5337,7 +5400,8 @@ class ObjectProgramUI(
                 loc_changed_values.append(", ".join(loc_vals))
 
         # -------- REVIEWED --------
-        old = bool(self.app.df_obs.at[oid, REVIEWED_COLUMN]) if oid in self.app.df_obs.index and REVIEWED_COLUMN in self.app.df_obs.columns else False
+        old = bool(self.app.df_obs.at[oid, REVIEWED_COLUMN]
+                   ) if oid in self.app.df_obs.index and REVIEWED_COLUMN in self.app.df_obs.columns else False
         new = bool(self.reviewed_var.get())
 
         if old != new:
@@ -5365,10 +5429,9 @@ class ObjectProgramUI(
             reg_changed_fields.append(REVIEWED_COLUMN)
             self.update_reviewed_button_state()
 
-
         has_changes = (
-            bool(reg_changed_fields) or 
-            bool(prob_changed_fields) or 
+            bool(reg_changed_fields) or
+            bool(prob_changed_fields) or
             bool(loc_changed_fields)
         )
 
@@ -5378,7 +5441,7 @@ class ObjectProgramUI(
             self.app.dirty = True
             self.update_dirty_ui()
             self._list_dirty = True
-            
+
             if has_changes:
                 # Log the edit immediately so it's captured in the continuous session
                 self.log_action("EDIT",
@@ -5395,7 +5458,7 @@ class ObjectProgramUI(
                 self._problem_cache.pop(int(s_oid), None)
             if hasattr(self, "invalidate_history_cache"):
                 self.invalidate_history_cache(oid)
-            
+
             if {"Genus", "Species"} & set(reg_changed_fields):
                 self.invalidate_search_index()
 
@@ -5403,24 +5466,23 @@ class ObjectProgramUI(
             self.update_list_item_color(oid)
 
             if reg_changed_fields and getattr(self.app, 'historical_dbs', None) and getattr(self, '_has_suggestions_set', None) is not None:
-                sug = self.collect_historical_suggestions(oid, show_all_override=False)
-                has_real = any(k != "(No data found)" for vals in sug.values() for k in vals)
+                sug = self.collect_historical_suggestions(
+                    oid, show_all_override=False)
+                has_real = any(
+                    k != "(No data found)" for vals in sug.values() for k in vals)
                 if has_real:
                     self._has_suggestions_set.add(oid)
                 else:
                     self._has_suggestions_set.discard(oid)
 
                 if hasattr(self, "_history_cache"):
-                    keys_to_remove = [k for k in self._history_cache if k[0] == oid]
+                    keys_to_remove = [
+                        k for k in self._history_cache if k[0] == oid]
                     for k in keys_to_remove:
                         self._history_cache.pop(k, None)
 
-        
 
-
-
-
-#------
+# ------
 
     def _invalidate_row_cache(self, oid=None):
         """Mark the refresh_list() row-dict caches as stale so they are rebuilt on next refresh."""
@@ -5449,15 +5511,16 @@ class ObjectProgramUI(
     def _get_obs_dict(self):
         if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_obs_dict", None) is None:
             obs_df = self.app.df_obs
-            self._cached_obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
+            self._cached_obs_dict = obs_df.to_dict(
+                orient="index") if obs_df is not None else {}
         return self._cached_obs_dict
 
     def _get_reg_dict(self):
         if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_reg_dict", None) is None:
             reg_df = self.app.df_reg
-            self._cached_reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
+            self._cached_reg_dict = reg_df.to_dict(
+                orient="index") if reg_df is not None else {}
         return self._cached_reg_dict
-
 
     def update_location_summary(self, oid):
         obs_dict = self._get_obs_dict() if hasattr(self, "_get_obs_dict") else None
@@ -5478,23 +5541,13 @@ class ObjectProgramUI(
             self.location_summary_label.config(text="")
             return
 
-
-
-
         floor = utils.fmt_pandas_val(obs.get("Floor", ""))
         cabinet = utils.fmt_pandas_val(obs.get("Cabinet", ""))
         building = utils.fmt_pandas_val(obs.get("Building", ""))
         extra = utils.fmt_pandas_val(obs.get(" ", ""))
 
-
         loaned_raw = obs.get("Loaned out", False)
         loaned = utils.parse_bool(loaned_raw)
-
-
-  
-      
-
-
 
         lines = []
 
@@ -5512,20 +5565,14 @@ class ObjectProgramUI(
 
         text = "\n".join(lines) if lines else "No location info"
 
-
-    
         self.location_summary_label.config(text=text)
-
-
 
     # ---------- Database handling ----------
 
     # ---------- Excel handling ----------
 
 
-#--------
-
-
+# --------
 
     def ui_error(self, title, msg):
         self.root.after(0, lambda: messagebox.showerror(title, msg))
@@ -5563,23 +5610,25 @@ class ObjectProgramUI(
             text_frame,
             wrap="none",
             font=("Courier New", sc(9.5)),
-            bg="#1e1e1e", # dark background
-            fg="#d4d4d4", # light gray text
+            bg="#1e1e1e",  # dark background
+            fg="#d4d4d4",  # light gray text
             insertbackground="white",
             highlightthickness=1,
             highlightbackground="#3c3c3c",
             relief="flat"
         )
         text_area.insert("1.0", traceback_text)
-        text_area.configure(state="disabled") # read-only
+        text_area.configure(state="disabled")  # read-only
         text_area.pack(side="left", fill="both", expand=True)
 
         # Scrollbars
-        v_scroll = ttk.Scrollbar(text_frame, orient="vertical", command=text_area.yview)
+        v_scroll = ttk.Scrollbar(
+            text_frame, orient="vertical", command=text_area.yview)
         v_scroll.pack(side="right", fill="y")
         text_area.config(yscrollcommand=v_scroll.set)
 
-        h_scroll = ttk.Scrollbar(frame, orient="horizontal", command=text_area.xview)
+        h_scroll = ttk.Scrollbar(
+            frame, orient="horizontal", command=text_area.xview)
         h_scroll.pack(fill="x", pady=(2, 8))
         text_area.config(xscrollcommand=h_scroll.set)
 
@@ -5591,9 +5640,11 @@ class ObjectProgramUI(
             self.root.clipboard_clear()
             self.root.clipboard_append(traceback_text)
             copy_btn.config(text="Copied!")
-            self.root.after(1500, lambda: copy_btn.config(text="Copy to Clipboard"))
+            self.root.after(1500, lambda: copy_btn.config(
+                text="Copy to Clipboard"))
 
-        copy_btn = ttk.Button(footer, text="Copy to Clipboard", command=copy_traceback, cursor="hand2")
+        copy_btn = ttk.Button(footer, text="Copy to Clipboard",
+                              command=copy_traceback, cursor="hand2")
         copy_btn.pack(side="left")
 
         if is_crash:
@@ -5614,18 +5665,23 @@ class ObjectProgramUI(
                     with open(save_path, "w") as f:
                         json.dump(json_data, f)
                     from tkinter import messagebox
-                    messagebox.showinfo("Emergency Save", f"Data safely backed up to:\n{save_path}", parent=dialog)
+                    messagebox.showinfo(
+                        "Emergency Save", f"Data safely backed up to:\n{save_path}", parent=dialog)
                 except Exception as e:
                     from tkinter import messagebox
-                    messagebox.showerror("Emergency Save Failed", f"Failed to autosave:\n{e}", parent=dialog)
+                    messagebox.showerror(
+                        "Emergency Save Failed", f"Failed to autosave:\n{e}", parent=dialog)
 
-            save_btn = ttk.Button(footer, text="Emergency Autosave", command=emergency_autosave, cursor="hand2")
+            save_btn = ttk.Button(
+                footer, text="Emergency Autosave", command=emergency_autosave, cursor="hand2")
             save_btn.pack(side="left", padx=10)
 
-            quit_btn = ttk.Button(footer, text="Quit Application", command=self.root.destroy, cursor="hand2")
+            quit_btn = ttk.Button(
+                footer, text="Quit Application", command=self.root.destroy, cursor="hand2")
             quit_btn.pack(side="right")
         else:
-            close_btn = ttk.Button(footer, text="Close", command=dialog.destroy, cursor="hand2")
+            close_btn = ttk.Button(footer, text="Close",
+                                   command=dialog.destroy, cursor="hand2")
             close_btn.pack(side="right")
 
     def show_banner(self, text, banner_type="info", duration_ms=4000, action_callback=None):
@@ -5746,14 +5802,17 @@ class ObjectProgramUI(
             # Cosine ease-out: math.sin(p * pi / 2)
             p_eased = math.sin(p * (math.pi / 2))
             curr_y = start_y + (end_y - start_y) * p_eased
-            self._inline_banner_frame.place(relx=0.5, y=int(curr_y), anchor="n")
-            self._banner_anim_id = self.root.after(interval, lambda: animate_show(step_idx + 1))
+            self._inline_banner_frame.place(
+                relx=0.5, y=int(curr_y), anchor="n")
+            self._banner_anim_id = self.root.after(
+                interval, lambda: animate_show(step_idx + 1))
 
         # Start sliding in
         animate_show(0)
 
         if duration_ms > 0:
-            self._banner_timer_id = self.root.after(duration_ms, self.hide_banner)
+            self._banner_timer_id = self.root.after(
+                duration_ms, self.hide_banner)
 
     def hide_banner(self):
         """Hides the inline notification banner with a slide-out animation."""
@@ -5795,19 +5854,12 @@ class ObjectProgramUI(
             # Cosine ease-out for slide-out
             p_eased = math.sin(p * (math.pi / 2))
             curr_y = start_y + (end_y - start_y) * p_eased
-            self._inline_banner_frame.place(relx=0.5, y=int(curr_y), anchor="n")
-            self._banner_anim_id = self.root.after(interval, lambda: animate_hide(step_idx + 1))
+            self._inline_banner_frame.place(
+                relx=0.5, y=int(curr_y), anchor="n")
+            self._banner_anim_id = self.root.after(
+                interval, lambda: animate_hide(step_idx + 1))
 
         animate_hide(0)
-
-
-
-
-
-
-
-    
-
 
     def _select_first_object(self):
         if not self.app.active_object_ids:
@@ -5817,7 +5869,6 @@ class ObjectProgramUI(
         self.object_list.selection_set(0)
         self.object_list.see(0)
 
-       
         self.object_list.focus_set()
 
         # Tving event
@@ -5825,11 +5876,8 @@ class ObjectProgramUI(
 
 # --------- auto flag problems ---
 
-
-
-
-
     # ---------- Load / Save ----------
+
     def on_list_select(self, event=None):
         if self.loading_object:
             return
@@ -5851,10 +5899,10 @@ class ObjectProgramUI(
         if sel:
             idx = sel[0]
             oid = self.app.active_object_ids[idx]
-            
+
             if self._is_searching() or self.root.focus_get() == self._inline_search_entry:
                 return
-                
+
             if oid == self.app.current_object_id:
                 return
 
@@ -5868,15 +5916,16 @@ class ObjectProgramUI(
                 except Exception:
                     pass
             self._nav_idle_job = self.root.after(15, self._navigation_finished)
-            
+
             # Fast selection load (15ms)
             if hasattr(self, '_list_select_job') and self._list_select_job:
                 try:
                     self.root.after_cancel(self._list_select_job)
                 except Exception:
                     pass
-                
-            self._list_select_job = self.root.after(15, lambda: self._deferred_list_select(oid))
+
+            self._list_select_job = self.root.after(
+                15, lambda: self._deferred_list_select(oid))
 
     def _deferred_list_select(self, oid):
         self._list_select_job = None
@@ -5890,14 +5939,12 @@ class ObjectProgramUI(
             except Exception:
                 pass
             self._nav_idle_job = None
-            
+
         self.load_object(oid)
         self._fix_listbox_horizontal_scroll()
 
         if hasattr(self, "left_pinned") and not self.left_pinned.get() and getattr(self, "_drawer_is_open", False):
             self.close_drawer()
-
-
 
     def _format_int_like(self, value):
         if pd.isna(value) or value == "":
@@ -5935,7 +5982,6 @@ class ObjectProgramUI(
         if self.loading_object:
             return
 
-      
         prev = self.app.current_object_id
 
         if prev and prev != oid:
@@ -5945,7 +5991,6 @@ class ObjectProgramUI(
             if not is_history_nav:
                 self.forward_stack.clear()
 
-          
             if not self.history_stack or self.history_stack[-1] != prev:
                 self.history_stack.append(prev)
 
@@ -5963,7 +6008,8 @@ class ObjectProgramUI(
                 oid_data = dict_cache.get(oid, {})
                 for field, field_vals in oid_data.items():
                     if field in self.reg_columns:
-                        vals = self.current_object_suggestions.setdefault(field, [])
+                        vals = self.current_object_suggestions.setdefault(
+                            field, [])
                         for v in field_vals:
                             if v not in vals:
                                 vals.append(v)
@@ -5973,17 +6019,13 @@ class ObjectProgramUI(
             if not skip_heavy:
                 for w in self.image_container.winfo_children():
                     w.destroy()
-          
-
 
             self.no_image_label.pack_forget()
 
-            
             if not skip_heavy:
                 self.images_missing_label.config(text="")
             self.app.current_object_id = oid
             self.object_loaded = True
-
 
             self.object_id_var.set(oid)
 
@@ -6004,7 +6046,8 @@ class ObjectProgramUI(
                     reg = {}
             genus = str(reg.get("Genus", "") or "").strip()
             species = str(reg.get("Species", "") or "").strip()
-            taxon_name = f"{genus} {species}".strip() if (genus or species) else "Unidentified Specimen"
+            taxon_name = f"{genus} {species}".strip() if (
+                genus or species) else "Unidentified Specimen"
             self.title_label.config(text=taxon_name)
             obs = obs_dict.get(oid)
             if obs is None:
@@ -6016,7 +6059,6 @@ class ObjectProgramUI(
                         obs = obs.to_dict()
                 except Exception:
                     obs = {}
-
 
             if self.image_mode == "online":
                 self.images_missing_var.set("Online images")
@@ -6036,26 +6078,16 @@ class ObjectProgramUI(
                     self.images_missing_var.set("Images OK")
                     self.images_missing_label.config(foreground="green")
 
-
-
-
-
             self.update_history_indicator(oid)
-
-
-
 
             for col, var in self.location_vars.items():
                 val = obs.get(col, "")
                 var.set(utils.fmt_pandas_val(val))
 
-
             # Location and registration fields updated from obs/reg dicts
-            
 
             for col, widget in self.reg_entries.items():
                 value = utils.fmt_pandas_val(reg.get(col, ""))
-
 
                 if isinstance(widget, tk.Text):
                     widget.delete("1.0", tk.END)
@@ -6078,7 +6110,7 @@ class ObjectProgramUI(
                 if prob_col in self.problem_to_field:
                     field = self.problem_to_field[prob_col]
                     raw_val = reg.get(field)
-                    
+
                     if prob_col == "Other_problem":
                         auto_val = False
                     else:
@@ -6103,8 +6135,6 @@ class ObjectProgramUI(
 
             self.reviewed_var.set(bool(obs.get(REVIEWED_COLUMN, False)))
 
-
-
             if not skip_heavy:
                 self.load_images(oid)
 
@@ -6115,26 +6145,19 @@ class ObjectProgramUI(
             else:
                 self.reviewed_time_label.config(text="")
 
-
         finally:
             self.loading_object = False
-
-
 
         self.update_location_summary(oid)
         self.update_location_summary_view()
         self.update_problems_default_view()
         self.update_reviewed_button_state()
 
-
-
         self.app.redo_stacks.setdefault(oid, [])
 
         self._validate_fields()
 
         self.highlight_fields_with_suggestions(oid)
-
-
 
         if oid not in self.app.undo_stacks:
             self.app.undo_stacks[oid] = [{
@@ -6145,12 +6168,10 @@ class ObjectProgramUI(
         if oid not in self.app.redo_stacks:
             self.app.redo_stacks[oid] = []
 
-
         self.update_image_view_button()
         self.update_reg_fields_visibility()
         self._preload_adjacent_images(oid)
         self.update_navigation_buttons()
-
 
         # Only steal focus to first reg entry if the user is NOT actively typing
         # in the live search bar or actively navigating the listbox
@@ -6158,21 +6179,18 @@ class ObjectProgramUI(
             focused = self.root.focus_get()
             is_in_search = False
             if hasattr(self, '_inline_search_entry'):
-                is_in_search = (focused == self._inline_search_entry or 
+                is_in_search = (focused == self._inline_search_entry or
                                 (focused is not None and str(focused) == str(self._inline_search_entry)) or
                                 getattr(self, '_is_applying_search', False))
-            
-            is_in_listbox = (focused == self.object_list or 
+
+            is_in_listbox = (focused == self.object_list or
                              (focused is not None and str(focused) == str(self.object_list)))
 
             if not is_in_search and not is_in_listbox:
                 self.reg_entry_list[0].focus_set()
-        
-
 
     def _update_list_if_needed(self):
         self._list_dirty = True
-
 
     def has_images(self, oid):
         if self.image_mode in ("online", "offline"):
@@ -6182,12 +6200,6 @@ class ObjectProgramUI(
             return not bool(val.iloc[0])
         return not bool(val)
 
-
-
-
-
-
-
     def load_object_from_entry(self, _=None):
         self.commit_current_object()
 
@@ -6195,13 +6207,9 @@ class ObjectProgramUI(
         if oid in self.app.active_object_ids:
             self.load_object(oid)
         else:
-            messagebox.showinfo("Not found","ObjectID not found")
+            messagebox.showinfo("Not found", "ObjectID not found")
 
-#---- SAVE
-
-
-
-
+# ---- SAVE
 
     def open_mobile_dialog(self):
         from ui.mobile_dialog import MobileDialog
@@ -6211,13 +6219,177 @@ class ObjectProgramUI(
             self._mobile_dialog.win.lift()
             self._mobile_dialog.win.focus_force()
 
+    def toggle_simultaneous_edit(self):
+        is_enabled = self.simultaneous_edit_var.get()
+        if is_enabled:
+            self.simultaneous_edit_frame.pack(side="left", fill="y", padx=(0, 8), before=self.data_status.master.winfo_children()[
+                                              0] if self.data_status.master.winfo_children() else None)
+        else:
+            self.simultaneous_edit_frame.pack_forget()
+
+        if hasattr(self, '_mobile_dialog') and self._mobile_dialog.win.winfo_exists():
+            if is_enabled:
+                self._mobile_dialog.win.grab_release()
+            else:
+                self._mobile_dialog.win.grab_set()
+
+    def _apply_mobile_conflict_resolution(self, oid, final_choices):
+        """Callback from the MobileConflictResolverWindow"""
+        reg_changed_fields = []
+        reg_changed_values = []
+
+        for field, data in final_choices.items():
+            choice = data["choice"]
+            desktop_val = data["desktop_value"]
+            mobile_val = data["mobile_value"]
+
+            if choice == "mobile":
+                # User chose mobile, update UI to reflect it
+                self.app.df_reg.loc[oid, field] = mobile_val
+                if field in self.reg_vars:
+                    self.reg_vars[field].set(mobile_val)
+                if hasattr(self, "reg_entries") and field in self.reg_entries:
+                    w = self.reg_entries[field]
+                    if isinstance(w, tk.Text):
+                        w.delete("1.0", tk.END)
+                        w.insert("1.0", str(mobile_val))
+                if getattr(self, "_cached_reg_dict", None) is not None and oid in self._cached_reg_dict:
+                    self._cached_reg_dict[oid][field] = mobile_val
+
+                reg_changed_fields.append(field)
+                reg_changed_values.append(
+                    f'{field}: "{desktop_val}" -> "{mobile_val}" (Mobile resolution)')
+
+            elif choice == "desktop":
+                # User chose desktop, overwrite dataframe with desktop UI val
+                self.app.df_reg.loc[oid, field] = desktop_val
+                if getattr(self, "_cached_reg_dict", None) is not None and oid in self._cached_reg_dict:
+                    self._cached_reg_dict[oid][field] = desktop_val
+
+                reg_changed_fields.append(field)
+                reg_changed_values.append(
+                    f'{field}: "{mobile_val}" -> "{desktop_val}" (Desktop resolution)')
+
+        if reg_changed_fields:
+            self._row_cache_dirty = True
+            self.commit_current_object()
+
+            self.log_action(
+                "RESOLVE_MOBILE_CONFLICT",
+                changed_fields=reg_changed_fields,
+                changed_values=reg_changed_values,
+                oid=oid
+            )
+
+            self.update_dirty_ui()
+            self.show_toast(
+                f"Resolved {len(reg_changed_fields)} conflicts.", "#0284c7")
+
+    def show_toast(self, message, bg_color="#3a7d44"):
+        """Displays a floating toast notification in the center top of the main window."""
+        toast = tk.Toplevel(self.root)
+        toast.overrideredirect(True)
+        toast.attributes("-topmost", True)
+
+        lbl = tk.Label(toast, text=message, font=(
+            "Segoe UI", 10, "bold"), bg=bg_color, fg="#ffffff", padx=16, pady=8)
+        lbl.pack()
+
+        toast.update_idletasks()
+
+        # Center horizontally, place near top
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - \
+            (toast.winfo_width() // 2)
+        y = self.root.winfo_y() + 60
+        toast.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        # Fade out
+        def _fade(alpha):
+            if not toast.winfo_exists():
+                return
+            if alpha > 0:
+                toast.attributes("-alpha", alpha)
+                self.root.after(50, lambda: _fade(alpha - 0.1))
+            else:
+                toast.destroy()
+
+        self.root.after(3000, lambda: _fade(1.0))
+
+    def _resolve_simultaneous_mobile_edit(self, oid):
+        """Analyzes active desktop widgets vs incoming mobile data and resolves or flags conflicts."""
+        # Get Mobile data (what's currently in df_reg after the mobile edit)
+        mobile_reg = self.app.df_reg.loc[oid]
+
+        # Get Desktop data (what was cached before the user started typing)
+        cached_reg = self._cached_reg_dict.get(
+            oid, {}) if hasattr(self, "_cached_reg_dict") else {}
+
+        conflicts = []
+        auto_resolved = 0
+
+        for field in self.app.metadata_columns:
+            # Current Mobile Value
+            m_val = str(mobile_reg.get(field, "")).strip()
+            if m_val == "nan":
+                m_val = ""
+
+            # Original Desktop Value
+            old_d_val = str(cached_reg.get(field, "")).strip()
+            if old_d_val == "nan":
+                old_d_val = ""
+
+            # Current Desktop Widget Value (what the user might have typed)
+            current_d_val = old_d_val
+            if field in self.reg_vars:
+                current_d_val = self.reg_vars[field].get().strip()
+            elif hasattr(self, "reg_entries") and field in self.reg_entries:
+                w = self.reg_entries[field]
+                if isinstance(w, tk.Text):
+                    current_d_val = w.get("1.0", tk.END).strip()
+
+            if current_d_val == "nan":
+                current_d_val = ""
+
+            # If Mobile changed it AND Desktop typed something different
+            if m_val != old_d_val and current_d_val != old_d_val and m_val != current_d_val:
+                conflicts.append({
+                    "field": field,
+                    "desktop_value": current_d_val,
+                    "mobile_value": m_val
+                })
+            # If Mobile changed it and Desktop did not touch it
+            elif m_val != old_d_val and current_d_val == old_d_val:
+                # Auto-update Desktop widget seamlessly
+                if field in self.reg_vars:
+                    self.reg_vars[field].set(m_val)
+                if hasattr(self, "reg_entries") and field in self.reg_entries:
+                    w = self.reg_entries[field]
+                    if isinstance(w, tk.Text):
+                        w.delete("1.0", tk.END)
+                        w.insert("1.0", str(m_val))
+                if hasattr(self, "_cached_reg_dict") and oid in self._cached_reg_dict:
+                    self._cached_reg_dict[oid][field] = m_val
+                auto_resolved += 1
+
+        if conflicts:
+            from ui.mobile_conflict_resolver import MobileConflictResolverWindow
+            MobileConflictResolverWindow(
+                self, oid, conflicts, self._apply_mobile_conflict_resolution)
+        elif auto_resolved > 0:
+            self.show_toast(
+                f"Record updated seamlessly via Mobile ({auto_resolved} fields)", "#3a7d44")
+
+        self._row_cache_dirty = True
+        self.update_dirty_ui()
+        self.update_review_progress()
+
     def _on_mobile_edit(self, event=None):
         """Called when the mobile server fires <<MobileEdit>>"""
         if getattr(self.app, '_mobile_last_edited_oid', None):
             oid = self.app._mobile_last_edited_oid
             self.app._mobile_last_edited_oid = None
 
-            self.log_action("EDIT", oid)
+            self.log_action("EDIT", oid=oid)
 
             # Invalidate row and problem caches so list view updates correctly
             self._invalidate_row_cache()
@@ -6227,15 +6399,20 @@ class ObjectProgramUI(
             if s_oid.isdigit():
                 self._problem_cache.pop(int(s_oid), None)
 
-            # If the edited object is currently displayed, refresh it
+            # If the edited object is currently displayed, handle it based on mode
             if self.app.current_object_id == oid:
-                self.load_object(oid)
-                # DO NOT call self.commit_current_object() here. The UI is locked
-                # by the modal mobile dialog, and calling commit would overwrite
-                # the fresh mobile edits with stale text currently in the UI widgets.
-
-            self.update_dirty_ui()
-            self.update_object_count()
+                if self.simultaneous_edit_var.get():
+                    self._resolve_simultaneous_mobile_edit(oid)
+                else:
+                    self.load_object(oid)
+                    # DO NOT call self.commit_current_object() here. The UI is locked
+                    # by the modal mobile dialog, and calling commit would overwrite
+                    # the fresh mobile edits with stale text currently in the UI widgets.
+                    self.update_dirty_ui()
+                    self.update_review_progress()
+            else:
+                self.update_dirty_ui()
+                self.update_review_progress()
             self._update_accordion_badges()
             self.update_review_progress()
             self.refresh_list()
@@ -6251,7 +6428,8 @@ class ObjectProgramUI(
 
     def on_close(self):
         if self.app.dirty:
-            res = messagebox.askyesnocancel("Unsaved changes", "Save before exiting?")
+            res = messagebox.askyesnocancel(
+                "Unsaved changes", "Save before exiting?")
             if res is None:
                 return
             if res:
@@ -6261,7 +6439,8 @@ class ObjectProgramUI(
                 except Exception as e:
                     from utils import debug_error
                     debug_error("on_close sync save", str(e))
-                    messagebox.showerror("Save Error", f"Failed to save on exit: {e}")
+                    messagebox.showerror(
+                        "Save Error", f"Failed to save on exit: {e}")
                     return
 
         if self._autosave_job:
@@ -6294,7 +6473,6 @@ class ObjectProgramUI(
             pass
 
         self.root.destroy()
-
 
     def show_error_log_window(self, log_path: str | None = None) -> None:
         """
@@ -6363,16 +6541,20 @@ class ObjectProgramUI(
             state="normal"
         )
 
-        v_scroll = ttk.Scrollbar(text_frame, orient="vertical", command=text_area.yview)
-        h_scroll = ttk.Scrollbar(win, orient="horizontal", command=text_area.xview)
-        text_area.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+        v_scroll = ttk.Scrollbar(
+            text_frame, orient="vertical", command=text_area.yview)
+        h_scroll = ttk.Scrollbar(
+            win, orient="horizontal", command=text_area.xview)
+        text_area.configure(yscrollcommand=v_scroll.set,
+                            xscrollcommand=h_scroll.set)
 
         v_scroll.pack(side="right", fill="y")
         text_area.pack(side="left", fill="both", expand=True)
         h_scroll.pack(fill="x", padx=10, pady=(0, 4))
 
         # Colour tags
-        text_area.tag_configure("error_line",  foreground="#ff6b6b", font=("Courier New", sc(9), "bold"))
+        text_area.tag_configure(
+            "error_line",  foreground="#ff6b6b", font=("Courier New", sc(9), "bold"))
         text_area.tag_configure("ts_line",      foreground="#6e7681")
         text_area.tag_configure("sep_line",     foreground="#30363d")
         text_area.tag_configure("tb_line",      foreground="#adbac7")
@@ -6430,7 +6612,8 @@ class ObjectProgramUI(
                             subprocess.Popen(["open", parent_dir])
                 else:
                     # Linux and other platforms
-                    parent_dir = os.path.dirname(path) if not os.path.isdir(path) else path
+                    parent_dir = os.path.dirname(
+                        path) if not os.path.isdir(path) else path
                     if os.path.isdir(parent_dir):
                         subprocess.Popen(["xdg-open", parent_dir])
             except Exception:
@@ -6468,7 +6651,7 @@ class ObjectProgramUI(
         win.grab_set()
 
 
-#--------- highlight funksjon
+# --------- highlight funksjon
 
     def _highlight_active_field(self, widget):
         for w in self.reg_entry_list:
@@ -6484,26 +6667,15 @@ class ObjectProgramUI(
             debug_error("Suppressed Error", str(e))
             pass
 
-
     def highlight_fields_with_suggestions(self, oid):
         for field in self.reg_entries:
             self._refresh_field_background(field)
 
 
+# -----
 
 
-
-#-----
-
-
-
-
-
-
-
-#---- go back
-
-
+# ---- go back
 
 
 # --- next problem
@@ -6546,11 +6718,7 @@ class ObjectProgramUI(
         messagebox.showinfo("Done", "No more problems found")
 
 
-
-
-
-
-#--- next problem with history
+# --- next problem with history
 
     def goto_next_problem_with_history(self):
         self.commit_current_object()
@@ -6589,7 +6757,6 @@ class ObjectProgramUI(
                 if not self.is_problem_active(oid, prob_col):
                     continue
 
-               
                 if field in suggestions:
                     match = True
                     break
@@ -6597,7 +6764,6 @@ class ObjectProgramUI(
             if not match:
                 continue
 
-          
             self.object_list.selection_clear(0, tk.END)
             self.object_list.selection_set(i)
             self.object_list.see(i)
@@ -6607,8 +6773,7 @@ class ObjectProgramUI(
         messagebox.showinfo("Done", "No matching objects found")
 
 
-
-#---- go to last object
+# ---- go to last object
 
     def goto_last_object(self):
 
@@ -6617,11 +6782,8 @@ class ObjectProgramUI(
 
         oid = self.last_object_id
 
-
-
         if not oid or oid == self.app.current_object_id:
             return
-    
 
         if oid in self.app.active_object_ids:
             idx = self.app.active_object_ids.index(oid)
@@ -6635,29 +6797,6 @@ class ObjectProgramUI(
 
 # ---------- Images ----------
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     def ensure_no_image_label(self):
         if not hasattr(self, "no_image_label") or not self.no_image_label.winfo_exists():
             self.no_image_label = ttk.Label(
@@ -6666,16 +6805,10 @@ class ObjectProgramUI(
                 foreground="gray"
             )
 
-
-
-
-
-
     def open_image_web(self, path):
         import webbrowser
         filename = os.path.basename(path)
         webbrowser.open(f"https://www.unimus.no/photos/image/jpeg/{filename}")
-
 
     def _show_no_images_online(self):
         try:
@@ -6690,18 +6823,6 @@ class ObjectProgramUI(
             debug_error("Suppressed Error", str(e))
             pass
 
-
-
-
-
-
-
-
-
-
-
-
-
     def _show_no_images_local(self):
         try:
             self.images_missing_label.config(text="Could not load images")
@@ -6715,21 +6836,10 @@ class ObjectProgramUI(
             debug_error("Suppressed Error", str(e))
             pass
 
-
-
-
-
-
-
-
-
-
     # ---------- Navigation ----------
-
 
     def _fix_listbox_horizontal_scroll(self):
         self.object_list.xview_moveto(0)
-
 
     def navigate_object(self, step):
         total = len(self.app.active_object_ids)
@@ -6748,7 +6858,8 @@ class ObjectProgramUI(
         self._nav_idle_job = self.root.after(15, self._navigation_finished)
 
         if self.app.current_object_id in self.app.active_object_ids:
-            current_index = self.app.active_object_ids.index(self.app.current_object_id)
+            current_index = self.app.active_object_ids.index(
+                self.app.current_object_id)
         else:
             current_index = 0
 
@@ -6770,9 +6881,9 @@ class ObjectProgramUI(
                 self.root.after_cancel(self._list_select_job)
             except Exception:
                 pass
-                
-        self._list_select_job = self.root.after(15, lambda: self._deferred_list_select(oid))
 
+        self._list_select_job = self.root.after(
+            15, lambda: self._deferred_list_select(oid))
 
     def _navigation_finished(self):
 
@@ -6782,7 +6893,7 @@ class ObjectProgramUI(
             self.load_images(self.app.current_object_id)
 
 
-# ---------- 
+# ----------
 
 
     def is_unknown(self, value):
@@ -6790,14 +6901,11 @@ class ObjectProgramUI(
             return False
 
         v = str(value).strip().lower()
-    
+
         if not v:
             return False
 
         return v in ("ukjent", "unknown", "?", "-")
-
-
-
 
     def open_location_window(self):
         if hasattr(self, "location_window") and self.location_window and self.location_window.winfo_exists():
@@ -6838,9 +6946,10 @@ class ObjectProgramUI(
             name = field["name"]
             ftype = field.get("type", "text")
             var = self.location_vars.get(name)
-            
+
             # Label
-            lbl = ttk.Label(grid_frame, text=name, font=("Segoe UI", sc(9.5), "bold"))
+            lbl = ttk.Label(grid_frame, text=name, font=(
+                "Segoe UI", sc(9.5), "bold"))
             lbl.grid(row=row, column=0, sticky="w", padx=(0, 10), pady=6)
 
             # Input widget
@@ -6857,7 +6966,8 @@ class ObjectProgramUI(
                 widget = ttk.Checkbutton(
                     grid_frame, cursor="hand2", text="", variable=var,
                     onvalue="True", offvalue="False",
-                    command=lambda n=name, v=var: self._on_checkbox_change(n, v)
+                    command=lambda n=name, v=var: self._on_checkbox_change(
+                        n, v)
                 )
             else:
                 widget = ttk.Entry(
@@ -6912,11 +7022,12 @@ class ObjectProgramUI(
         )
         cancel_btn.pack(side="right", padx=(0, 10))
         cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg="#e2e2e2"))
-        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=win.cget("bg")))
+        cancel_btn.bind(
+            "<Leave>", lambda e: cancel_btn.config(bg=win.cget("bg")))
 
         # Esc binding to close
         win.bind("<Escape>", lambda e: win.destroy())
-        
+
         # When closing, restore self.location_entries.
         def restore_locations(e):
             if e.widget == win:
@@ -6931,13 +7042,13 @@ class ObjectProgramUI(
         """Rebuilds the read-only list of active problem flags in the default window."""
         if not hasattr(self, "problem_frame") or not self.problem_frame.winfo_exists():
             return
-        
+
         # Clear existing children of problem_frame
         for w in self.problem_frame.winfo_children():
             w.destroy()
-            
+
         s = getattr(self, "_scale", 1.0)
-        
+
         # Find all active problems
         active_problems = []
         for field in self.app.config["ui_sections"]["problems"]:
@@ -6947,7 +7058,7 @@ class ObjectProgramUI(
             var = self.problem_vars.get(name)
             if var and var.get():
                 active_problems.append(name)
-                
+
         # Also check if images are missing (from images_missing_var status)
         # (Images_Missing is excluded from active_problems to not count as a metadata problem or show in the list/title count)
 
@@ -6957,7 +7068,8 @@ class ObjectProgramUI(
                 if self.title_problem_count_label.winfo_exists():
                     count = len(active_problems)
                     if count > 0:
-                        self.title_problem_count_label.config(text=f"({count} problems)")
+                        self.title_problem_count_label.config(
+                            text=f"({count} problems)")
                     else:
                         self.title_problem_count_label.config(text="")
             except Exception:
@@ -6966,13 +7078,13 @@ class ObjectProgramUI(
         if not active_problems:
             row_frame = ttk.Frame(self.problem_frame)
             row_frame.pack(fill="x", pady=4, padx=6)
-            
+
             lbl_icon = tk.Label(
                 row_frame, text="✔", fg="#3a7d44", bg=self.root.cget("bg"),
                 font=("Segoe UI", sc(11), "bold")
             )
             lbl_icon.pack(side="left", padx=(0, 6))
-            
+
             lbl_text = ttk.Label(
                 row_frame, text="No active problems flagged.",
                 foreground="#3a7d44",
@@ -6983,13 +7095,13 @@ class ObjectProgramUI(
             for prob_name in active_problems:
                 row_frame = ttk.Frame(self.problem_frame)
                 row_frame.pack(fill="x", pady=2, padx=4)
-                
+
                 lbl_icon = tk.Label(
                     row_frame, text="⚠", fg="#c93a40", bg=self.root.cget("bg"),
                     font=("Segoe UI", sc(10), "bold")
                 )
                 lbl_icon.pack(side="left", padx=(0, 6))
-                
+
                 lbl_text = ttk.Label(
                     row_frame, text=prob_name.replace("_", " "),
                     foreground="#c93a40",
@@ -7003,21 +7115,23 @@ class ObjectProgramUI(
             for name, var in self.problem_vars.items():
                 if var.get():
                     active_problems_set.add(name)
-            
+
             for g_name, tab_info in self._reg_tabs.items():
                 tab_container = tab_info["container"]
                 count = 0
                 if g_name == "Problems":
                     mapped_problems = set(self.problem_to_field.keys())
-                    unmapped_problems = [p for p in self.problem_columns if p not in mapped_problems]
-                    count = sum(1 for p in unmapped_problems if p in active_problems_set)
+                    unmapped_problems = [
+                        p for p in self.problem_columns if p not in mapped_problems]
+                    count = sum(
+                        1 for p in unmapped_problems if p in active_problems_set)
                 else:
                     g_fields = tab_info["fields"]
                     for f in g_fields:
                         for prob_col, mapped_field in self.problem_to_field.items():
                             if mapped_field == f and prob_col in active_problems_set:
                                 count += 1
-                
+
                 tab_text = f"{g_name} ({count})" if count > 0 else g_name
                 self.reg_notebook.tab(tab_container, text=tab_text)
 
@@ -7055,7 +7169,8 @@ class ObjectProgramUI(
         grid_frame = ttk.Frame(frame)
         grid_frame.pack(fill="both", expand=True)
 
-        orig_problem_checkbuttons = list(getattr(self, "problem_checkbuttons", []))
+        orig_problem_checkbuttons = list(
+            getattr(self, "problem_checkbuttons", []))
         self.problem_checkbuttons = []
 
         # Re-create checkbuttons in the popup sharing the same BooleanVars
@@ -7085,7 +7200,8 @@ class ObjectProgramUI(
             cb.bind("<Shift-Down>", self._problem_nav_down)
             cb.bind("<Control-Up>", self._problem_nav_up)
             cb.bind("<Control-Down>", self._problem_nav_down)
-            cb.bind("<Return>", lambda e, c=cb: self._toggle_specific_checkbox(c))
+            cb.bind("<Return>", lambda e,
+                    c=cb: self._toggle_specific_checkbox(c))
 
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
@@ -7137,10 +7253,11 @@ class ObjectProgramUI(
         )
         cancel_btn.pack(side="right", padx=(0, 10))
         cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg="#e2e2e2"))
-        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=win.cget("bg")))
+        cancel_btn.bind(
+            "<Leave>", lambda e: cancel_btn.config(bg=win.cget("bg")))
 
         win.bind("<Escape>", lambda e: win.destroy())
-        
+
         # When closing, restore self.problem_checkbuttons.
         def restore_problems(e):
             if e.widget == win:
@@ -7157,7 +7274,7 @@ class ObjectProgramUI(
 
         from config import sc
         import utils
-        
+
         COLORS = {
             "surface": "#fbfaf8",
             "surface_dim": "#dadada",
@@ -7175,64 +7292,79 @@ class ObjectProgramUI(
             "search_orange": "#d9480f",
             "surface_tint": "#5f5e5e"
         }
-        
+
         FONT_HEADLINE = ("Hanken Grotesk", sc(14), "bold")
         FONT_LABEL = ("JetBrains Mono", sc(10), "bold")
         FONT_DATA = ("JetBrains Mono", sc(11))
-        
+
         win = tk.Toplevel(self.root)
         self.filter_window = win
         win.title("Filter objects")
         win.geometry(f"{sc(800)}x{sc(600)}")
         win.configure(bg=COLORS["surface"])
-        win.bind("<Destroy>", lambda e: setattr(self, "filter_window", None) if e.widget == win else None)
+        win.bind("<Destroy>", lambda e: setattr(
+            self, "filter_window", None) if e.widget == win else None)
         win.bind("<Escape>", lambda e: win.destroy())
         win.bind("<Control-Return>", lambda e: self.apply_filter(win))
 
-        main_container = tk.Frame(win, bg=COLORS["surface"], bd=0, highlightthickness=0)
+        main_container = tk.Frame(
+            win, bg=COLORS["surface"], bd=0, highlightthickness=0)
         main_container.pack(fill="both", expand=True)
 
-        header = tk.Frame(main_container, bg=COLORS["surface_container_low"], height=sc(56))
+        header = tk.Frame(
+            main_container, bg=COLORS["surface_container_low"], height=sc(56))
         header.pack(fill="x", side="top")
         header.pack_propagate(False)
-        tk.Frame(header, bg=COLORS["outline"], height=1).pack(fill="x", side="bottom")
+        tk.Frame(header, bg=COLORS["outline"], height=1).pack(
+            fill="x", side="bottom")
 
         left_header = tk.Frame(header, bg=COLORS["surface_container_low"])
         left_header.pack(side="left", fill="y", padx=sc(16))
-        
-        tk.Label(left_header, text="Filter objects", font=FONT_HEADLINE, fg=COLORS["primary"], bg=COLORS["surface_container_low"]).pack(side="left")
-        
-        search_frame = tk.Frame(left_header, bg=COLORS["surface"], highlightbackground=COLORS["search_orange"], highlightthickness=1)
+
+        tk.Label(left_header, text="Filter objects", font=FONT_HEADLINE,
+                 fg=COLORS["primary"], bg=COLORS["surface_container_low"]).pack(side="left")
+
+        search_frame = tk.Frame(
+            left_header, bg=COLORS["surface"], highlightbackground=COLORS["search_orange"], highlightthickness=1)
         search_frame.pack(side="left", padx=sc(24), pady=sc(12), fill="y")
-        tk.Label(search_frame, text="⌕", font=("Segoe UI", sc(12)), fg=COLORS["search_orange"], bg=COLORS["surface"]).pack(side="left", padx=(sc(8), 0))
+        tk.Label(search_frame, text="⌕", font=("Segoe UI", sc(
+            12)), fg=COLORS["search_orange"], bg=COLORS["surface"]).pack(side="left", padx=(sc(8), 0))
         search_var = tk.StringVar()
-        search_entry = tk.Entry(search_frame, textvariable=search_var, font=FONT_DATA, fg=COLORS["search_orange"], bg=COLORS["surface"], bd=0, insertbackground=COLORS["search_orange"], width=20)
-        search_entry.pack(side="left", fill="both", expand=True, padx=sc(8), pady=sc(4))
-        
+        search_entry = tk.Entry(search_frame, textvariable=search_var, font=FONT_DATA,
+                                fg=COLORS["search_orange"], bg=COLORS["surface"], bd=0, insertbackground=COLORS["search_orange"], width=20)
+        search_entry.pack(side="left", fill="both",
+                          expand=True, padx=sc(8), pady=sc(4))
+
         right_header = tk.Frame(header, bg=COLORS["surface_container_low"])
         right_header.pack(side="right", fill="y", padx=sc(16))
-        
+
         def make_btn(parent, text, cmd):
-            btn = tk.Button(parent, text=text, font=FONT_LABEL, fg=COLORS["on_surface"], bg=COLORS["surface"], bd=1, relief="solid", padx=sc(12), pady=sc(4), cursor="hand2", command=cmd)
+            btn = tk.Button(parent, text=text, font=FONT_LABEL, fg=COLORS["on_surface"], bg=COLORS["surface"], bd=1, relief="solid", padx=sc(
+                12), pady=sc(4), cursor="hand2", command=cmd)
             btn.pack(side="left", padx=sc(4), pady=sc(12))
             return btn
-            
+
         make_btn(right_header, "Load Preset...", self.load_filter_preset)
         make_btn(right_header, "Save Preset...", self.save_filter_preset)
 
-        tab_nav = tk.Frame(main_container, bg=COLORS["surface_container_highest"], height=sc(40))
+        tab_nav = tk.Frame(
+            main_container, bg=COLORS["surface_container_highest"], height=sc(40))
         tab_nav.pack(fill="x", side="top")
-        tk.Frame(tab_nav, bg=COLORS["outline"], height=1).pack(fill="x", side="bottom")
+        tk.Frame(tab_nav, bg=COLORS["outline"], height=1).pack(
+            fill="x", side="bottom")
 
         # Global Match Mode Toggle (Right side of tab_nav)
-        global_mode_frame = tk.Frame(tab_nav, bg=COLORS["surface_container_highest"])
+        global_mode_frame = tk.Frame(
+            tab_nav, bg=COLORS["surface_container_highest"])
         global_mode_frame.pack(side="right", fill="y", padx=sc(16))
 
-        tk.Label(global_mode_frame, text="Match criteria:", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"]).pack(side="left", padx=(0, sc(8)))
+        tk.Label(global_mode_frame, text="Match criteria:", font=FONT_LABEL,
+                 fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"]).pack(side="left", padx=(0, sc(8)))
 
         from tkinter import ttk
         style = ttk.Style(self.root)
-        style.configure("GlobalMode.TCombobox", fieldbackground=COLORS["surface"], background=COLORS["surface"], borderwidth=0)
+        style.configure("GlobalMode.TCombobox",
+                        fieldbackground=COLORS["surface"], background=COLORS["surface"], borderwidth=0)
 
         def on_global_mode_change(event):
             val = global_mode_cb.get()
@@ -7245,7 +7377,8 @@ class ObjectProgramUI(
         current_mode = self.filter_mode.get()
         cb_val = "All selected (AND)" if current_mode == "AND" else "Any selected (OR)"
 
-        global_mode_cb = ttk.Combobox(global_mode_frame, values=["All selected (AND)", "Any selected (OR)"], state="readonly", width=18, style="GlobalMode.TCombobox", cursor="hand2")
+        global_mode_cb = ttk.Combobox(global_mode_frame, values=[
+                                      "All selected (AND)", "Any selected (OR)"], state="readonly", width=18, style="GlobalMode.TCombobox", cursor="hand2")
         global_mode_cb.set(cb_val)
         global_mode_cb.pack(side="left", pady=sc(8))
         global_mode_cb.bind("<<ComboboxSelected>>", on_global_mode_change)
@@ -7255,33 +7388,37 @@ class ObjectProgramUI(
 
         self.filter_tabs = {}
         self.filter_tab_buttons = {}
-        
+
         def show_tab(tab_name):
             for name, frame in self.filter_tabs.items():
                 frame.pack_forget()
             self.filter_tabs[tab_name].pack(fill="both", expand=True)
-            
+
             for name, btn_tuple in self.filter_tab_buttons.items():
                 btn, border = btn_tuple
                 if name == tab_name:
                     btn.config(fg=COLORS["primary"], bg=COLORS["surface"])
                     border.config(bg=COLORS["primary"])
                 else:
-                    btn.config(fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"])
+                    btn.config(fg=COLORS["on_surface_variant"],
+                               bg=COLORS["surface_container_highest"])
                     border.config(bg=COLORS["outline"])
-                    
+
         def create_tab_btn(name, label):
-            btn_frame = tk.Frame(tab_nav, bg=COLORS["surface_container_highest"])
+            btn_frame = tk.Frame(
+                tab_nav, bg=COLORS["surface_container_highest"])
             btn_frame.pack(side="left", fill="y")
-            
-            tk.Frame(btn_frame, bg=COLORS["outline"], width=1).pack(side="right", fill="y")
+
+            tk.Frame(btn_frame, bg=COLORS["outline"], width=1).pack(
+                side="right", fill="y")
             bottom_border = tk.Frame(btn_frame, bg=COLORS["outline"], height=2)
             bottom_border.pack(side="bottom", fill="x")
-            
-            btn = tk.Button(btn_frame, text=label, font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"], bd=0, relief="flat", padx=sc(16), cursor="hand2", command=lambda n=name: show_tab(n))
+
+            btn = tk.Button(btn_frame, text=label, font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"], bd=0, relief="flat", padx=sc(
+                16), cursor="hand2", command=lambda n=name: show_tab(n))
             btn.pack(side="top", fill="both", expand=True)
             self.filter_tab_buttons[name] = (btn, bottom_border)
-            
+
         create_tab_btn("status", "Status & General")
         create_tab_btn("problems", "Problems & Unknowns")
         create_tab_btn("images", "Images")
@@ -7290,9 +7427,11 @@ class ObjectProgramUI(
         all_widgets = []
 
         def create_group(parent, title):
-            group = tk.Frame(parent, bg=COLORS["surface"], highlightbackground=COLORS["outline"], highlightthickness=1)
+            group = tk.Frame(
+                parent, bg=COLORS["surface"], highlightbackground=COLORS["outline"], highlightthickness=1)
             group.pack(fill="x", pady=(0, sc(16)))
-            tk.Label(group, text=title.upper(), font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", padx=sc(12), pady=(sc(12), sc(8)))
+            tk.Label(group, text=title.upper(), font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(
+                anchor="w", padx=sc(12), pady=(sc(12), sc(8)))
             content = tk.Frame(group, bg=COLORS["surface"])
             content.pack(fill="x", padx=sc(12), pady=(0, sc(12)))
             return content
@@ -7300,21 +7439,26 @@ class ObjectProgramUI(
         def make_chk(parent, text, var, color_bar=None):
             f = tk.Frame(parent, bg=COLORS["surface"])
             f.pack(fill="x", pady=sc(2))
-            chk = tk.Checkbutton(f, variable=var, bg=COLORS["surface"], activebackground=COLORS["surface"], selectcolor=COLORS["surface"], bd=0, highlightthickness=0, command=self.update_filter_button_text, cursor="hand2")
+            chk = tk.Checkbutton(f, variable=var, bg=COLORS["surface"], activebackground=COLORS["surface"],
+                                 selectcolor=COLORS["surface"], bd=0, highlightthickness=0, command=self.update_filter_button_text, cursor="hand2")
             chk.pack(side="left")
             if color_bar:
-                tk.Frame(f, bg=color_bar, width=4, height=sc(12)).pack(side="left", padx=(sc(4), sc(8)))
-            lbl = tk.Label(f, text=text, font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"])
+                tk.Frame(f, bg=color_bar, width=4, height=sc(12)).pack(
+                    side="left", padx=(sc(4), sc(8)))
+            lbl = tk.Label(f, text=text, font=FONT_DATA,
+                           fg=COLORS["on_surface"], bg=COLORS["surface"])
             lbl.pack(side="left", padx=(0, sc(8)))
             all_widgets.append((text.lower(), f, COLORS["surface"]))
             return chk
-            
+
         def make_rad(parent, text, var, val):
             f = tk.Frame(parent, bg=COLORS["surface"])
             f.pack(fill="x", pady=sc(2))
-            rad = tk.Radiobutton(f, variable=var, value=val, bg=COLORS["surface"], activebackground=COLORS["surface"], bd=0, highlightthickness=0, cursor="hand2")
+            rad = tk.Radiobutton(
+                f, variable=var, value=val, bg=COLORS["surface"], activebackground=COLORS["surface"], bd=0, highlightthickness=0, cursor="hand2")
             rad.pack(side="left")
-            lbl = tk.Label(f, text=text, font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"])
+            lbl = tk.Label(f, text=text, font=FONT_DATA,
+                           fg=COLORS["on_surface"], bg=COLORS["surface"])
             lbl.pack(side="left", padx=sc(8))
             all_widgets.append((text.lower(), f, COLORS["surface"]))
             return rad
@@ -7322,68 +7466,91 @@ class ObjectProgramUI(
         # TAB 1: STATUS
         tab_status = tk.Frame(tab_content_area, bg=COLORS["surface"])
         self.filter_tabs["status"] = tab_status
-        
+
         status_left = tk.Frame(tab_status, bg=COLORS["surface"])
-        status_left.pack(side="left", fill="both", expand=True, padx=sc(16), pady=sc(16))
+        status_left.pack(side="left", fill="both",
+                         expand=True, padx=sc(16), pady=sc(16))
         status_right = tk.Frame(tab_status, bg=COLORS["surface"])
-        status_right.pack(side="right", fill="both", expand=True, padx=sc(16), pady=sc(16))
+        status_right.pack(side="right", fill="both",
+                          expand=True, padx=sc(16), pady=sc(16))
 
         p_status = create_group(status_left, "Processing Status")
-        make_chk(p_status, "Reviewed", self.filter_vars["Reviewed"], COLORS["secondary"])
-        make_chk(p_status, "Not Reviewed (Pending)", self.filter_vars["Not_Reviewed"], COLORS["surface_tint"])
-        make_chk(p_status, "Reviewed + Has Problem", self.filter_vars["Reviewed_With_Problem"], COLORS["error"])
-        make_chk(p_status, "Problem + Has History", self.filter_vars["Problem_With_History"], COLORS["error"])
-        make_chk(p_status, "Has Suggestions from Books", self.filter_vars["Has_History"], COLORS["outline_variant"])
+        make_chk(p_status, "Reviewed",
+                 self.filter_vars["Reviewed"], COLORS["secondary"])
+        make_chk(p_status, "Not Reviewed (Pending)",
+                 self.filter_vars["Not_Reviewed"], COLORS["surface_tint"])
+        make_chk(p_status, "Reviewed + Has Problem",
+                 self.filter_vars["Reviewed_With_Problem"], COLORS["error"])
+        make_chk(p_status, "Problem + Has History",
+                 self.filter_vars["Problem_With_History"], COLORS["error"])
+        make_chk(p_status, "Has Suggestions from Books",
+                 self.filter_vars["Has_History"], COLORS["outline_variant"])
 
         m_pres = create_group(status_right, "Metadata Presence")
-        tk.Label(m_pres, text="Comments", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w")
-        tk.Frame(m_pres, bg=COLORS["outline"], height=1).pack(fill="x", pady=sc(4))
+        tk.Label(m_pres, text="Comments", font=FONT_LABEL,
+                 fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w")
+        tk.Frame(m_pres, bg=COLORS["outline"],
+                 height=1).pack(fill="x", pady=sc(4))
         make_chk(m_pres, "Missing Comment", self.filter_vars["Comment_Empty"])
         make_chk(m_pres, "Has Comment", self.filter_vars["Comment_Not_Empty"])
-        
-        tk.Label(m_pres, text="Location Notes", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", pady=(sc(12), 0))
-        tk.Frame(m_pres, bg=COLORS["outline"], height=1).pack(fill="x", pady=sc(4))
-        make_chk(m_pres, "No Location Comment", self.filter_vars["Extra_Empty"])
-        make_chk(m_pres, "Has Location Comment", self.filter_vars["Extra_Not_Empty"])
+
+        tk.Label(m_pres, text="Location Notes", font=FONT_LABEL,
+                 fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", pady=(sc(12), 0))
+        tk.Frame(m_pres, bg=COLORS["outline"],
+                 height=1).pack(fill="x", pady=sc(4))
+        make_chk(m_pres, "No Location Comment",
+                 self.filter_vars["Extra_Empty"])
+        make_chk(m_pres, "Has Location Comment",
+                 self.filter_vars["Extra_Not_Empty"])
 
         # TAB 2: PROBLEMS
         tab_probs = tk.Frame(tab_content_area, bg=COLORS["surface"])
         self.filter_tabs["problems"] = tab_probs
-        
-        probs_canvas = tk.Canvas(tab_probs, bg=COLORS["surface"], highlightthickness=0, bd=0)
-        probs_scrollbar = tk.Scrollbar(tab_probs, orient="vertical", command=probs_canvas.yview)
+
+        probs_canvas = tk.Canvas(
+            tab_probs, bg=COLORS["surface"], highlightthickness=0, bd=0)
+        probs_scrollbar = tk.Scrollbar(
+            tab_probs, orient="vertical", command=probs_canvas.yview)
         probs_inner = tk.Frame(probs_canvas, bg=COLORS["surface"])
-        
-        probs_inner.bind("<Configure>", lambda e: probs_canvas.configure(scrollregion=probs_canvas.bbox("all")))
-        probs_canvas_window = probs_canvas.create_window((0, 0), window=probs_inner, anchor="nw")
-        probs_canvas.bind("<Configure>", lambda e: probs_canvas.itemconfig(probs_canvas_window, width=e.width) if getattr(probs_canvas, "_last_width", None) != e.width and not setattr(probs_canvas, "_last_width", e.width) else None)
+
+        probs_inner.bind("<Configure>", lambda e: probs_canvas.configure(
+            scrollregion=probs_canvas.bbox("all")))
+        probs_canvas_window = probs_canvas.create_window(
+            (0, 0), window=probs_inner, anchor="nw")
+        probs_canvas.bind("<Configure>", lambda e: probs_canvas.itemconfig(probs_canvas_window, width=e.width) if getattr(
+            probs_canvas, "_last_width", None) != e.width and not setattr(probs_canvas, "_last_width", e.width) else None)
         probs_canvas.configure(yscrollcommand=probs_scrollbar.set)
-        
-        probs_canvas.pack(side="left", fill="both", expand=True, padx=(sc(16), 0), pady=sc(16))
+
+        probs_canvas.pack(side="left", fill="both",
+                          expand=True, padx=(sc(16), 0), pady=sc(16))
         probs_scrollbar.pack(side="right", fill="y", pady=sc(16))
-        
+
         def _on_prob_scroll(event):
             probs_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        self.root.after(100, lambda: self._bind_canvas_mousewheel(probs_canvas, _on_prob_scroll))
+        self.root.after(100, lambda: self._bind_canvas_mousewheel(
+            probs_canvas, _on_prob_scroll))
 
         p_list = create_group(probs_inner, "Problems Checklist")
         normal_problems = [p for p in self.problem_columns if "Image" not in p]
         for col in normal_problems:
-            make_chk(p_list, col.replace("_", " "), self.filter_vars.get(col), COLORS["error"])
-        make_chk(p_list, "Any problem (except images)", self.filter_vars.get("Any_Problem"), COLORS["error"])
-        
+            make_chk(p_list, col.replace("_", " "),
+                     self.filter_vars.get(col), COLORS["error"])
+        make_chk(p_list, "Any problem (except images)",
+                 self.filter_vars.get("Any_Problem"), COLORS["error"])
+
         u_list = create_group(probs_inner, "Unknown values")
         if not hasattr(self, "filter_unknown_var"):
             self.filter_unknown_var = tk.BooleanVar()
-        make_chk(u_list, "Show objects with unknown fields", self.filter_unknown_var)
+        make_chk(u_list, "Show objects with unknown fields",
+                 self.filter_unknown_var)
 
         # TAB 3: IMAGES
         tab_imgs = tk.Frame(tab_content_area, bg=COLORS["surface"])
         self.filter_tabs["images"] = tab_imgs
-        
+
         img_inner = tk.Frame(tab_imgs, bg=COLORS["surface"])
         img_inner.pack(fill="both", expand=True, padx=sc(16), pady=sc(16))
-        
+
         i_list = create_group(img_inner, "Images Checklist")
         image_filters = ["Images_Missing", "Has_Images"]
         image_problems = [p for p in self.problem_columns if "Image" in p]
@@ -7396,56 +7563,71 @@ class ObjectProgramUI(
         # TAB 4: LOCATION
         tab_loc = tk.Frame(tab_content_area, bg=COLORS["surface"])
         self.filter_tabs["location"] = tab_loc
-        
-        loc_canvas = tk.Canvas(tab_loc, bg=COLORS["surface"], highlightthickness=0, bd=0)
-        loc_scrollbar = tk.Scrollbar(tab_loc, orient="vertical", command=loc_canvas.yview)
+
+        loc_canvas = tk.Canvas(
+            tab_loc, bg=COLORS["surface"], highlightthickness=0, bd=0)
+        loc_scrollbar = tk.Scrollbar(
+            tab_loc, orient="vertical", command=loc_canvas.yview)
         loc_inner = tk.Frame(loc_canvas, bg=COLORS["surface"])
-        
-        loc_inner.bind("<Configure>", lambda e: loc_canvas.configure(scrollregion=loc_canvas.bbox("all")))
-        loc_canvas_window = loc_canvas.create_window((0, 0), window=loc_inner, anchor="nw")
-        loc_canvas.bind("<Configure>", lambda e: loc_canvas.itemconfig(loc_canvas_window, width=e.width) if getattr(loc_canvas, "_last_width", None) != e.width and not setattr(loc_canvas, "_last_width", e.width) else None)
+
+        loc_inner.bind("<Configure>", lambda e: loc_canvas.configure(
+            scrollregion=loc_canvas.bbox("all")))
+        loc_canvas_window = loc_canvas.create_window(
+            (0, 0), window=loc_inner, anchor="nw")
+        loc_canvas.bind("<Configure>", lambda e: loc_canvas.itemconfig(loc_canvas_window, width=e.width) if getattr(
+            loc_canvas, "_last_width", None) != e.width and not setattr(loc_canvas, "_last_width", e.width) else None)
         loc_canvas.configure(yscrollcommand=loc_scrollbar.set)
-        
-        loc_canvas.pack(side="left", fill="both", expand=True, padx=(sc(16), 0), pady=sc(16))
+
+        loc_canvas.pack(side="left", fill="both", expand=True,
+                        padx=(sc(16), 0), pady=sc(16))
         loc_scrollbar.pack(side="right", fill="y", pady=sc(16))
-        
+
         l_group = create_group(loc_inner, "Location Fields")
         loc_fields = self.app.config.get("ui_sections", {}).get("location", [])
-        
+
         from tkinter import ttk
         style = ttk.Style(self.root)
-        style.configure("Flat.TCombobox", fieldbackground=COLORS["surface"], background=COLORS["surface"], borderwidth=0)
-        
+        style.configure(
+            "Flat.TCombobox", fieldbackground=COLORS["surface"], background=COLORS["surface"], borderwidth=0)
+
         for field in loc_fields:
             name = field["name"]
             ftype = field.get("type", "text")
             if name not in self.filter_location_vars:
                 self.filter_location_vars[name] = tk.StringVar()
-                
+
             f = tk.Frame(l_group, bg=COLORS["surface"])
             f.pack(fill="x", pady=sc(4))
-            tk.Label(f, text=name, font=FONT_LABEL, fg=COLORS["on_surface"], bg=COLORS["surface"], width=20, anchor="w").pack(side="left", padx=sc(8))
-            
-            ent_frame = tk.Frame(f, bg=COLORS["surface"], highlightbackground=COLORS["outline"], highlightthickness=1)
+            tk.Label(f, text=name, font=FONT_LABEL, fg=COLORS["on_surface"], bg=COLORS["surface"], width=20, anchor="w").pack(
+                side="left", padx=sc(8))
+
+            ent_frame = tk.Frame(
+                f, bg=COLORS["surface"], highlightbackground=COLORS["outline"], highlightthickness=1)
             ent_frame.pack(side="left", fill="x", expand=True, padx=(0, sc(8)))
-            
+
             if ftype in ("choice", "checkbox"):
-                vals = [""] + list(field.get("choices", [])) if ftype == "choice" else ["", "True", "False"]
-                cb = ttk.Combobox(ent_frame, textvariable=self.filter_location_vars[name], values=vals, state="readonly", style="Flat.TCombobox", cursor="hand2")
+                vals = [""] + list(field.get("choices", [])
+                                   ) if ftype == "choice" else ["", "True", "False"]
+                cb = ttk.Combobox(
+                    ent_frame, textvariable=self.filter_location_vars[name], values=vals, state="readonly", style="Flat.TCombobox", cursor="hand2")
                 cb.pack(fill="x", expand=True, padx=sc(2), pady=sc(2))
-                cb.bind("<BackSpace>", lambda e, w=cb: (w.set(""), self.update_filter_button_text()))
-                cb.bind("<Delete>", lambda e, w=cb: (w.set(""), self.update_filter_button_text()))
+                cb.bind("<BackSpace>", lambda e, w=cb: (
+                    w.set(""), self.update_filter_button_text()))
+                cb.bind("<Delete>", lambda e, w=cb: (
+                    w.set(""), self.update_filter_button_text()))
             else:
-                ent = tk.Entry(ent_frame, textvariable=self.filter_location_vars[name], font=FONT_DATA, bg=COLORS["surface"], fg=COLORS["on_surface"], bd=0, insertbackground=COLORS["primary"])
+                ent = tk.Entry(ent_frame, textvariable=self.filter_location_vars[name], font=FONT_DATA,
+                               bg=COLORS["surface"], fg=COLORS["on_surface"], bd=0, insertbackground=COLORS["primary"])
                 ent.pack(fill="x", expand=True, padx=sc(4), pady=sc(2))
-                
+
             all_widgets.append((name.lower(), f, COLORS["surface"]))
 
         # Cache children for Quick Search
         for text, frame, orig_bg in all_widgets:
             cached = []
             for child in frame.winfo_children():
-                if isinstance(child, tk.Frame) and child.cget("width") == 4: continue
+                if isinstance(child, tk.Frame) and child.cget("width") == 4:
+                    continue
                 cached.append(child)
             frame._cached_children = cached
 
@@ -7462,27 +7644,34 @@ class ObjectProgramUI(
 
                 frame.config(bg=bg_color)
                 for child in getattr(frame, "_cached_children", []):
-                    try: child.config(bg=bg_color)
-                    except Exception: pass
-                        
+                    try:
+                        child.config(bg=bg_color)
+                    except Exception:
+                        pass
+
         search_var.trace("w", on_search)
 
         show_tab("status")
 
         # FOOTER ACTION BAR
-        footer = tk.Frame(main_container, bg=COLORS["surface_container_low"], height=sc(56))
+        footer = tk.Frame(
+            main_container, bg=COLORS["surface_container_low"], height=sc(56))
         footer.pack(fill="x", side="bottom")
         footer.pack_propagate(False)
-        tk.Frame(footer, bg=COLORS["outline"], height=1).pack(fill="x", side="top")
+        tk.Frame(footer, bg=COLORS["outline"],
+                 height=1).pack(fill="x", side="top")
 
-        tk.Button(footer, text="Reset All", font=FONT_LABEL, fg=COLORS["error"], bg=COLORS["surface_container_low"], bd=0, relief="flat", cursor="hand2", command=lambda: self.clear_filter(win)).pack(side="left", padx=sc(16), pady=sc(12))
+        tk.Button(footer, text="Reset All", font=FONT_LABEL, fg=COLORS["error"], bg=COLORS["surface_container_low"], bd=0,
+                  relief="flat", cursor="hand2", command=lambda: self.clear_filter(win)).pack(side="left", padx=sc(16), pady=sc(12))
 
         right_footer = tk.Frame(footer, bg=COLORS["surface_container_low"])
         right_footer.pack(side="right", fill="y", padx=sc(16))
 
-        tk.Button(right_footer, text="Cancel", font=FONT_LABEL, fg=COLORS["on_surface"], bg=COLORS["surface"], bd=1, relief="solid", padx=sc(16), pady=sc(4), cursor="hand2", command=win.destroy).pack(side="left", padx=sc(8), pady=sc(12))
-        
-        apply_btn = tk.Button(right_footer, text="Apply Filter  |  Ctrl+Enter", font=FONT_LABEL, fg=COLORS["on_primary"], bg=COLORS["botanical_green"], bd=0, relief="flat", padx=sc(16), pady=sc(4), cursor="hand2", command=lambda: self.apply_filter(win))
+        tk.Button(right_footer, text="Cancel", font=FONT_LABEL, fg=COLORS["on_surface"], bg=COLORS["surface"], bd=1, relief="solid", padx=sc(
+            16), pady=sc(4), cursor="hand2", command=win.destroy).pack(side="left", padx=sc(8), pady=sc(12))
+
+        apply_btn = tk.Button(right_footer, text="Apply Filter  |  Ctrl+Enter", font=FONT_LABEL,
+                              fg=COLORS["on_primary"], bg=COLORS["botanical_green"], bd=0, relief="flat", padx=sc(16), pady=sc(4), cursor="hand2", command=lambda: self.apply_filter(win))
         apply_btn.pack(side="left", pady=sc(12))
 
         # Focus handling for keyboard
@@ -7497,20 +7686,23 @@ class ObjectProgramUI(
                                 all_inputs.append(child)
         self._filter_widgets = all_inputs
         self._filter_index = 0
-        
+
         utils.center_and_fit_toplevel(win, sc(800), sc(600))
 
     def save_filter_preset(self):
         from tkinter import simpledialog
-        name = simpledialog.askstring("Save Preset", "Enter preset name:", parent=self.filter_window)
+        name = simpledialog.askstring(
+            "Save Preset", "Enter preset name:", parent=self.filter_window)
         if name:
-            import json, os
+            import json
+            import os
             preset = {
                 "vars": {k: v.get() for k, v in self.filter_vars.items() if isinstance(v, tk.BooleanVar) and v.get()},
                 "locs": {k: v.get() for k, v in self.filter_location_vars.items() if v.get()},
                 "mode": self.filter_mode.get()
             }
-            presets_file = os.path.join(os.path.dirname(_PREFS_PATH), "filter_presets.json")
+            presets_file = os.path.join(os.path.dirname(
+                _PREFS_PATH), "filter_presets.json")
             try:
                 if os.path.exists(presets_file):
                     with open(presets_file, "r", encoding="utf-8") as f:
@@ -7525,37 +7717,40 @@ class ObjectProgramUI(
                 self.show_banner(f"Failed to save preset: {e}", "error")
 
     def load_filter_preset(self):
-        import json, os
-        presets_file = os.path.join(os.path.dirname(_PREFS_PATH), "filter_presets.json")
+        import json
+        import os
+        presets_file = os.path.join(os.path.dirname(
+            _PREFS_PATH), "filter_presets.json")
         if not os.path.exists(presets_file):
             self.show_banner("No presets saved yet.", "info")
             return
-            
+
         with open(presets_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-            
+
         if not data:
             return
-            
+
         win = tk.Toplevel(self.filter_window)
         win.title("Load Preset")
         import utils
         utils.center_and_fit_toplevel(win, 250, 300)
-        
+
         lb = tk.Listbox(win)
         lb.pack(fill="both", expand=True, padx=10, pady=10)
         for k in data.keys():
             lb.insert("end", k)
-            
+
         def on_load():
             sel = lb.curselection()
-            if not sel: return
+            if not sel:
+                return
             name = lb.get(sel[0])
             preset = data[name]
-            
+
             # Clear current
             self.clear_filter(self.filter_window, destroy_win=False)
-            
+
             # Apply preset
             for k, v in preset.get("vars", {}).items():
                 if k in self.filter_vars:
@@ -7576,11 +7771,12 @@ class ObjectProgramUI(
                     self.filter_mode.set("OR")
             else:
                 self.filter_mode.set("AND")
-                    
+
             self.update_filter_button_text()
             win.destroy()
-            
-        ttk.Button(win, text="Load", command=on_load, cursor="hand2").pack(pady=10)
+
+        ttk.Button(win, text="Load", command=on_load,
+                   cursor="hand2").pack(pady=10)
 
     def _filter_nav_down(self, event):
         if not hasattr(self, "_filter_widgets"):
@@ -7595,7 +7791,6 @@ class ObjectProgramUI(
 
         return "break"
 
-
     def _filter_nav_up(self, event):
         if not hasattr(self, "_filter_widgets"):
             return
@@ -7609,19 +7804,18 @@ class ObjectProgramUI(
 
         return "break"
 
-
     def _filter_activate(self, event):
         widget = self.root.focus_get()
 
         try:
-            widget.invoke()  
+            widget.invoke()
         except Exception as e:
             debug_error("Suppressed Error", str(e))
             pass
 
         return "break"
 
-#----------
+# ----------
 
     def is_problem_active(self, oid, prob_col):
         obs_dict = self._get_obs_dict() if hasattr(self, "_get_obs_dict") else None
@@ -7636,7 +7830,8 @@ class ObjectProgramUI(
                 obs_row = {}
         elif hasattr(self, "obs_by_id") and self.obs_by_id is not None and oid in self.obs_by_id.index:
             r = self.obs_by_id.loc[oid]
-            obs_row = r.iloc[0].to_dict() if isinstance(r, pd.DataFrame) else r.to_dict()
+            obs_row = r.iloc[0].to_dict() if isinstance(
+                r, pd.DataFrame) else r.to_dict()
 
         if prob_col == "Other_problem":
             return bool(obs_row.get(prob_col, False))
@@ -7665,7 +7860,8 @@ class ObjectProgramUI(
                 reg_row = {}
         elif hasattr(self, "reg_by_id") and self.reg_by_id is not None and oid in self.reg_by_id.index:
             r = self.reg_by_id.loc[oid]
-            reg_row = r.iloc[0].to_dict() if isinstance(r, pd.DataFrame) else r.to_dict()
+            reg_row = r.iloc[0].to_dict() if isinstance(
+                r, pd.DataFrame) else r.to_dict()
 
         value = obs_row.get(prob_col, False)
         if isinstance(value, pd.Series):
@@ -7683,9 +7879,6 @@ class ObjectProgramUI(
             if isinstance(raw_val, pd.Series):
                 raw_val = raw_val.iloc[0]
 
-
-
-           
             is_missing = (
                 pd.isna(raw_val) or
                 (isinstance(raw_val, str) and raw_val.strip() == "")
@@ -7698,7 +7891,7 @@ class ObjectProgramUI(
         return obs_val or auto_val
 
 
-#-------
+# -------
 
     def build_filter_state(self):
         return {
@@ -7707,7 +7900,7 @@ class ObjectProgramUI(
             "mode": self.filter_mode.get(),
         }
 
-#----
+# ----
 
     def apply_filter(self, win):
 
@@ -7728,7 +7921,6 @@ class ObjectProgramUI(
             "Unknown": []
         }
 
-       
         for key, var in self.filter_vars.items():
             if not var.get():
                 continue
@@ -7752,7 +7944,6 @@ class ObjectProgramUI(
         if filter_state["unknown"]:
             groups["Unknown"].append("Unknown")
 
-
         win.destroy()
 
         # PERFORMANCE OPTIMIZATION (Bolt): Converting DataFrames to dictionary structures once
@@ -7766,7 +7957,8 @@ class ObjectProgramUI(
         if (history_set is None or len(history_set) == 0) and getattr(self.app, "historical_dbs", None) and hasattr(self, "collect_historical_suggestions"):
             history_set = set()
             for oid in getattr(self.app, "active_object_ids", []):
-                sug = self.collect_historical_suggestions(oid, show_all_override=False)
+                sug = self.collect_historical_suggestions(
+                    oid, show_all_override=False)
                 if sug and any(list(v.keys()) != ["(No data found)"] for v in sug.values()):
                     history_set.add(oid)
                     s_oid = str(oid)
@@ -7808,7 +8000,6 @@ class ObjectProgramUI(
         self.refresh_list()  # apply_filter must actually update the list
         self.update_filter_button_text()
 
-     
         if hasattr(self, "filter_status_label"):
             total = len(self.app.df_reg)
             shown = len(matched)
@@ -7827,7 +8018,7 @@ class ObjectProgramUI(
 
             self.object_list.event_generate("<<ListboxSelect>>")
 
-#----
+# ----
 
     def has_any_problem(self, oid, include_image_problems=True):
         for p in self.problem_columns:
@@ -7841,12 +8032,10 @@ class ObjectProgramUI(
         return False
 
 
+# ----
 
-#----
-        
     def get_object_status(self, oid):
 
- 
         if self.image_mode == "online":
             has_images = True
         elif self.image_mode == "offline":
@@ -7858,7 +8047,6 @@ class ObjectProgramUI(
             else:
                 has_images = not bool(val)
 
-   
         has_problem = self.has_any_problem(oid)
 
         return {
@@ -7866,7 +8054,7 @@ class ObjectProgramUI(
             "has_problem": has_problem,
         }
 
-#----
+# ----
 
     def clear_filter(self, win, destroy_win=True):
         for v in self.filter_vars.values():
@@ -7891,7 +8079,6 @@ class ObjectProgramUI(
 
         if destroy_win and win:
             win.destroy()
-
 
     def _get_cached_problem(self, oid):
         """Returns True if the object has any checked problem checkbox. Result is cached."""
@@ -7922,7 +8109,7 @@ class ObjectProgramUI(
         """Returns True if object appears in any loaded historical database."""
         if not self.app.historical_dbs:
             return False
-            
+
         try:
             lookup_key = int(oid) if str(oid).isdigit() else oid
         except Exception:
@@ -7940,7 +8127,7 @@ class ObjectProgramUI(
         """Debounce: wait 250ms after last keystroke before filtering."""
         # Ignore non-text navigation/modifier keys
         if event and event.keysym in (
-            "Up", "Down", "Return", "Escape", "Tab", 
+            "Up", "Down", "Return", "Escape", "Tab",
             "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R",
             "Left", "Right", "Home", "End"
         ):
@@ -7953,7 +8140,8 @@ class ObjectProgramUI(
 
         if self._inline_search_job:
             self.root.after_cancel(self._inline_search_job)
-        self._inline_search_job = self.root.after(250, self._apply_inline_search)
+        self._inline_search_job = self.root.after(
+            250, self._apply_inline_search)
 
     def _apply_inline_search(self):
         self._is_applying_search = True
@@ -7979,7 +8167,8 @@ class ObjectProgramUI(
 
             total = len(self.app.df_reg) if self.app.df_reg is not None else 0
             color = "green" if matched else "red"
-            self._search_count_label.config(text=f"{len(matched)}/{total}", foreground=color)
+            self._search_count_label.config(
+                text=f"{len(matched)}/{total}", foreground=color)
         finally:
             self._is_applying_search = False
 
@@ -8002,7 +8191,8 @@ class ObjectProgramUI(
     def _search_focus_out(self, event=None):
         if not self._inline_search_var.get().strip():
             self._inline_search_entry.delete(0, tk.END)
-            self._inline_search_entry.insert(0, self._inline_search_placeholder)
+            self._inline_search_entry.insert(
+                0, self._inline_search_placeholder)
             self._inline_search_entry.config(foreground="gray")
 
     def _on_search_arrow_down(self, event=None):
@@ -8014,7 +8204,7 @@ class ObjectProgramUI(
             new_idx = min(curr_idx + 1, len(self.app.active_object_ids) - 1)
         else:
             new_idx = 0
-            
+
         self.object_list.selection_clear(0, tk.END)
         self.object_list.selection_set(new_idx)
         self.object_list.see(new_idx)
@@ -8029,7 +8219,7 @@ class ObjectProgramUI(
             new_idx = max(curr_idx - 1, 0)
         else:
             new_idx = 0
-            
+
         self.object_list.selection_clear(0, tk.END)
         self.object_list.selection_set(new_idx)
         self.object_list.see(new_idx)
@@ -8068,21 +8258,21 @@ class ObjectProgramUI(
             self.object_list.see(0)
         else:
             return
-        
+
         oid = self.app.active_object_ids[idx]
-        
+
         # Commit current changes before loading the new object
         if not self._is_navigating:
             self._is_navigating = True
             self.commit_current_object()
-            
+
         if self._nav_idle_job:
             try:
                 self.root.after_cancel(self._nav_idle_job)
             except Exception:
                 pass
         self._nav_idle_job = self.root.after(150, self._navigation_finished)
-        
+
         self.load_object(oid)
 
     def _is_searching(self):
@@ -8112,21 +8302,22 @@ class ObjectProgramUI(
                 self.object_list.selection_set(iid)
                 self.object_list.focus(iid)
                 self.load_object(iid)
-            
+
             self.context_menu.post(event.x_root, event.y_root)
 
     def _context_set_reviewed(self, value: bool):
         selection = self.object_list.selection()
         if not selection:
             return
-        
+
         self.push_undo_state()
-        
+
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if value else ""
-        
+
         for oid in selection:
             try:
-                lookup_key = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_obs.index else oid
+                lookup_key = int(oid) if str(oid).isdigit() and int(
+                    oid) in self.app.df_obs.index else oid
             except Exception:
                 lookup_key = oid
 
@@ -8154,13 +8345,14 @@ class ObjectProgramUI(
                 self.object_list.item(oid, values=current_vals)
 
             self.update_list_item_color(oid)
-            self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'], oid=lookup_key)
-            
+            self.log_action("REVIEWED" if value else "NOT_REVIEWED", [
+                            "Reviewed"], [f'Reviewed: "{value}"'], oid=lookup_key)
+
         self.app.dirty = True
         self.update_dirty_ui()
         self.update_review_progress()
         self.update_reviewed_button_state()
-        
+
         current_oid = self.app.current_object_id
         if current_oid in selection:
             self.load_object(current_oid)
@@ -8177,8 +8369,10 @@ class ObjectProgramUI(
         # Use cached dicts; rebuild only when data has changed (_row_cache_dirty).
         # This avoids expensive full-DF to_dict() on every filter/search/review.
         if getattr(self, "_row_cache_dirty", True) or self._cached_reg_dict is None:
-            self._cached_reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
-            self._cached_obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
+            self._cached_reg_dict = reg_df.to_dict(
+                orient="index") if reg_df is not None else {}
+            self._cached_obs_dict = obs_df.to_dict(
+                orient="index") if obs_df is not None else {}
             self._cached_reviewed_dict = (
                 obs_df[REVIEWED_COLUMN].to_dict()
                 if obs_df is not None and REVIEWED_COLUMN in obs_df.columns
@@ -8197,12 +8391,10 @@ class ObjectProgramUI(
             self._row_cache_dirty = False
 
         reviewed_dict = self._cached_reviewed_dict
-        genus_dict    = self._cached_genus_dict
-        species_dict  = self._cached_species_dict
-        reg_dict      = self._cached_reg_dict
-        obs_dict      = self._cached_obs_dict
-
-
+        genus_dict = self._cached_genus_dict
+        species_dict = self._cached_species_dict
+        reg_dict = self._cached_reg_dict
+        obs_dict = self._cached_obs_dict
 
         # Is image mode folder?
         include_image_problems = (self.image_mode == "folder")
@@ -8211,7 +8403,8 @@ class ObjectProgramUI(
         # pre-built by _precompute_startup_caches() on the background thread.
         # The pre-built cache covers all active objects; we only run the O(N×M) loop
         # when the cache is stale (e.g. after a user edit or image scan completion).
-        cache_complete = len(self._problem_cache) >= len(self.app.active_object_ids)
+        cache_complete = len(self._problem_cache) >= len(
+            self.app.active_object_ids)
 
         if not cache_complete:
             # Clear and re-compute problem cache for active objects
@@ -8248,7 +8441,8 @@ class ObjectProgramUI(
                                 raw_val = reg_row.get(field, "")
                                 is_missing = (
                                     pd.isna(raw_val) or
-                                    (isinstance(raw_val, str) and raw_val.strip() == "")
+                                    (isinstance(raw_val, str)
+                                     and raw_val.strip() == "")
                                 )
                                 is_unknown = self.is_unknown(raw_val)
                                 auto_val = is_missing and not is_unknown
@@ -8269,12 +8463,16 @@ class ObjectProgramUI(
         for i, oid in enumerate(self.app.active_object_ids):
             genus = str(genus_dict.get(oid, "")).strip()
             species = str(species_dict.get(oid, "")).strip()
-            if genus == "nan" or genus == "None": genus = ""
-            if species == "nan" or species == "None": species = ""
+            if genus == "nan" or genus == "None":
+                genus = ""
+            if species == "nan" or species == "None":
+                species = ""
 
             parts = [str(oid)]
-            if genus: parts.append(genus)
-            if species: parts.append(species)
+            if genus:
+                parts.append(genus)
+            if species:
+                parts.append(species)
             title = " ".join(parts)
 
             reviewed = bool(reviewed_dict.get(oid, False))
@@ -8292,12 +8490,12 @@ class ObjectProgramUI(
                 color = "#d9534f"
 
             # PERFORMANCE OPTIMIZATION (Bolt): Pass pre-calculated color directly to bypass itemconfig Tcl queries entirely.
-            self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed, color=color, bulk=True)
+            self.object_list.insert(
+                tk.END, title, genus=genus, species=species, reviewed=reviewed, color=color, bulk=True)
 
         # Trigger lazy deferred card building if in detailed view mode
         if getattr(self.object_list, "active_view", None) == "detailed":
             self.object_list._schedule_viewport_update()
-
 
     def update_filter_button_text(self):
         active = [k for k, v in self.filter_vars.items() if v.get()]
@@ -8318,7 +8516,6 @@ class ObjectProgramUI(
             self.filter_btn.config(text=f"Filter ({len(active)}): {short}")
         else:
             self.filter_btn.config(text="Filter")
-
 
     def _quick_filter(self, mode):
         for v in self.filter_vars.values():
@@ -8363,7 +8560,8 @@ class ObjectProgramUI(
         self.app.df_obs.loc[ids, REVIEWED_AT_COLUMN] = now
 
         for oid in ids:
-            self.log_action("REVIEWED" if value else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{value}"'], oid=oid)
+            self.log_action("REVIEWED" if value else "NOT_REVIEWED", [
+                            "Reviewed"], [f'Reviewed: "{value}"'], oid=oid)
 
         self.app.dirty = True
         self.update_dirty_ui()
@@ -8382,7 +8580,6 @@ class ObjectProgramUI(
 
     def open_recent_popup(self):
         self.open_recent_activity_window(default_tab=0)
-
 
 
 # ---- Export filtered list
@@ -8413,7 +8610,8 @@ class ObjectProgramUI(
             ids = self.app.active_object_ids
             df_reg_exp = self.app.df_reg.loc[ids].reset_index()
             df_obs_exp = self.app.df_obs.loc[ids].reset_index()
-            df_merged = df_reg_exp.merge(df_obs_exp, on="ObjectID", suffixes=("", "_obs"))
+            df_merged = df_reg_exp.merge(
+                df_obs_exp, on="ObjectID", suffixes=("", "_obs"))
 
             from utils import sanitize_df_for_excel
             df_merged_safe = sanitize_df_for_excel(df_merged)
@@ -8504,8 +8702,10 @@ class ObjectProgramUI(
                         value = widget.get()
                     self._copied_field_name = name
                     self._copied_field_value = value
-                    preview = (value[:40] + "...") if len(value) > 40 else value
-                    self.system_status.config(text=f"Copied [{name}]: {preview}")
+                    preview = (
+                        value[:40] + "...") if len(value) > 40 else value
+                    self.system_status.config(
+                        text=f"Copied [{name}]: {preview}")
                 except Exception:
                     pass
                 break
@@ -8514,7 +8714,8 @@ class ObjectProgramUI(
 
     def _paste_field_value(self, event=None):
         if not hasattr(self, "_copied_field_name") or not hasattr(self, "_copied_field_value"):
-            self.system_status.config(text="Nothing copied use Ctrl+Shift+C first")
+            self.system_status.config(
+                text="Nothing copied use Ctrl+Shift+C first")
             return "break"
 
         name = self._copied_field_name
@@ -8543,10 +8744,6 @@ class ObjectProgramUI(
 # ---- Statistics
 
 
-
-
-
-
 # ---- Clear filter quick
 
     def _clear_filter_quick(self):
@@ -8571,51 +8768,51 @@ class ObjectProgramUI(
 # Main
 # =====================
 
-
-
     def go_back(self):
         if not self.history_stack:
             return
-        
+
         current = self.app.current_object_id
         if current:
             self.forward_stack.append(current)
-            
+
         oid = self.history_stack.pop()
-        
+
         self.object_list.selection_clear(0, tk.END)
         if oid in self.app.active_object_ids:
             idx = self.app.active_object_ids.index(oid)
             self.object_list.selection_set(idx)
             self.object_list.see(idx)
-            
+
         self.load_object(oid, is_history_nav=True)
 
     def go_forward(self):
         if not self.forward_stack:
             return
-            
+
         current = self.app.current_object_id
         oid = self.forward_stack.pop()
-        
+
         if current:
             self.history_stack.append(current)
             if len(self.history_stack) > 50:
                 self.history_stack.pop(0)
-            
+
         self.object_list.selection_clear(0, tk.END)
         if oid in self.app.active_object_ids:
             idx = self.app.active_object_ids.index(oid)
             self.object_list.selection_set(idx)
             self.object_list.see(idx)
-            
+
         self.load_object(oid, is_history_nav=True)
 
     def update_navigation_buttons(self):
         if hasattr(self, "back_btn") and self.back_btn:
-            self.back_btn.config(state="normal" if self.history_stack else "disabled")
+            self.back_btn.config(
+                state="normal" if self.history_stack else "disabled")
         if hasattr(self, "forward_btn") and self.forward_btn:
-            self.forward_btn.config(state="normal" if self.forward_stack else "disabled")
+            self.forward_btn.config(
+                state="normal" if self.forward_stack else "disabled")
 
     def snap_to_place(self, shrink=True):
         """
@@ -8627,6 +8824,7 @@ class ObjectProgramUI(
             if shrink:
                 # Save the last manual sash position before shrinking
                 self._last_manual_middle_sash = self.middle_panes.sashpos(0)
+
                 def _do_shrink():
                     try:
                         self.root.update_idletasks()
@@ -8638,7 +8836,8 @@ class ObjectProgramUI(
                 def _do_restore():
                     try:
                         if hasattr(self, "_last_manual_middle_sash"):
-                            self.middle_panes.sashpos(0, self._last_manual_middle_sash)
+                            self.middle_panes.sashpos(
+                                0, self._last_manual_middle_sash)
                     except Exception:
                         pass
                 self.root.after(50, _do_restore)
@@ -8648,30 +8847,33 @@ class ObjectProgramUI(
     def update_reg_fields_visibility(self, skip_snap=False):
         if not self.object_loaded:
             return
-            
+
         focus_active = self.focus_mode_var.get()
         focus_fallback = self.focus_fallback_var.get()
-        
+
         # Committing problem changes instantly to update status color coding
         oid = self.app.current_object_id
         if oid and not self.loading_object:
             self.commit_current_object(skip_heavy=True)
-            
+
         active_problem_fields = set()
         for prob_col, mapped_field in self.problem_to_field.items():
             if self.problem_vars.get(prob_col) and self.problem_vars[prob_col].get():
                 active_problem_fields.add(mapped_field)
-                
+
         # Location and Problems sections visibility
         if hasattr(self, "loc_container") and hasattr(self, "prob_container"):
-            show_loc = not (focus_active and not self.focus_visibility_vars.get("Location", tk.BooleanVar(value=True)).get())
-            show_prob = not (focus_active and not self.focus_visibility_vars.get("Problems", tk.BooleanVar(value=True)).get())
-            
+            show_loc = not (focus_active and not self.focus_visibility_vars.get(
+                "Location", tk.BooleanVar(value=True)).get())
+            show_prob = not (focus_active and not self.focus_visibility_vars.get(
+                "Problems", tk.BooleanVar(value=True)).get())
+
             # Repack location components safely
             self.loc_container.pack_forget()
 
             # Check if location should be in the left column or center column
-            loc_in_center = hasattr(self, 'location_in_center_var') and self.location_in_center_var.get()
+            loc_in_center = hasattr(
+                self, 'location_in_center_var') and self.location_in_center_var.get()
 
             if show_loc and not loc_in_center:
                 if str(self.left_bottom_container) not in self.left_panes.panes():
@@ -8683,36 +8885,39 @@ class ObjectProgramUI(
                 # So we just ensure it's not in the left pane.
                 if str(self.left_bottom_container) in self.left_panes.panes():
                     self.left_panes.forget(self.left_bottom_container)
-                
+
             if show_prob:
                 try:
-                    self.reg_notebook.add(self._reg_tabs["Problems"]["container"])
+                    self.reg_notebook.add(
+                        self._reg_tabs["Problems"]["container"])
                 except Exception:
                     pass
             else:
                 try:
-                    self.reg_notebook.hide(self._reg_tabs["Problems"]["container"])
+                    self.reg_notebook.hide(
+                        self._reg_tabs["Problems"]["container"])
                 except Exception:
                     pass
-                
+
         visible_count = 0
-        
+
         # Registration fields
         for field in self.app.config["ui_sections"]["registration"]:
             name = field["name"]
             frame = self.reg_row_frames.get(name)
             if not frame:
                 continue
-            
+
             is_visible = True
             if focus_active:
-                field_toggle = self.focus_visibility_vars.get(name, tk.BooleanVar(value=True)).get()
+                field_toggle = self.focus_visibility_vars.get(
+                    name, tk.BooleanVar(value=True)).get()
                 has_problem = (name in active_problem_fields)
                 if focus_fallback and has_problem:
                     is_visible = True
                 else:
                     is_visible = field_toggle
-                    
+
             if is_visible:
                 if frame.winfo_manager() != "grid":
                     frame.grid()
@@ -8720,7 +8925,6 @@ class ObjectProgramUI(
             else:
                 if frame.winfo_manager() == "grid":
                     frame.grid_remove()
-                
 
         # Unknown/missing values section
         if hasattr(self, "unknown_fields_container"):
@@ -8728,7 +8932,7 @@ class ObjectProgramUI(
             is_visible = True
             if focus_active:
                 is_visible = False
-                
+
             if is_visible:
                 if frame.winfo_manager() != "grid":
                     frame.grid()
@@ -8736,7 +8940,7 @@ class ObjectProgramUI(
             else:
                 if frame.winfo_manager() == "grid":
                     frame.grid_remove()
-            
+
         # Sjekk om i det hele tatt noe er synlig (only run when Focus Mode is active)
         if focus_active:
             for field_name, check_var in self.focus_visibility_vars.items():
@@ -8745,11 +8949,13 @@ class ObjectProgramUI(
                     if frame.winfo_manager() == "grid":
                         visible_count -= 1
                     frame.grid_remove()
-                
+
         if focus_active and visible_count <= 0:
-            self.no_problems_msg_label.config(text="No fields visible in Focus mode.")
+            self.no_problems_msg_label.config(
+                text="No fields visible in Focus mode.")
             if self.no_problems_msg_label.winfo_manager() != "grid":
-                self.no_problems_msg_label.grid(row=0, column=0, pady=15, sticky="ew")
+                self.no_problems_msg_label.grid(
+                    row=0, column=0, pady=15, sticky="ew")
         else:
             if self.no_problems_msg_label.winfo_manager() == "grid":
                 self.no_problems_msg_label.grid_remove()
@@ -8776,15 +8982,13 @@ class ObjectProgramUI(
         if not skip_snap and self.snap_lock_var.get():
             self.snap_to_place(shrink=focus_active)
 
-
-
-
     def _refresh_field_background(self, field_name):
         widget = self.reg_entries.get(field_name)
         if not widget:
             return
 
-        is_dark = getattr(self, "dark_mode_active", self.app.config.get("theme", "dark") == "dark")
+        is_dark = getattr(self, "dark_mode_active",
+                          self.app.config.get("theme", "dark") == "dark")
         norm_bg = "#212622" if is_dark else "#ffffff"
         warn_bg = "#5c4d00" if is_dark else "#fff3cd"
         err_bg = "#5c1e1e" if is_dark else "#f8d7da"
@@ -8816,10 +9020,11 @@ class ObjectProgramUI(
                 import config
                 advanced_prefs = config.load_prefs().get("advanced", {})
                 if advanced_prefs.get("enable_problem_highlights", True):
-                    hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+                    hl_color_name = advanced_prefs.get(
+                        "problem_highlight_color", "Default (Red)")
             except Exception:
                 pass
-            
+
             if "Yellow" in hl_color_name:
                 tint = "#5f5b2e" if is_dark else "#fff9c4"
             elif "Orange" in hl_color_name:
@@ -8871,8 +9076,8 @@ class ObjectProgramUI(
                 else:
                     widget.configure(style="TEntry")
         except Exception as e:
-            debug_error("Suppressed Error in _refresh_field_background", str(e))
-
+            debug_error(
+                "Suppressed Error in _refresh_field_background", str(e))
 
     def _validate_fields(self, event=None):
         if self._is_navigating or self.loading_object:
@@ -8881,11 +9086,10 @@ class ObjectProgramUI(
         for f_name in self.reg_entries.keys():
             self._refresh_field_background(f_name)
 
-
     def _run_fuzzy_match(self, field_name, widget):
         if field_name not in ["Genus", "Species"]:
             return
-            
+
         val = self.reg_vars[field_name].get().strip()
         if not val or len(val) < 3:
             if hasattr(widget, "fuzzy_label"):
@@ -8896,26 +9100,27 @@ class ObjectProgramUI(
         history = self.current_object_suggestions.get(field_name, [])
         if not history:
             return
-            
+
         import difflib
         # Look for close matches that are NOT the exact typed value
         matches = difflib.get_close_matches(val, history, n=1, cutoff=0.7)
-        
+
         if matches and matches[0].lower() != val.lower():
             suggestion = matches[0]
             if hasattr(widget, "fuzzy_label"):
                 widget.fuzzy_label.destroy()
-            
-            lbl = ttk.Label(widget.master, text=f"Did you mean '{suggestion}'?", foreground="#4dabf7", font=("Segoe UI", 8, "underline"), cursor="hand2")
+
+            lbl = ttk.Label(widget.master, text=f"Did you mean '{suggestion}'?", foreground="#4dabf7", font=(
+                "Segoe UI", 8, "underline"), cursor="hand2")
             lbl.grid(row=1, column=1, sticky="w")
-            
+
             def apply_suggestion(e, s=suggestion, w=widget, n=field_name):
                 self.reg_vars[n].set(s)
                 self.commit_current_object()
                 w.fuzzy_label.destroy()
                 delattr(w, "fuzzy_label")
                 self._validate_fields()
-                
+
             lbl.bind("<Button-1>", apply_suggestion)
             widget.fuzzy_label = lbl
         else:
@@ -8947,19 +9152,11 @@ class ObjectProgramUI(
         if isinstance(widget, ttk.Combobox):
             widget.configure(values=filtered)
 
-
-
-
-
-
-
-
-
-
     def set_status_badge(self, status_type, text=""):
         if not hasattr(self, "data_status") or not self.data_status:
             return
-        colors = self.status_badge_colors.get(status_type, {"bg": "#f0f0f0", "fg": "black"})
+        colors = self.status_badge_colors.get(
+            status_type, {"bg": "#f0f0f0", "fg": "black"})
         self.data_status.config(
             text=f" {text} ",
             background=colors["bg"],
@@ -8971,17 +9168,18 @@ class ObjectProgramUI(
         # Update LAST_SAVE in status bar when saved
         if status_type in ("saved", "autosaved") and hasattr(self, "_status_bar_labels"):
             ts = datetime.now().strftime("%H:%M:%S")
-            self._status_bar_labels["last_save"].config(text=f"LAST_SAVE: {ts}")
+            self._status_bar_labels["last_save"].config(
+                text=f"LAST_SAVE: {ts}")
 
     def sort_column(self, col):
         if self.app.df_reg is None or not self.app.active_object_ids:
             return
-            
+
         ascending = self.sort_directions.get(col, True)
         self.sort_directions[col] = not ascending
-        
+
         ids = self.app.active_object_ids
-        
+
         # Pre-fetch dicts outside loops
         reg_dict = self._get_reg_dict()
         obs_dict = self._get_obs_dict()
@@ -8995,6 +9193,7 @@ class ObjectProgramUI(
             sorted_ids = sorted(ids, key=id_key, reverse=not ascending)
         elif col == "Genus":
             genus_dict = getattr(self, "_cached_genus_dict", None)
+
             def get_genus(oid):
                 if genus_dict is not None and oid in genus_dict:
                     return str(genus_dict[oid] or "").lower()
@@ -9003,6 +9202,7 @@ class ObjectProgramUI(
             sorted_ids = sorted(ids, key=get_genus, reverse=not ascending)
         elif col == "Species":
             species_dict = getattr(self, "_cached_species_dict", None)
+
             def get_species(oid):
                 if species_dict is not None and oid in species_dict:
                     return str(species_dict[oid] or "").lower()
@@ -9015,7 +9215,7 @@ class ObjectProgramUI(
                 reviewed = bool(row.get(REVIEWED_COLUMN, False))
                 has_problem = self._get_cached_problem(oid)
                 has_history = self._problems_have_history(oid)
-                
+
                 if reviewed and has_problem:
                     return 1
                 elif reviewed:
@@ -9027,27 +9227,24 @@ class ObjectProgramUI(
                 else:
                     return 5
             sorted_ids = sorted(ids, key=status_key, reverse=not ascending)
-            
+
         self.app.active_object_ids = sorted_ids
         self._list_dirty = True
         self.refresh_list()
-        
+
         oid = self.app.current_object_id
         if oid and oid in self.app.active_object_ids:
             idx = self.app.active_object_ids.index(oid)
             self.object_list.selection_clear(0, tk.END)
             self.object_list.selection_set(idx)
             self.object_list.see(idx)
-            
+
         dir_char = "â–²" if ascending else "â–¼"
         self.system_status.config(text=f"Sorted by {col} {dir_char}")
-
 
     def _bind_canvas_mousewheel(self, canvas, handler):
         """Bind mousewheel to a canvas without touching any child bindtags."""
         canvas.bind("<MouseWheel>", handler)
-
-
 
     def _on_reviewed_clicked(self):
         """Mark as reviewed and automatically advance if autoAdvanceOnReview is enabled."""
@@ -9061,14 +9258,14 @@ class ObjectProgramUI(
             except Exception:
                 pass
             self._btn_anim_id = None
-        
+
         try:
             start_bg = self.reviewed_button.cget("bg")
             start_fg = self.reviewed_button.cget("fg")
         except Exception:
             start_bg = target_bg
             start_fg = target_fg
-            
+
         def parse_color(c):
             try:
                 r_16, g_16, b_16 = self.reviewed_button.winfo_rgb(c)
@@ -9086,10 +9283,10 @@ class ObjectProgramUI(
         start_fg_rgb = parse_color(start_fg)
         target_bg_rgb = parse_color(target_bg)
         target_fg_rgb = parse_color(target_fg)
-        
+
         steps = 8
         interval = 10
-        
+
         def step(current_step):
             if not self.root.winfo_exists() or not self.reviewed_button.winfo_exists():
                 self._btn_anim_id = None
@@ -9101,26 +9298,33 @@ class ObjectProgramUI(
                     pass
                 self._btn_anim_id = None
                 return
-            
+
             p = current_step / steps
-            bg_r = int(start_bg_rgb[0] + (target_bg_rgb[0] - start_bg_rgb[0]) * p)
-            bg_g = int(start_bg_rgb[1] + (target_bg_rgb[1] - start_bg_rgb[1]) * p)
-            bg_b = int(start_bg_rgb[2] + (target_bg_rgb[2] - start_bg_rgb[2]) * p)
-            
-            fg_r = int(start_fg_rgb[0] + (target_fg_rgb[0] - start_fg_rgb[0]) * p)
-            fg_g = int(start_fg_rgb[1] + (target_fg_rgb[1] - start_fg_rgb[1]) * p)
-            fg_b = int(start_fg_rgb[2] + (target_fg_rgb[2] - start_fg_rgb[2]) * p)
-            
+            bg_r = int(start_bg_rgb[0] +
+                       (target_bg_rgb[0] - start_bg_rgb[0]) * p)
+            bg_g = int(start_bg_rgb[1] +
+                       (target_bg_rgb[1] - start_bg_rgb[1]) * p)
+            bg_b = int(start_bg_rgb[2] +
+                       (target_bg_rgb[2] - start_bg_rgb[2]) * p)
+
+            fg_r = int(start_fg_rgb[0] +
+                       (target_fg_rgb[0] - start_fg_rgb[0]) * p)
+            fg_g = int(start_fg_rgb[1] +
+                       (target_fg_rgb[1] - start_fg_rgb[1]) * p)
+            fg_b = int(start_fg_rgb[2] +
+                       (target_fg_rgb[2] - start_fg_rgb[2]) * p)
+
             color_bg = f"#{bg_r:02x}{bg_g:02x}{bg_b:02x}"
             color_fg = f"#{fg_r:02x}{fg_g:02x}{fg_b:02x}"
-            
+
             try:
                 self.reviewed_button.config(bg=color_bg, fg=color_fg)
             except Exception:
                 pass
-                
-            self._btn_anim_id = self.root.after(interval, lambda: step(current_step + 1))
-            
+
+            self._btn_anim_id = self.root.after(
+                interval, lambda: step(current_step + 1))
+
         step(0)
 
     def update_reviewed_button_state(self):
@@ -9145,17 +9349,19 @@ class ObjectProgramUI(
         is_reviewed = bool(self.reviewed_var.get())
 
         if hasattr(self, "clear_problems_var") and hasattr(self, "problem_vars"):
-            all_clear = all(not var.get() for var in self.problem_vars.values())
+            all_clear = all(not var.get()
+                            for var in self.problem_vars.values())
             self.clear_problems_var.set(all_clear and is_reviewed)
 
         if is_reviewed:
             reviewed_at = ""
             if self.app.df_obs is not None and oid in self.app.df_obs.index:
                 try:
-                    reviewed_at = str(self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN])
+                    reviewed_at = str(
+                        self.app.df_obs.loc[oid, REVIEWED_AT_COLUMN])
                 except Exception:
                     pass
-            
+
             time_str = ""
             if reviewed_at and reviewed_at != "nan":
                 parts = reviewed_at.split()
@@ -9163,7 +9369,7 @@ class ObjectProgramUI(
                     time_str = parts[1][:5]
                 else:
                     time_str = reviewed_at[:5]
-            
+
             btn_text = f"✓ REVIEWED – {time_str}" if time_str else "✓ REVIEWED"
             self.reviewed_button.config(
                 text=btn_text,
@@ -9257,7 +9463,7 @@ class ObjectProgramUI(
 
     def _clear_problems_and_mark_reviewed(self, event=None):
         """Clear all problem flags for the current object and mark it as reviewed.
-        
+
         Stays on the current object — no navigation — so the user can verify
         the result before moving on.
         """
@@ -9308,11 +9514,13 @@ class ObjectProgramUI(
         import config
         prefs = config.load_prefs() or {}
         advanced_prefs = prefs.get("advanced", {})
-        enable_hl = enable_hl_override if enable_hl_override is not None else prefs.get("enable_problem_highlights", advanced_prefs.get("enable_problem_highlights", True))
-        hl_color_name = color_override if color_override is not None else prefs.get("problem_highlight_color", advanced_prefs.get("problem_highlight_color", "Default (Red)"))
+        enable_hl = enable_hl_override if enable_hl_override is not None else prefs.get(
+            "enable_problem_highlights", advanced_prefs.get("enable_problem_highlights", True))
+        hl_color_name = color_override if color_override is not None else prefs.get(
+            "problem_highlight_color", advanced_prefs.get("problem_highlight_color", "Default (Red)"))
 
         is_dark = getattr(self, "dark_mode_active", False)
-        
+
         # Determine colors
         if not enable_hl:
             err_fg = "#e8ebe9" if is_dark else "#2c302e"
@@ -9336,8 +9544,8 @@ class ObjectProgramUI(
                 bar_active = "#c93a40" if not is_dark else "#c93a40"
                 tint = "#5c1e1e" if is_dark else "#ffdad6"
 
-        norm_fg     = "#e8ebe9" if is_dark else "#2c302e"
-        bar_normal  = "#1e1e2d" if is_dark else "#ffffff"  # matches card bg
+        norm_fg = "#e8ebe9" if is_dark else "#2c302e"
+        bar_normal = "#1e1e2d" if is_dark else "#ffffff"  # matches card bg
 
         # 1. Border bar (3px vertical indicator)
         bar = self.prob_border_bars.get(field_name)
@@ -9360,14 +9568,14 @@ class ObjectProgramUI(
 
         # 3. Entry / Combobox style
         self._refresh_field_background(field_name)
-                
+
         # Update accordion badges if any
         self._update_accordion_badges()
 
     def _update_accordion_badges(self):
         """Iterate all accordion cards/groups and count active problems within their fields."""
         field_to_problem = {v: k for k, v in self.problem_to_field.items()}
-        
+
         # Update card_frames accordion badges
         if hasattr(self, "card_frames"):
             for card_id, data in self.card_frames.items():
@@ -9413,27 +9621,29 @@ class ObjectProgramUI(
             prob_col = field_to_problem.get(field_name)
             if prob_col and prob_col in self.problem_vars:
                 is_active = bool(self.problem_vars[prob_col].get())
-                self._update_problem_row_style(field_name, is_active, enable_hl_override=enable_hl_override, color_override=color_override)
-        
+                self._update_problem_row_style(
+                    field_name, is_active, enable_hl_override=enable_hl_override, color_override=color_override)
+
         self._update_accordion_badges()
 
     def update_list_item_color(self, oid):
         if not self.app.active_object_ids or oid not in self.app.active_object_ids:
             return
-            
+
         if getattr(self, "_cached_reviewed_dict", None) is not None:
             reviewed = bool(self._cached_reviewed_dict.get(oid, False))
         elif getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
-            reviewed = bool(self._cached_obs_dict[oid].get(REVIEWED_COLUMN, False))
+            reviewed = bool(self._cached_obs_dict[oid].get(
+                REVIEWED_COLUMN, False))
         else:
             try:
                 reviewed = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
             except Exception:
                 reviewed = False
-            
+
         has_problem = self._get_cached_problem(oid)
         has_history = self._problems_have_history(oid)
-        
+
         color = None
         if reviewed:
             color = "#4CAF50" if self.dark_mode_active else "#2E7D32"
@@ -9443,15 +9653,15 @@ class ObjectProgramUI(
             color = "#f28b82" if self.dark_mode_active else "#C62828"
         elif has_history:
             color = "#5ab0e8" if self.dark_mode_active else "#0284C7"
-            
+
         current_tags = list(self.object_list.item(oid, "tags") or [])
         current_tags = [t for t in current_tags if not t.startswith("color_")]
-        
+
         if color:
             tag_name = f"color_{color.replace('#', '')}"
             self.object_list.tag_configure(tag_name, foreground=color)
             current_tags.append(tag_name)
-            
+
         self.object_list.item(oid, tags=current_tags)
 
         # Update checkbox symbol
@@ -9471,7 +9681,7 @@ class ObjectProgramUI(
             return
         was_reviewed = bool(self.reviewed_var.get())
         self._toggle_reviewed_for_id(oid)
-        
+
         # If toggled ON to Reviewed:
         if not was_reviewed:
             if self.autoAdvanceOnReview:
@@ -9486,21 +9696,23 @@ class ObjectProgramUI(
         if not oid:
             return
         self.push_undo_state()
-        
+
         # Toggle in df_obs
         try:
-            lookup_key = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_obs.index else oid
+            lookup_key = int(oid) if str(oid).isdigit() and int(
+                oid) in self.app.df_obs.index else oid
         except Exception:
             lookup_key = oid
 
         current = False
         if self.app.df_obs is not None and lookup_key in self.app.df_obs.index:
             try:
-                current = bool(self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN])
+                current = bool(
+                    self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN])
             except Exception:
                 pass
         new_val = not current
-        
+
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if new_val else ""
         self.app.df_obs.at[lookup_key, REVIEWED_COLUMN] = new_val
         self.app.df_obs.at[lookup_key, REVIEWED_AT_COLUMN] = now
@@ -9523,23 +9735,21 @@ class ObjectProgramUI(
         if current_vals:
             current_vals[0] = "☑" if new_val else "☐"
             self.object_list.item(oid, values=current_vals)
-        
+
         # If this is the currently active object, also update the checkbox variable
         if oid == self.app.current_object_id:
             self.reviewed_var.set(new_val)
             self.reviewed_time_label.config(text=now if new_val else "")
 
-        self.log_action("REVIEWED" if new_val else "NOT_REVIEWED", ["Reviewed"], [f'Reviewed: "{new_val}"'], oid=lookup_key)
-            
+        self.log_action("REVIEWED" if new_val else "NOT_REVIEWED", [
+                        "Reviewed"], [f'Reviewed: "{new_val}"'], oid=lookup_key)
+
         self.app.dirty = True
         self.update_dirty_ui()
         self.update_list_item_color(oid)
         self.update_review_progress()
         self._list_dirty = True
         self.update_reviewed_button_state()
-
-
-
 
     def load_ignored_words(self):
         import json
@@ -9558,7 +9768,8 @@ class ObjectProgramUI(
                 with open(read_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self.ignored_words = data.get("words", [])
-                    self.ignored_words_variations.set(data.get("variations", True))
+                    self.ignored_words_variations.set(
+                        data.get("variations", True))
             except Exception as e:
                 debug_error("Load ignored words failed", str(e))
                 self.ignored_words = []
@@ -9595,10 +9806,10 @@ class ObjectProgramUI(
     def is_word_ignored(self, val):
         if not val or not self.ignored_words:
             return False
-        
+
         variations = self.ignored_words_variations.get()
         val_norm = self.normalize_word(val, variations)
-        
+
         for word in self.ignored_words:
             word_norm = self.normalize_word(word, variations)
             if variations:
@@ -9614,36 +9825,37 @@ class ObjectProgramUI(
         win.transient(self.root)
         win.grab_set()
         win.bind("<Escape>", lambda e: win.destroy())
-        
+
         bg_color = "#181c19" if self.dark_mode_active else "#f0f0f0"
         fg_color = "#e8ebe9" if self.dark_mode_active else "black"
         field_bg = "#212622" if self.dark_mode_active else "white"
         border_color = "#313244" if self.dark_mode_active else "#d0d0d0"
-        
+
         win.configure(background=bg_color)
         win.title("Configure Ignored Words")
         import utils
         utils.center_and_fit_toplevel(win, 500, 550)
-        
-        title_lbl = ttk.Label(win, text="Suggestions Filter: Ignored Words", font=("Segoe UI", sc(12), "bold"))
+
+        title_lbl = ttk.Label(win, text="Suggestions Filter: Ignored Words", font=(
+            "Segoe UI", sc(12), "bold"))
         title_lbl.pack(anchor="w", padx=15, pady=(15, 5))
-        
+
         desc_lbl = ttk.Label(
-            win, 
-            text="Suggestions matching these words/phrases will be omitted in comparison.\nEnter one word or phrase per line.", 
+            win,
+            text="Suggestions matching these words/phrases will be omitted in comparison.\nEnter one word or phrase per line.",
             font=("Segoe UI", sc(9))
         )
         desc_lbl.pack(anchor="w", padx=15, pady=(0, 10))
-        
+
         text_frame = ttk.Frame(win)
         text_frame.pack(fill="both", expand=True, padx=15, pady=5)
-        
+
         text_scroll = ttk.Scrollbar(text_frame)
         text_scroll.pack(side="right", fill="y")
-        
+
         text_area = tk.Text(
-            text_frame, 
-            yscrollcommand=text_scroll.set, 
+            text_frame,
+            yscrollcommand=text_scroll.set,
             font=("Segoe UI", sc(10)),
             background=field_bg,
             foreground=fg_color,
@@ -9654,40 +9866,44 @@ class ObjectProgramUI(
         )
         text_area.pack(side="left", fill="both", expand=True)
         text_scroll.config(command=text_area.yview)
-        
+
         text_area.insert("1.0", "\n".join(self.ignored_words))
-        
+
         vars_frame = ttk.Frame(win)
         vars_frame.pack(fill="x", padx=15, pady=10)
-        
-        local_vars_var = tk.BooleanVar(value=self.ignored_words_variations.get())
+
+        local_vars_var = tk.BooleanVar(
+            value=self.ignored_words_variations.get())
         cb = ttk.Checkbutton(
             vars_frame, cursor="hand2",
             text="Include variations (ignore capitalization, punctuation, extra spacing)",
             variable=local_vars_var
         )
         cb.pack(anchor="w")
-        
+
         btn_frame = ttk.Frame(win, padding=10)
         btn_frame.pack(fill="x", side="bottom")
-        
+
         def on_save():
             content = text_area.get("1.0", tk.END).strip()
-            words = [line.strip() for line in content.split("\n") if line.strip()]
+            words = [line.strip()
+                     for line in content.split("\n") if line.strip()]
             self.ignored_words = words
             self.ignored_words_variations.set(local_vars_var.get())
             self.save_ignored_words()
-            
+
             if hasattr(self, "_history_cache"):
                 self._history_cache.clear()
-                
+
             if hasattr(self, "history_window") and self.history_window and self.history_window.winfo_exists():
-                show_all = getattr(self.history_window, "local_show_all", False)
+                show_all = getattr(self.history_window,
+                                   "local_show_all", False)
                 self.history_window.destroy()
                 self.open_historical_suggestions(show_all_override=show_all)
-                
-            win.destroy()
-            
-        ttk.Button(btn_frame, text="Save", command=on_save, cursor="hand2").pack(side="right", padx=5)
-        ttk.Button(btn_frame, text="Cancel", command=win.destroy, cursor="hand2").pack(side="left", padx=5)
 
+            win.destroy()
+
+        ttk.Button(btn_frame, text="Save", command=on_save,
+                   cursor="hand2").pack(side="right", padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=win.destroy,
+                   cursor="hand2").pack(side="left", padx=5)
