@@ -456,6 +456,9 @@ class MobileServer:
         self._auth_attempts = {}
         self.clients = []
         self.clients_lock = threading.Lock()
+        self._event_batch = []
+        self._batch_lock = threading.Lock()
+        self._batch_timer = None
         self.on_client_connect_callback = None
         self._setup_routes()
 
@@ -532,10 +535,26 @@ class MobileServer:
         if data is None:
             data = {}
         payload = {"type": event_type, "data": data}
+        with self._batch_lock:
+            self._event_batch.append(payload)
+            if self._batch_timer is None:
+                self._batch_timer = threading.Timer(0.2, self._flush_events)
+                self._batch_timer.start()
+
+    def _flush_events(self):
+        with self._batch_lock:
+            events = self._event_batch
+            self._event_batch = []
+            self._batch_timer = None
+
+        if not events:
+            return
+
+        batch_payload = {"type": "batch", "events": events}
         with self.clients_lock:
             for q in self.clients:
                 try:
-                    q.put(payload)
+                    q.put(batch_payload)
                 except Exception:
                     pass
 
@@ -2956,71 +2975,85 @@ INDEX_TEMPLATE = """
         _evtSource.onmessage = function(e) {
           try {
             const data = JSON.parse(e.data);
-            if (data.type === 'record_updated' || data.type === 'object_updated') {
-              const updatedId = String(data.data ? (data.data.id || data.data.oid) : '');
-              if (data.data && (data.data.has_flags !== undefined || data.data.review_status !== undefined)) {
-                const listItem = objectList.find(o => String(o.id) === updatedId);
-                if (listItem) {
-                  Object.assign(listItem, data.data);
+            const eventsToProcess = data.type === 'batch' ? data.events : [data];
+
+            let needsListRender = false;
+            let needsListFetch = false;
+
+            for (const evt of eventsToProcess) {
+              if (evt.type === 'record_updated' || evt.type === 'object_updated') {
+                const updatedId = String(evt.data ? (evt.data.id || evt.data.oid) : '');
+                if (evt.data && (evt.data.has_flags !== undefined || evt.data.review_status !== undefined)) {
+                  const listItem = objectList.find(o => String(o.id) === updatedId);
+                  if (listItem) {
+                    Object.assign(listItem, evt.data);
+                    if (!document.getElementById('listView').classList.contains('hidden')) {
+                      needsListRender = true;
+                    }
+                  }
+                  if (currentRecord && String(currentRecord.id) === updatedId) {
+                    Object.assign(currentRecord, evt.data);
+                    if (evt.data.review_status) isReviewed = (evt.data.review_status === 'reviewed');
+                    updateReviewButtonUI();
+                  }
+                } else {
                   if (!document.getElementById('listView').classList.contains('hidden')) {
-                    renderList();
+                    needsListFetch = true;
+                  } else if (currentRecord && String(currentRecord.id) === updatedId) {
+                    apiFetch(`/api/object/${encodeURIComponent(updatedId)}`).then(freshData => {
+                      if (currentOid === updatedId) {
+                        currentRecord = freshData;
+                        isReviewed = (freshData.review_status === 'reviewed');
+                        updateReviewButtonUI();
+                      }
+                    }).catch(() => {});
                   }
                 }
-                if (currentRecord && String(currentRecord.id) === updatedId) {
-                  Object.assign(currentRecord, data.data);
-                  if (data.data.review_status) isReviewed = (data.data.review_status === 'reviewed');
-                  updateReviewButtonUI();
+              } else if (evt.type === 'session_ended') {
+                showSessionEndedOverlay();
+              } else if (evt.type === 'push_navigation') {
+                showPushNavigationOverlay(evt.data.id);
+              } else if (evt.type === 'filter_synced') {
+                const payload = evt.data;
+                searchQuery = payload.q || "";
+                const searchBox = document.getElementById('searchBox');
+                if (searchBox) searchBox.value = searchQuery;
+
+                const searchClearBtn = document.getElementById('searchClearBtn');
+                if (searchClearBtn) {
+                  if (searchQuery) searchClearBtn.classList.remove('hidden');
+                  else searchClearBtn.classList.add('hidden');
                 }
-              } else {
-                if (!document.getElementById('listView').classList.contains('hidden')) {
-                  fetchList();
-                } else if (currentRecord && String(currentRecord.id) === updatedId) {
-                  apiFetch(`/api/object/${encodeURIComponent(updatedId)}`).then(freshData => {
-                    if (currentOid === updatedId) {
-                      currentRecord = freshData;
-                      isReviewed = (freshData.review_status === 'reviewed');
-                      updateReviewButtonUI();
-                    }
-                  }).catch(() => {});
+
+                activeAdvancedFilters.locations = payload.locations || {};
+                activeAdvancedFilters.problems = payload.specific_problems || [];
+
+                noImageFilterActive = payload.no_image || false;
+                const noImagePill = document.getElementById('pill-no-image');
+                if (noImagePill) {
+                  if (noImageFilterActive) {
+                    noImagePill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ink text-white border-ink';
+                  } else {
+                    noImagePill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
+                  }
                 }
-              }
-            } else if (data.type === 'session_ended') {
-              showSessionEndedOverlay();
-            } else if (data.type === 'push_navigation') {
-              showPushNavigationOverlay(data.data.id);
-            } else if (data.type === 'filter_synced') {
-              const payload = data.data;
-              searchQuery = payload.q || "";
-              const searchBox = document.getElementById('searchBox');
-              if (searchBox) searchBox.value = searchQuery;
 
-              const searchClearBtn = document.getElementById('searchClearBtn');
-              if (searchClearBtn) {
-                if (searchQuery) searchClearBtn.classList.remove('hidden');
-                else searchClearBtn.classList.add('hidden');
-              }
+                setStatusFilter(payload.status || 'all').then(() => {
+                  showToast("📱 Synced batch with Desktop (" + objectList.length + " matching records)");
+                });
 
-              activeAdvancedFilters.locations = payload.locations || {};
-              activeAdvancedFilters.problems = payload.specific_problems || [];
-
-              noImageFilterActive = payload.no_image || false;
-              const noImagePill = document.getElementById('pill-no-image');
-              if (noImagePill) {
-                if (noImageFilterActive) {
-                  noImagePill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ink text-white border-ink';
-                } else {
-                  noImagePill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
+                if (!document.getElementById('detailView').classList.contains('hidden')) {
+                  showListView(false);
                 }
-              }
-
-              setStatusFilter(payload.status || 'all').then(() => {
-                showToast("📱 Synced batch with Desktop (" + objectList.length + " matching records)");
-              });
-
-              if (!document.getElementById('detailView').classList.contains('hidden')) {
-                showListView(false);
               }
             }
+
+            if (needsListFetch) {
+              fetchList();
+            } else if (needsListRender) {
+              renderList();
+            }
+
           } catch(err) {}
         };
       } catch(err) {
