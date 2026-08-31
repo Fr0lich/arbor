@@ -5906,9 +5906,9 @@ class ObjectProgramUI(
             return str(int(value))
         return str(value)
 
-    def load_object(self, oid, is_history_nav=False):
-        # Convert oid type for pandas index compatibility (checks string first, then integer if needed)
-        if oid not in self.reg_by_id.index:
+    def _extract_object_payload(self, oid):
+        # Convert oid type for pandas index compatibility
+        if hasattr(self, "reg_by_id") and self.reg_by_id is not None and oid not in self.reg_by_id.index:
             try:
                 if str(oid).isdigit():
                     int_oid = int(oid)
@@ -5916,11 +5916,97 @@ class ObjectProgramUI(
                         oid = int_oid
             except Exception:
                 pass
+        elif self.app.df_reg is not None and oid not in self.app.df_reg.index:
+            try:
+                if str(oid).isdigit():
+                    int_oid = int(oid)
+                    if int_oid in self.app.df_reg.index:
+                        oid = int_oid
+            except Exception:
+                pass
+
+        payload = {"oid": oid}
+
+        # Collect suggestions for this specific ObjectID
+        current_object_suggestions = {}
+        if oid and self.app.historical_dbs:
+            for db in self.app.historical_dbs:
+                dict_cache = self._get_db_dict_cache(db, oid)
+                oid_data = dict_cache.get(oid, {})
+                for field, field_vals in oid_data.items():
+                    if field in self.reg_columns:
+                        vals = current_object_suggestions.setdefault(field, [])
+                        for v in field_vals:
+                            if v not in vals:
+                                vals.append(v)
+        payload["current_object_suggestions"] = current_object_suggestions
+
+        reg_dict = self._get_reg_dict()
+        obs_dict = self._get_obs_dict()
+        reg = reg_dict.get(oid)
+        if reg is None:
+            try:
+                if hasattr(self, "reg_by_id") and self.reg_by_id is not None:
+                    reg = self.reg_by_id.loc[oid]
+                elif self.app.df_reg is not None:
+                    reg = self.app.df_reg.loc[oid]
+
+                if isinstance(reg, pd.DataFrame):
+                    reg = reg.iloc[0].to_dict()
+                elif isinstance(reg, pd.Series):
+                    reg = reg.to_dict()
+            except Exception:
+                reg = {}
+        payload["reg"] = reg
+
+        genus = str(reg.get("Genus", "") or "").strip()
+        species = str(reg.get("Species", "") or "").strip()
+        taxon_name = f"{genus} {species}".strip() if (genus or species) else "Unidentified Specimen"
+        payload["taxon_name"] = taxon_name
+
+        obs = obs_dict.get(oid)
+        if obs is None:
+            try:
+                if hasattr(self, "obs_by_id") and self.obs_by_id is not None:
+                    obs = self.obs_by_id.loc[oid]
+                elif self.app.df_obs is not None:
+                    obs = self.app.df_obs.loc[oid]
+
+                if isinstance(obs, pd.DataFrame):
+                    obs = obs.iloc[0].to_dict()
+                elif isinstance(obs, pd.Series):
+                    obs = obs.to_dict()
+            except Exception:
+                obs = {}
+        payload["obs"] = obs
+
+        if self.image_mode == "online":
+            payload["images_missing_var"] = "Online images"
+            payload["images_missing_color"] = "blue"
+        elif self.image_mode == "offline":
+            payload["images_missing_var"] = "Offline Mode no images available"
+            payload["images_missing_color"] = "gray"
+        else:  # folder mode
+            images_missing = bool(obs.get("Images_Missing", False))
+            if images_missing:
+                payload["images_missing_var"] = "Images missing"
+                payload["images_missing_color"] = "red"
+            else:
+                payload["images_missing_var"] = "Images OK"
+                payload["images_missing_color"] = "green"
+
+        return payload
+
+    def _render_object_payload(self, payload):
+        oid = payload["oid"]
+        reg = payload["reg"]
+        obs = payload["obs"]
 
         if hasattr(self, "clear_problems_var"):
             self.clear_problems_var.set(False)
         self.image_zoom_factor = 1.0
         self.image_rotation_angle = 0
+
         if hasattr(self, '_list_select_job') and self._list_select_job:
             try:
                 self.root.after_cancel(self._list_select_job)
@@ -5935,128 +6021,55 @@ class ObjectProgramUI(
         if self.loading_object:
             return
 
-      
         prev = self.app.current_object_id
 
         if prev and prev != oid:
             self.commit_current_object()
             self.last_object_id = prev
 
-            if not is_history_nav:
+            if not payload.get("is_history_nav", False):
                 self.forward_stack.clear()
 
-          
             if not self.history_stack or self.history_stack[-1] != prev:
                 self.history_stack.append(prev)
-
                 if len(self.history_stack) > 50:
                     self.history_stack.pop(0)
 
-        # Clear any lingering "Did you mean" labels from the previous object
         self._clear_all_fuzzy_labels()
-
-        # Collect suggestions for this specific ObjectID
-        self.current_object_suggestions = {}
-        if oid and self.app.historical_dbs:
-            for db in self.app.historical_dbs:
-                dict_cache = self._get_db_dict_cache(db, oid)
-                oid_data = dict_cache.get(oid, {})
-                for field, field_vals in oid_data.items():
-                    if field in self.reg_columns:
-                        vals = self.current_object_suggestions.setdefault(field, [])
-                        for v in field_vals:
-                            if v not in vals:
-                                vals.append(v)
+        self.current_object_suggestions = payload["current_object_suggestions"]
 
         self.loading_object = True
         try:
             if not skip_heavy:
                 for w in self.image_container.winfo_children():
                     w.destroy()
-          
-
 
             self.no_image_label.pack_forget()
 
-            
             if not skip_heavy:
                 self.images_missing_label.config(text="")
+
             self.app.current_object_id = oid
             self.object_loaded = True
-
 
             self.object_id_var.set(oid)
 
             if hasattr(self, "header_id_badge") and self.header_id_badge.winfo_exists():
                 self.header_id_badge.config(text=f"ID: {oid}")
 
-            reg_dict = self._get_reg_dict()
-            obs_dict = self._get_obs_dict()
-            reg = reg_dict.get(oid)
-            if reg is None:
-                try:
-                    reg = self.reg_by_id.loc[oid]
-                    if isinstance(reg, pd.DataFrame):
-                        reg = reg.iloc[0].to_dict()
-                    elif isinstance(reg, pd.Series):
-                        reg = reg.to_dict()
-                except Exception:
-                    reg = {}
-            genus = str(reg.get("Genus", "") or "").strip()
-            species = str(reg.get("Species", "") or "").strip()
-            taxon_name = f"{genus} {species}".strip() if (genus or species) else "Unidentified Specimen"
-            self.title_label.config(text=taxon_name)
-            obs = obs_dict.get(oid)
-            if obs is None:
-                try:
-                    obs = self.obs_by_id.loc[oid]
-                    if isinstance(obs, pd.DataFrame):
-                        obs = obs.iloc[0].to_dict()
-                    elif isinstance(obs, pd.Series):
-                        obs = obs.to_dict()
-                except Exception:
-                    obs = {}
+            self.title_label.config(text=payload["taxon_name"])
 
-
-            if self.image_mode == "online":
-                self.images_missing_var.set("Online images")
-                self.images_missing_label.config(foreground="blue")
-
-            elif self.image_mode == "offline":
-                self.images_missing_var.set("Offline Mode no images available")
-                self.images_missing_label.config(foreground="gray")
-
-            else:  # folder mode
-                images_missing = bool(obs.get("Images_Missing", False))
-
-                if images_missing:
-                    self.images_missing_var.set("Images missing")
-                    self.images_missing_label.config(foreground="red")
-                else:
-                    self.images_missing_var.set("Images OK")
-                    self.images_missing_label.config(foreground="green")
-
-
-
-
+            self.images_missing_var.set(payload["images_missing_var"])
+            self.images_missing_label.config(foreground=payload["images_missing_color"])
 
             self.update_history_indicator(oid)
-
-
-
 
             for col, var in self.location_vars.items():
                 val = obs.get(col, "")
                 var.set(utils.fmt_pandas_val(val))
 
-
-            # Location and registration fields updated from obs/reg dicts
-            
-
             for col, widget in self.reg_entries.items():
                 value = utils.fmt_pandas_val(reg.get(col, ""))
-
-
                 if isinstance(widget, tk.Text):
                     widget.delete("1.0", tk.END)
                     widget.insert("1.0", str(value))
@@ -6092,49 +6105,34 @@ class ObjectProgramUI(
                 display_val = obs_val or auto_val
                 v.set(display_val)
 
-            # Apply problem row styles after all vars are set (traces fire via after_idle,
-            # but we also call explicitly here to guarantee correct state on load)
             self._update_all_problem_row_styles()
 
-            # Save the loaded state of all problem checkbuttons so we can detect real edits later
             self.loaded_problem_states = {
                 col: bool(v.get()) for col, v in self.problem_vars.items()
             }
 
             self.reviewed_var.set(bool(obs.get(REVIEWED_COLUMN, False)))
 
-
-
             if not skip_heavy:
                 self.load_images(oid)
 
             reviewed_at = str(obs.get(REVIEWED_AT_COLUMN, ""))
-
             if reviewed_at:
                 self.reviewed_time_label.config(text=f"( {reviewed_at} )")
             else:
                 self.reviewed_time_label.config(text="")
 
-
         finally:
             self.loading_object = False
-
-
 
         self.update_location_summary(oid)
         self.update_location_summary_view()
         self.update_problems_default_view()
         self.update_reviewed_button_state()
 
-
-
         self.app.redo_stacks.setdefault(oid, [])
-
         self._validate_fields()
-
         self.highlight_fields_with_suggestions(oid)
-
-
 
         if oid not in self.app.undo_stacks:
             self.app.undo_stacks[oid] = [{
@@ -6145,16 +6143,12 @@ class ObjectProgramUI(
         if oid not in self.app.redo_stacks:
             self.app.redo_stacks[oid] = []
 
-
         self.update_image_view_button()
         self.update_reg_fields_visibility()
         self._preload_adjacent_images(oid)
         self.update_navigation_buttons()
 
-
-        # Only steal focus to first reg entry if the user is NOT actively typing
-        # in the live search bar or actively navigating the listbox
-        if not skip_heavy and self.reg_entry_list:
+        if not skip_heavy and getattr(self, "reg_entry_list", None):
             focused = self.root.focus_get()
             is_in_search = False
             if hasattr(self, '_inline_search_entry'):
@@ -6162,11 +6156,18 @@ class ObjectProgramUI(
                                 (focused is not None and str(focused) == str(self._inline_search_entry)) or
                                 getattr(self, '_is_applying_search', False))
             
-            is_in_listbox = (focused == self.object_list or 
-                             (focused is not None and str(focused) == str(self.object_list)))
+            is_in_listbox = False
+            if hasattr(self, 'object_list'):
+                is_in_listbox = (focused == self.object_list or
+                                 (focused is not None and str(focused) == str(self.object_list)))
 
             if not is_in_search and not is_in_listbox:
                 self.reg_entry_list[0].focus_set()
+
+    def load_object(self, oid, is_history_nav=False):
+        payload = self._extract_object_payload(oid)
+        payload["is_history_nav"] = is_history_nav
+        self._render_object_payload(payload)
         
 
 
@@ -8746,13 +8747,14 @@ class ObjectProgramUI(
                         visible_count -= 1
                     frame.grid_remove()
                 
-        if focus_active and visible_count <= 0:
-            self.no_problems_msg_label.config(text="No fields visible in Focus mode.")
-            if self.no_problems_msg_label.winfo_manager() != "grid":
-                self.no_problems_msg_label.grid(row=0, column=0, pady=15, sticky="ew")
-        else:
-            if self.no_problems_msg_label.winfo_manager() == "grid":
-                self.no_problems_msg_label.grid_remove()
+        if hasattr(self, "no_problems_msg_label"):
+            if focus_active and visible_count <= 0:
+                self.no_problems_msg_label.config(text="No fields visible in Focus mode.")
+                if self.no_problems_msg_label.winfo_manager() != "grid":
+                    self.no_problems_msg_label.grid(row=0, column=0, pady=15, sticky="ew")
+            else:
+                if self.no_problems_msg_label.winfo_manager() == "grid":
+                    self.no_problems_msg_label.grid_remove()
 
         # Dynamically hide card frames if all of their fields are hidden in Focus Mode
         if hasattr(self, "card_frames") and hasattr(self, "card_defs_ordered"):
