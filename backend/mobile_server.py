@@ -18,6 +18,7 @@ from werkzeug.utils import secure_filename
 import pandas as pd
 import config
 from utils import debug_error
+from ui.state import app_bus, DATABASE_UPDATED
 
 def sanitize_value(val):
     if pd.isna(val) or val is None:
@@ -1526,7 +1527,7 @@ self.addEventListener('fetch', (event) => {
 
             if self.root_tk:
                 try:
-                    self.root_tk.event_generate("<<MobileEdit>>", when="tail")
+                    app_bus.publish(DATABASE_UPDATED, mobile_edit=True)
                 except Exception:
                     pass
 
@@ -1699,7 +1700,7 @@ self.addEventListener('fetch', (event) => {
 
             if self.root_tk:
                 try:
-                    self.root_tk.event_generate("<<MobileEdit>>", when="tail")
+                    app_bus.publish(DATABASE_UPDATED, mobile_edit=True)
                 except Exception:
                     pass
 

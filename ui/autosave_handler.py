@@ -1,4 +1,5 @@
 import os
+from ui.state import app_bus, DATABASE_UPDATED
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
@@ -239,9 +240,8 @@ class AutosaveMixin:
             self.reg_by_id = self.app.df_reg
             self.obs_by_id = self.app.df_obs
             self.app.active_object_ids = list(self.app.df_reg.index)
-            self.refresh_list()
             self.app.dirty = True
-            self.update_dirty_ui()
+            app_bus.publish(DATABASE_UPDATED, refresh_list=True)
             # Remove the autosave after successful restore
             try:
                 os.remove(autosave_path)

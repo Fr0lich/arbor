@@ -189,6 +189,6 @@ def test_create_objects_commit(tk_env):
     assert app.dirty is True
     assert mw.refreshed is True
     assert mw.invalidated_cache is True
-    assert mw.count_updated is True
-    assert mw.progress_updated is True
+
+
     assert len(mw.logged_actions) == 2

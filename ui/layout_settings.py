@@ -1,4 +1,5 @@
 import tkinter as tk
+from ui.state import app_bus, DATABASE_UPDATED
 from tkinter import ttk
 from config import sc
 from ui.widgets import ToggleSwitch
@@ -1115,4 +1116,4 @@ class LayoutSettingsMixin:
             except Exception:
                 pass
 
-        self.update_dirty_ui()
+        app_bus.publish(DATABASE_UPDATED)
