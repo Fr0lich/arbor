@@ -15,3 +15,6 @@
 ## 2023-10-25 - Reliable Mobile SSE Resync
 **Learning:** Browser native `EventSource` reconnection logic frequently stalls when mobile devices enter sleep mode or lock screens, leaving the client disconnected from the server despite reporting network availability.
 **Action:** When implementing SSE in mobile contexts, maintain a global reference to the `EventSource` instance and bind a `visibilitychange` listener. When the page becomes visible, explicitly call `.close()` on the old instance and instantiate a new one to force an immediate data refresh and network reconnect.
+## 2024-05-17 - Pandas loc[] vs dict lookup in Tkinter Sorts
+**Learning:** Using `df.loc[oid]` inside tight loops like Python's `sorted()` key functions in Tkinter (`ui/main_window.py`) causes significant lag due to Pandas' $O(N)$ row lookup overhead.
+**Action:** When sorting or filtering, always pre-convert necessary Pandas DataFrames to native Python dictionaries outside the loop (e.g., via `self._get_reg_dict()` or `df.to_dict('index')`) and use `dict.get(oid, {})` inside the lambda/key function to achieve $O(1)$ lookups.
