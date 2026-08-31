@@ -436,3 +436,186 @@ def test_sse_headers_and_initial_connect_handshake(mock_app_state):
     assert parsed["type"] == "connected"
 
 
+def test_status_flags_and_six_tier_badge_parity():
+    """Verify all 6 badge status states, specific problem history isolation, facets, and endpoint parity."""
+    from backend.mobile_server import is_unknown, compute_status_flags, get_history_set, get_problem_to_field_map, get_historical_cache
+
+    # 1. Test is_unknown helper
+    assert is_unknown("ukjent") is True
+    assert is_unknown("Unknown") is True
+    assert is_unknown("?") is True
+    assert is_unknown("-") is True
+    assert is_unknown("nan") is True
+    assert is_unknown("") is False
+    assert is_unknown(None) is False
+    assert is_unknown("Pinus") is False
+
+    # 2. Build test objects representing each priority tier & isolation rules
+    app = AppState()
+    app.config = {
+        "ui_sections": {
+            "registration": [{"name": "Genus"}, {"name": "Species"}, {"name": "Author"}],
+            "location": [{"name": "Cabinet"}],
+            "problems": [
+                {"name": "MissingLabel", "maps_to": "Genus"},
+                {"name": "Species_Problem", "maps_to": "Species"}
+            ]
+        }
+    }
+
+    # Specimens:
+    # 1: OK (Reviewed = True)
+    # 2: ERR+HIS (MissingLabel = True -> maps to Genus, Historical DB has Genus)
+    # 3: ERR (MissingLabel = True, Not in Historical DB)
+    # 4: CFCT (No flags, Genus = '?' is unknown, Historical DB has Genus)
+    # 5: UKN (No flags, Genus = '?' is unknown, Historical DB has no Genus)
+    # 6: UNREV (Clean default unreviewed)
+    # 7: ERR (Species_Problem = True -> maps to Species, Historical DB has Genus but NO Species)
+    # 8: ERR+HIS (Species_Problem = True -> maps to Species, Historical DB HAS Species)
+    app.df_reg = pd.DataFrame({
+        "Genus": ["Pinus", "Betula", "Quercus", "?", "?", "Fagus", "Acer", "Ulmus"],
+        "Species": ["sylvestris", "pendula", "robur", "alba", "incana", "sylvatica", "platanoides", "glabra"],
+        "Author": ["L.", "Roth", "L.", "L.", "L.", "L.", "L.", "Huds."],
+        "Cabinet": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
+    }, index=pd.Index(["1", "2", "3", "4", "5", "6", "7", "8"], name="ObjectID"))
+
+    app.df_obs = pd.DataFrame({
+        "Reviewed": [True, False, False, False, False, False, False, False],
+        "MissingLabel": [False, True, True, False, False, False, False, False],
+        "Species_Problem": [False, False, False, False, False, False, True, True],
+        "Cabinet": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
+    }, index=pd.Index(["1", "2", "3", "4", "5", "6", "7", "8"], name="ObjectID"))
+
+    # Historical DBs:
+    # Obj 2: Has Genus = 'Betula' (resolves MissingLabel)
+    # Obj 4: Has Genus = 'Salix' (resolves unknown Genus)
+    # Obj 7: Has Genus = 'Acer' (does NOT resolve Species_Problem, Species is empty)
+    # Obj 8: Has Species = 'glabra' (resolves Species_Problem)
+    hist_df = pd.DataFrame({
+        "Genus": ["Betula", "Salix", "Acer", "Ulmus"],
+        "Species": ["", "", "", "glabra"]
+    }, index=pd.Index(["2", "4", "7", "8"], name="ObjectID"))
+    app.historical_dbs = [{"name": "HistDB1", "reg_by_id": hist_df}]
+
+    server = MobileServer(app, port=5091)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Verify get_history_set & get_historical_cache
+    presence_set, fields_by_oid = get_historical_cache(app)
+    assert "2" in presence_set
+    assert "4" in presence_set
+    assert "7" in presence_set
+    assert "8" in presence_set
+    assert "1" not in presence_set
+    assert fields_by_oid["7"] == {"Genus"}
+    assert fields_by_oid["8"] == {"Genus", "Species"}
+
+    # 3. GET /api/objects - Test full list & facets
+    res = client.get('/api/objects', headers=headers)
+    assert res.status_code == 200
+    data = res.json
+    assert data["total_matching"] == 8
+
+    # Verify serialized object flags
+    by_id = {o["id"]: o for o in data["objects"]}
+    
+    # Obj 1: OK
+    assert by_id["1"]["review_status"] == "reviewed"
+    assert by_id["1"]["has_flags"] is False
+    assert by_id["1"]["has_history"] is False
+    assert by_id["1"]["problems_have_history"] is False
+    assert by_id["1"]["has_unknown"] is False
+
+    # Obj 2: ERR+HIS (MissingLabel has historical Genus)
+    assert by_id["2"]["review_status"] == "pending"
+    assert by_id["2"]["has_flags"] is True
+    assert by_id["2"]["has_history"] is True
+    assert by_id["2"]["problems_have_history"] is True
+
+    # Obj 3: ERR (MissingLabel but no history at all)
+    assert by_id["3"]["review_status"] == "pending"
+    assert by_id["3"]["has_flags"] is True
+    assert by_id["3"]["has_history"] is False
+    assert by_id["3"]["problems_have_history"] is False
+
+    # Obj 7: ERR (Species_Problem is active, object exists in History, but History only has Genus, NOT Species)
+    assert by_id["7"]["review_status"] == "pending"
+    assert by_id["7"]["has_flags"] is True
+    assert by_id["7"]["has_history"] is True
+    assert by_id["7"]["problems_have_history"] is False
+
+    # Obj 8: ERR+HIS (Species_Problem is active, and History HAS Species)
+    assert by_id["8"]["review_status"] == "pending"
+    assert by_id["8"]["has_flags"] is True
+    assert by_id["8"]["has_history"] is True
+    assert by_id["8"]["problems_have_history"] is True
+
+    # Obj 4: CFCT (Unknown Genus resolved by historical Genus)
+    assert by_id["4"]["review_status"] == "pending"
+    assert by_id["4"]["has_flags"] is False
+    assert by_id["4"]["has_history"] is True
+    assert by_id["4"]["problems_have_history"] is True
+
+    # Obj 5: UKN (Unknown Genus with no historical data)
+    assert by_id["5"]["review_status"] == "pending"
+    assert by_id["5"]["has_flags"] is False
+    assert by_id["5"]["has_history"] is False
+    assert by_id["5"]["problems_have_history"] is False
+    assert by_id["5"]["has_unknown"] is True
+
+    # Obj 6: UNREV
+    assert by_id["6"]["review_status"] == "pending"
+    assert by_id["6"]["has_flags"] is False
+    assert by_id["6"]["has_history"] is False
+    assert by_id["6"]["problems_have_history"] is False
+    assert by_id["6"]["has_unknown"] is False
+
+    # 4. Test status filter query parameters
+    res_reviewed = client.get('/api/objects?status=reviewed', headers=headers)
+    assert [o["id"] for o in res_reviewed.json["objects"]] == ["1"]
+
+    res_flagged = client.get('/api/objects?status=flagged', headers=headers)
+    assert set(o["id"] for o in res_flagged.json["objects"]) == {"2", "3", "7", "8"}
+
+    res_unknown = client.get('/api/objects?status=unknown', headers=headers)
+    assert set(o["id"] for o in res_unknown.json["objects"]) == {"4", "5"}
+
+    # 5. Test detail endpoint /api/object/<oid>
+    detail7 = client.get('/api/object/7', headers=headers).json
+    assert detail7["has_flags"] is True
+    assert detail7["has_history"] is True
+    assert detail7["problems_have_history"] is False
+    assert detail7["review_status"] == "pending"
+
+    detail8 = client.get('/api/object/8', headers=headers).json
+    assert detail8["has_flags"] is True
+    assert detail8["has_history"] is True
+    assert detail8["problems_have_history"] is True
+    assert detail8["review_status"] == "pending"
+
+    # 6. Test update endpoint /api/update returning recalculations
+    upd_res = client.post('/api/update', headers=headers, json={
+        "id": "6",
+        "observation": {"MissingLabel": True}
+    })
+    assert upd_res.status_code == 200
+    upd_data = upd_res.json
+    assert upd_data["success"] is True
+    assert upd_data["has_flags"] is True
+
+def test_mobile_back_button_navigation_template():
+    """Verify INDEX_TEMPLATE contains the leave confirmation modal, history API integration, and popstate handling."""
+    from backend.mobile_server import INDEX_TEMPLATE
+
+    # 1. Leave confirmation modal DOM elements and text
+    assert 'id="leaveConfirmModal"' in INDEX_TEMPLATE
+    assert "do you want to leave the database? (you might need to resync)" in INDEX_TEMPLATE
+    assert "cancelLeaveModal()" in INDEX_TEMPLATE
+    assert "confirmLeaveModal()" in INDEX_TEMPLATE
+
+    # 2. History API usage and popstate handler
+    assert "history.replaceState" in INDEX_TEMPLATE
+    assert "history.pushState" in INDEX_TEMPLATE
+    assert "window.addEventListener('popstate'" in INDEX_TEMPLATE
+    assert "showListView(false)" in INDEX_TEMPLATE

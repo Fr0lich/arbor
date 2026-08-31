@@ -24,6 +24,157 @@ def sanitize_value(val):
         return ""
     return str(val).strip()
 
+def is_unknown(value):
+    if value is None or pd.isna(value):
+        return False
+    v = str(value).strip().lower()
+    if not v:
+        return False
+    return v in ("ukjent", "unknown", "?", "-", "nan")
+
+def get_problem_to_field_map(config):
+    problem_to_field = {}
+    if config and isinstance(config, dict):
+        ui_sec = config.get("ui_sections", {})
+        for p in ui_sec.get("problems", []):
+            if isinstance(p, dict):
+                name = p.get("name")
+                if not name:
+                    continue
+                if "maps_to" in p:
+                    problem_to_field[name] = p["maps_to"]
+                elif "target" in p:
+                    problem_to_field[name] = p["target"]
+    return problem_to_field
+
+def get_history_set(app_state):
+    presence_set, _ = get_historical_cache(app_state)
+    return presence_set
+
+def get_historical_cache(app_state):
+    hist_presence_set = set()
+    hist_fields_by_oid = {}
+    hist_dbs = getattr(app_state, "historical_dbs", None) or []
+    for db in hist_dbs:
+        reg_by_id = db.get("reg_by_id")
+        if reg_by_id is not None:
+            if isinstance(reg_by_id, pd.DataFrame):
+                cols = list(reg_by_id.columns)
+                for hist_id, row in reg_by_id.iterrows():
+                    s_id = str(hist_id).strip()
+                    hist_presence_set.add(s_id)
+                    if s_id.isdigit():
+                        try:
+                            hist_presence_set.add(int(s_id))
+                        except Exception:
+                            pass
+                    if s_id not in hist_fields_by_oid:
+                        hist_fields_by_oid[s_id] = set()
+                    for col in cols:
+                        val = row[col]
+                        if pd.notna(val):
+                            val_str = str(val).strip()
+                            if val_str and val_str.lower() not in ("nan", "none", "", "ukjent", "unknown", "?", "-"):
+                                hist_fields_by_oid[s_id].add(col)
+            elif isinstance(reg_by_id, dict):
+                for hist_id, row_dict in reg_by_id.items():
+                    s_id = str(hist_id).strip()
+                    hist_presence_set.add(s_id)
+                    if s_id.isdigit():
+                        try:
+                            hist_presence_set.add(int(s_id))
+                        except Exception:
+                            pass
+                    if s_id not in hist_fields_by_oid:
+                        hist_fields_by_oid[s_id] = set()
+                    if isinstance(row_dict, dict):
+                        for col, val in row_dict.items():
+                            if pd.notna(val):
+                                val_str = str(val).strip()
+                                if val_str and val_str.lower() not in ("nan", "none", "", "ukjent", "unknown", "?", "-"):
+                                    hist_fields_by_oid[s_id].add(col)
+    return hist_presence_set, hist_fields_by_oid
+
+def compute_status_flags(reg_dict, obs_dict, history_set, oid, prob_cols=None, problem_to_field=None, hist_fields_by_oid=None):
+    # 1. Review status
+    rev_val = False
+    if obs_dict is not None and "Reviewed" in obs_dict:
+        v = sanitize_value(obs_dict.get("Reviewed")).lower()
+        rev_val = v in ("true", "1", "yes", "t")
+    review_status = "reviewed" if rev_val else "pending"
+
+    # 2. Problem flags and active problem target fields
+    has_flags = False
+    active_problem_fields = set()
+    problem_to_field = problem_to_field or {}
+
+    if prob_cols:
+        for p_col in prob_cols:
+            val = ""
+            if obs_dict is not None and p_col in obs_dict:
+                val = sanitize_value(obs_dict.get(p_col)).lower()
+            elif reg_dict is not None and p_col in reg_dict:
+                val = sanitize_value(reg_dict.get(p_col)).lower()
+            if val in ("true", "1", "yes", "t", "x"):
+                has_flags = True
+                target_field = problem_to_field.get(p_col)
+                if target_field:
+                    active_problem_fields.add(target_field)
+                elif p_col.endswith("_Problem"):
+                    active_problem_fields.add(p_col[:-8])
+                else:
+                    active_problem_fields.add(p_col)
+    elif obs_dict is not None or reg_dict is not None:
+        merged = {}
+        if reg_dict:
+            merged.update(reg_dict)
+        if obs_dict:
+            merged.update(obs_dict)
+        for k, v in merged.items():
+            if k.endswith("_Problem") or k in ("Images_Problem", "Images_Missing", "MissingLabel"):
+                if sanitize_value(v).lower() in ("true", "1", "yes", "t", "x"):
+                    has_flags = True
+                    target_field = problem_to_field.get(k)
+                    if target_field:
+                        active_problem_fields.add(target_field)
+                    elif k.endswith("_Problem"):
+                        active_problem_fields.add(k[:-8])
+                    else:
+                        active_problem_fields.add(k)
+
+    # 3. Unknown fields (check registration values)
+    has_unknown = False
+    unknown_fields = set()
+    if reg_dict:
+        for k, v in reg_dict.items():
+            if str(k).lower() in ("objectid", "id"):
+                continue
+            if is_unknown(v):
+                has_unknown = True
+                unknown_fields.add(k)
+
+    # 4. History and Specific Problem History check
+    s_oid = str(oid).strip()
+    has_history = False
+    if history_set:
+        has_history = (oid in history_set) or (s_oid in history_set) or (s_oid.isdigit() and int(s_oid) in history_set)
+
+    problems_have_history = False
+    if hist_fields_by_oid is not None and s_oid in hist_fields_by_oid:
+        available_hist_fields = hist_fields_by_oid[s_oid]
+        if any(f in available_hist_fields for f in active_problem_fields) or any(f in available_hist_fields for f in unknown_fields):
+            problems_have_history = True
+    elif has_history and not hist_fields_by_oid:
+        problems_have_history = (has_flags or has_unknown)
+
+    return {
+        "has_flags": bool(has_flags),
+        "has_history": bool(has_history),
+        "problems_have_history": bool(problems_have_history),
+        "has_unknown": bool(has_unknown),
+        "review_status": review_status
+    }
+
 def coerce_type(val, dtype):
     if pd.isna(val) or val is None:
         return ""
@@ -670,6 +821,11 @@ class MobileServer:
             with self.app_state.df_lock:
                 df_reg = self.app_state.df_reg
                 df_obs = self.app_state.df_obs
+                history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
+                prob_cols = []
+                if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                    prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+                problem_to_field = get_problem_to_field_map(self.app_state.config)
 
                 def _clean_val(val):
                     if val is None or pd.isna(val):
@@ -750,27 +906,35 @@ class MobileServer:
 
                 # Status filter with index dtype safety
                 if status_filter != 'all':
-                    if rev_col and df_obs is not None:
-                        obs_rev = df_obs[rev_col]
-                        if obs_rev.index.dtype != matched_indices.dtype:
-                            obs_rev_map = {str(k): v for k, v in obs_rev.items()}
-                            rev_series = pd.Series([str(obs_rev_map.get(str(idx), "")).strip().lower() for idx in matched_indices], index=matched_indices)
-                        else:
-                            rev_series = obs_rev.reindex(matched_indices).astype(str).str.strip().str.lower()
-                        is_rev = rev_series.isin(["true", "1", "yes"])
-                        if status_filter == 'reviewed':
-                            matched_indices = matched_indices[is_rev]
-                        elif status_filter == 'pending':
-                            matched_indices = matched_indices[~is_rev]
-                    if status_filter == 'flagged':
-                        prob_cols = []
-                        if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
-                            prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+                    if status_filter in ('reviewed', 'pending', 'unreviewed'):
+                        if rev_col and df_obs is not None:
+                            obs_rev = df_obs[rev_col]
+                            if obs_rev.index.dtype != matched_indices.dtype:
+                                obs_rev_map = {str(k): v for k, v in obs_rev.items()}
+                                rev_series = pd.Series([str(obs_rev_map.get(str(idx), "")).strip().lower() for idx in matched_indices], index=matched_indices)
+                            else:
+                                rev_series = obs_rev.reindex(matched_indices).astype(str).str.strip().str.lower()
+                            is_rev = rev_series.isin(["true", "1", "yes", "t"])
+                            if status_filter == 'reviewed':
+                                matched_indices = matched_indices[is_rev]
+                            else:
+                                matched_indices = matched_indices[~is_rev]
+                    elif status_filter in ('flagged', 'err'):
                         flagged_mask = pd.Series(False, index=matched_indices)
                         for p_col in prob_cols:
                             combined_prob = _get_combined(p_col, matched_indices)
-                            flagged_mask |= combined_prob.map(_clean_val).str.lower().isin(["true", "1", "yes", "t"])
+                            flagged_mask |= combined_prob.map(_clean_val).str.lower().isin(["true", "1", "yes", "t", "x"])
                         matched_indices = matched_indices[flagged_mask]
+                    elif status_filter in ('conflict', 'cfct', 'history'):
+                        history_mask = pd.Series([oid in history_set or str(oid) in history_set or (str(oid).isdigit() and int(str(oid)) in history_set) for oid in matched_indices], index=matched_indices)
+                        matched_indices = matched_indices[history_mask]
+                    elif status_filter in ('unknown', 'ukn'):
+                        unknown_mask = pd.Series(False, index=matched_indices)
+                        for col in df_reg.columns:
+                            if str(col).lower() in ("objectid", "id"):
+                                continue
+                            unknown_mask |= df_reg[col].reindex(matched_indices).map(is_unknown)
+                        matched_indices = matched_indices[unknown_mask]
 
                 # Cabinet filter
                 if cabinet_filter:
@@ -874,21 +1038,48 @@ class MobileServer:
                 cabinet_series = cabinet_series[cabinet_series != ""]
                 facets["cabinets"] = cabinet_series.value_counts().to_dict()
 
-                # 2. Review counts with index dtype safety
+                # 2. Review and Status counts with index dtype safety
                 reviewed_count = 0
                 pending_count = total_matching
-                if rev_col and df_obs is not None:
-                    obs_rev = df_obs[rev_col]
-                    if obs_rev.index.dtype != matched_indices.dtype:
-                        obs_rev_map = {str(k): v for k, v in obs_rev.items()}
-                        rev_series_facet = pd.Series([str(obs_rev_map.get(str(idx), "")).strip().lower() for idx in matched_indices], index=matched_indices)
-                    else:
-                        rev_series_facet = obs_rev.reindex(matched_indices).astype(str).str.strip().str.lower()
-                    reviewed_count = int(rev_series_facet.isin(["true", "1", "yes"]).sum())
-                    pending_count = max(0, total_matching - reviewed_count)
+                flagged_count = 0
+                history_count = 0
+                unknown_count = 0
+
+                if total_matching > 0:
+                    if rev_col and df_obs is not None:
+                        obs_rev = df_obs[rev_col]
+                        if obs_rev.index.dtype != matched_indices.dtype:
+                            obs_rev_map = {str(k): v for k, v in obs_rev.items()}
+                            rev_series_facet = pd.Series([str(obs_rev_map.get(str(idx), "")).strip().lower() for idx in matched_indices], index=matched_indices)
+                        else:
+                            rev_series_facet = obs_rev.reindex(matched_indices).astype(str).str.strip().str.lower()
+                        is_rev_series = rev_series_facet.isin(["true", "1", "yes", "t"])
+                        reviewed_count = int(is_rev_series.sum())
+                        pending_count = max(0, total_matching - reviewed_count)
+
+                    if prob_cols:
+                        f_mask = pd.Series(False, index=matched_indices)
+                        for p_col in prob_cols:
+                            combined_prob = _get_combined(p_col, matched_indices)
+                            f_mask |= combined_prob.map(_clean_val).str.lower().isin(["true", "1", "yes", "t", "x"])
+                        flagged_count = int(f_mask.sum())
+
+                    if history_set:
+                        h_mask = pd.Series([oid in history_set or str(oid) in history_set or (str(oid).isdigit() and int(str(oid)) in history_set) for oid in matched_indices], index=matched_indices)
+                        history_count = int(h_mask.sum())
+
+                    u_mask = pd.Series(False, index=matched_indices)
+                    for col in df_reg.columns:
+                        if str(col).lower() in ("objectid", "id"):
+                            continue
+                        u_mask |= df_reg[col].reindex(matched_indices).map(is_unknown)
+                    unknown_count = int(u_mask.sum())
 
                 facets["reviewed_count"] = reviewed_count
                 facets["pending_count"] = pending_count
+                facets["flagged_count"] = flagged_count
+                facets["history_count"] = history_count
+                facets["unknown_count"] = unknown_count
 
                 # Sorting logic
                 if sort_by in ['id', 'genus', 'cabinet'] and not is_search_active:
@@ -947,7 +1138,7 @@ class MobileServer:
 
                 for oid in paged_indices_list:
                     reg_row = paged_reg_dict.get(oid, {})
-                    obs_row = paged_obs_dict.get(oid)
+                    obs_row = paged_obs_dict.get(oid, {})
 
                     genus = _clean_val(reg_row.get("Genus"))
                     species = _clean_val(reg_row.get("Species"))
@@ -957,19 +1148,16 @@ class MobileServer:
                     collection_date = _clean_val(reg_row.get("Collection Date"))
                     sci_name = f"{genus} {species} {author}".strip() if (genus or species) else f"Specimen #{oid}"
 
-                    rev_val = False
-                    if rev_col and obs_row is not None:
-                        v = _clean_val(obs_row.get(rev_col)).lower()
-                        rev_val = v in ["true", "1", "yes"]
-
                     loc = {}
                     for lcol, key_name in loc_keys.items():
-                        if obs_row is not None and lcol in obs_cols and _clean_val(obs_row.get(lcol)):
+                        if obs_row and lcol in obs_cols and _clean_val(obs_row.get(lcol)):
                             loc[key_name] = _clean_val(obs_row.get(lcol))
                         elif lcol in reg_cols and _clean_val(reg_row.get(lcol)):
                             loc[key_name] = _clean_val(reg_row.get(lcol))
                         else:
                             loc[key_name] = ""
+
+                    flags = compute_status_flags(reg_row, obs_row, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
 
                     objects.append({
                         "id": str(oid),
@@ -982,8 +1170,11 @@ class MobileServer:
                         "collector": collector,
                         "collection_date": collection_date,
                         "location": loc,
-                        "review_status": "reviewed" if rev_val else "pending",
-                        "has_flags": False
+                        "review_status": flags["review_status"],
+                        "has_flags": flags["has_flags"],
+                        "has_history": flags["has_history"],
+                        "problems_have_history": flags["problems_have_history"],
+                        "has_unknown": flags["has_unknown"]
                     })
 
             return jsonify({
@@ -1117,13 +1308,24 @@ class MobileServer:
                             "resolved": False
                         })
 
+            history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
+            prob_cols = []
+            if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+            problem_to_field = get_problem_to_field_map(self.app_state.config)
+            flags = compute_status_flags(reg_dict, obs_dict, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
+
             return jsonify({
                 "id": str(oid),
                 "accession_number": str(oid),
                 "scientific_name": sci_name,
                 "registration": reg_dict,
                 "observation": obs_dict,
-                "review_status": "reviewed" if rev_val else "pending",
+                "review_status": flags["review_status"],
+                "has_flags": flags["has_flags"],
+                "has_history": flags["has_history"],
+                "problems_have_history": flags["problems_have_history"],
+                "has_unknown": flags["has_unknown"],
                 "flagged_issues": flagged_issues,
                 "images": {
                     "preferred_source": "online",
@@ -1159,7 +1361,25 @@ class MobileServer:
                 self.app_state.dirty = True
                 self.app_state._mobile_last_edited_oid = oid
 
-            self.broadcast_event("record_updated", {"id": oid})
+                resolved_reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
+                resolved_obs_oid = _resolve_oid_in_df(self.app_state.df_obs, oid)
+                reg_row = self.app_state.df_reg.loc[resolved_reg_oid].to_dict() if (self.app_state.df_reg is not None and resolved_reg_oid is not None) else {}
+                obs_row = self.app_state.df_obs.loc[resolved_obs_oid].to_dict() if (self.app_state.df_obs is not None and resolved_obs_oid is not None) else {}
+                history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
+                prob_cols = []
+                if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                    prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+                problem_to_field = get_problem_to_field_map(self.app_state.config)
+                flags = compute_status_flags(reg_row, obs_row, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
+
+            self.broadcast_event("record_updated", {
+                "id": str(oid),
+                "has_flags": flags["has_flags"],
+                "has_history": flags["has_history"],
+                "problems_have_history": flags["problems_have_history"],
+                "has_unknown": flags["has_unknown"],
+                "review_status": flags["review_status"]
+            })
 
             # Notify desktop UI
             if self.on_edit_callback:
@@ -1177,7 +1397,11 @@ class MobileServer:
             return jsonify({
                 "success": True,
                 "id": str(oid),
-                "review_status": "reviewed" if reviewed else "pending",
+                "review_status": flags["review_status"],
+                "has_flags": flags["has_flags"],
+                "has_history": flags["has_history"],
+                "problems_have_history": flags["problems_have_history"],
+                "has_unknown": flags["has_unknown"],
                 "synced_at": datetime.now().isoformat()
             })
 
@@ -1595,6 +1819,26 @@ INDEX_TEMPLATE = """
             <span>Reviewed (0)</span>
           </button>
 
+          <button
+            type="button"
+            onclick="setStatusFilter('conflict')"
+            id="pill-conflict"
+            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-[#e0f2fe] text-[#0369a1] border-[#bae6fd] hover:bg-[#bae6fd]"
+          >
+            <span>🔀</span>
+            <span>Conflict (0)</span>
+          </button>
+
+          <button
+            type="button"
+            onclick="setStatusFilter('unknown')"
+            id="pill-unknown"
+            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-[#fef9c3] text-[#854d0e] border-[#fde047] hover:bg-[#fef08a]"
+          >
+            <span>?</span>
+            <span>Unknown (0)</span>
+          </button>
+
           <div class="w-px h-6 bg-bordercol mx-0.5 shrink-0"></div>
 
           <button
@@ -1710,6 +1954,19 @@ INDEX_TEMPLATE = """
             <span id="detailAuthor" class="font-medium text-ink"></span>
             <span>•</span>
             <span id="detailFamily"></span>
+          </div>
+        </div>
+
+        <!-- Active Problems Alert Banner (Dynamically shown if problems/unknowns exist) -->
+        <div id="detailProblemBanner" class="hidden bg-ember-light border border-ember-border rounded-[2px] p-3 shadow-xs space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-ember-dark flex items-center gap-1">
+              <span>⚠</span>
+              <span>Active Problems Detected</span>
+            </span>
+          </div>
+          <div id="detailProblemBadges" class="flex flex-wrap items-center gap-1.5 pt-1">
+            <!-- Problem chips injected here -->
           </div>
         </div>
 
@@ -2086,6 +2343,39 @@ INDEX_TEMPLATE = """
 
 
     <!-- ========================================== -->
+    <!-- MODAL: LEAVE DATABASE CONFIRMATION         -->
+    <!-- ========================================== -->
+    <div id="leaveConfirmModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-sm p-4 shadow-xl space-y-3">
+        <div class="flex items-center justify-between border-b border-tonal2 pb-2">
+          <h3 class="font-serif font-bold text-sm text-ink">⚠️ Leave Database?</h3>
+          <button type="button" onclick="cancelLeaveModal()" class="text-ink-muted font-bold text-sm">✕</button>
+        </div>
+
+        <p class="font-sans text-xs text-ink-muted leading-relaxed">
+          do you want to leave the database? (you might need to resync)
+        </p>
+
+        <div class="flex items-center gap-2 pt-2">
+          <button
+            type="button"
+            onclick="cancelLeaveModal()"
+            class="flex-1 py-2 border border-bordercol bg-tonal1 hover:bg-tonal2 text-ink rounded-[2px] text-xs font-bold transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onclick="confirmLeaveModal()"
+            class="flex-1 py-2 bg-ember hover:bg-ember-dark text-white rounded-[2px] text-xs font-bold transition"
+          >
+            Leave
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
     <!-- MODAL: CONNECTION STATUS                   -->
     <!-- ========================================== -->
     <div id="connectionModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2384,7 +2674,62 @@ INDEX_TEMPLATE = """
       document.getElementById(id).classList.add('hidden');
     }
 
+    let isLeavingApp = false;
+
+    function openLeaveModal() {
+      openModal('leaveConfirmModal');
+    }
+
+    function cancelLeaveModal() {
+      closeModal('leaveConfirmModal');
+      // Re-push list state so history is restored at [root] -> [list]
+      window.history.pushState({ view: 'list' }, '');
+    }
+
+    function confirmLeaveModal() {
+      isLeavingApp = true;
+      closeModal('leaveConfirmModal');
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = '/login';
+      }
+    }
+
+    window.addEventListener('popstate', async (event) => {
+      if (isLeavingApp) return;
+
+      const state = event.state;
+
+      // If we popped to list view:
+      if (state && state.view === 'list') {
+        closeModal('leaveConfirmModal');
+        closeModal('photoViewerModal');
+        closeModal('presetSettingsModal');
+        closeModal('filterModal');
+        closeModal('addDiscrepancyModal');
+        closeModal('connectionModal');
+        await showListView(false);
+      } else if (state && state.view === 'detail') {
+        closeModal('leaveConfirmModal');
+        if (state.id && state.id !== currentOid) {
+          await loadSpecimen(state.id, true);
+        } else {
+          showDetailView();
+        }
+      } else {
+        // Popped past list view (e.g. state is 'root' or null) -> user clicked back on List View
+        openLeaveModal();
+      }
+    });
+
     async function init() {
+      // 0. Initialize SPA History State for Back Button handling
+      if (!window.history.state || window.history.state.view !== 'list') {
+        window.history.replaceState({ view: 'root' }, '');
+        window.history.pushState({ view: 'list' }, '');
+      }
+
       // 1. Immediately initiate live SSE connection in background so desktop detects phone right away
       setupEventSource();
       document.addEventListener('visibilitychange', () => {
@@ -2470,11 +2815,33 @@ INDEX_TEMPLATE = """
         _evtSource.onmessage = function(e) {
           try {
             const data = JSON.parse(e.data);
-            if (data.type === 'record_updated') {
-              if (document.getElementById('listView').classList.contains('hidden') && currentOid === data.data.id) {
-                // Background notification — no action needed
-              } else if (!document.getElementById('listView').classList.contains('hidden')) {
-                fetchList();
+            if (data.type === 'record_updated' || data.type === 'object_updated') {
+              const updatedId = String(data.data ? (data.data.id || data.data.oid) : '');
+              if (data.data && (data.data.has_flags !== undefined || data.data.review_status !== undefined)) {
+                const listItem = objectList.find(o => String(o.id) === updatedId);
+                if (listItem) {
+                  Object.assign(listItem, data.data);
+                  if (!document.getElementById('listView').classList.contains('hidden')) {
+                    renderList();
+                  }
+                }
+                if (currentRecord && String(currentRecord.id) === updatedId) {
+                  Object.assign(currentRecord, data.data);
+                  if (data.data.review_status) isReviewed = (data.data.review_status === 'reviewed');
+                  updateReviewButtonUI();
+                }
+              } else {
+                if (!document.getElementById('listView').classList.contains('hidden')) {
+                  fetchList();
+                } else if (currentRecord && String(currentRecord.id) === updatedId) {
+                  apiFetch(`/api/object/${encodeURIComponent(updatedId)}`).then(freshData => {
+                    if (currentOid === updatedId) {
+                      currentRecord = freshData;
+                      isReviewed = (freshData.review_status === 'reviewed');
+                      updateReviewButtonUI();
+                    }
+                  }).catch(() => {});
+                }
               }
             } else if (data.type === 'session_ended') {
               showSessionEndedOverlay();
@@ -2610,6 +2977,55 @@ INDEX_TEMPLATE = """
       fetchList();
     }
 
+    function renderStatusBadge(item) {
+      if (!item) return '';
+      const isRev = (item.review_status === 'reviewed') || (item.reviewed === true) || (item.is_reviewed === true);
+      const hasFlags = Boolean(item.has_flags);
+      const problemsHaveHistory = Boolean(item.problems_have_history !== undefined ? item.problems_have_history : item.has_history);
+      const hasUnknown = Boolean(item.has_unknown);
+
+      let label, bg, fg, border, icon;
+      if (isRev) {
+        label = 'OK';
+        bg = '#2E7D32';
+        fg = '#ffffff';
+        border = '#2E7D32';
+        icon = '✓';
+      } else if (hasFlags && problemsHaveHistory) {
+        label = 'ERR+HIS';
+        bg = '#7B1FA2';
+        fg = '#ffffff';
+        border = '#7B1FA2';
+        icon = '⚠';
+      } else if (hasFlags) {
+        label = 'ERR';
+        bg = '#C62828';
+        fg = '#ffffff';
+        border = '#C62828';
+        icon = '⚠';
+      } else if (problemsHaveHistory) {
+        label = 'CFCT';
+        bg = '#0284C7';
+        fg = '#ffffff';
+        border = '#0284C7';
+        icon = '🔀';
+      } else if (hasUnknown) {
+        label = 'UKN';
+        bg = '#FBC02D';
+        fg = '#2c302e';
+        border = '#FBC02D';
+        icon = '?';
+      } else {
+        label = 'UNREV';
+        bg = '#45475a';
+        fg = '#ffffff';
+        border = '#45475a';
+        icon = '🕒';
+      }
+
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold" style="background-color: ${bg}; color: ${fg}; border: 1px solid ${border};">${icon} ${label}</span>`;
+    }
+
     function setStatusFilter(status) {
       activeStatusFilter = status;
       const filterStyles = {
@@ -2618,24 +3034,32 @@ INDEX_TEMPLATE = """
           inactive: 'bg-surface text-ink-muted border-bordercol hover:bg-tonal1'
         },
         pending: {
-          active: 'bg-ink text-white border-ink font-semibold',
+          active: 'bg-[#45475a] text-white border-[#45475a] shadow-xs font-semibold',
           inactive: 'bg-surface text-ink-muted border-bordercol hover:bg-tonal1'
         },
         flagged: {
-          active: 'bg-ember text-white border-ember shadow-xs font-semibold',
+          active: 'bg-[#C62828] text-white border-[#C62828] shadow-xs font-semibold',
           inactive: 'bg-ember-light text-ember-dark border-ember-border hover:bg-ember-light/80'
         },
         reviewed: {
-          active: 'bg-fern text-white border-fern shadow-xs font-semibold',
+          active: 'bg-[#2E7D32] text-white border-[#2E7D32] shadow-xs font-semibold',
           inactive: 'bg-fern-light text-fern-dark border-fern-border hover:bg-fern-light/80'
+        },
+        conflict: {
+          active: 'bg-[#0284C7] text-white border-[#0284C7] shadow-xs font-semibold',
+          inactive: 'bg-[#e0f2fe] text-[#0369a1] border-[#bae6fd] hover:bg-[#bae6fd]'
+        },
+        unknown: {
+          active: 'bg-[#FBC02D] text-[#2c302e] border-[#FBC02D] shadow-xs font-semibold',
+          inactive: 'bg-[#fef9c3] text-[#854d0e] border-[#fde047] hover:bg-[#fef08a]'
         }
       };
 
-      ['all', 'pending', 'flagged', 'reviewed'].forEach(s => {
+      ['all', 'pending', 'flagged', 'reviewed', 'conflict', 'unknown'].forEach(s => {
         const pill = document.getElementById(`pill-${s}`);
         if (!pill) return;
         const isSelected = (s === status);
-        const styleRule = filterStyles[s];
+        const styleRule = filterStyles[s] || filterStyles.all;
         pill.className = `min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center justify-center gap-1.5 ${isSelected ? styleRule.active : styleRule.inactive}`;
       });
       fetchList();
@@ -2793,6 +3217,12 @@ INDEX_TEMPLATE = """
         const flaggedCount = facets.flagged_count !== undefined 
           ? facets.flagged_count 
           : objectList.filter(o => o.has_flags).length;
+        const historyCount = facets.history_count !== undefined
+          ? facets.history_count
+          : objectList.filter(o => o.has_history).length;
+        const unknownCount = facets.unknown_count !== undefined
+          ? facets.unknown_count
+          : objectList.filter(o => o.has_unknown).length;
         const total = res.total_matching !== undefined ? res.total_matching : objectList.length;
 
         document.getElementById('matchingCount').textContent = total;
@@ -2800,6 +3230,10 @@ INDEX_TEMPLATE = """
         document.getElementById('pill-pending').innerHTML = `<span>🕒</span> <span>Unreviewed (${pendCount})</span>`;
         document.getElementById('pill-flagged').innerHTML = `<span>⚠</span> <span>Flagged (${flaggedCount})</span>`;
         document.getElementById('pill-reviewed').innerHTML = `<span>✓</span> <span>Reviewed (${revCount})</span>`;
+        const pillConf = document.getElementById('pill-conflict');
+        if (pillConf) pillConf.innerHTML = `<span>🔀</span> <span>Conflict (${historyCount})</span>`;
+        const pillUkn = document.getElementById('pill-unknown');
+        if (pillUkn) pillUkn.innerHTML = `<span>?</span> <span>Unknown (${unknownCount})</span>`;
         document.getElementById('connModalReviewed').textContent = `${revCount} / ${total} items`;
 
         renderList();
@@ -2842,12 +3276,7 @@ INDEX_TEMPLATE = """
       });
 
       container.innerHTML = sorted.map(s => {
-        const isRev = s.review_status === 'reviewed';
-        const statusBadge = isRev
-          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-fern-light text-fern-dark border border-fern-border">✓ REVIEWED</span>`
-          : (s.has_flags
-            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-ember-light text-ember-dark border border-ember-border">⚠ FLAGGED</span>`
-            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-tonal1 text-ink-muted border border-bordercol">🕒 UNREVIEWED</span>`);
+        const statusBadge = renderStatusBadge(s);
 
         let locStr = [];
         if (s.location) {
@@ -2897,7 +3326,21 @@ INDEX_TEMPLATE = """
       }).join('');
     }
 
-    function showListView() {
+    async function showListView(manageHistory = true) {
+      if (autoSaveTimer !== null) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = null;
+        if (currentOid) {
+          await saveCurrentEdits();
+        }
+      }
+
+      // If triggered from top-left UI back button while in detail view, pop history
+      if (manageHistory && window.history.state && window.history.state.view === 'detail') {
+        window.history.back();
+        return;
+      }
+
       document.getElementById('detailView').classList.add('hidden');
       document.getElementById('listView').classList.remove('hidden');
       fetchList();
@@ -2911,7 +3354,7 @@ INDEX_TEMPLATE = """
     // ==========================================
     // SPECIMEN DETAIL VIEW & DYNAMIC FORM ENGINE
     // ==========================================
-    async function loadSpecimen(oid) {
+    async function loadSpecimen(oid, fromHistory = false) {
       // Flush any pending debounced save for the outgoing specimen BEFORE currentOid changes.
       // Without this, navigating via prev/next saves the old form data under the new specimen's OID.
       if (autoSaveTimer !== null) {
@@ -2922,6 +3365,15 @@ INDEX_TEMPLATE = """
         }
       }
       currentOid = oid;
+
+      if (!fromHistory) {
+        if (window.history.state && window.history.state.view === 'detail') {
+          window.history.replaceState({ view: 'detail', id: oid }, '');
+        } else {
+          window.history.pushState({ view: 'detail', id: oid }, '');
+        }
+      }
+
       showDetailView();
 
       // Reset scroll position to top
@@ -3020,6 +3472,61 @@ INDEX_TEMPLATE = """
         // Render Dynamic Forms Driven by config.py
         renderDynamicForm(activeSchema, data);
 
+        // Update Problem Summary Banner
+        const banner = document.getElementById('detailProblemBanner');
+        const badgeContainer = document.getElementById('detailProblemBadges');
+        const activeProbFields = [];
+        const unknownFields = [];
+
+        if (activeSchema && activeSchema.ui_sections) {
+          const allFields = (activeSchema.ui_sections.registration || []).concat(activeSchema.ui_sections.location || []);
+          allFields.forEach(f => {
+            const val = (data.registration && data.registration[f.name] !== undefined) ? data.registration[f.name] : (data.observation ? data.observation[f.name] : '');
+            if (isFieldProblemActive(f.name, 'registration', data) || isFieldProblemActive(f.name, 'observation', data)) {
+              if (!activeProbFields.includes(f.name)) activeProbFields.push(f.name);
+            } else if (isValueUnknown(val)) {
+              if (!unknownFields.includes(f.name)) unknownFields.push(f.name);
+            }
+          });
+        }
+
+        if (activeProbFields.length > 0 || unknownFields.length > 0) {
+          banner.classList.remove('hidden');
+          let chipsHtml = '';
+          activeProbFields.forEach(fName => {
+            const inputId = `input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+            chipsHtml += `
+              <button
+                type="button"
+                onclick="scrollToField('${inputId}', '${fName}')"
+                class="px-2 py-1 bg-[#C62828] text-white text-[11px] font-bold rounded-[2px] shadow-xs flex items-center gap-1 touch-press hover:bg-[#b71c1c]"
+                title="Jump to ${fName}"
+              >
+                <span>⚠</span>
+                <span>${fName}</span>
+              </button>
+            `;
+          });
+          unknownFields.forEach(fName => {
+            const inputId = `input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+            chipsHtml += `
+              <button
+                type="button"
+                onclick="scrollToField('${inputId}', '${fName}')"
+                class="px-2 py-1 bg-[#FBC02D] text-[#2c302e] text-[11px] font-bold rounded-[2px] shadow-xs flex items-center gap-1 touch-press hover:bg-[#f9a825]"
+                title="Jump to ${fName}"
+              >
+                <span>?</span>
+                <span>${fName}</span>
+              </button>
+            `;
+          });
+          badgeContainer.innerHTML = chipsHtml;
+        } else {
+          banner.classList.add('hidden');
+          badgeContainer.innerHTML = '';
+        }
+
         // Render Problems & Discrepancies
         renderDiscrepancies(data);
 
@@ -3039,6 +3546,101 @@ INDEX_TEMPLATE = """
       if (idx !== -1 && objectList[idx + offset]) {
         loadSpecimen(objectList[idx + offset].id);
       }
+    }
+
+    function isFieldProblemActive(fieldName, section, record) {
+      if (!record) return false;
+      const issues = record.flagged_issues || [];
+      if (issues.some(iss => (iss.field === fieldName || iss.id === fieldName) && !iss.resolved)) {
+        return true;
+      }
+      const obs = record.observation || {};
+      const reg = record.registration || {};
+
+      // 1. Direct Problem Column Check (e.g. Genus_Problem)
+      const directProb = `${fieldName}_Problem`;
+      if (obs[directProb] === true || String(obs[directProb]).toLowerCase() === 'true' || obs[directProb] === '1' ||
+          reg[directProb] === true || String(reg[directProb]).toLowerCase() === 'true' || reg[directProb] === '1') {
+        return true;
+      }
+
+      // 2. Mapped Problem Columns from Schema
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+        for (const p of activeSchema.ui_sections.problems) {
+          const target = p.maps_to || p.target;
+          if (target === fieldName || (!target && p.name.replace(/_Problem$/, '') === fieldName)) {
+            const pVal = (obs[p.name] !== undefined) ? obs[p.name] : reg[p.name];
+            if (pVal === true || String(pVal).toLowerCase() === 'true' || pVal === '1' || pVal === 'x') {
+              return true;
+            }
+          }
+        }
+      }
+
+      // 3. Location section general problem
+      if (section === 'observation' && (obs.Loc_Problem === true || String(obs.Loc_Problem).toLowerCase() === 'true' || obs.Loc_Problem === '1')) {
+        return true;
+      }
+
+      return false;
+    }
+
+    function isValueUnknown(val) {
+      if (val === null || val === undefined) return false;
+      const s = String(val).trim().toLowerCase();
+      return ['ukjent', 'unknown', '?', '-', 'nan'].includes(s);
+    }
+
+    function scrollToField(inputId, fName) {
+      let el = document.getElementById(inputId);
+      if (!el && fName) {
+        el = document.getElementById(`input_observation_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`);
+      }
+      if (el) {
+        const accordion = el.closest('.accordion');
+        if (accordion) {
+          const content = accordion.querySelector('.acc-content');
+          const icon = accordion.querySelector('.acc-icon');
+          if (content && content.classList.contains('hidden')) {
+            content.classList.remove('hidden');
+            content.classList.add('block');
+            accordion.classList.add('acc-open');
+            if (icon) icon.textContent = '▲';
+          }
+        }
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.focus();
+        el.classList.add('ring-2', 'ring-ember');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-ember'), 1500);
+      }
+    }
+
+    async function toggleFieldProblem(fieldName) {
+      if (!currentRecord) return;
+      if (currentRecord.flagged_issues) {
+        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.field !== fieldName && i.id !== fieldName);
+      }
+      currentRecord.observation = currentRecord.observation || {};
+      const probCol = `${fieldName}_Problem`;
+      if (currentRecord.observation[probCol] !== undefined) {
+        currentRecord.observation[probCol] = false;
+      }
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+        for (const p of activeSchema.ui_sections.problems) {
+          if (p.maps_to === fieldName || p.target === fieldName) {
+            currentRecord.observation[p.name] = false;
+          }
+        }
+      }
+      if (fieldName === 'Location') {
+        currentRecord.observation.Loc_Problem = false;
+      }
+
+      renderDynamicForm(activeSchema, currentRecord);
+      renderDiscrepancies(currentRecord);
+      updateReviewButtonUI();
+      await saveCurrentEdits();
+      showToast(`Resolved problem for ${fieldName}`);
     }
 
     // ==========================================
@@ -3062,14 +3664,28 @@ INDEX_TEMPLATE = """
       regGroups.forEach((grp, gIdx) => {
         const isTaxonomy = grp.name.toLowerCase().includes('tax');
         const icon = isTaxonomy ? '🧬' : (grp.name.toLowerCase().includes('collect') ? '📦' : (grp.name.toLowerCase().includes('obj') ? '🌿' : (grp.name.toLowerCase().includes('note') ? '📝' : '🔒')));
-        const isOpen = (gIdx <= 1); // First two open by default
 
+        let grpProbCount = 0;
+        let grpUknCount = 0;
         let fieldsHtml = '';
+
         grp.fields.forEach(fName => {
           const fDef = regFields.find(f => f.name === fName) || { name: fName, type: 'text' };
           const val = (record.registration && record.registration[fName] !== undefined) ? record.registration[fName] : '';
-          fieldsHtml += renderFieldInput(fDef, val, 'registration');
+          if (isFieldProblemActive(fName, 'registration', record)) grpProbCount++;
+          else if (isValueUnknown(val)) grpUknCount++;
+          fieldsHtml += renderFieldInput(fDef, val, 'registration', record);
         });
+
+        const isOpen = (grpProbCount > 0 || grpUknCount > 0 || gIdx <= 1);
+
+        let badgesHtml = '';
+        if (grpProbCount > 0) {
+          badgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#C62828] text-white flex items-center gap-0.5 shadow-xs"><span>⚠</span><span>${grpProbCount}</span></span>`;
+        }
+        if (grpUknCount > 0) {
+          badgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#FBC02D] text-[#2c302e] flex items-center gap-0.5 shadow-xs"><span>?</span><span>${grpUknCount}</span></span>`;
+        }
 
         html += `
           <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion ${isOpen ? 'acc-open' : ''}">
@@ -3081,11 +3697,14 @@ INDEX_TEMPLATE = """
               <div class="flex items-center gap-2.5">
                 <span class="text-base">${icon}</span>
                 <div>
-                  <h3 class="font-bold text-xs text-ink uppercase tracking-wider">${grp.name}</h3>
+                  <div class="flex items-center gap-1.5">
+                    <h3 class="font-bold text-xs text-ink uppercase tracking-wider">${grp.name}</h3>
+                    ${badgesHtml}
+                  </div>
                   <p class="text-[10px] text-ink-muted">${grp.fields.join(' • ')}</p>
                 </div>
               </div>
-              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">▼</span>
+              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">${isOpen ? '▲' : '▼'}</span>
             </button>
             <div class="p-3.5 space-y-3 acc-content ${isOpen ? 'block' : 'hidden'}">
               ${fieldsHtml}
@@ -3097,10 +3716,25 @@ INDEX_TEMPLATE = """
       // 2. Render Physical Location Group from config.py
       if (locFields.length > 0) {
         let locFieldsHtml = '';
+        let locProbCount = 0;
+        let locUknCount = 0;
+
         locFields.forEach(fDef => {
           const val = (record.observation && record.observation[fDef.name] !== undefined) ? record.observation[fDef.name] : '';
-          locFieldsHtml += renderFieldInput(fDef, val, 'observation');
+          if (isFieldProblemActive(fDef.name, 'observation', record)) locProbCount++;
+          else if (isValueUnknown(val)) locUknCount++;
+          locFieldsHtml += renderFieldInput(fDef, val, 'observation', record);
         });
+
+        const isLocOpen = (locProbCount > 0 || locUknCount > 0 || true);
+
+        let locBadgesHtml = '';
+        if (locProbCount > 0) {
+          locBadgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#C62828] text-white flex items-center gap-0.5 shadow-xs"><span>⚠</span><span>${locProbCount}</span></span>`;
+        }
+        if (locUknCount > 0) {
+          locBadgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#FBC02D] text-[#2c302e] flex items-center gap-0.5 shadow-xs"><span>?</span><span>${locUknCount}</span></span>`;
+        }
 
         let presetOptions = `<option value="Default" ${lastSelectedPreset === 'Default' ? 'selected' : ''}>Default</option>`;
         Object.keys(locationPresets).forEach(pName => {
@@ -3110,7 +3744,7 @@ INDEX_TEMPLATE = """
         });
 
         html += `
-          <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion acc-open">
+          <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion ${isLocOpen ? 'acc-open' : ''}">
             <button
               type="button"
               onclick="toggleAccordion(this)"
@@ -3119,13 +3753,16 @@ INDEX_TEMPLATE = """
               <div class="flex items-center gap-2.5">
                 <span class="text-base">📍</span>
                 <div>
-                  <h3 class="font-bold text-xs text-ink uppercase tracking-wider">Physical Storage Location</h3>
+                  <div class="flex items-center gap-1.5">
+                    <h3 class="font-bold text-xs text-ink uppercase tracking-wider">Physical Storage Location</h3>
+                    ${locBadgesHtml}
+                  </div>
                   <p class="text-[10px] text-ink-muted">Museum coordinates & storage trait</p>
                 </div>
               </div>
-              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">▼</span>
+              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">${isLocOpen ? '▲' : '▼'}</span>
             </button>
-            <div class="p-3.5 space-y-3 acc-content block">
+            <div class="p-3.5 space-y-3 acc-content ${isLocOpen ? 'block' : 'hidden'}">
               <div class="flex items-center gap-2 mb-4">
                 <select id="locPresetSelect" class="flex-grow bg-surface border border-bordercol rounded-[2px] px-2 py-1.5 text-xs font-sans text-ink outline-none focus:border-fern">
                   ${presetOptions}
@@ -3146,7 +3783,7 @@ INDEX_TEMPLATE = """
       container.innerHTML = html;
     }
 
-    function renderFieldInput(field, value, section) {
+    function renderFieldInput(field, value, section, record) {
       const fName = field.name;
       const fType = field.type || 'text';
       const isReadOnly = !!field.readonly;
@@ -3154,6 +3791,41 @@ INDEX_TEMPLATE = """
 
       const toggleBtnId = `history_toggle_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
       const containerId = `history_container_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+
+      const hasProb = isFieldProblemActive(fName, section, record);
+      const hasUkn = isValueUnknown(value);
+
+      const problemBadge = hasProb
+        ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-[#C62828] text-white shadow-xs ml-1" title="Problem Flagged">⚠</span>`
+        : (hasUkn
+          ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-[#FBC02D] text-[#2c302e] shadow-xs ml-1" title="Unknown Value">?</span>`
+          : '');
+
+      const inputStyle = hasProb
+        ? 'border-l-4 border-l-[#C62828] bg-ember-light border-ember text-ember-dark font-medium focus:border-ember'
+        : (hasUkn
+          ? 'border-l-4 border-l-[#FBC02D] bg-[#fef9c3] border-[#fde047] text-[#854d0e] font-medium focus:border-[#eab308]'
+          : 'border-bordercol bg-surface text-ink focus:border-fern');
+
+      const flagBtn = hasProb
+        ? `<button
+            type="button"
+            onclick="toggleFieldProblem('${fName}')"
+            class="min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-bold text-white bg-[#C62828] hover:bg-[#b71c1c] border border-[#C62828] rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1 shadow-xs"
+            title="Problem active for ${fName} (tap to resolve)"
+          >
+            <span>⚑</span>
+            <span>Flagged</span>
+          </button>`
+        : `<button
+            type="button"
+            onclick="openAddDiscrepancyModal('${fName}')"
+            class="min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-medium text-ink-muted hover:text-ember bg-tonal1 hover:bg-tonal2 border border-bordercol rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1"
+            title="Flag discrepancy for ${fName}"
+          >
+            <span>⚑</span>
+            <span>Flag</span>
+          </button>`;
 
       const historyControls = `
         <button
@@ -3166,17 +3838,7 @@ INDEX_TEMPLATE = """
           <span>📖</span>
           <span>History</span>
         </button>
-        ${!isReadOnly ? `
-          <button
-            type="button"
-            onclick="openAddDiscrepancyModal('${fName}')"
-            class="min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-medium text-ink-muted hover:text-ember bg-tonal1 hover:bg-tonal2 border border-bordercol rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1"
-            title="Flag discrepancy for ${fName}"
-          >
-            <span>⚑</span>
-            <span>Flag</span>
-          </button>
-        ` : ''}
+        ${!isReadOnly ? flagBtn : ''}
       `;
 
       const historyContainerHtml = `
@@ -3194,7 +3856,10 @@ INDEX_TEMPLATE = """
         return `
           <div class="space-y-1">
             <div class="flex items-center justify-between min-h-[32px]">
-              <label for="${inputId}" class="text-xs font-bold text-ink">${fName}</label>
+              <label for="${inputId}" class="text-xs font-bold text-ink flex items-center gap-1">
+                <span>${fName}</span>
+                ${problemBadge}
+              </label>
               <div class="flex items-center">${historyControls}</div>
             </div>
             <select
@@ -3202,7 +3867,7 @@ INDEX_TEMPLATE = """
               data-section="${section}"
               data-field="${fName}"
               onchange="triggerAutoSave()" onblur="saveCurrentEdits()"
-              class="w-full min-h-[44px] bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern cursor-pointer"
+              class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none cursor-pointer ${inputStyle}"
             >
               ${optionsHtml}
             </select>
@@ -3216,8 +3881,11 @@ INDEX_TEMPLATE = """
         const isChecked = (String(value).toLowerCase() === 'true' || value === true || value === '1' || value === 'yes');
         return `
           <div class="space-y-1">
-            <div class="flex items-center justify-between min-h-[44px] py-1">
-              <label for="${inputId}" class="flex-1 text-xs font-bold text-ink cursor-pointer flex items-center">${fName}</label>
+            <div class="flex items-center justify-between min-h-[44px] py-1 ${hasProb ? 'bg-ember-light p-2 rounded-[2px] border border-ember' : ''}">
+              <label for="${inputId}" class="flex-1 text-xs font-bold text-ink cursor-pointer flex items-center gap-1">
+                <span>${fName}</span>
+                ${problemBadge}
+              </label>
               <div class="flex items-center gap-1.5">
                 ${historyControls}
                 <label class="min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer">
@@ -3243,7 +3911,10 @@ INDEX_TEMPLATE = """
         return `
           <div class="space-y-1">
             <div class="flex items-center justify-between min-h-[32px]">
-              <label for="${inputId}" class="text-xs font-bold text-ink">${fName}</label>
+              <label for="${inputId}" class="text-xs font-bold text-ink flex items-center gap-1">
+                <span>${fName}</span>
+                ${problemBadge}
+              </label>
               <div class="flex items-center">${historyControls}</div>
             </div>
             <textarea
@@ -3252,7 +3923,7 @@ INDEX_TEMPLATE = """
               data-field="${fName}"
               rows="2"
               oninput="triggerAutoSave()" onblur="saveCurrentEdits()"
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
+              class="w-full border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}"
             >${value || ''}</textarea>
             ${historyContainerHtml}
           </div>
@@ -3263,7 +3934,11 @@ INDEX_TEMPLATE = """
       return `
         <div class="space-y-1">
           <div class="flex items-center justify-between min-h-[32px]">
-            <label for="${inputId}" class="text-xs font-bold text-ink">${fName} ${isReadOnly ? '<span class="text-[9px] text-ink-faint font-normal font-mono">(Locked)</span>' : ''}</label>
+            <label for="${inputId}" class="text-xs font-bold text-ink flex items-center gap-1">
+              <span>${fName}</span>
+              ${problemBadge}
+              ${isReadOnly ? '<span class="text-[9px] text-ink-faint font-normal font-mono">(Locked)</span>' : ''}
+            </label>
             <div class="flex items-center">${historyControls}</div>
           </div>
           <input
@@ -3272,7 +3947,7 @@ INDEX_TEMPLATE = """
             data-section="${section}"
             data-field="${fName}"
             value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full min-h-[44px] bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : 'class="w-full min-h-[44px] bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern" oninput="triggerAutoSave()" onblur="saveCurrentEdits()"'}
+            ${isReadOnly ? 'readonly class="w-full min-h-[44px] bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : `class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}" oninput="triggerAutoSave()" onblur="saveCurrentEdits()"`}
           />
           ${historyContainerHtml}
         </div>
@@ -3283,10 +3958,13 @@ INDEX_TEMPLATE = """
       const acc = btn.closest('.accordion');
       acc.classList.toggle('acc-open');
       const content = acc.querySelector('.acc-content');
+      const icon = acc.querySelector('.acc-icon');
       if (acc.classList.contains('acc-open')) {
         content.classList.remove('hidden');
+        if (icon) icon.textContent = '▲';
       } else {
         content.classList.add('hidden');
+        if (icon) icon.textContent = '▼';
       }
     }
 
@@ -3520,6 +4198,63 @@ INDEX_TEMPLATE = """
       openModal('addDiscrepancyModal');
     }
 
+    function updateDetailProblemBanner(data) {
+      const banner = document.getElementById('detailProblemBanner');
+      const badgeContainer = document.getElementById('detailProblemBadges');
+      if (!banner || !badgeContainer || !data) return;
+      const activeProbFields = [];
+      const unknownFields = [];
+
+      if (activeSchema && activeSchema.ui_sections) {
+        const allFields = (activeSchema.ui_sections.registration || []).concat(activeSchema.ui_sections.location || []);
+        allFields.forEach(f => {
+          const val = (data.registration && data.registration[f.name] !== undefined) ? data.registration[f.name] : (data.observation ? data.observation[f.name] : '');
+          if (isFieldProblemActive(f.name, 'registration', data) || isFieldProblemActive(f.name, 'observation', data)) {
+            if (!activeProbFields.includes(f.name)) activeProbFields.push(f.name);
+          } else if (isValueUnknown(val)) {
+            if (!unknownFields.includes(f.name)) unknownFields.push(f.name);
+          }
+        });
+      }
+
+      if (activeProbFields.length > 0 || unknownFields.length > 0) {
+        banner.classList.remove('hidden');
+        let chipsHtml = '';
+        activeProbFields.forEach(fName => {
+          const inputId = `input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+          chipsHtml += `
+            <button
+              type="button"
+              onclick="scrollToField('${inputId}', '${fName}')"
+              class="px-2 py-1 bg-[#C62828] text-white text-[11px] font-bold rounded-[2px] shadow-xs flex items-center gap-1 touch-press hover:bg-[#b71c1c]"
+              title="Jump to ${fName}"
+            >
+              <span>⚠</span>
+              <span>${fName}</span>
+            </button>
+          `;
+        });
+        unknownFields.forEach(fName => {
+          const inputId = `input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+          chipsHtml += `
+            <button
+              type="button"
+              onclick="scrollToField('${inputId}', '${fName}')"
+              class="px-2 py-1 bg-[#FBC02D] text-[#2c302e] text-[11px] font-bold rounded-[2px] shadow-xs flex items-center gap-1 touch-press hover:bg-[#f9a825]"
+              title="Jump to ${fName}"
+            >
+              <span>?</span>
+              <span>${fName}</span>
+            </button>
+          `;
+        });
+        badgeContainer.innerHTML = chipsHtml;
+      } else {
+        banner.classList.add('hidden');
+        badgeContainer.innerHTML = '';
+      }
+    }
+
     async function submitDiscrepancy(e) {
       e.preventDefault();
       const field = document.getElementById('discrepancyFieldSelect').value;
@@ -3546,6 +4281,8 @@ INDEX_TEMPLATE = """
 
       closeModal('addDiscrepancyModal');
       document.getElementById('discrepancyReasonInput').value = '';
+      renderDynamicForm(activeSchema, currentRecord);
+      updateDetailProblemBanner(currentRecord);
       renderDiscrepancies(currentRecord);
       await saveCurrentEdits();
       showToast('Discrepancy flagged on host');
@@ -3554,6 +4291,8 @@ INDEX_TEMPLATE = """
     async function resolveDiscrepancy(issId) {
       if (!currentRecord || !currentRecord.flagged_issues) return;
       currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issId);
+      renderDynamicForm(activeSchema, currentRecord);
+      updateDetailProblemBanner(currentRecord);
       renderDiscrepancies(currentRecord);
       await saveCurrentEdits();
       showToast('Discrepancy resolved');
@@ -3564,6 +4303,21 @@ INDEX_TEMPLATE = """
       if (!el || !currentRecord) return;
       currentRecord.observation = currentRecord.observation || {};
       currentRecord.observation[probName] = el.checked;
+
+      const probs = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) ? activeSchema.ui_sections.problems : [];
+      let hasProb = false;
+      for (const p of probs) {
+        const v = currentRecord.observation[p.name];
+        if (v === true || String(v).toLowerCase() === 'true' || v === '1') {
+          hasProb = true;
+          break;
+        }
+      }
+      currentRecord.has_flags = hasProb;
+      updateReviewButtonUI();
+      renderDynamicForm(activeSchema, currentRecord);
+      updateDetailProblemBanner(currentRecord);
+
       await saveCurrentEdits();
     }
 
@@ -3615,11 +4369,27 @@ INDEX_TEMPLATE = """
       };
 
       try {
-        await apiFetch('/api/update', {
+        const res = await apiFetch('/api/update', {
           method: 'POST',
           body: JSON.stringify(payload)
         });
         document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
+
+        if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
+          if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
+          if (res.has_history !== undefined) currentRecord.has_history = res.has_history;
+          if (res.has_unknown !== undefined) currentRecord.has_unknown = res.has_unknown;
+          if (res.review_status !== undefined) currentRecord.review_status = res.review_status;
+          updateReviewButtonUI();
+
+          const listItem = objectList.find(o => String(o.id) === String(currentOid));
+          if (listItem) {
+            if (res.has_flags !== undefined) listItem.has_flags = res.has_flags;
+            if (res.has_history !== undefined) listItem.has_history = res.has_history;
+            if (res.has_unknown !== undefined) listItem.has_unknown = res.has_unknown;
+            if (res.review_status !== undefined) listItem.review_status = res.review_status;
+          }
+        }
 
         // Hide 'Edit saved' message if we determine we're actually disconnected
         if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
@@ -3638,11 +4408,16 @@ INDEX_TEMPLATE = """
       if (isReviewed) {
         btn.className = 'w-full py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm flex items-center justify-center gap-2 border-2 transition-all touch-target-min touch-press bg-fern text-white border-fern-dark shadow-md';
         label.textContent = '✓ Reviewed (Tap to undo)';
-        badgeContainer.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-fern-light text-fern-dark border border-fern-border">✓ REVIEWED</span>';
       } else {
         btn.className = 'w-full py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm flex items-center justify-center gap-2 border-2 transition-all touch-target-min touch-press bg-surface text-ink border-bordercol hover:bg-tonal1 shadow-xs';
         label.textContent = 'Mark Reviewed';
-        badgeContainer.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-tonal1 text-ink-muted border border-bordercol">🕒 UNREVIEWED</span>';
+      }
+
+      if (currentRecord) {
+        currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+        badgeContainer.innerHTML = renderStatusBadge(currentRecord);
+      } else {
+        badgeContainer.innerHTML = renderStatusBadge({ review_status: isReviewed ? 'reviewed' : 'pending' });
       }
     }
 
