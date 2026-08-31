@@ -73,6 +73,82 @@ DEFAULT_LOCATION_FIELDS = [
 ]
 
 
+class StatusToggleCard(tk.Frame):
+    """
+    A standalone, reusable toggle card component that manages its own style via trace_add.
+    Used for the "Loan status" toggle, but generic enough for other booleans.
+    """
+    def __init__(self, parent, variable, colors, command=None, **kwargs):
+        self.colors = colors
+
+        if "bg" not in kwargs:
+            kwargs["bg"] = colors["surface"]
+        if "highlightbackground" not in kwargs:
+            kwargs["highlightbackground"] = colors["border"]
+        if "highlightthickness" not in kwargs:
+            kwargs["highlightthickness"] = 1
+
+        super().__init__(parent, **kwargs)
+
+        self.variable = variable
+        self.command = command
+
+        # Left color indicator bar (4px)
+        self.bar = tk.Frame(self, bg=self.colors["success"], width=sc(4))
+        self.bar.pack(side="left", fill="y")
+
+        self.lbl = tk.Label(
+            self,
+            text="STATUS: AVAILABLE",
+            font=("JetBrains Mono", sc(9), "bold"),
+            fg=self.colors["text"],
+            bg=self.colors["surface"],
+            cursor="hand2"
+        )
+        self.lbl.pack(side="left", padx=sc(8), pady=sc(4))
+
+        self.bind("<Button-1>", self._toggle)
+        self.lbl.bind("<Button-1>", self._toggle)
+
+        # Setup variable tracking
+        self._trace_name = self.variable.trace_add("write", self._on_var_changed)
+        self.bind("<Destroy>", self._on_destroy, add="+")
+
+        # Initial style sync
+        self._update_style()
+
+    def _is_active(self):
+        return self.variable.get() in ("True", "true", "1", True)
+
+    def _toggle(self, event=None):
+        new_val = "False" if self._is_active() else "True"
+        self.variable.set(new_val)
+        if self.command:
+            self.command(new_val == "True")
+
+    def _on_var_changed(self, *args):
+        if self.winfo_exists():
+            self._update_style()
+
+    def _update_style(self):
+        c = self.colors
+        is_active = self._is_active()
+
+        bar_color = c["warning"] if is_active else c["success"]
+        status_text = "STATUS: ON LOAN [ACTIVE]" if is_active else "STATUS: AVAILABLE"
+
+        self.bar.configure(bg=bar_color)
+        self.lbl.configure(text=status_text, fg=bar_color if is_active else c["text"])
+
+    def _on_destroy(self, event):
+        if str(event.widget) == str(self):
+            if hasattr(self, "_trace_name") and self._trace_name:
+                try:
+                    self.variable.trace_remove("write", self._trace_name)
+                except Exception:
+                    pass
+
+
 class LocationPanel(tk.Frame):
     """
     Decoupled Location Panel Component for Arbor.
@@ -127,10 +203,6 @@ class LocationPanel(tk.Frame):
 
     def _on_field_var_change(self, field_name):
         val = self.location_vars[field_name].get()
-        if field_name == "Loaned out" and hasattr(self, "_loan_card_widgets"):
-            for card, bar, lbl in self._loan_card_widgets:
-                if card.winfo_exists():
-                    self._update_loan_card_style(card, bar, lbl)
         if "on_field_change" in self.live_callbacks:
             self.live_callbacks["on_field_change"](field_name, val)
 
@@ -149,7 +221,6 @@ class LocationPanel(tk.Frame):
         for child in self.winfo_children():
             child.destroy()
         self.field_entries.clear()
-        self._loan_card_widgets = []
         
         if self.mode == "vertical":
             self._build_vertical_ui()
@@ -290,55 +361,24 @@ class LocationPanel(tk.Frame):
     # Loan Status Card
     # -------------------------------------------------------------------------
     def _build_loan_status_card(self, parent_frame, is_horiz=False):
-        c = self.colors
-        is_loaned = self.location_vars.get("Loaned out", tk.StringVar(value="False")).get() in ("True", "true", "1", True)
-        
-        card_bg = c["surface"]
-        bar_color = c["warning"] if is_loaned else c["success"]
-        status_text = "STATUS: ON LOAN [ACTIVE]" if is_loaned else "STATUS: AVAILABLE"
-        
-        card = tk.Frame(parent_frame, bg=card_bg, highlightbackground=c["border"], highlightthickness=1)
-        
-        # Left color indicator bar (4px)
-        bar = tk.Frame(card, bg=bar_color, width=sc(4))
-        bar.pack(side="left", fill="y")
-        
-        lbl = tk.Label(
-            card,
-            text=status_text,
-            font=("JetBrains Mono", sc(9), "bold"),
-            fg=bar_color if is_loaned else c["text"],
-            bg=card_bg,
-            cursor="hand2"
-        )
-        lbl.pack(side="left", padx=sc(8), pady=sc(4))
-        
-        def _toggle_loan(e=None):
-            new_val = "False" if self.location_vars.get("Loaned out").get() in ("True", "true", "1", True) else "True"
-            self.location_vars.get("Loaned out").set(new_val)
-            self._update_loan_card_style(card, bar, lbl)
+        var = self.location_vars.get("Loaned out")
+        if not var:
+            var = tk.StringVar(value="False")
+            self.location_vars["Loaned out"] = var
+
+        def _on_toggle(active):
             if "on_loan_toggle" in self.live_callbacks:
-                self.live_callbacks["on_loan_toggle"](new_val == "True")
+                self.live_callbacks["on_loan_toggle"](active)
             if "on_commit" in self.live_callbacks:
                 self.live_callbacks["on_commit"](self.get_data())
 
-        card.bind("<Button-1>", _toggle_loan)
-        lbl.bind("<Button-1>", _toggle_loan)
-        
-        if not hasattr(self, "_loan_card_widgets"):
-            self._loan_card_widgets = []
-        self._loan_card_widgets.append((card, bar, lbl))
-
+        card = StatusToggleCard(
+            parent_frame,
+            variable=var,
+            colors=self.colors,
+            command=_on_toggle
+        )
         return card
-
-    def _update_loan_card_style(self, card, bar, lbl):
-        c = self.colors
-        is_loaned = self.location_vars.get("Loaned out").get() in ("True", "true", "1", True)
-        bar_color = c["warning"] if is_loaned else c["success"]
-        status_text = "STATUS: ON LOAN [ACTIVE]" if is_loaned else "STATUS: AVAILABLE"
-        
-        bar.configure(bg=bar_color)
-        lbl.configure(text=status_text, fg=bar_color if is_loaned else c["text"])
 
     # -------------------------------------------------------------------------
     # Field Builder Helper
