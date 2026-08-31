@@ -89,6 +89,9 @@ class MobileDialog:
         if hasattr(self.parent_ui, "update_review_progress"):
             self.parent_ui.update_review_progress()
 
+        if hasattr(self.parent_ui, "_update_push_to_phone_state"):
+            self.parent_ui.root.after(100, self.parent_ui._update_push_to_phone_state)
+
         self.win.destroy()
 
     # ------------------------------------------------------------------
