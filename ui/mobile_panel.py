@@ -393,6 +393,12 @@ class MobilePanel:
 
     def stop(self):
         """Stop the tunnel (does not save data — wrapper handles that)."""
+        if self.server:
+            try:
+                self.server.broadcast_event('session_ended', {})
+            except Exception:
+                pass
+
         if self.tunnel:
             self.tunnel.stop()
             self.tunnel = None

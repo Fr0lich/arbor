@@ -1772,7 +1772,7 @@ INDEX_TEMPLATE = """
             </div>
 
             <div class="flex items-center gap-1" id="footerSyncStatus">
-              <span class="font-mono text-fern-dark font-medium">✓ Synced to host</span>
+              <span class="font-mono text-fern-dark font-medium hidden" id="footerSyncStatusText">✓ Edit saved</span>
             </div>
           </div>
 
@@ -2330,6 +2330,7 @@ INDEX_TEMPLATE = """
       const dotFooter = document.getElementById('footerConnDot');
       const dotFooterAnim = document.getElementById('footerConnDotAnimate');
       const offlineBanner = document.getElementById('offlineBanner');
+      const syncStatusText = document.getElementById('footerSyncStatusText');
 
       if (state === 'connected') {
         if (badge) badge.textContent = 'Live';
@@ -2348,6 +2349,7 @@ INDEX_TEMPLATE = """
         if (offlineBanner) offlineBanner.classList.remove('hidden');
         [dotHeader, dotFooter].forEach(d => { if (d) d.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember-dark'; });
         [dotHeaderAnim, dotFooterAnim].forEach(d => { if (d) d.className = 'hidden'; });
+        if (syncStatusText) syncStatusText.classList.add('hidden');
       }
     }
 
@@ -2374,12 +2376,41 @@ INDEX_TEMPLATE = """
               } else if (!document.getElementById('listView').classList.contains('hidden')) {
                 fetchList();
               }
+            } else if (data.type === 'session_ended') {
+              showSessionEndedOverlay();
             }
           } catch(err) {}
         };
       } catch(err) {
         updateConnectionState('disconnected');
       }
+    }
+
+    function showSessionEndedOverlay() {
+      // Close active SSE connection
+      if (_evtSource) {
+        _evtSource.close();
+        _evtSource = null;
+      }
+
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 z-[100] flex flex-col items-center justify-center bg-surface px-6 text-center';
+      overlay.innerHTML = `
+        <div class="mb-6 rounded-full bg-ember-light p-4">
+          <svg class="h-10 w-10 text-ember-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h2 class="font-serif text-2xl font-bold text-ink mb-2">Session Ended</h2>
+        <p class="font-sans text-ink-muted mb-8 max-w-sm">
+          The desktop application has closed this session.
+          To continue editing, start a new session on your desktop.
+        </p>
+        <button onclick="window.location.reload()" class="w-full max-w-[200px] py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm bg-fern text-white border-2 border-fern-dark shadow-md touch-target-min touch-press">
+          Refresh & Try Again
+        </button>
+      `;
+      document.body.appendChild(overlay);
     }
 
     // ==========================================
@@ -3262,9 +3293,14 @@ INDEX_TEMPLATE = """
           method: 'POST',
           body: JSON.stringify(payload)
         });
-        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium">✓ Synced to host</span>';
+        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
+
+        // Hide 'Edit saved' message if we determine we're actually disconnected
+        if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
+            document.getElementById('footerSyncStatusText').classList.add('hidden');
+        }
       } catch (err) {
-        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-ember-dark font-medium">⚠ Sync Error</span>';
+        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-ember-dark font-medium" id="footerSyncStatusText">⚠ Sync Error</span>';
       }
     }
 
