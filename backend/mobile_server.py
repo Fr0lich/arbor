@@ -2715,6 +2715,7 @@ INDEX_TEMPLATE = """
     let searchQuery = '';
     let searchDebounceTimer = null;
     let autoSaveTimer = null;
+    let dirtyFields = new Set();
     let wakeLockSentinel = null;
 
     let locationPresets = {};
@@ -3822,6 +3823,7 @@ INDEX_TEMPLATE = """
         }
       }
       currentOid = oid;
+      dirtyFields.clear();
 
       if (!fromHistory) {
         if (window.history.state && window.history.state.view === 'detail') {
@@ -4330,7 +4332,7 @@ INDEX_TEMPLATE = """
               id="${inputId}"
               data-section="${section}"
               data-field="${fName}"
-              onchange="triggerAutoSave()" onblur="saveCurrentEdits()"
+              onchange="markDirty('${fName}'); triggerAutoSave()" onblur="saveCurrentEdits()"
               class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none cursor-pointer ${inputStyle}"
             >
               ${optionsHtml}
@@ -4359,7 +4361,7 @@ INDEX_TEMPLATE = """
                     data-section="${section}"
                     data-field="${fName}"
                     ${isChecked ? 'checked' : ''}
-                    onchange="triggerAutoSave()"
+                    onchange="markDirty('${fName}'); triggerAutoSave()"
                     class="w-5 h-5 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
                   />
                 </label>
@@ -4386,7 +4388,7 @@ INDEX_TEMPLATE = """
               data-section="${section}"
               data-field="${fName}"
               rows="2"
-              oninput="triggerAutoSave()" onblur="saveCurrentEdits()"
+              oninput="markDirty('${fName}'); triggerAutoSave()" onblur="saveCurrentEdits()"
               class="w-full border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}"
             >${value || ''}</textarea>
             ${historyContainerHtml}
@@ -4411,7 +4413,7 @@ INDEX_TEMPLATE = """
             data-section="${section}"
             data-field="${fName}"
             value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full min-h-[44px] bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : `class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}" oninput="handleVocabInput(this, '${fName}')" onchange="handleVocabChange(this)" onblur="saveCurrentEdits()"`}
+            ${isReadOnly ? 'readonly class="w-full min-h-[44px] bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : `class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}" oninput="markDirty('${fName}'); handleVocabInput(this, '${fName}')" onchange="markDirty('${fName}'); handleVocabChange(this)" onblur="saveCurrentEdits()"`}
             ${activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName] && !isReadOnly ? `list="datalist_${section}_${fName}"` : ''}
           />
           ${activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName] && !isReadOnly ? `
@@ -4549,11 +4551,13 @@ INDEX_TEMPLATE = """
                if (input.checked !== checkedVal) {
                   input.checked = checkedVal;
                   changed = true;
+                  markDirty(field.name);
                }
              } else {
                if (input.value !== newVal) {
                  input.value = newVal;
                  changed = true;
+                 markDirty(field.name);
                }
              }
           }
@@ -4831,6 +4835,7 @@ INDEX_TEMPLATE = """
       const matchProb = `${field}_Problem`;
       if (currentRecord.observation) {
         currentRecord.observation[matchProb] = true;
+        markDirty(matchProb);
       }
 
       closeModal('addDiscrepancyModal');
@@ -4857,6 +4862,7 @@ INDEX_TEMPLATE = """
       if (!el || !currentRecord) return;
       currentRecord.observation = currentRecord.observation || {};
       currentRecord.observation[probName] = el.checked;
+      markDirty(probName);
 
       const probs = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) ? activeSchema.ui_sections.problems : [];
       let hasProb = false;
@@ -4881,6 +4887,7 @@ INDEX_TEMPLATE = """
 
 
     function handleVocabInput(input, fName) {
+      markDirty(fName);
       triggerAutoSave();
     }
 
@@ -4902,7 +4909,13 @@ INDEX_TEMPLATE = """
             }
         }
       }
+      const fName = input.getAttribute('data-field');
+      markDirty(fName);
       triggerAutoSave();
+    }
+
+    function markDirty(fieldName) {
+      if (fieldName) dirtyFields.add(fieldName);
     }
 
     function triggerAutoSave() {
@@ -4921,15 +4934,19 @@ INDEX_TEMPLATE = """
       // Collect all dynamic inputs
       document.querySelectorAll('[data-section="registration"]').forEach(input => {
         const f = input.getAttribute('data-field');
-        regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
+        if (dirtyFields.has(f)) {
+          regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
+        }
       });
 
       document.querySelectorAll('[data-section="observation"]').forEach(input => {
         const f = input.getAttribute('data-field');
-        if (input.type === 'checkbox') {
-          obsPayload[f] = input.checked;
-        } else {
-          obsPayload[f] = input.value;
+        if (dirtyFields.has(f)) {
+          if (input.type === 'checkbox') {
+            obsPayload[f] = input.checked;
+          } else {
+            obsPayload[f] = input.value;
+          }
         }
       });
 
@@ -4937,10 +4954,16 @@ INDEX_TEMPLATE = """
       if (currentRecord && currentRecord.observation) {
         Object.keys(currentRecord.observation).forEach(k => {
           if (k.endsWith('_Problem') || k.startsWith('Unknown_')) {
-            obsPayload[k] = currentRecord.observation[k];
+            if (dirtyFields.has(k)) {
+              obsPayload[k] = currentRecord.observation[k];
+            }
           }
         });
       }
+
+      // If nothing was dirtied, and review status wasn't checked, we technically don't need to save,
+      // but the server handles empty updates gracefully.
+      dirtyFields.clear();
 
       const payload = {
         id: currentOid,
