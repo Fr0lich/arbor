@@ -8979,6 +8979,10 @@ class ObjectProgramUI(
         
         ids = self.app.active_object_ids
         
+        # Pre-fetch dicts outside loops
+        reg_dict = self._get_reg_dict()
+        obs_dict = self._get_obs_dict()
+
         if col == "ID":
             def id_key(oid):
                 try:
@@ -8991,31 +8995,21 @@ class ObjectProgramUI(
             def get_genus(oid):
                 if genus_dict is not None and oid in genus_dict:
                     return str(genus_dict[oid] or "").lower()
-                val = self.app.df_reg.loc[oid]
-                if isinstance(val, pd.DataFrame):
-                    val = val.iloc[0]
-                return str(val.get("Genus", "")).lower()
+                row = reg_dict.get(oid, {})
+                return str(row.get("Genus", "")).lower()
             sorted_ids = sorted(ids, key=get_genus, reverse=not ascending)
         elif col == "Species":
             species_dict = getattr(self, "_cached_species_dict", None)
             def get_species(oid):
                 if species_dict is not None and oid in species_dict:
                     return str(species_dict[oid] or "").lower()
-                val = self.app.df_reg.loc[oid]
-                if isinstance(val, pd.DataFrame):
-                    val = val.iloc[0]
-                return str(val.get("Species", "")).lower()
+                row = reg_dict.get(oid, {})
+                return str(row.get("Species", "")).lower()
             sorted_ids = sorted(ids, key=get_species, reverse=not ascending)
         elif col == "Status":
             def status_key(oid):
-                try:
-                    val = self.app.df_obs.loc[oid, REVIEWED_COLUMN]
-                    if isinstance(val, pd.Series):
-                        reviewed = bool(val.iloc[0])
-                    else:
-                        reviewed = bool(val)
-                except Exception:
-                    reviewed = False
+                row = obs_dict.get(oid, {})
+                reviewed = bool(row.get(REVIEWED_COLUMN, False))
                 has_problem = self._get_cached_problem(oid)
                 has_history = self._problems_have_history(oid)
                 
