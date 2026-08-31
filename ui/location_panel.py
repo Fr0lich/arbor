@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk, simpledialog
 import config
 from config import sc
+from ui.widgets import ArborTextField, ArborDropdown
+from ui.state import app_bus
 
 # Color scheme definitions matching Filter menu & Historical Conflict Resolver (Zero emojis/symbols)
 COLORS_LIGHT = {
@@ -384,83 +386,25 @@ class LocationPanel(tk.Frame):
     # Field Builder Helper
     # -------------------------------------------------------------------------
     def _create_field_widget(self, parent, name, fdef, is_horiz=False):
-        c = self.colors
         var = self.location_vars[name]
         ftype = fdef.get("type", "text")
         
-        container = tk.Frame(parent, bg=c["bg"])
+        # We wrap it in a frame so it matches the expected return signature `row.pack(fill="x")`
+        row = tk.Frame(parent, bg=parent.cget("bg"))
         
-        if is_horiz:
-            lbl = tk.Label(
-                container, text=name.upper(),
-                font=("JetBrains Mono", sc(9), "bold"),
-                bg=c["bg"], fg=c["text_muted"], anchor="w"
-            )
-            lbl.pack(fill="x", pady=(0, sc(2)))
-        else:
-            lbl = tk.Label(
-                container, text=name.upper(), width=13,
-                font=("JetBrains Mono", sc(9.5), "bold"),
-                bg=c["bg"], fg=c["text_muted"], anchor="w"
-            )
-            lbl.pack(side="left", padx=(0, sc(4)))
-            
         if ftype == "choice":
             choices = fdef.get("choices", [])
-            if "" not in choices:
-                choices = [""] + choices
-            widget = ttk.Combobox(
-                container,
-                textvariable=var,
-                values=choices,
-                state="readonly" if name != "Stored as" else "normal",
-                font=("JetBrains Mono", sc(10))
-            , cursor="hand2")
-            widget.bind("<<ComboboxSelected>>", lambda e: self._trigger_commit())
-            if is_horiz:
-                widget.pack(fill="x", expand=True, ipady=sc(2))
-            else:
-                widget.pack(side="left", fill="x", expand=True, ipady=sc(2))
-        else:
-            entry_box = tk.Frame(container, bg=c["bg"])
-            widget = tk.Entry(
-                entry_box,
-                textvariable=var,
-                state="disabled" if fdef.get("readonly") else "normal",
-                font=("JetBrains Mono", sc(10)),
-                bg=c["surface"], fg=c["text"],
-                insertbackground=c["text"],
-                highlightthickness=1, highlightbackground=c["border"], highlightcolor=c["surface"],
-                relief="flat"
+            widget = ArborDropdown(
+                row, variable=var, label_text=name, choices=choices, colors=self.colors, bg=parent.cget("bg")
             )
-            widget.pack(fill="x", expand=True, ipady=sc(2))
+        else:
+            readonly = fdef.get("readonly", False)
+            widget = ArborTextField(
+                row, variable=var, label_text=name, colors=self.colors, readonly=readonly, bg=parent.cget("bg")
+            )
             
-            focus_line = tk.Frame(entry_box, height=sc(2), bg=c["bg"])
-            focus_line.pack(fill="x", side="bottom")
-            
-            def _on_in(e, fl=focus_line):
-                fl.configure(bg=self.colors["focus_line"])
-            def _on_out(e, fl=focus_line):
-                fl.configure(bg=self.colors["bg"])
-                self._trigger_commit()
-                
-            widget.bind("<FocusIn>", _on_in, add="+")
-            widget.bind("<FocusOut>", _on_out, add="+")
-            
-            if is_horiz:
-                entry_box.pack(fill="x", expand=True)
-            else:
-                entry_box.pack(side="left", fill="x", expand=True)
-                
-        self.field_entries.append(widget)
-        widget.bind("<Shift-Up>", self._nav_prev)
-        widget.bind("<Shift-Down>", self._nav_next)
-        widget.bind("<Control-Up>", self._nav_prev)
-        widget.bind("<Control-Down>", self._nav_next)
-        if ftype != "multiline":
-            widget.bind("<Return>", self._nav_next)
-            
-        return container
+        widget.pack(fill="x", expand=True)
+        return row
 
     def _trigger_commit(self):
         if "on_commit" in self.live_callbacks:
@@ -670,6 +614,18 @@ class LocationPanel(tk.Frame):
     # -------------------------------------------------------------------------
     # Data Accessors
     # -------------------------------------------------------------------------
+
+    def _on_bus_data_changed(self, payload):
+        if not self.winfo_exists():
+            return
+        if "location" in payload:
+            self.set_data(payload["location"])
+
+    def destroy(self):
+        if hasattr(self, "app_bus"):
+            self.app_bus.unsubscribe("LOCATION_DATA_CHANGED", self._on_bus_data_changed)
+        super().destroy()
+
     def get_data(self):
         data = {}
         for k, var in self.location_vars.items():
