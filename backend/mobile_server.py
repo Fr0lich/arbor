@@ -532,15 +532,6 @@ class MobileServer:
                 if k.startswith('loc_') and v.strip():
                     loc_filters[k[4:]] = v.strip().lower()
 
-            # Dynamic Advanced Filters
-            specific_problems_param = request.args.get('specific_problems', '').strip()
-            specific_problems = [p.strip() for p in specific_problems_param.split(',')] if specific_problems_param else []
-
-            loc_filters = {}
-            for k, v in request.args.items():
-                if k.startswith('loc_') and v.strip():
-                    loc_filters[k[4:]] = v.strip().lower()
-
             sort_by = request.args.get('sort_by', '').strip().lower()
             sort_dir = request.args.get('sort_dir', 'asc').strip().lower()
 
@@ -677,58 +668,6 @@ class MobileServer:
                         matched_indices = matched_indices[mask]
                     elif has_problems_filter in ["false", "0", "no", "f"]:
                         matched_indices = matched_indices[~mask]
-
-                # Dynamic Location Filters
-                for loc_col, loc_val in loc_filters.items():
-                    combined_loc = _get_combined(loc_col, matched_indices).map(_clean_val).str.lower()
-                    matched_indices = matched_indices[combined_loc == loc_val]
-
-                # Specific Problems Filters (from Advanced Filter Modal)
-                if specific_problems:
-                    # Collect schema-defined problems and mapping
-                    schema_problems = []
-                    problem_to_field = {}
-                    if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
-                        for p in self.app_state.config["ui_sections"]["problems"]:
-                            name = p.get("name")
-                            if name:
-                                schema_problems.append(name)
-                                if "maps_to" in p:
-                                    problem_to_field[name] = p["maps_to"]
-                                elif "target" in p:
-                                    problem_to_field[name] = p["target"]
-
-                    def get_problem_mask(prob_col, indices):
-                        if prob_col == "Images_Missing":
-                            if "Images_Missing" in df_obs.columns if df_obs is not None else False:
-                                return _get_combined("Images_Missing", indices).map(_clean_val).str.lower().isin(["true", "1", "yes", "t"])
-                            return pd.Series(False, index=indices)
-
-                        obs_mask = _get_combined(prob_col, indices).map(_clean_val).str.lower().isin(["true", "1", "yes", "t"])
-
-                        if prob_col in problem_to_field:
-                            field = problem_to_field[prob_col]
-                            if field in df_reg.columns:
-                                raw_vals = df_reg[field].reindex(indices)
-                                is_missing = raw_vals.isna() | (raw_vals.map(_clean_val) == "")
-                                # Check for unknown strings
-                                is_unknown = raw_vals.isna() | raw_vals.map(lambda x: str(x).strip().lower() in ("", "unknown", "?", "ukjent"))
-                                auto_mask = is_missing & ~is_unknown
-                                return obs_mask | auto_mask
-
-                        return obs_mask
-
-                    combined_problem_mask = pd.Series(False, index=matched_indices)
-
-                    for sp in specific_problems:
-                        if sp == "Any_Problem":
-                            for sp_schema in schema_problems:
-                                if "Image" not in sp_schema:
-                                    combined_problem_mask |= get_problem_mask(sp_schema, matched_indices)
-                        else:
-                            combined_problem_mask |= get_problem_mask(sp, matched_indices)
-
-                    matched_indices = matched_indices[combined_problem_mask]
 
                 # Dynamic Location Filters
                 for loc_col, loc_val in loc_filters.items():
@@ -2064,67 +2003,6 @@ INDEX_TEMPLATE = """
 
 
     <!-- ========================================== -->
-    <!-- MODAL: ADVANCED FILTER                     -->
-    <!-- ========================================== -->
-    <div id="filterModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
-        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between shrink-0">
-          <div class="flex items-center gap-2">
-            <span class="text-sm">⚙</span>
-            <h2 class="font-serif font-bold text-sm text-ink">
-              Advanced Filter
-            </h2>
-          </div>
-          <button
-            type="button"
-            onclick="closeFilterModal()"
-            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold"
-          >
-            ✕
-          </button>
-        </header>
-
-        <div class="p-4 overflow-y-auto space-y-6 flex-1">
-          <!-- Locations -->
-          <div>
-            <h3 class="font-sans text-xs font-bold text-ink mb-3 uppercase tracking-wider">Location Filters</h3>
-            <div id="filterModalLocations" class="space-y-3">
-              <!-- Dynamically populated -->
-            </div>
-          </div>
-
-          <hr class="border-t border-tonal2" />
-
-          <!-- Specific Problems -->
-          <div>
-            <h3 class="font-sans text-xs font-bold text-ink mb-3 uppercase tracking-wider">Specific Problems</h3>
-            <div id="filterModalProblems" class="space-y-2">
-              <!-- Dynamically populated -->
-            </div>
-          </div>
-        </div>
-
-        <footer class="p-3.5 bg-tonal1 border-t border-tonal2 flex gap-3 justify-end shrink-0">
-          <button
-            type="button"
-            onclick="clearAdvancedFilters()"
-            class="px-4 py-2 font-sans font-medium text-xs text-ink-muted hover:text-ink transition-colors rounded-[2px]"
-          >
-            Clear All
-          </button>
-          <button
-            type="button"
-            onclick="applyAdvancedFilters()"
-            class="px-5 py-2 bg-fern hover:bg-fern-dark text-white font-sans font-bold text-xs transition-colors rounded-[2px]"
-          >
-            Apply Filters
-          </button>
-        </footer>
-      </div>
-    </div>
-
-
-    <!-- ========================================== -->
     <!-- MODAL: ADD DISCREPANCY                     -->
     <!-- ========================================== -->
     <div id="addDiscrepancyModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2779,116 +2657,6 @@ INDEX_TEMPLATE = """
       noImageFilterActive = !noImageFilterActive;
       const pill = document.getElementById('pill-no-image');
       if (noImageFilterActive) {
-        pill.className = 'min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center justify-center gap-1.5 transition-colors bg-ink text-white border-ink';
-      } else {
-        pill.className = 'min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center justify-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
-      }
-      fetchList();
-    }
-
-    function openFilterModal() {
-      // Populate Location Filters
-      const locContainer = document.getElementById('filterModalLocations');
-      locContainer.innerHTML = '';
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
-        activeSchema.ui_sections.location.forEach(field => {
-          if (field.type === 'checkbox') return; // Skip bool locations for simplicity, or implement if needed
-
-          let inputHtml = '';
-          if (field.type === 'choice' && field.choices) {
-            inputHtml = `
-              <select id="filter_loc_${field.name}" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs font-sans text-ink outline-none focus:border-fern cursor-pointer">
-                <option value="">Any ${field.name}</option>
-                ${field.choices.map(c => `<option value="${c}" ${activeAdvancedFilters.locations[field.name] === c ? 'selected' : ''}>${c}</option>`).join('')}
-              </select>
-            `;
-          } else {
-            inputHtml = `
-              <input type="text" id="filter_loc_${field.name}" placeholder="Any ${field.name}..." value="${activeAdvancedFilters.locations[field.name] || ''}" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs font-sans text-ink placeholder:text-ink-faint outline-none focus:border-fern" />
-            `;
-          }
-
-          locContainer.innerHTML += `
-            <div>
-              <label class="block text-[11px] font-bold text-ink-muted mb-1">${field.name}</label>
-              ${inputHtml}
-            </div>
-          `;
-        });
-      }
-
-      // Populate Specific Problems
-      const probContainer = document.getElementById('filterModalProblems');
-      probContainer.innerHTML = '';
-
-      // Static specific problems
-      let staticProblems = [
-        { name: "Any_Problem", label: "Any problem (except images)" },
-        { name: "Images_Missing", label: "Missing Images" }
-      ];
-
-      let dynamicProblems = [];
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-        dynamicProblems = activeSchema.ui_sections.problems.map(p => {
-          return { name: p.name, label: p.name.replace('_Problem', '').replace(/_/g, ' ') };
-        });
-      }
-
-      const allProblems = staticProblems.concat(dynamicProblems);
-
-      allProblems.forEach(p => {
-        const isChecked = activeAdvancedFilters.problems.includes(p.name);
-        probContainer.innerHTML += `
-          <label class="flex items-center gap-2 p-1.5 rounded-[2px] hover:bg-tonal1 cursor-pointer">
-            <input type="checkbox" id="filter_prob_${p.name}" value="${p.name}" ${isChecked ? 'checked' : ''} class="w-4 h-4 text-fern rounded-[2px] border-bordercol cursor-pointer" />
-            <span class="text-xs font-sans text-ink">${p.label}</span>
-          </label>
-        `;
-      });
-
-      openModal('filterModal');
-    }
-
-    function closeFilterModal() {
-      closeModal('filterModal');
-    }
-
-    function applyAdvancedFilters() {
-      // Gather Locations
-      activeAdvancedFilters.locations = {};
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
-        activeSchema.ui_sections.location.forEach(field => {
-          if (field.type === 'checkbox') return;
-          const el = document.getElementById(`filter_loc_${field.name}`);
-          if (el && el.value.trim()) {
-            activeAdvancedFilters.locations[field.name] = el.value.trim();
-          }
-        });
-      }
-
-      // Gather Problems
-      activeAdvancedFilters.problems = [];
-      const probCheckboxes = document.querySelectorAll('#filterModalProblems input[type="checkbox"]');
-      probCheckboxes.forEach(cb => {
-        if (cb.checked) {
-          activeAdvancedFilters.problems.push(cb.value);
-        }
-      });
-
-      closeFilterModal();
-      fetchList();
-    }
-
-    function clearAdvancedFilters() {
-      activeAdvancedFilters = { locations: {}, problems: [] };
-      closeFilterModal();
-      fetchList();
-    }
-
-    function toggleNoImageFilter() {
-      noImageFilterActive = !noImageFilterActive;
-      const pill = document.getElementById('pill-no-image');
-      if (noImageFilterActive) {
         pill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ink text-white border-ink';
       } else {
         pill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
@@ -3022,25 +2790,6 @@ INDEX_TEMPLATE = """
           url += `&specific_problems=${encodeURIComponent(combinedProblems.join(','))}`;
         }
 
-        // Append No Image filter
-        if (noImageFilterActive) {
-          // If we also had specific problems, we append it, but handled below
-        }
-
-        // Append Location Filters
-        for (const [key, val] of Object.entries(activeAdvancedFilters.locations)) {
-          url += `&loc_${encodeURIComponent(key)}=${encodeURIComponent(val)}`;
-        }
-
-        // Append Specific Problems (merge with No Image pill logic)
-        let combinedProblems = [...activeAdvancedFilters.problems];
-        if (noImageFilterActive && !combinedProblems.includes('Images_Missing')) {
-          combinedProblems.push('Images_Missing');
-        }
-
-        if (combinedProblems.length > 0) {
-          url += `&specific_problems=${encodeURIComponent(combinedProblems.join(','))}`;
-        }
         const res = await apiFetch(url);
         objectList = res.objects || [];
 
