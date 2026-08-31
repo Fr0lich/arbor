@@ -752,6 +752,29 @@ self.addEventListener('fetch', (event) => {
         # REST API (Conforming to arbor-mobile-companion / src/api.ts)
         # -------------------------------------------------------------
 
+        @app.route('/api/settings', methods=['GET', 'POST'])
+        def handle_settings():
+            if not self._check_auth():
+                return jsonify({"error": "Unauthorized"}), 401
+
+            if request.method == 'GET':
+                prefs = config.load_prefs()
+                pattern = prefs.get("image_url_pattern_override", "")
+                return jsonify({"success": True, "image_url_pattern_override": pattern})
+
+            elif request.method == 'POST':
+                data = request.get_json(silent=True) or {}
+                prefs = config.load_prefs()
+                if "image_url_pattern_override" in data:
+                    prefs["image_url_pattern_override"] = data["image_url_pattern_override"]
+
+                    # Also update advanced subkey for backwards compatibility (same as unified_settings.py)
+                    adv = prefs.setdefault("advanced", {})
+                    adv["image_url_pattern_override"] = data["image_url_pattern_override"]
+
+                    config.save_prefs(prefs)
+                return jsonify({"success": True})
+
         @app.route('/api/presets', methods=['GET', 'POST'])
         def handle_presets():
             if not self._check_auth():
@@ -1406,14 +1429,37 @@ self.addEventListener('fetch', (event) => {
                 rev_val = str(obs_dict["Reviewed"]).strip().lower() in ["true", "1", "yes"]
 
             online_urls = []
-            if self.app_state.config:
-                pattern = self.app_state.config.get("image_url_pattern", "")
-                if pattern:
-                    online_urls.append(pattern.replace("{id}", oid))
+            prefs = config.load_prefs()
 
-            if not online_urls:
-                padded = oid.zfill(4) if oid.isdigit() else oid
-                online_urls.append(f"https://www.unimus.no/photos/image/jpeg/O-V-OE-{padded}.jpg")
+            # Check user preferences override first
+            pattern = prefs.get("image_url_pattern_override", "").strip()
+            if not pattern:
+                # Fall back to advanced setting or config pattern
+                pattern = prefs.get("advanced", {}).get("image_url_pattern_override", "").strip()
+
+            if not pattern and self.app_state.config:
+                pattern = self.app_state.config.get("image_url_pattern", "").strip()
+
+            if not pattern:
+                pattern = "https://www.unimus.no/photos/image/jpeg/O-V-OE-{num:04d}{suffix}.jpg"
+
+            try:
+                num_val = int(oid) if oid.isdigit() else 0
+            except ValueError:
+                num_val = 0
+
+            # Desktop-style format tokens support
+            for suf in ["", "-01", "-02", "-1", "-2", "-3"]:
+                try:
+                    f_url = pattern.format(id=oid, num=num_val, suffix=suf)
+                    if f_url not in online_urls:
+                        online_urls.append(f_url)
+                except Exception:
+                    # Fallback to simple replace if format string is malformed
+                    f_url = pattern.replace("{id}", oid)
+                    if f_url not in online_urls:
+                        online_urls.append(f_url)
+                    break
 
             flagged_issues = []
             if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
@@ -1942,6 +1988,16 @@ INDEX_TEMPLATE = """
           </div>
 
           <div class="flex items-center gap-1.5">
+            <!-- Settings Modal Trigger -->
+            <button
+              type="button"
+              onclick="openSettingsModal()"
+              class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+              title="Settings"
+            >
+              <span class="text-ink text-sm font-mono">⚙️</span>
+            </button>
+
             <!-- Recent Changes Drawer Trigger -->
             <button
               type="button"
@@ -2393,6 +2449,43 @@ INDEX_TEMPLATE = """
           <button type="button" onclick="resetPhotoTransform()" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min">Reset</button>
         </div>
       </footer>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODAL: APP SETTINGS                        -->
+    <!-- ========================================== -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
+          <div class="flex items-center gap-2 text-ink">
+            <span class="text-sm">⚙️</span>
+            <h2 class="font-serif font-bold text-sm text-ink">
+              Application Settings
+            </h2>
+          </div>
+          <button
+            type="button"
+            onclick="closeSettingsModal()"
+            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold touch-press"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div class="p-4 space-y-4">
+          <div>
+            <label class="block font-sans text-xs font-medium text-ink mb-1">Image URL Pattern Override</label>
+            <input type="text" id="settingImageUrlPattern" placeholder="e.g. https://example.com/{id}.jpg" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern" />
+            <p class="text-[10px] text-ink-muted mt-1">Available tokens: {id}, {num}, {num:04d}, {suffix}. Leave blank to use desktop defaults.</p>
+          </div>
+
+          <div class="pt-2 border-t border-tonal2 flex justify-end gap-2">
+            <button type="button" onclick="closeSettingsModal()" class="px-3 py-1.5 border border-bordercol text-ink-muted hover:bg-surface rounded-[2px] text-xs font-medium touch-press">Cancel</button>
+            <button type="button" onclick="saveSettings()" class="px-3 py-1.5 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold transition-colors touch-press">Save</button>
+          </div>
+        </div>
+      </div>
     </div>
 
 
@@ -4625,6 +4718,42 @@ INDEX_TEMPLATE = """
       if (changed) {
         showToast(`Applied Preset: ${pName}`);
         queueSave();
+      }
+    }
+
+    async function openSettingsModal() {
+      openModal('settingsModal');
+      const input = document.getElementById('settingImageUrlPattern');
+      try {
+        const res = await apiFetch('/api/settings');
+        if (res && res.success) {
+          input.value = res.image_url_pattern_override || '';
+        }
+      } catch (err) {
+        console.error("Failed to load settings:", err);
+      }
+    }
+
+    function closeSettingsModal() {
+      closeModal('settingsModal');
+    }
+
+    async function saveSettings() {
+      const pattern = document.getElementById('settingImageUrlPattern').value.trim();
+      try {
+        const res = await apiFetch('/api/settings', {
+          method: 'POST',
+          body: JSON.stringify({ image_url_pattern_override: pattern })
+        });
+        if (res && res.success) {
+          showToast("Settings saved.");
+          closeSettingsModal();
+        } else {
+          showToast("Failed to save settings.", true);
+        }
+      } catch (err) {
+        console.error("Failed to save settings:", err);
+        showToast("Error saving settings.", true);
       }
     }
 
