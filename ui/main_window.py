@@ -2967,52 +2967,8 @@ class ObjectProgramUI(
         panes.add(left, weight=0)
         self.left_frame.bind("<Configure>", self.on_left_frame_configure, add="+")
 
-        # Persistent Action Rail frame on the left edge
-        rail = tk.Frame(
-            left,
-            bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
-            highlightthickness=1,
-            highlightbackground=config.RAIL_THEME.get("rail_border", "#d1d1d1"),
-            width=sc(config.RAIL_THEME.get("rail_width", 40))
-        )
-        rail.pack_propagate(False)
-        self.rail_frame = rail
-        rail.pack(side="left", fill="y")
-
-        # Action Rail buttons
-        self.pin_btn = tk.Button(
-            rail, text="📌",
-            font=("Segoe UI Symbol", sc(11)),
-            bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
-            fg=config.RAIL_THEME.get("icon_active_fg", "#000000"),
-            activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"),
-            bd=0, relief="flat", cursor="hand2",
-            command=self.toggle_left_pin
-        )
-        self.pin_btn.pack(side="top", fill="x", pady=(sc(6), sc(4)), padx=sc(4))
-        self.add_tooltip(self.pin_btn, "Toggle Docked / Unpinned Focus Mode")
-
-        self.drawer_btn = tk.Button(
-            rail, text="🔍",
-            font=("Segoe UI Symbol", sc(11)),
-            bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
-            fg=config.RAIL_THEME.get("icon_active_fg", "#000000"),
-            activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"),
-            bd=0, relief="flat", cursor="hand2",
-            command=self.toggle_floating_drawer
-        )
-        self.drawer_btn.pack(side="top", fill="x", pady=sc(4), padx=sc(4))
-        self.add_tooltip(self.drawer_btn, "Open Object Drawer (Ctrl+O)")
-
-        self.filter_indicator = tk.Label(
-            rail, text="⚡",
-            font=("Segoe UI Symbol", sc(10), "bold"),
-            bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"),
-            fg=config.RAIL_THEME.get("indicator_active_bg", "#C62828"),
-            bd=0
-        )
-        self.filter_indicator.pack(side="top", fill="x", pady=sc(4), padx=sc(4))
-        self.filter_indicator.pack_forget()
+        from ui.action_rail import ActionRail
+        ActionRail.build_rail_ui(self, left)
 
         # Content frame holding list, search, and location widgets (master is self.root to allow unclipped reparenting into drawer_overlay)
         self.left_content_frame = ttk.Frame(self.root)
