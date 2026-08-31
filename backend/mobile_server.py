@@ -247,6 +247,10 @@ class MobileServer:
                 except Exception:
                     pass
 
+    def push_navigation(self, oid):
+        """Pushes a navigation request to connected mobile clients."""
+        self.broadcast_event("push_navigation", {"id": oid})
+
     def _check_rate_limit(self, ip):
         if ip not in self._auth_attempts:
             self._auth_attempts[ip] = {"consecutive": 0, "recent": [], "lockout_until": 0}
@@ -2389,12 +2393,56 @@ INDEX_TEMPLATE = """
               }
             } else if (data.type === 'session_ended') {
               showSessionEndedOverlay();
+            } else if (data.type === 'push_navigation') {
+              showPushNavigationOverlay(data.data.id);
             }
           } catch(err) {}
         };
       } catch(err) {
         updateConnectionState('disconnected');
       }
+    }
+
+    function showPushNavigationOverlay(oid) {
+      const existing = document.getElementById('pushNavOverlay');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'pushNavOverlay';
+      overlay.className = 'fixed bottom-4 left-4 right-4 z-[100] flex flex-col bg-surface border border-bordercol rounded-xl shadow-2xl p-4 transform transition-all';
+      overlay.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-lake-light text-lake-dark rounded-full">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <h2 class="text-base font-serif font-bold text-ink mb-1">Object Pushed: ${oid}</h2>
+            <p class="font-sans text-sm text-ink-muted mb-3">
+              The desktop app sent this object. View it now?
+            </p>
+            <div class="flex gap-2">
+              <button id="btnDeclinePush" class="flex-1 py-2 px-3 bg-canvas text-ink-muted font-sans font-bold text-xs rounded-[2px] border border-bordercol touch-press touch-target-min">
+                Decline
+              </button>
+              <button id="btnAcceptPush" class="flex-1 py-2 px-3 bg-fern text-white font-sans font-bold text-xs rounded-[2px] touch-press touch-target-min">
+                View Object
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      document.getElementById('btnDeclinePush').addEventListener('click', () => {
+        overlay.remove();
+      });
+
+      document.getElementById('btnAcceptPush').addEventListener('click', () => {
+        overlay.remove();
+        loadSpecimen(oid);
+      });
     }
 
     function showSessionEndedOverlay() {

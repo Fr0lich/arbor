@@ -4238,6 +4238,8 @@ class ObjectProgramUI(
             self.context_menu.add_command(label="Bulk Edit Selected", command=self.open_bulk_edit_window)
         self.context_menu.add_command(label="Duplicate Object", command=lambda: self._shortcut_duplicate_object(None))
         self.context_menu.add_command(label="Delete Object", command=self.delete_current_object)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="📱 Push to Phone", command=self.push_current_to_phone)
 
         self.bulk_edit_btn = ttk.Button(list_container, text="Bulk Edit Selected", state="disabled", command=self.open_bulk_edit_window, cursor="hand2")
         self.toggle_bulk_edit_btn()
@@ -4289,6 +4291,17 @@ class ObjectProgramUI(
             bg="#ffffff"
         )
         self.title_problem_count_label.pack(side="left", anchor="center", padx=(sc(6), 0), pady=sc(6))
+
+        # Push to Phone button
+        self.push_to_phone_btn = ttk.Button(
+            center_header,
+            text="📱 Push",
+            command=self.push_current_to_phone,
+            style="Outline.TButton",
+            cursor="hand2",
+            state="disabled"
+        )
+        self.push_to_phone_btn.pack(side="left", anchor="center", padx=(sc(6), 0), pady=sc(6))
 
         # RIGHT: location summary (Technical Monospace)
         self.location_summary_label = tk.Label(
@@ -5990,6 +6003,9 @@ class ObjectProgramUI(
             if hasattr(self, "header_id_badge") and self.header_id_badge.winfo_exists():
                 self.header_id_badge.config(text=f"ID: {oid}")
 
+            if hasattr(self, "_update_push_to_phone_state"):
+                self._update_push_to_phone_state()
+
             reg_dict = self._get_reg_dict()
             obs_dict = self._get_obs_dict()
             reg = reg_dict.get(oid)
@@ -6203,13 +6219,33 @@ class ObjectProgramUI(
 
 
 
+
+    def push_current_to_phone(self):
+        if not hasattr(self.app, 'current_object_id') or self.app.current_object_id is None:
+            return
+
+        server = getattr(self.app, '_mobile_server_instance', None)
+        if server and server.is_running:
+            server.push_navigation(self.app.current_object_id)
+            self.show_banner(f"Pushed {self.app.current_object_id} to Mobile Session", "success")
+
+    def _update_push_to_phone_state(self):
+        if hasattr(self, 'push_to_phone_btn') and self.push_to_phone_btn.winfo_exists():
+            server = getattr(self.app, '_mobile_server_instance', None)
+            if server and server.is_running and getattr(self.app, 'current_object_id', None) is not None:
+                self.push_to_phone_btn.config(state="normal")
+            else:
+                self.push_to_phone_btn.config(state="disabled")
+
     def open_mobile_dialog(self):
+
         from ui.mobile_dialog import MobileDialog
         if not hasattr(self, '_mobile_dialog') or not self._mobile_dialog.win.winfo_exists():
             self._mobile_dialog = MobileDialog(self, self.root, self.app)
         else:
             self._mobile_dialog.win.lift()
             self._mobile_dialog.win.focus_force()
+        self._update_push_to_phone_state()
 
     def _on_mobile_edit(self, event=None):
         """Called when the mobile server fires <<MobileEdit>>"""
@@ -8113,6 +8149,24 @@ class ObjectProgramUI(
                 self.object_list.focus(iid)
                 self.load_object(iid)
             
+            # Dynamically update state of "Push to Phone" based on selection and mobile server status
+            push_index = None
+            try:
+                # Find index by exact label matching
+                for i in range(self.context_menu.index("end") + 1):
+                    if self.context_menu.entrycget(i, "label") == "📱 Push to Phone":
+                        push_index = i
+                        break
+            except Exception:
+                pass
+
+            if push_index is not None:
+                server = getattr(self.app, '_mobile_server_instance', None)
+                if server and server.is_running and len(current_selection) <= 1:
+                    self.context_menu.entryconfig(push_index, state="normal")
+                else:
+                    self.context_menu.entryconfig(push_index, state="disabled")
+
             self.context_menu.post(event.x_root, event.y_root)
 
     def _context_set_reviewed(self, value: bool):
