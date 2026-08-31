@@ -1,9 +1,7 @@
-1. **Identify Performance Bottleneck**: `sort_column` in `ui/main_window.py` uses `df.loc[oid]` for sorting operations which results in slow row-by-row lookups inside the sort key function (O(N) operations per sorting).
-2. **Review CLAUDE_BUG_REVIEW_GUIDE.md**: The guide states: "Avoid `df.loc[oid]` lookups inside loops, especially when serializing or paginating data. Pre-convert slices to native Python dictionaries (e.g., `df.loc[index_list].to_dict('index')`) outside the loop and use `dict.get()` inside."
-3. **Refactor `sort_column`**: We can use the existing `_get_reg_dict()` and `_get_obs_dict()` to perform fast dictionary lookups rather than `loc[oid]`.
-4. **Target file**: `ui/main_window.py` in the `sort_column` method.
-5. **Detailed Changes**:
-   - Get the dict representation of `df_reg` and `df_obs` at the beginning of `sort_column`.
-   - Update `get_genus`, `get_species`, `status_key` to use `.get(oid, {})` instead of `loc`.
-   - Remove `iloc[0]` calls inside loops.
-6. **Pre-commit checks**: Run `pytest tests/` and verify formatting/linting using instructions from `pre_commit_instructions`.
+1. **Understand the Goal**: The user wants a companion prompt to follow the provided prompt, focusing on decoupling and reducing the size of the massive `ui/main_window.py` (which is ~10,000 lines).
+2. **Draft the Prompt**: I will write a comprehensive prompt tailored to safely and efficiently refactoring `ui/main_window.py`. The prompt will emphasize a component-based approach (extracting UI panels one by one), using the EventBus (`app_bus`) for communication, and maintaining strict safety protocols to avoid breaking the fragile codebase.
+3. **Review against Requirements**:
+   - Matches the structure of the provided prompt (Context, Prior Work, Execution Goals & Strategies, Crucial Rules & Pitfalls).
+   - Provides clear, actionable steps for a subsequent AI agent.
+   - Focuses on safely reducing the size of `main_window.py`.
+4. **Deliver to User**: I will present the drafted prompt to the user using `message_user`.

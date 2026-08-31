@@ -18,3 +18,6 @@
 ## 2024-05-17 - Pandas loc[] vs dict lookup in Tkinter Sorts
 **Learning:** Using `df.loc[oid]` inside tight loops like Python's `sorted()` key functions in Tkinter (`ui/main_window.py`) causes significant lag due to Pandas' $O(N)$ row lookup overhead.
 **Action:** When sorting or filtering, always pre-convert necessary Pandas DataFrames to native Python dictionaries outside the loop (e.g., via `self._get_reg_dict()` or `df.to_dict('index')`) and use `dict.get(oid, {})` inside the lambda/key function to achieve $O(1)$ lookups.
+## $(date +%Y-%m-%d) - Component-Based Extraction of Large UI Classes
+**Learning:** Extracting code from massive Tkinter files like `ui/main_window.py` (which has over 9000 lines) is very dangerous and error-prone if done with automated regex or mass deletions. It can cascade indentation errors that break the codebase.
+**Action:** When extracting large UI classes, always extract one self-contained component vertically (like a panel). Copy the methods over, test the new component thoroughly by instantiating it inside the original class, and only after tests pass, delete the old code. Run tests sequentially after *every* single extraction.
