@@ -1470,6 +1470,94 @@ self.addEventListener('fetch', (event) => {
             self.broadcast_event('filter_synced', payload)
             return jsonify({"success": True})
 
+        @app.route('/api/recent_edits', methods=['GET'])
+        def get_recent_edits():
+            return jsonify({"edits": self.recent_edits})
+
+        @app.route('/api/undo', methods=['POST'])
+        def undo_last_edit():
+            data = request.get_json(silent=True) or {}
+            oid = str(data.get('oid') or data.get('id') or '').strip()
+
+            if not oid and self.recent_edits:
+                oid = self.recent_edits[0]["oid"]
+
+            if not oid:
+                return jsonify({"error": "No recent edits to undo"}), 400
+
+            with self.app_state.df_lock:
+                if not hasattr(self.app_state, 'undo_stacks') or str(oid) not in self.app_state.undo_stacks or not self.app_state.undo_stacks[str(oid)]:
+                    return jsonify({"error": f"No undo history for {oid}"}), 404
+
+                # Pop the latest snapshot (the state *before* the most recent edit)
+                snapshot = self.app_state.undo_stacks[str(oid)].pop()
+
+                resolved_reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
+                resolved_obs_oid = _resolve_oid_in_df(self.app_state.df_obs, oid)
+
+                if resolved_reg_oid is not None:
+                    # Update row cell-by-cell to avoid pandas ValueError
+                    for col, val in snapshot["reg"].items():
+                        self.app_state.df_reg.at[resolved_reg_oid, col] = val
+
+                if resolved_obs_oid is not None:
+                    # Update row cell-by-cell
+                    for col, val in snapshot["obs"].items():
+                        self.app_state.df_obs.at[resolved_obs_oid, col] = val
+
+                # Clean up recent_edits and _log_records
+                # Note: If multiple clients made edits, this is naive, but works for the active session.
+                for i in range(len(self.recent_edits)):
+                    if str(self.recent_edits[i]["oid"]) == str(oid):
+                        self.recent_edits.pop(i)
+                        break
+
+                if hasattr(self.app_state, "_log_records") and self.app_state._log_records:
+                    # Find and remove the latest log record for this oid
+                    for i in range(len(self.app_state._log_records) - 1, -1, -1):
+                        if str(self.app_state._log_records[i].get("ObjectID", "")) == str(oid):
+                            self.app_state._log_records.pop(i)
+                            break
+                    self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+
+                self.app_state.dirty = True
+
+                reg_row = self.app_state.df_reg.loc[resolved_reg_oid].to_dict() if (self.app_state.df_reg is not None and resolved_reg_oid is not None) else {}
+                obs_row = self.app_state.df_obs.loc[resolved_obs_oid].to_dict() if (self.app_state.df_obs is not None and resolved_obs_oid is not None) else {}
+                history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
+                prob_cols = []
+                if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                    prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+                problem_to_field = get_problem_to_field_map(self.app_state.config)
+                flags = compute_status_flags(reg_row, obs_row, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
+
+            self.broadcast_event("record_updated", {
+                "id": str(oid),
+                "has_flags": flags["has_flags"],
+                "has_history": flags["has_history"],
+                "problems_have_history": flags["problems_have_history"],
+                "has_unknown": flags["has_unknown"],
+                "review_status": flags["review_status"]
+            })
+
+            if self.on_edit_callback:
+                try:
+                    self.on_edit_callback(oid, f"Undid last edit on {oid}")
+                except Exception:
+                    pass
+
+            # Return the restored record so the UI can update itself
+            restored_record = {**reg_row, **obs_row}
+            restored_record["id"] = str(oid)
+            restored_record["has_flags"] = flags["has_flags"]
+            restored_record["has_history"] = flags["has_history"]
+            restored_record["problems_have_history"] = flags["problems_have_history"]
+            restored_record["has_unknown"] = flags["has_unknown"]
+            restored_record["review_status"] = flags["review_status"]
+
+            return jsonify({"success": True, "restored": restored_record})
+
+
         @app.route('/api/update', methods=['POST'])
         def update_object():
             data = request.get_json(silent=True) or {}
@@ -1854,6 +1942,16 @@ INDEX_TEMPLATE = """
           </div>
 
           <div class="flex items-center gap-1.5">
+            <!-- Recent Changes Drawer Trigger -->
+            <button
+              type="button"
+              onclick="openRecentEditsModal()"
+              class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+              title="Recent Changes"
+            >
+              <span class="text-ink text-sm font-mono">↩</span>
+            </button>
+
             <!-- Screen Wake Lock / Walk Mode Toggle -->
             <button
               type="button"
@@ -2036,6 +2134,17 @@ INDEX_TEMPLATE = """
         </button>
 
         <div class="flex items-center gap-2">
+          <!-- Undo Button (shown conditionally after edit) -->
+          <button
+            type="button"
+            id="btnMobileUndo"
+            onclick="undoLastEdit()"
+            class="hidden items-center gap-1 text-[11px] font-sans font-bold bg-ember-light text-ember-dark border border-ember-border px-2 py-1 rounded-[2px] hover:bg-ember/10 transition-colors touch-target-min"
+          >
+            <span>↩</span>
+            <span>Undo</span>
+          </button>
+
           <span class="font-mono text-xs text-ink-muted" id="detailNavIndex">
             1 of 1
           </span>
@@ -2332,6 +2441,35 @@ INDEX_TEMPLATE = """
         </div>
       </div>
     </div>
+
+    <!-- ========================================== -->
+    <!-- ========================================== -->
+    <!-- MODAL: RECENT EDITS DRAWER                 -->
+    <!-- ========================================== -->
+    <div id="recentEditsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end">
+      <div class="bg-surface w-full max-w-sm h-full shadow-xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-200 border-l border-bordercol">
+        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-2">
+            <span class="text-sm">↩</span>
+            <h2 class="font-serif font-bold text-sm text-ink">
+              Recent Changes
+            </h2>
+          </div>
+          <button
+            type="button"
+            onclick="closeRecentEditsModal()"
+            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div class="p-4 overflow-y-auto space-y-3 flex-1 bg-canvas" id="recentEditsList">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+
 
     <!-- ========================================== -->
     <!-- MODAL: ADVANCED FILTER                     -->
@@ -3734,6 +3872,13 @@ INDEX_TEMPLATE = """
         thumbStrip.innerHTML = '';
       }
 
+      // Hide Undo button on explicit specimen navigation
+      const undoBtn = document.getElementById('btnMobileUndo');
+      if (undoBtn) {
+          undoBtn.classList.add('hidden');
+          undoBtn.classList.remove('flex');
+      }
+
       try {
         const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}`);
         currentRecord = data;
@@ -4294,6 +4439,90 @@ INDEX_TEMPLATE = """
     }
 
     // ==========================================
+    // UNDO & RECENT EDITS
+    // ==========================================
+    async function undoLastEdit(oid = null) {
+      try {
+        const payload = oid ? { oid: oid } : {};
+        const res = await apiFetch('/api/undo', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        if (res.success) {
+          showToast(`✓ Undo successful`);
+          const undoBtn = document.getElementById('btnMobileUndo');
+          if (undoBtn) {
+            undoBtn.classList.remove('flex');
+            undoBtn.classList.add('hidden');
+          }
+
+          if (document.getElementById('recentEditsModal') && !document.getElementById('recentEditsModal').classList.contains('hidden')) {
+              await openRecentEditsModal();
+          }
+
+          if (currentRecord && String(res.restored.id) === String(currentOid)) {
+            Object.assign(currentRecord, res.restored);
+            isReviewed = currentRecord.review_status === 'reviewed';
+            populateDetailView(currentRecord);
+            updateReviewButtonUI();
+          }
+
+          const listItem = objectList.find(o => String(o.id) === String(res.restored.id));
+          if (listItem) {
+            Object.assign(listItem, res.restored);
+            if (!document.getElementById('listView').classList.contains('hidden')) {
+              renderList();
+            }
+          }
+        } else {
+          showToast(res.error || 'Undo failed', true);
+        }
+      } catch (err) {
+        showToast('Undo failed', true);
+        console.error(err);
+      }
+    }
+
+    async function openRecentEditsModal() {
+      const modal = document.getElementById('recentEditsModal');
+      const listContainer = document.getElementById('recentEditsList');
+
+      try {
+        const res = await apiFetch('/api/recent_edits');
+        if (res.edits && res.edits.length > 0) {
+          listContainer.innerHTML = res.edits.map(edit => `
+            <div class="bg-surface border border-bordercol rounded-[2px] p-3 text-sm flex flex-col gap-2 shadow-xs">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs font-medium text-ink bg-tonal1 px-1.5 py-0.5 rounded-[2px]">${edit.oid}</span>
+                <span class="text-[10px] text-ink-muted">${edit.time}</span>
+              </div>
+              <div class="text-xs text-ink break-words">${edit.summary}</div>
+              <div class="flex justify-end border-t border-tonal2 mt-1 pt-2">
+                 <button type="button" onclick="undoLastEdit('${edit.oid}')" class="text-[11px] font-bold text-ember hover:bg-ember/10 px-2 py-1 border border-ember-border bg-ember-light rounded-[2px] touch-press">Revert</button>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          listContainer.innerHTML = `
+            <div class="text-center p-6 text-ink-faint text-xs">
+              <div class="text-2xl mb-2">∅</div>
+              No recent edits in this session.
+            </div>
+          `;
+        }
+      } catch (err) {
+        listContainer.innerHTML = `<div class="text-center p-4 text-ember text-xs">Error loading history.</div>`;
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeRecentEditsModal() {
+      document.getElementById('recentEditsModal').classList.add('hidden');
+    }
+
+    // ==========================================
     // LOCATION PRESETS LOGIC
     // ==========================================
     function applyLocPreset() {
@@ -4750,6 +4979,9 @@ INDEX_TEMPLATE = """
         }
 
         document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
+        const undoBtn = document.getElementById('btnMobileUndo');
+        if (undoBtn) undoBtn.classList.remove('hidden');
+        if (undoBtn) undoBtn.classList.add('flex');
 
         if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
           if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
