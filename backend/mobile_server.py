@@ -835,6 +835,10 @@ self.addEventListener('fetch', (event) => {
             })
 
 
+        @app.route('/api/ping', methods=['GET'])
+        def ping():
+            return jsonify({"status": "ok"})
+
         @app.route('/api/events', methods=['GET'])
         def sse_events():
             client_queue = queue.Queue()
@@ -3043,11 +3047,22 @@ INDEX_TEMPLATE = """
       setupEventSource();
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
+          _reconnectDelay = 2000;
+          if (_reconnectTimer) clearTimeout(_reconnectTimer);
           setupEventSource();  // closes stale connection and opens a fresh one
         }
       });
-      window.addEventListener('online', () => setupEventSource());
-      window.addEventListener('offline', () => updateConnectionState('disconnected'));
+      window.addEventListener('online', () => {
+        _reconnectDelay = 2000;
+        if (_reconnectTimer) clearTimeout(_reconnectTimer);
+        setupEventSource();
+      });
+      window.addEventListener('offline', () => {
+        stopPing();
+        if (_reconnectTimer) clearTimeout(_reconnectTimer);
+        if (_evtSource) { _evtSource.close(); _evtSource = null; }
+        updateConnectionState('disconnected');
+      });
 
       try {
         // 2. Fetch Schema from Master config.py
@@ -3075,6 +3090,53 @@ INDEX_TEMPLATE = """
     }
 
     let _evtSource = null;
+    let _reconnectDelay = 2000;
+    const _maxReconnectDelay = 16000;
+    let _pingInterval = null;
+    let _missedPings = 0;
+    let _reconnectTimer = null;
+
+    function startPing() {
+      stopPing();
+      _missedPings = 0;
+      _pingInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/ping?token=' + encodeURIComponent(TOKEN));
+          if (res.ok) {
+            _missedPings = 0;
+          } else {
+            _missedPings++;
+          }
+        } catch (e) {
+          _missedPings++;
+        }
+
+        if (_missedPings >= 3) {
+          stopPing();
+          if (_evtSource) {
+            _evtSource.close();
+            _evtSource = null;
+          }
+          updateConnectionState('disconnected');
+          scheduleReconnect();
+        }
+      }, 10000);
+    }
+
+    function stopPing() {
+      if (_pingInterval) {
+        clearInterval(_pingInterval);
+        _pingInterval = null;
+      }
+    }
+
+    function scheduleReconnect() {
+      if (_reconnectTimer) clearTimeout(_reconnectTimer);
+      _reconnectTimer = setTimeout(() => {
+        setupEventSource();
+        _reconnectDelay = Math.min(_reconnectDelay * 2, _maxReconnectDelay);
+      }, _reconnectDelay);
+    }
 
     let db;
     function initIndexedDB() {
@@ -3245,17 +3307,23 @@ INDEX_TEMPLATE = """
 
     function setupEventSource() {
       try {
+        if (_reconnectTimer) clearTimeout(_reconnectTimer);
         if (_evtSource) { _evtSource.close(); _evtSource = null; }
         updateConnectionState('connecting');
         _evtSource = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
 
         _evtSource.onopen = function() {
           updateConnectionState('connected');
+          _reconnectDelay = 2000;
+          startPing();
           flushQueuedMutations();
         };
 
         _evtSource.onerror = function() {
+          stopPing();
+          if (_evtSource) { _evtSource.close(); _evtSource = null; }
           updateConnectionState('disconnected');
+          scheduleReconnect();
         };
 
         _evtSource.onmessage = function(e) {
