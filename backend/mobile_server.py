@@ -762,6 +762,26 @@ class MobileServer:
                         else:
                             loc[key_name] = ""
 
+                    mw = getattr(self.app_state, 'main_window', None)
+
+                    has_problem = False
+                    has_history = False
+                    has_unknown = False
+                    is_loaned = False
+
+                    if mw:
+                        has_problem = mw._get_cached_problem(oid) if hasattr(mw, "_get_cached_problem") else (getattr(mw, "_problem_cache", {}).get(oid, False))
+                        has_history = mw._problems_have_history(oid) if hasattr(mw, "_problems_have_history") else False
+
+                        if hasattr(mw, "is_unknown"):
+                            for v in reg_row.values():
+                                if mw.is_unknown(v):
+                                    has_unknown = True
+                                    break
+
+                    loaned_raw = obs_row.get("Loaned out", False) if obs_row else False
+                    is_loaned = str(loaned_raw).lower() in ["true", "1", "yes"]
+
                     objects.append({
                         "id": str(oid),
                         "accession_number": str(oid),
@@ -774,7 +794,11 @@ class MobileServer:
                         "collection_date": collection_date,
                         "location": loc,
                         "review_status": "reviewed" if rev_val else "pending",
-                        "has_flags": False
+                        "has_flags": has_problem,
+                        "has_problem": has_problem,
+                        "has_history": has_history,
+                        "has_unknown": has_unknown,
+                        "is_loaned": is_loaned
                     })
 
             return jsonify({
@@ -2667,11 +2691,25 @@ INDEX_TEMPLATE = """
 
       container.innerHTML = sorted.map(s => {
         const isRev = s.review_status === 'reviewed';
-        const statusBadge = isRev
-          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-fern-light text-fern-dark border border-fern-border">✓ REVIEWED</span>`
-          : (s.has_flags
-            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-ember-light text-ember-dark border border-ember-border">⚠ FLAGGED</span>`
-            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-tonal1 text-ink-muted border border-bordercol">🕒 UNREVIEWED</span>`);
+        let statusBadge = '';
+
+        if (isRev) {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-[#2E7D32] text-white border border-[#2E7D32]">✓ OK</span>`;
+        } else if (s.has_problem && s.has_history) {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-[#7B1FA2] text-white border border-[#7B1FA2]">⚠ ERR+HIS</span>`;
+        } else if (s.has_problem) {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-[#C62828] text-white border border-[#C62828]">⚠ ERR</span>`;
+        } else if (s.has_history) {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-[#0284C7] text-white border border-[#0284C7]">◂ CFCT</span>`;
+        } else if (s.has_unknown) {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-[#FBC02D] text-[#2c302e] border border-[#FBC02D]">? UKN</span>`;
+        } else {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-[#6c757d] text-white border border-[#6c757d]">🕒 UNREV</span>`;
+        }
+
+        const loanedBadge = s.is_loaned
+          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold bg-[#0d47a1] text-white border border-[#0d47a1] ml-1">📋 LOANED</span>`
+          : '';
 
         let locStr = [];
         if (s.location) {
@@ -2694,7 +2732,9 @@ INDEX_TEMPLATE = """
                 </span>
                 ${s.family ? `<span class="font-sans text-[10px] text-ink-faint bg-tonal1 px-1.5 py-0.2 rounded-[1px] border border-tonal3">${highlightMatch(s.family, searchQuery)}</span>` : ''}
               </div>
-              ${statusBadge}
+              <div>
+                  ${statusBadge}${loanedBadge}
+              </div>
             </div>
 
             <h2 class="font-serif italic font-bold text-base text-ink leading-snug">
