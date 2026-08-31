@@ -388,6 +388,40 @@ class MobileServer:
         # REST API (Conforming to arbor-mobile-companion / src/api.ts)
         # -------------------------------------------------------------
 
+        @app.route('/api/presets', methods=['GET', 'POST'])
+        def handle_presets():
+            if not self._check_auth():
+                return jsonify({"error": "Unauthorized"}), 401
+
+            if request.method == 'GET':
+                prefs = config.load_prefs()
+                presets = prefs.get("data_presets", {})
+                return jsonify({"success": True, "presets": presets})
+
+            elif request.method == 'POST':
+                data = request.get_json(silent=True) or {}
+                action = data.get("action")
+                name = data.get("name")
+
+                if not name:
+                    return jsonify({"error": "Preset name required"}), 400
+
+                prefs = config.load_prefs()
+                if "data_presets" not in prefs:
+                    prefs["data_presets"] = {}
+
+                if action == "save":
+                    vals = data.get("values", {})
+                    prefs["data_presets"][name] = vals
+                elif action == "delete":
+                    if name in prefs["data_presets"]:
+                        del prefs["data_presets"][name]
+                else:
+                    return jsonify({"error": "Invalid action"}), 400
+
+                config.save_prefs(prefs)
+                return jsonify({"success": True, "presets": prefs["data_presets"]})
+
         @app.route('/api/schema', methods=['GET'])
         def get_schema():
             ui_sections = {}
@@ -1923,6 +1957,52 @@ INDEX_TEMPLATE = """
 
 
     <!-- ========================================== -->
+    <!-- MODAL: LOCATION PRESETS SETTINGS           -->
+    <!-- ========================================== -->
+    <div id="presetSettingsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
+          <div class="flex items-center gap-2 text-ink">
+            <span class="text-sm">⚙️</span>
+            <h2 class="font-serif font-bold text-sm text-ink">
+              Location Presets Settings
+            </h2>
+          </div>
+          <button
+            type="button"
+            onclick="closePresetSettings()"
+            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold touch-press"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div class="p-4 space-y-4">
+          <div>
+            <h3 class="font-bold text-xs text-ink uppercase tracking-wider mb-2">Saved Presets</h3>
+            <div id="presetSettingsList" class="max-h-48 overflow-y-auto space-y-1">
+               <!-- Preset items injected dynamically -->
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-tonal2">
+            <button type="button" onclick="toggleNewPresetForm()" class="w-full py-2 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold transition-colors mb-2 cursor-pointer touch-press">
+              + Save Current Location as New Preset
+            </button>
+            <div id="newPresetForm" class="hidden space-y-2 mt-2 p-3 bg-tonal1 border border-bordercol rounded-[2px]">
+              <label class="block font-sans text-xs font-medium text-ink">New Preset Name</label>
+              <input type="text" id="newPresetNameInput" placeholder="e.g., Cabinet A, Shelf 2" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern" />
+              <div class="flex justify-end gap-2 mt-2">
+                <button type="button" onclick="toggleNewPresetForm()" class="px-3 py-1.5 border border-bordercol text-ink-muted hover:bg-surface rounded-[2px] text-xs font-medium touch-press">Cancel</button>
+                <button type="button" onclick="saveNewLocPreset()" class="px-3 py-1.5 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold transition-colors touch-press">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
     <!-- MODAL: ADVANCED FILTER                     -->
     <!-- ========================================== -->
     <div id="filterModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2196,6 +2276,8 @@ INDEX_TEMPLATE = """
     let autoSaveTimer = null;
     let wakeLockSentinel = null;
 
+    let locationPresets = {};
+    let lastSelectedPreset = "Default";
     let historicalData = {};
     let revertState = {}; // field: originalValue
 
@@ -2442,10 +2524,16 @@ INDEX_TEMPLATE = """
         // 2. Fetch Initial List
         await fetchList();
 
-        // 3. Populate Discrepancy Field Select Options
+        // 3. Fetch Location Presets
+        const presetsRes = await apiFetch('/api/presets');
+        if (presetsRes && presetsRes.success) {
+          locationPresets = presetsRes.presets || {};
+        }
+
+        // 4. Populate Discrepancy Field Select Options
         populateDiscrepancyFields();
 
-        // 4. Setup SSE live events + reconnect on mobile wake & network online
+        // 5. Setup SSE live events + reconnect on mobile wake & network online
         setupEventSource();
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
@@ -3272,6 +3360,13 @@ INDEX_TEMPLATE = """
           locFieldsHtml += renderFieldInput(fDef, val, 'observation');
         });
 
+        let presetOptions = `<option value="Default" ${lastSelectedPreset === 'Default' ? 'selected' : ''}>Default</option>`;
+        Object.keys(locationPresets).forEach(pName => {
+          if (pName !== 'Default') {
+            presetOptions += `<option value="${pName}" ${lastSelectedPreset === pName ? 'selected' : ''}>${pName}</option>`;
+          }
+        });
+
         html += `
           <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion acc-open">
             <button
@@ -3289,6 +3384,17 @@ INDEX_TEMPLATE = """
               <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">▼</span>
             </button>
             <div class="p-3.5 space-y-3 acc-content block">
+              <div class="flex items-center gap-2 mb-4">
+                <select id="locPresetSelect" class="flex-grow bg-surface border border-bordercol rounded-[2px] px-2 py-1.5 text-xs font-sans text-ink outline-none focus:border-fern">
+                  ${presetOptions}
+                </select>
+                <button type="button" onclick="applyLocPreset()" class="px-3 py-1.5 bg-tonal1 hover:bg-tonal2 text-ink text-xs font-bold rounded-[2px] border border-bordercol transition-colors cursor-pointer touch-press">
+                  Apply Preset
+                </button>
+                <button type="button" onclick="openPresetSettings()" class="px-2 py-1.5 bg-surface hover:bg-tonal1 text-ink text-xs rounded-[2px] border border-bordercol transition-colors cursor-pointer touch-press" title="Preset Settings">
+                  ⚙️
+                </button>
+              </div>
               ${locFieldsHtml}
             </div>
           </div>
@@ -3439,6 +3545,169 @@ INDEX_TEMPLATE = """
         content.classList.remove('hidden');
       } else {
         content.classList.add('hidden');
+      }
+    }
+
+    // ==========================================
+    // LOCATION PRESETS LOGIC
+    // ==========================================
+    function applyLocPreset() {
+      const select = document.getElementById('locPresetSelect');
+      if (!select) return;
+      const pName = select.value;
+      if (!pName || pName === "Default") return;
+
+      const presetData = locationPresets[pName];
+      if (!presetData) return;
+
+      lastSelectedPreset = pName;
+      let changed = false;
+
+      // Ensure activeSchema and location fields exist
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
+        activeSchema.ui_sections.location.forEach(field => {
+          const inputId = `input_observation_${field.name.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+          const input = document.getElementById(inputId);
+          if (input && presetData[field.name] !== undefined) {
+             const newVal = presetData[field.name];
+             if (input.type === 'checkbox') {
+               const checkedVal = (String(newVal).toLowerCase() === 'true' || newVal === true || newVal === '1');
+               if (input.checked !== checkedVal) {
+                  input.checked = checkedVal;
+                  changed = true;
+               }
+             } else {
+               if (input.value !== newVal) {
+                 input.value = newVal;
+                 changed = true;
+               }
+             }
+          }
+        });
+      }
+
+      if (changed) {
+        showToast(`Applied Preset: ${pName}`);
+        queueSave();
+      }
+    }
+
+    function openPresetSettings() {
+      renderPresetSettingsList();
+      openModal('presetSettingsModal');
+    }
+
+    function closePresetSettings() {
+      closeModal('presetSettingsModal');
+    }
+
+    function renderPresetSettingsList() {
+      const container = document.getElementById('presetSettingsList');
+      if (!container) return;
+
+      const keys = Object.keys(locationPresets).filter(k => k !== 'Default');
+      if (keys.length === 0) {
+        container.innerHTML = '<p class="text-xs text-ink-faint italic py-2">No custom presets saved yet.</p>';
+        return;
+      }
+
+      container.innerHTML = keys.map(k => `
+        <div class="flex items-center justify-between p-2.5 border-b border-bordercol bg-surface hover:bg-tonal1 rounded-[2px] transition-colors mb-1 shadow-xs">
+          <span class="text-sm font-sans text-ink">${k}</span>
+          <button type="button" onclick="deleteLocPreset('${k}')" class="px-2 py-1 text-xs font-bold text-ember border border-ember bg-ember-light hover:bg-ember rounded-[2px] hover:text-white transition-colors cursor-pointer touch-press">Delete</button>
+        </div>
+      `).join('');
+    }
+
+    async function deleteLocPreset(name) {
+      if (!confirm(`Delete location preset "${name}"?`)) return;
+
+      try {
+        const res = await apiFetch('/api/presets', {
+          method: 'POST',
+          body: JSON.stringify({ action: "delete", name: name })
+        });
+
+        if (res && res.success) {
+          locationPresets = res.presets || {};
+          if (lastSelectedPreset === name) lastSelectedPreset = "Default";
+          renderPresetSettingsList();
+          showToast(`Preset deleted.`);
+          // Repopulate dynamic form to update select options
+          renderDynamicForm(activeSchema, currentRecord);
+        } else {
+          showToast(`Failed to delete preset.`, true);
+        }
+      } catch (err) {
+        console.error("Error deleting preset:", err);
+        showToast("Error deleting preset", true);
+      }
+    }
+
+    function toggleNewPresetForm() {
+      const form = document.getElementById('newPresetForm');
+      if (form.classList.contains('hidden')) {
+        form.classList.remove('hidden');
+        document.getElementById('newPresetNameInput').focus();
+      } else {
+        form.classList.add('hidden');
+      }
+    }
+
+    async function saveNewLocPreset() {
+      const nameInput = document.getElementById('newPresetNameInput');
+      const name = nameInput.value.trim();
+
+      if (!name) {
+        alert("Please enter a name for the preset.");
+        return;
+      }
+      if (name.toLowerCase() === "default") {
+        alert("Cannot overwrite Default preset.");
+        return;
+      }
+
+      const vals = {};
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
+        activeSchema.ui_sections.location.forEach(field => {
+          const inputId = `input_observation_${field.name.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+          const input = document.getElementById(inputId);
+          if (input) {
+             if (input.type === 'checkbox') {
+               vals[field.name] = input.checked ? "True" : "False";
+             } else {
+               vals[field.name] = input.value;
+             }
+          }
+        });
+      }
+
+      try {
+        const res = await apiFetch('/api/presets', {
+          method: 'POST',
+          body: JSON.stringify({ action: "save", name: name, values: vals })
+        });
+
+        if (res && res.success) {
+          locationPresets = res.presets || {};
+          lastSelectedPreset = name;
+          nameInput.value = "";
+          toggleNewPresetForm();
+          renderPresetSettingsList();
+          showToast(`Preset "${name}" saved.`);
+          // Repopulate dynamic form to update select options and set it to active
+          renderDynamicForm(activeSchema, currentRecord);
+          // Set dropdown
+          setTimeout(() => {
+             const sel = document.getElementById('locPresetSelect');
+             if(sel) sel.value = name;
+          }, 50);
+        } else {
+          showToast(`Failed to save preset.`, true);
+        }
+      } catch (err) {
+        console.error("Error saving preset:", err);
+        showToast("Error saving preset", true);
       }
     }
 
