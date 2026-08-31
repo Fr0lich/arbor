@@ -603,7 +603,7 @@ class MobileServer:
 
         @app.before_request
         def require_auth():
-            if request.endpoint in ['login', 'static', 'api_auth', None]:
+            if request.endpoint in ['login', 'static', 'api_auth', 'service_worker', None]:
                 return
             if not self._check_auth():
                 if request.path.startswith('/api/'):
@@ -667,6 +667,66 @@ class MobileServer:
             if token_param == self.session_token:
                 session['authenticated'] = True
             return render_template_string(INDEX_TEMPLATE, token=self.session_token)
+
+        @app.route('/service-worker.js')
+        def service_worker():
+            sw_script = """
+const CACHE_NAME = 'arbor-companion-v1';
+const ASSETS = [
+    '/',
+    '/login',
+    'https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js',
+    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap'
+];
+
+self.addEventListener('install', (event) => {
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    );
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.map((cacheName) => {
+                    if (cacheName !== CACHE_NAME) {
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        }).then(() => self.clients.claim())
+    );
+});
+
+self.addEventListener('fetch', (event) => {
+    const url = new URL(event.request.url);
+    if (url.pathname.startsWith('/api/') || event.request.method !== 'GET') {
+        return;
+    }
+    // Stale-While-Revalidate strategy
+    event.respondWith(
+        caches.match(event.request).then((cachedResponse) => {
+            const fetchPromise = fetch(event.request).then((networkResponse) => {
+                if (networkResponse && networkResponse.ok && !networkResponse.redirected) {
+                    const clonedResponse = networkResponse.clone();
+                    event.waitUntil(
+                        caches.open(CACHE_NAME).then((cache) => {
+                            cache.put(event.request, clonedResponse);
+                        })
+                    );
+                }
+                return networkResponse;
+            }).catch(() => {
+                // Ignore fetch errors if offline
+            });
+            return cachedResponse || fetchPromise;
+        })
+    );
+});
+"""
+            return Response(sw_script, mimetype='application/javascript')
 
         # -------------------------------------------------------------
         # REST API (Conforming to arbor-mobile-companion / src/api.ts)
@@ -2705,14 +2765,25 @@ INDEX_TEMPLATE = """
       options.headers['X-Session-Token'] = TOKEN;
       options.headers['Content-Type'] = 'application/json';
       const sep = url.includes('?') ? '&' : '?';
+      const fullUrl = `${url}${sep}token=${encodeURIComponent(TOKEN)}`;
+      const isCacheable = options.method !== 'POST' && (url.startsWith('/api/schema') || url.startsWith('/api/objects'));
+
       try {
-        const res = await fetch(`${url}${sep}token=${encodeURIComponent(TOKEN)}`, options);
+        const res = await fetch(fullUrl, options);
         if (!res.ok) {
           console.warn(`API response status ${res.status} for ${url}`);
         }
-        return await res.json();
+        const data = await res.json();
+        if (isCacheable) {
+          cacheApiResponse(url, data);
+        }
+        return data;
       } catch (err) {
         console.error(`Fetch error on ${url}:`, err);
+        if (isCacheable) {
+          const cached = await getCachedApiResponse(url);
+          if (cached) return cached;
+        }
         return {};
       }
     }
@@ -2784,7 +2855,15 @@ INDEX_TEMPLATE = """
 
 
     async function init() {
-      initIndexedDB();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/service-worker.js').catch(err => console.error('ServiceWorker registration failed: ', err));
+      }
+
+      try {
+        await initIndexedDB();
+      } catch (e) {
+        console.warn('Offline DB init failed', e);
+      }
 
       // 0. Initialize SPA History State for Back Button handling
       if (!window.history.state || window.history.state.view !== 'list') {
@@ -2831,15 +2910,48 @@ INDEX_TEMPLATE = """
 
     let db;
     function initIndexedDB() {
-      const request = indexedDB.open('arbor_offline_db', 1);
-      request.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains('queued_mutations')) {
-          db.createObjectStore('queued_mutations', { keyPath: 'timestamp' });
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('arbor_offline_db', 2);
+        request.onupgradeneeded = (e) => {
+          const dbInstance = e.target.result;
+          if (!dbInstance.objectStoreNames.contains('queued_mutations')) {
+            dbInstance.createObjectStore('queued_mutations', { keyPath: 'timestamp' });
+          }
+          if (!dbInstance.objectStoreNames.contains('api_cache')) {
+            dbInstance.createObjectStore('api_cache', { keyPath: 'url' });
+          }
+        };
+        request.onsuccess = (e) => {
+          db = e.target.result;
+          resolve();
+        };
+        request.onerror = (e) => {
+          console.error('IndexedDB init error:', e);
+          reject(e);
+        };
+      });
+    }
+
+    function cacheApiResponse(url, data) {
+      if (!db) return;
+      try {
+        const tx = db.transaction('api_cache', 'readwrite');
+        tx.objectStore('api_cache').put({ url, data });
+      } catch (e) { console.error('Cache API error', e); }
+    }
+
+    function getCachedApiResponse(url) {
+      return new Promise((resolve) => {
+        if (!db) return resolve(null);
+        try {
+          const tx = db.transaction('api_cache', 'readonly');
+          const req = tx.objectStore('api_cache').get(url);
+          req.onsuccess = () => resolve(req.result ? req.result.data : null);
+          req.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
         }
-      };
-      request.onsuccess = (e) => { db = e.target.result; };
-      request.onerror = (e) => { console.error('IndexedDB init error:', e); };
+      });
     }
 
     function queueMutation(payload) {
