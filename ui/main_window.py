@@ -5030,12 +5030,7 @@ class ObjectProgramUI(
 
 
 
-    def push_filter_to_mobile(self):
-        server = getattr(self.app, '_mobile_server_instance', None)
-        if not server or not server.is_running:
-            return
-
-        import requests
+    def get_active_filter_state(self):
         query = self._inline_search_var.get().strip()
         if query == self._inline_search_placeholder:
             query = ""
@@ -5056,13 +5051,21 @@ class ObjectProgramUI(
         elif self.filter_vars.get("Problem_With_History") and self.filter_vars.get("Problem_With_History").get():
             status = "conflict"
 
-        payload = {
+        return {
             "q": query,
             "status": status,
             "specific_problems": problems,
             "locations": locations,
             "no_image": no_image
         }
+
+    def push_filter_to_mobile(self):
+        server = getattr(self.app, '_mobile_server_instance', None)
+        if not server or not server.is_running:
+            return
+
+        import requests
+        payload = self.get_active_filter_state()
 
         try:
             url = f"http://127.0.0.1:{server.port}/api/session/push_filter"
