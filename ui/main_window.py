@@ -3271,6 +3271,11 @@ class ObjectProgramUI(
         self.filter_btn = self.toolbar_buttons['Filter']
         self.add_tooltip(self.toolbar_buttons['Filter'], "Ctrl+G")
 
+        self.sync_filter_btn = ttk.Button(sort_frame, text="📱 Sync to Mobile", style="Nav.TButton", command=self.push_filter_to_mobile, cursor="hand2")
+        self.sync_filter_btn.pack(side="left", padx=(4, 0))
+        self.add_tooltip(self.sync_filter_btn, "Push working batch filter to mobile session")
+        self.sync_filter_btn.config(state="disabled")
+
         self.search_count_label = None
 
 
@@ -5025,6 +5030,48 @@ class ObjectProgramUI(
 
 
 
+    def push_filter_to_mobile(self):
+        server = getattr(self.app, '_mobile_server_instance', None)
+        if not server or not server.is_running:
+            return
+
+        import requests
+        query = self._inline_search_var.get().strip()
+        if query == self._inline_search_placeholder:
+            query = ""
+
+        problems = [
+            k for k, v in self.filter_vars.items()
+            if v.get() and k not in ('Images_Missing', 'Has_Images', 'Reviewed', 'Not_Reviewed', 'Problem_With_History', 'Has_History', 'Reviewed_With_Problem')
+        ]
+
+        locations = {k: v.get() for k, v in getattr(self, "filter_location_vars", {}).items() if v.get()}
+        no_image = bool(self.filter_vars.get('Images_Missing') and self.filter_vars.get('Images_Missing').get())
+
+        status = "all"
+        if self.filter_vars.get("Not_Reviewed") and self.filter_vars.get("Not_Reviewed").get():
+            status = "pending"
+        elif self.filter_vars.get("Reviewed") and self.filter_vars.get("Reviewed").get():
+            status = "reviewed"
+        elif self.filter_vars.get("Problem_With_History") and self.filter_vars.get("Problem_With_History").get():
+            status = "conflict"
+
+        payload = {
+            "q": query,
+            "status": status,
+            "specific_problems": problems,
+            "locations": locations,
+            "no_image": no_image
+        }
+
+        try:
+            url = f"http://127.0.0.1:{server.port}/api/session/push_filter"
+            headers = {"X-Session-Token": server.session_token} if hasattr(server, 'session_token') else {}
+            requests.post(url, json=payload, headers=headers, timeout=2)
+            self.show_banner(f"Pushed working batch ({len(self.app.active_object_ids)} items) to connected mobile companion", "success")
+        except Exception as e:
+            self.show_banner(f"Failed to push filter: {e}", "error")
+
     def push_current_to_phone(self):
         if not hasattr(self.app, 'current_object_id') or getattr(self.app, 'current_object_id', None) is None:
             return
@@ -5035,12 +5082,20 @@ class ObjectProgramUI(
             self.show_banner(f"Pushed {self.app.current_object_id} to Mobile Session", "success")
 
     def _update_push_to_phone_state(self):
+        server = getattr(self.app, '_mobile_server_instance', None)
+        is_running = server and server.is_running
+
         if hasattr(self, 'push_to_phone_btn') and self.push_to_phone_btn.winfo_exists():
-            server = getattr(self.app, '_mobile_server_instance', None)
-            if server and server.is_running and getattr(self.app, 'current_object_id', None) is not None:
+            if is_running and getattr(self.app, 'current_object_id', None) is not None:
                 self.push_to_phone_btn.config(state="normal")
             else:
                 self.push_to_phone_btn.config(state="disabled")
+
+        if hasattr(self, 'sync_filter_btn') and self.sync_filter_btn.winfo_exists():
+            if is_running:
+                self.sync_filter_btn.config(state="normal")
+            else:
+                self.sync_filter_btn.config(state="disabled")
 
     def open_mobile_dialog(self):
         from ui.mobile_dialog import MobileDialog

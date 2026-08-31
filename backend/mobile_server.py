@@ -1344,6 +1344,20 @@ class MobileServer:
                 }
             })
 
+
+        @app.route('/api/session/push_filter', methods=['POST'])
+        def push_filter():
+            data = request.get_json(silent=True) or {}
+            payload = {
+                "q": data.get("q", ""),
+                "status": data.get("status", "all"),
+                "specific_problems": data.get("specific_problems", []),
+                "locations": data.get("locations", {}),
+                "no_image": data.get("no_image", False)
+            }
+            self.broadcast_event('filter_synced', payload)
+            return jsonify({"success": True})
+
         @app.route('/api/update', methods=['POST'])
         def update_object():
             data = request.get_json(silent=True) or {}
@@ -2942,6 +2956,38 @@ INDEX_TEMPLATE = """
               showSessionEndedOverlay();
             } else if (data.type === 'push_navigation') {
               showPushNavigationOverlay(data.data.id);
+            } else if (data.type === 'filter_synced') {
+              const payload = data.data;
+              searchQuery = payload.q || "";
+              const searchBox = document.getElementById('searchBox');
+              if (searchBox) searchBox.value = searchQuery;
+
+              const searchClearBtn = document.getElementById('searchClearBtn');
+              if (searchClearBtn) {
+                if (searchQuery) searchClearBtn.classList.remove('hidden');
+                else searchClearBtn.classList.add('hidden');
+              }
+
+              activeAdvancedFilters.locations = payload.locations || {};
+              activeAdvancedFilters.problems = payload.specific_problems || [];
+
+              noImageFilterActive = payload.no_image || false;
+              const noImagePill = document.getElementById('pill-no-image');
+              if (noImagePill) {
+                if (noImageFilterActive) {
+                  noImagePill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ink text-white border-ink';
+                } else {
+                  noImagePill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
+                }
+              }
+
+              setStatusFilter(payload.status || 'all').then(() => {
+                showToast("📱 Synced batch with Desktop (" + objectList.length + " matching records)");
+              });
+
+              if (!document.getElementById('detailView').classList.contains('hidden')) {
+                showListView(false);
+              }
             }
           } catch(err) {}
         };
@@ -3157,7 +3203,7 @@ INDEX_TEMPLATE = """
         const styleRule = filterStyles[s] || filterStyles.all;
         pill.className = `min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center justify-center gap-1.5 ${isSelected ? styleRule.active : styleRule.inactive}`;
       });
-      fetchList();
+      return fetchList();
     }
 
     function handleSortChange() {
