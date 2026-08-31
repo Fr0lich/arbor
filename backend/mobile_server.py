@@ -277,26 +277,28 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
 
     # Conflict check
     if client_timestamp and hasattr(app_state, 'undo_stacks'):
-        stacks = app_state.undo_stacks.get(str(oid), [])
+        stacks = app_state.undo_stacks.get(resolved_reg_oid, [])
+        if not stacks:
+            stacks = app_state.undo_stacks.get(str(oid), [])
         if stacks:
             last_edit_time = stacks[-1].get("timestamp")
             if last_edit_time and client_timestamp < last_edit_time:
                 return None, f"Conflict: Host has newer changes for {oid}"
 
     # 1. Snapshot for Undo Stack
-    old_reg = app_state.df_reg.loc[resolved_reg_oid].to_dict()
+    old_reg = app_state.df_reg.loc[resolved_reg_oid].copy()
     resolved_obs_oid = _resolve_oid_in_df(app_state.df_obs, oid)
-    old_obs = app_state.df_obs.loc[resolved_obs_oid].to_dict() if (app_state.df_obs is not None and resolved_obs_oid is not None) else {}
+    old_obs = app_state.df_obs.loc[resolved_obs_oid].copy() if (app_state.df_obs is not None and resolved_obs_oid is not None) else {}
 
     undo_snapshot = {
         "oid": str(oid),
-        "reg": old_reg.copy(),
-        "obs": old_obs.copy(),
+        "reg": old_reg,
+        "obs": old_obs,
         "timestamp": datetime.now().isoformat()
     }
-    app_state.undo_stacks.setdefault(str(oid), []).append(undo_snapshot)
-    if len(app_state.undo_stacks[str(oid)]) > 20:
-        app_state.undo_stacks[str(oid)].pop(0)
+    app_state.undo_stacks.setdefault(resolved_reg_oid, []).append(undo_snapshot)
+    if len(app_state.undo_stacks[resolved_reg_oid]) > 20:
+        app_state.undo_stacks[resolved_reg_oid].pop(0)
 
     changed_fields = []
     changed_values = []
@@ -344,13 +346,43 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     # 6. Record Recent Edit in Server
     edit_summary = f"#{oid}: {', '.join(changed_fields)}" if changed_fields else f"#{oid} updated"
     if recent_edits is not None:
-        recent_edits.insert(0, {
-            "oid": str(oid),
-            "summary": edit_summary,
-            "time": datetime.now().strftime("%H:%M:%S")
-        })
-        if len(recent_edits) > 20:
-            recent_edits.pop()
+        accession = str(app_state.df_reg.at[resolved_reg_oid, 'catalogNumber']) if (app_state.df_reg is not None and 'catalogNumber' in app_state.df_reg.columns and pd.notna(app_state.df_reg.at[resolved_reg_oid, 'catalogNumber'])) else str(oid)
+
+        if changed_fields:
+            for field, val_change in zip(changed_fields, changed_values):
+                old_val = ""
+                new_val = val_change
+                if " -> " in val_change:
+                    parts = val_change.split(" -> ")
+                    old_part = parts[0]
+                    if ": " in old_part:
+                        old_val = old_part.split(": ", 1)[-1].strip('"')
+                    else:
+                        old_val = old_part.strip('"')
+                    new_val = parts[-1].strip('"')
+
+                recent_edits.insert(0, {
+                    "id": str(oid),
+                    "accession_number": accession,
+                    "field": field,
+                    "old_val": old_val,
+                    "new_val": new_val,
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "Mobile"
+                })
+        else:
+            recent_edits.insert(0, {
+                "id": str(oid),
+                "accession_number": accession,
+                "field": "General Update",
+                "old_val": "",
+                "new_val": "",
+                "timestamp": datetime.now().isoformat(),
+                "source": "Mobile"
+            })
+
+        if len(recent_edits) > 50:
+            del recent_edits[50:]
 
     return edit_summary, None
 
@@ -1344,6 +1376,86 @@ class MobileServer:
                 }
             })
 
+        @app.route('/api/undo', methods=['POST'])
+        def undo_object():
+            data = request.get_json(silent=True) or {}
+            oid = str(data.get('oid') or data.get('id') or '').strip()
+            if not oid:
+                return jsonify({"error": "Missing object ID"}), 400
+
+            with self.app_state.df_lock:
+                resolved_reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
+                if resolved_reg_oid is None:
+                    return jsonify({"error": "Object not found in active database"}), 404
+
+                stack = self.app_state.undo_stacks.get(resolved_reg_oid)
+                if not stack:
+                    return jsonify({"error": "No history for this object"}), 404
+
+                state = stack.pop()
+                if hasattr(state["reg"], "items"):
+                    for col, val in state["reg"].items():
+                        self.app_state.df_reg.at[resolved_reg_oid, col] = val
+                else:
+                    self.app_state.df_reg.loc[resolved_reg_oid] = state["reg"]
+
+                resolved_obs_oid = _resolve_oid_in_df(self.app_state.df_obs, oid)
+                if resolved_obs_oid is not None:
+                    if hasattr(state["obs"], "items"):
+                        for col, val in state["obs"].items():
+                            self.app_state.df_obs.at[resolved_obs_oid, col] = val
+                    else:
+                        self.app_state.df_obs.loc[resolved_obs_oid] = state["obs"]
+
+                # Audit Log
+                if not hasattr(self.app_state, "_log_records") or self.app_state._log_records is None:
+                    self.app_state._log_records = []
+                log_entry = _build_audit_log_entry(self.app_state, str(oid), "UNDO", "", ["Restored previous state"], ["Undo via Mobile"])
+                self.app_state._log_records.append(log_entry)
+                self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+
+                self.app_state.dirty = True
+                self.app_state._mobile_last_edited_oid = resolved_reg_oid
+
+                # Recompute Flags
+                reg_row = self.app_state.df_reg.loc[resolved_reg_oid].to_dict()
+                obs_row = self.app_state.df_obs.loc[resolved_obs_oid].to_dict() if resolved_obs_oid is not None else {}
+                history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
+                prob_cols = []
+                if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                    prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+                problem_to_field = get_problem_to_field_map(self.app_state.config)
+                flags = compute_status_flags(reg_row, obs_row, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
+
+            # Notify clients
+            self.broadcast_event("record_updated", {
+                "id": str(oid),
+                "has_flags": flags["has_flags"],
+                "has_history": flags["has_history"],
+                "problems_have_history": flags["problems_have_history"],
+                "has_unknown": flags["has_unknown"],
+                "review_status": flags["review_status"]
+            })
+
+            # Remove from recent_edits for this oid, just taking out the first matched entry
+            for i, edit in enumerate(self.recent_edits):
+                if edit["id"] == str(oid):
+                    self.recent_edits.pop(i)
+                    break
+
+            if self.on_edit_callback:
+                try:
+                    self.on_edit_callback(resolved_reg_oid, f"Undo on #{oid}")
+                except Exception:
+                    pass
+
+            payload = self.data_store.get_object_payload(oid)
+            return jsonify(payload)
+
+        @app.route('/api/recent_edits', methods=['GET'])
+        def get_recent_edits():
+            return jsonify(self.recent_edits)
+
         @app.route('/api/update', methods=['POST'])
         def update_object():
             data = request.get_json(silent=True) or {}
@@ -1789,6 +1901,16 @@ INDEX_TEMPLATE = """
           >
             <span class="text-ink text-sm font-mono">⚙</span>
           </button>
+
+          <!-- Recent Changes Modal Trigger -->
+          <button
+            type="button"
+            onclick="toggleRecentChangesDrawer()"
+            class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+            title="Recent Activity"
+          >
+            <span class="text-ink text-sm font-mono">🕒</span>
+          </button>
         </div>
 
         <!-- Filter Pill Tabs -->
@@ -1900,14 +2022,20 @@ INDEX_TEMPLATE = """
     <div id="detailView" class="hidden flex-1 flex flex-col h-full bg-canvas overflow-hidden relative">
       <!-- Sticky Top Header -->
       <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 py-2.5 shadow-xs shrink-0 flex items-center justify-between">
-        <button
-          type="button"
-          onclick="showListView()"
-          class="flex items-center gap-1.5 text-xs font-sans font-medium text-ink hover:text-fern py-1 px-1.5 -ml-1 rounded-[2px] transition-colors touch-target-min"
-        >
-          <span class="font-bold text-sm">&lt;</span>
-          <span>Vault List</span>
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            onclick="showListView()"
+            class="flex items-center gap-1.5 text-xs font-sans font-medium text-ink hover:text-fern py-1 px-1.5 -ml-1 rounded-[2px] transition-colors touch-target-min"
+          >
+            <span class="font-bold text-sm">&lt;</span>
+            <span>Vault List</span>
+          </button>
+
+          <button id="btnUndo" onclick="undoCurrentObject()" class="hidden text-xs font-sans font-medium text-ember hover:text-ember-dark px-2 py-1 rounded touch-target-min border border-ember-border bg-ember-light">
+            ↩ Undo
+          </button>
+        </div>
 
         <div class="flex items-center gap-2">
           <span class="font-mono text-xs text-ink-muted" id="detailNavIndex">
@@ -2671,6 +2799,131 @@ INDEX_TEMPLATE = """
       }
     }
 
+    let recentEdits = [];
+
+    async function toggleRecentChangesDrawer() {
+      const drawer = document.getElementById('recentChangesDrawer');
+      const overlay = document.getElementById('recentChangesDrawerOverlay');
+      const isHidden = drawer.classList.contains('translate-x-full');
+
+      if (isHidden) {
+        await fetchRecentEdits();
+        overlay.classList.remove('hidden');
+        setTimeout(() => {
+          overlay.classList.remove('opacity-0');
+          drawer.classList.remove('translate-x-full');
+        }, 10);
+      } else {
+        overlay.classList.add('opacity-0');
+        drawer.classList.add('translate-x-full');
+        setTimeout(() => {
+          overlay.classList.add('hidden');
+        }, 250);
+      }
+    }
+
+    async function fetchRecentEdits() {
+      try {
+        const res = await apiFetch('/api/recent_edits');
+        recentEdits = res;
+        renderRecentEdits();
+        updateUndoButtonVisibility();
+      } catch (err) {
+        console.error('Error fetching recent edits:', err);
+      }
+    }
+
+    function renderRecentEdits() {
+      const container = document.getElementById('recentChangesList');
+      if (!recentEdits || recentEdits.length === 0) {
+        container.innerHTML = '<div class="text-ink-muted text-sm text-center py-4">No recent activity.</div>';
+        return;
+      }
+
+      let html = '';
+      recentEdits.forEach(edit => {
+        let title = edit.accession_number || edit.id;
+        let changeText = '';
+        if (edit.old_val || edit.new_val) {
+          changeText = `<div class="text-[11px] text-ink-muted truncate"><span class="line-through">${edit.old_val || 'empty'}</span> &rarr; <span class="font-medium text-ink">${edit.new_val || 'empty'}</span></div>`;
+        }
+
+        html += `
+          <div class="bg-surface border border-bordercol rounded-[4px] p-2.5 flex flex-col gap-2 shadow-xs">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="text-xs font-mono text-ink font-bold truncate">#${title}</div>
+                <div class="text-xs font-sans text-ink truncate">${edit.field}</div>
+                ${changeText}
+              </div>
+              <button onclick="undoObject('${edit.id}')" class="shrink-0 text-xs text-ember hover:text-ember-dark border border-ember-border bg-ember-light px-2 py-1 rounded">
+                Revert
+              </button>
+            </div>
+            <div class="text-[10px] text-ink-faint text-right">${edit.timestamp ? new Date(edit.timestamp).toLocaleTimeString() : ''}</div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    async function undoObject(oid) {
+      showLoader('Reverting change...');
+      try {
+        const res = await apiFetch('/api/undo', {
+          method: 'POST',
+          body: JSON.stringify({ oid: oid })
+        });
+        showToast('Change reverted successfully');
+
+        // Refresh local views
+        if (currentOid === String(oid)) {
+          // If we are currently viewing this object, update the form
+          Object.assign(currentObjectData, res);
+          // Wait a tick for UI update if needed
+          await loadSpecimen(oid);
+        }
+
+        // Always refresh the recent edits and vault list
+        await fetchRecentEdits();
+
+        // Re-run search/list to reflect changes
+        const sv = document.getElementById('searchInput').value;
+        if (sv) {
+           performSearch();
+        } else {
+           fetchBatchObjects();
+        }
+
+      } catch (err) {
+        showToast('Failed to revert: ' + err.message, true);
+      } finally {
+        hideLoader();
+      }
+    }
+
+    async function undoCurrentObject() {
+       if (currentOid) {
+           await undoObject(currentOid);
+       }
+    }
+
+    function updateUndoButtonVisibility() {
+      const btn = document.getElementById('btnUndo');
+      if (!btn) return;
+      if (!currentOid) {
+        btn.classList.add('hidden');
+        return;
+      }
+
+      const hasEditForCurrent = recentEdits.some(e => String(e.id) === String(currentOid));
+      if (hasEditForCurrent) {
+        btn.classList.remove('hidden');
+      } else {
+        btn.classList.add('hidden');
+      }
+    }
+
     function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
       toast.textContent = msg;
@@ -2765,6 +3018,7 @@ INDEX_TEMPLATE = """
 
         // 3. Fetch Initial List
         await fetchList();
+        fetchRecentEdits();
 
         // 4. Fetch Location Presets
         const presetsRes = await apiFetch('/api/presets');
@@ -3478,6 +3732,7 @@ INDEX_TEMPLATE = """
       const idx = objectList.findIndex(o => o.id === oid);
       if (idx !== -1) {
         document.getElementById('detailNavIndex').textContent = `${idx + 1} of ${objectList.length}`;
+        updateUndoButtonVisibility();
         document.getElementById('btnPrevSpecimen').disabled = (idx === 0);
         document.getElementById('btnNextSpecimen').disabled = (idx === objectList.length - 1);
       }
@@ -4689,6 +4944,20 @@ INDEX_TEMPLATE = """
     // Initialize application
     init();
   </script>
+
+  <!-- Recent Changes Drawer -->
+  <div id="recentChangesDrawerOverlay" class="fixed inset-0 bg-ink/40 z-[90] hidden transition-opacity opacity-0" onclick="toggleRecentChangesDrawer()"></div>
+  <div id="recentChangesDrawer" class="fixed right-0 top-0 bottom-0 w-80 max-w-[90%] bg-surface z-[100] transform translate-x-full transition-transform duration-250 flex flex-col shadow-2xl border-l border-bordercol">
+    <div class="px-4 py-3 border-b border-bordercol bg-tonal1 flex items-center justify-between shrink-0">
+      <h2 class="font-sans font-semibold text-ink text-sm">Recent Activity</h2>
+      <button type="button" onclick="toggleRecentChangesDrawer()" class="text-ink-muted hover:text-ink p-2 -mr-2 touch-target-min flex items-center justify-center">
+        ✕
+      </button>
+    </div>
+    <div id="recentChangesList" class="flex-1 overflow-y-auto p-4 space-y-3 bg-canvas">
+      <!-- Injected dynamically -->
+    </div>
+  </div>
 </body>
 </html>
 
