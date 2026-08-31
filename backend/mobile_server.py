@@ -1421,58 +1421,61 @@ INDEX_TEMPLATE = """
     </div>
 
     <!-- ========================================== -->
+    <!-- GLOBAL HEADER                              -->
+    <!-- ========================================== -->
+    <header class="bg-surface border-b border-bordercol px-4 pt-3 pb-2.5 shadow-xs shrink-0 z-40 relative flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-[2px] bg-fern text-white flex items-center justify-center font-serif font-bold text-sm">
+          A
+        </div>
+        <div>
+          <h1 class="font-serif font-bold text-base text-ink leading-tight">
+            Arbor Companion
+          </h1>
+          <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
+            Connecting to database...
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <!-- Screen Wake Lock / Walk Mode Toggle -->
+        <button
+          type="button"
+          id="btnWakeLock"
+          onclick="toggleWakeLock()"
+          class="p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center"
+          title="Toggle Walk Mode (Prevent Screen Sleep)"
+        >
+          <span id="wakeLockIcon" class="text-sm leading-none">🌙</span>
+        </button>
+
+        <!-- Desktop Connection Pill Button -->
+        <button
+          type="button"
+          onclick="openModal('connectionModal')"
+          id="connStatusBtn"
+          class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
+          title="Desktop Connection Status"
+          aria-live="polite"
+        >
+          <span class="relative flex h-2 w-2">
+            <span id="connPingDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
+            <span id="connPingDot" class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
+          </span>
+          <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
+            Live
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ========================================== -->
     <!-- VIEW: SPECIMEN LIST                        -->
     <!-- ========================================== -->
     <div id="listView" class="flex-1 flex flex-col h-full bg-canvas overflow-hidden">
       <!-- Sticky Header -->
-      <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 pt-3 pb-2.5 shadow-xs shrink-0">
-        <div class="flex items-center justify-between mb-2.5">
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 rounded-[2px] bg-fern text-white flex items-center justify-center font-serif font-bold text-sm">
-              A
-            </div>
-            <div>
-              <h1 class="font-serif font-bold text-base text-ink leading-tight">
-                Arbor Companion
-              </h1>
-              <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
-                Connecting to database...
-              </div>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-1.5">
-            <!-- Screen Wake Lock / Walk Mode Toggle -->
-            <button
-              type="button"
-              id="btnWakeLock"
-              onclick="toggleWakeLock()"
-              class="p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center"
-              title="Toggle Walk Mode (Prevent Screen Sleep)"
-            >
-              <span id="wakeLockIcon" class="text-sm leading-none">🌙</span>
-            </button>
-
-            <!-- Desktop Connection Pill Button -->
-            <button
-              type="button"
-              onclick="openModal('connectionModal')"
-              id="connStatusBtn"
-              class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
-              title="Desktop Connection Status"
-              aria-live="polite"
-            >
-              <span class="relative flex h-2 w-2">
-                <span id="connPingDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
-                <span id="connPingDot" class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
-              </span>
-              <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
-                Live
-              </span>
-            </button>
-          </div>
-        </div>
-
+      <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 py-2.5 shadow-xs shrink-0">
         <!-- Search Input Box -->
         <div class="relative flex items-center gap-2">
           <div class="relative flex-1 flex items-center bg-tonal1 border border-bordercol rounded-[2px] transition-all search-active">
