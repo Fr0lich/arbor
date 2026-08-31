@@ -592,6 +592,8 @@ class SQLiteRepository:
         else:
             df_log = _normalise_log_dataframe(df_log)
 
+        from utils import sanitize_df_for_excel
+
         if df_reg is not None and "ObjectID" not in df_reg.columns:
             df_reg = df_reg.reset_index()
         
@@ -601,18 +603,24 @@ class SQLiteRepository:
         if df_photo is not None and not df_photo.empty and "ObjectID" not in df_photo.columns:
             df_photo = df_photo.reset_index()
 
+        # Sanitize dataframes to prevent CSV/Excel formula injection
+        df_reg_safe = sanitize_df_for_excel(df_reg)
+        df_obs_safe = sanitize_df_for_excel(df_obs)
+        df_photo_safe = sanitize_df_for_excel(df_photo)
+        df_log_safe = sanitize_df_for_excel(df_log)
+
         sheets = config.get("sheets", {
             "reg": "Registration", "obs": "Observation",
             "photo": "Photo", "log": "Log"
         })
 
         steps = [
-            (df_reg, sheets.get("reg", "Registration"), "Registration"),
-            (df_obs, sheets.get("obs", "Observation"),  "Observation"),
+            (df_reg_safe, sheets.get("reg", "Registration"), "Registration"),
+            (df_obs_safe, sheets.get("obs", "Observation"),  "Observation"),
         ]
-        if df_photo is not None and not df_photo.empty:
-            steps.append((df_photo, sheets.get("photo", "Photo"), "Photo"))
-        steps.append((df_log, sheets.get("log", "Log"), "Log"))
+        if df_photo_safe is not None and not df_photo_safe.empty:
+            steps.append((df_photo_safe, sheets.get("photo", "Photo"), "Photo"))
+        steps.append((df_log_safe, sheets.get("log", "Log"), "Log"))
 
         total = len(steps)
 
