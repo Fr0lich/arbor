@@ -26,7 +26,12 @@ class MobileDialog:
         self.win.geometry("540x730")
         self.win.minsize(500, 690)
         self.win.transient(root)
-        self.win.grab_set()
+
+        # Only lock if simultaneous edit is not enabled
+        if hasattr(self.parent_ui, "simultaneous_edit_var") and self.parent_ui.simultaneous_edit_var.get():
+            pass
+        else:
+            self.win.grab_set()
 
         # Center on parent
         self.win.update_idletasks()

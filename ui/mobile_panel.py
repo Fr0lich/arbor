@@ -144,13 +144,13 @@ class MobilePanel:
         )
         self.start_btn.pack(fill="x", ipady=4)
 
-
         # ── Active Frame (Hidden initially) ───────────────────────────
         self.active_frame = tk.Frame(main, bg="#ffffff")
         # Do not pack active_frame yet
 
         # ── Status pill ───────────────────────────────────────────────
-        self.status_bar = tk.Frame(self.active_frame, bg="#e8f5e9", bd=1, relief="solid", padx=10, pady=6)
+        self.status_bar = tk.Frame(
+            self.active_frame, bg="#e8f5e9", bd=1, relief="solid", padx=10, pady=6)
         self.status_bar.pack(fill="x", pady=(0, 10))
 
         self.status_dot = tk.Label(
@@ -173,11 +173,13 @@ class MobilePanel:
         self.client_badge.pack(side="right", padx=(0, 6))
 
         # ── QR + connection info ──────────────────────────────────────
-        mid = tk.Frame(self.active_frame, bg="#fbfbf9", bd=1, relief="solid", padx=12, pady=12)
+        mid = tk.Frame(self.active_frame, bg="#fbfbf9", bd=1,
+                       relief="solid", padx=12, pady=12)
         mid.pack(fill="x", pady=(0, 10))
 
         # QR box
-        qr_box = tk.Frame(mid, bg="#ffffff", bd=1, relief="solid", padx=6, pady=6)
+        qr_box = tk.Frame(mid, bg="#ffffff", bd=1,
+                          relief="solid", padx=6, pady=6)
         qr_box.pack(side="left", padx=(0, 14))
 
         self.qr_label = tk.Label(qr_box, bg="#ffffff")
@@ -266,8 +268,20 @@ class MobilePanel:
         )
         self.tunnel_lbl.pack(anchor="w", pady=(4, 0))
 
+        # Link to main window's simultaneous edit toggle if it exists
+        if hasattr(self.parent.master, "parent_ui") and hasattr(self.parent.master.parent_ui, "simultaneous_edit_var"):
+            simul_cb = ttk.Checkbutton(
+                info,
+                text="Enable simultaneous edit",
+                variable=self.parent.master.parent_ui.simultaneous_edit_var,
+                command=self.parent.master.parent_ui.toggle_simultaneous_edit,
+                cursor="hand2"
+            )
+            simul_cb.pack(anchor="w", pady=(8, 0))
+
         # ── Session notice ────────────────────────────────────────────
-        notice = tk.Frame(self.active_frame, bg="#fffbeb", bd=1, relief="solid", padx=10, pady=6)
+        notice = tk.Frame(self.active_frame, bg="#fffbeb",
+                          bd=1, relief="solid", padx=10, pady=6)
         notice.pack(fill="x", pady=(0, 10))
         tk.Label(
             notice,
@@ -303,11 +317,13 @@ class MobilePanel:
         )
         self.feed_list.pack(fill="both", expand=True, side="left")
 
-        feed_scroll = ttk.Scrollbar(feed_frame, orient="vertical", command=self.feed_list.yview)
+        feed_scroll = ttk.Scrollbar(
+            feed_frame, orient="vertical", command=self.feed_list.yview)
         feed_scroll.pack(side="right", fill="y")
         self.feed_list.config(yscrollcommand=feed_scroll.set)
 
-        self.feed_list.insert(tk.END, "Session initialized. Ready for mobile connections.")
+        self.feed_list.insert(
+            tk.END, "Session initialized. Ready for mobile connections.")
 
         # ── Bottom button ─────────────────────────────────────────────
         bottom = tk.Frame(self.active_frame, bg="#ffffff")
@@ -363,8 +379,10 @@ class MobilePanel:
         # Update DB info label
         try:
             db_name = os.path.basename(self.app_state.excel_path or "")
-            record_count = len(self.app_state.df_reg) if self.app_state.df_reg is not None else 0
-            self._db_info_lbl.config(text=f"DB: {db_name}  ({record_count} records)")
+            record_count = len(
+                self.app_state.df_reg) if self.app_state.df_reg is not None else 0
+            self._db_info_lbl.config(
+                text=f"DB: {db_name}  ({record_count} records)")
         except Exception:
             pass
 
@@ -385,11 +403,12 @@ class MobilePanel:
             self.tunnel.start(self._on_tunnel_ready, self._on_tunnel_status)
         else:
             # Local only mode
-            self.tunnel_lbl.config(text="Tunnel: Disabled (LAN Only)", fg="#5a655e")
+            self.tunnel_lbl.config(
+                text="Tunnel: Disabled (LAN Only)", fg="#5a655e")
             self.status_lbl.config(text="🟢 Local Server Ready", fg="#1b4332")
             self.switch_qr("local")
-            self.log(f"Server started in LAN-only mode: http://{local_ip}:{self.port}")
-
+            self.log(
+                f"Server started in LAN-only mode: http://{local_ip}:{self.port}")
 
     def stop(self):
         """Stop the tunnel (does not save data — wrapper handles that)."""
@@ -431,13 +450,17 @@ class MobilePanel:
         """Toggle the QR code between local and public URL."""
         self.current_qr_mode = mode
         if mode == "local":
-            self.btn_qr_local.config(bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
-            self.btn_qr_public.config(bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+            self.btn_qr_local.config(
+                bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+            self.btn_qr_public.config(
+                bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
             self.url_var.set(self.local_url_with_token)
             self._render_qr(self.local_url_with_token)
         else:
-            self.btn_qr_public.config(bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
-            self.btn_qr_local.config(bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+            self.btn_qr_public.config(
+                bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+            self.btn_qr_local.config(
+                bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
             url = self.public_url_with_token or self.local_url_with_token
             self.url_var.set(url)
             self._render_qr(url)
@@ -455,12 +478,15 @@ class MobilePanel:
         def _update():
             self.public_url_with_token = f"{url}?token={self.server.session_token}"
             self.status_dot.config(fg="#2e7d32")
-            self.status_lbl.config(text="🟢 Public Tunnel Live & Secure", fg="#1b4332")
-            self.tunnel_lbl.config(text=f"Public: {url}", fg="#2e7d32", font=("Segoe UI", 8))
+            self.status_lbl.config(
+                text="🟢 Public Tunnel Live & Secure", fg="#1b4332")
+            self.tunnel_lbl.config(
+                text=f"Public: {url}", fg="#2e7d32", font=("Segoe UI", 8))
             self.btn_qr_public.config(text="🌐 Public (Internet) ✓")
             # Always switch to the public QR as soon as the tunnel is ready
             self.switch_qr("public")
-            self.feed_list.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] Public tunnel ready: {url}")
+            self.feed_list.insert(
+                tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] Public tunnel ready: {url}")
             self.feed_list.see(tk.END)
         self.root.after(0, _update)
 
