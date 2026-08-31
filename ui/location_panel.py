@@ -127,6 +127,10 @@ class LocationPanel(tk.Frame):
 
     def _on_field_var_change(self, field_name):
         val = self.location_vars[field_name].get()
+        if field_name == "Loaned out" and hasattr(self, "_loan_card_widgets"):
+            for card, bar, lbl in self._loan_card_widgets:
+                if card.winfo_exists():
+                    self._update_loan_card_style(card, bar, lbl)
         if "on_field_change" in self.live_callbacks:
             self.live_callbacks["on_field_change"](field_name, val)
 
@@ -145,6 +149,7 @@ class LocationPanel(tk.Frame):
         for child in self.winfo_children():
             child.destroy()
         self.field_entries.clear()
+        self._loan_card_widgets = []
         
         if self.mode == "vertical":
             self._build_vertical_ui()
@@ -320,6 +325,10 @@ class LocationPanel(tk.Frame):
         card.bind("<Button-1>", _toggle_loan)
         lbl.bind("<Button-1>", _toggle_loan)
         
+        if not hasattr(self, "_loan_card_widgets"):
+            self._loan_card_widgets = []
+        self._loan_card_widgets.append((card, bar, lbl))
+
         return card
 
     def _update_loan_card_style(self, card, bar, lbl):
