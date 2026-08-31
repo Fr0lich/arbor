@@ -4233,6 +4233,7 @@ class ObjectProgramUI(
         self.context_menu.add_command(label="Mark Selected as Reviewed", command=lambda: self._context_set_reviewed(True))
         self.context_menu.add_command(label="Mark Selected as Not Reviewed", command=lambda: self._context_set_reviewed(False))
         self.context_menu.add_separator()
+        self.context_menu.add_command(label="📱 Push to Phone", command=self.push_current_to_phone)
         advanced_prefs = config.load_prefs().get("advanced", {})
         if advanced_prefs.get("enable_bulk_editor", False):
             self.context_menu.add_command(label="Bulk Edit Selected", command=self.open_bulk_edit_window)
@@ -4289,6 +4290,36 @@ class ObjectProgramUI(
             bg="#ffffff"
         )
         self.title_problem_count_label.pack(side="left", anchor="center", padx=(sc(6), 0), pady=sc(6))
+
+        # Push to phone button
+        try:
+            from pytablericons import TablerIcons
+            import pytablericons.outline_icon as oi
+            from PIL import ImageTk
+            pil_img = TablerIcons.load(oi.OutlineIcon.DEVICE_MOBILE_SHARE, 20, '#555555', 1.5)
+            self._icon_mobile_share = ImageTk.PhotoImage(pil_img)
+            self.push_to_phone_btn = tk.Button(
+                center_header,
+                image=self._icon_mobile_share,
+                bg="#ffffff",
+                relief="flat",
+                bd=0,
+                cursor="hand2",
+                command=self.push_current_to_phone
+            )
+        except Exception:
+            self.push_to_phone_btn = tk.Button(
+                center_header,
+                text="📱 Push to Phone",
+                font=("Inter", sc(9)),
+                bg="#ffffff",
+                relief="solid",
+                bd=1,
+                cursor="hand2",
+                command=self.push_current_to_phone
+            )
+        self.push_to_phone_btn.pack(side="left", anchor="center", padx=(sc(8), 0), pady=sc(6))
+        self.add_tooltip(self.push_to_phone_btn, "Push object to connected mobile companion")
 
         # RIGHT: location summary (Technical Monospace)
         self.location_summary_label = tk.Label(
@@ -6056,6 +6087,7 @@ class ObjectProgramUI(
 
             if hasattr(self, "header_id_badge") and self.header_id_badge.winfo_exists():
                 self.header_id_badge.config(text=f"ID: {oid}")
+            self.root.after(100, self._update_push_to_phone_state)
 
             self.title_label.config(text=payload["taxon_name"])
 
@@ -6204,13 +6236,32 @@ class ObjectProgramUI(
 
 
 
+    def push_current_to_phone(self):
+        if not hasattr(self.app, 'current_object_id') or getattr(self.app, 'current_object_id', None) is None:
+            return
+
+        server = getattr(self.app, '_mobile_server_instance', None)
+        if server and server.is_running:
+            server.push_navigation(self.app.current_object_id)
+            self.show_banner(f"Pushed {self.app.current_object_id} to Mobile Session", "success")
+
+    def _update_push_to_phone_state(self):
+        if hasattr(self, 'push_to_phone_btn') and self.push_to_phone_btn.winfo_exists():
+            server = getattr(self.app, '_mobile_server_instance', None)
+            if server and server.is_running and getattr(self.app, 'current_object_id', None) is not None:
+                self.push_to_phone_btn.config(state="normal")
+            else:
+                self.push_to_phone_btn.config(state="disabled")
+
     def open_mobile_dialog(self):
         from ui.mobile_dialog import MobileDialog
         if not hasattr(self, '_mobile_dialog') or not self._mobile_dialog.win.winfo_exists():
             self._mobile_dialog = MobileDialog(self, self.root, self.app)
+            self.root.after(500, self._update_push_to_phone_state)
         else:
             self._mobile_dialog.win.lift()
             self._mobile_dialog.win.focus_force()
+            self._update_push_to_phone_state()
 
     def _on_mobile_edit(self, event=None):
         """Called when the mobile server fires <<MobileEdit>>"""
@@ -8113,7 +8164,25 @@ class ObjectProgramUI(
                 self.object_list.selection_set(iid)
                 self.object_list.focus(iid)
                 self.load_object(iid)
+                current_selection = self.object_list.selection()
             
+            # Dynamically update state of "Push to Phone" based on selection and mobile server status
+            push_index = None
+            try:
+                for i in range(self.context_menu.index("end") + 1):
+                    if self.context_menu.entrycget(i, "label") == "📱 Push to Phone":
+                        push_index = i
+                        break
+            except Exception:
+                pass
+
+            if push_index is not None:
+                server = getattr(self.app, '_mobile_server_instance', None)
+                if server and server.is_running and len(current_selection) <= 1:
+                    self.context_menu.entryconfig(push_index, state="normal")
+                else:
+                    self.context_menu.entryconfig(push_index, state="disabled")
+
             self.context_menu.post(event.x_root, event.y_root)
 
     def _context_set_reviewed(self, value: bool):
