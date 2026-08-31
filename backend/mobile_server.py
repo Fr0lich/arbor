@@ -265,7 +265,7 @@ def _get_allowed_columns(config):
                 allowed_obs_cols.add(item["name"])
     return allowed_reg_cols, allowed_obs_cols
 
-def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, allowed_reg_cols=None, allowed_obs_cols=None, recent_edits=None):
+def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, allowed_reg_cols=None, allowed_obs_cols=None, recent_edits=None, client_timestamp=None):
     """Execute single record update core with dtype safety, undo snapshots, audit logging, and change tracking."""
     if app_state.df_reg is None:
         return None, "No active database loaded"
@@ -273,6 +273,15 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     resolved_reg_oid = _resolve_oid_in_df(app_state.df_reg, oid)
     if resolved_reg_oid is None:
         return None, f"Object {oid} not found in active database"
+
+
+    # Conflict check
+    if client_timestamp and hasattr(app_state, 'undo_stacks'):
+        stacks = app_state.undo_stacks.get(str(oid), [])
+        if stacks:
+            last_edit_time = stacks[-1].get("timestamp")
+            if last_edit_time and client_timestamp < last_edit_time:
+                return None, f"Conflict: Host has newer changes for {oid}"
 
     # 1. Snapshot for Undo Stack
     old_reg = app_state.df_reg.loc[resolved_reg_oid].to_dict()
@@ -1346,13 +1355,15 @@ class MobileServer:
             updates = data.get('observation') or data.get('updates') or {}
             reg_updates = data.get('registration') or {}
 
+            client_timestamp = data.get('timestamp')
             with self.app_state.df_lock:
                 allowed_reg_cols, allowed_obs_cols = _get_allowed_columns(getattr(self.app_state, "config", None))
                 edit_summary, err = _execute_record_update(
                     self.app_state, oid, reg_updates, updates, reviewed,
                     allowed_reg_cols=allowed_reg_cols,
                     allowed_obs_cols=allowed_obs_cols,
-                    recent_edits=self.recent_edits
+                    recent_edits=self.recent_edits,
+                    client_timestamp=client_timestamp
                 )
                 if err:
                     return jsonify({"error": err}), 404
@@ -1531,12 +1542,14 @@ class MobileServer:
                     reviewed = update.get('reviewed')
                     obs_updates = update.get('observation') or {}
                     reg_updates = update.get('registration') or {}
+                    client_timestamp = update.get('timestamp')
 
                     _, err = _execute_record_update(
                         self.app_state, oid, reg_updates, obs_updates, reviewed,
                         allowed_reg_cols=allowed_reg_cols,
                         allowed_obs_cols=allowed_obs_cols,
-                        recent_edits=self.recent_edits
+                        recent_edits=self.recent_edits,
+                        client_timestamp=client_timestamp
                     )
                     if err:
                         continue
@@ -2723,7 +2736,10 @@ INDEX_TEMPLATE = """
       }
     });
 
+
     async function init() {
+      initIndexedDB();
+
       // 0. Initialize SPA History State for Back Button handling
       if (!window.history.state || window.history.state.view !== 'list') {
         window.history.replaceState({ view: 'root' }, '');
@@ -2767,6 +2783,84 @@ INDEX_TEMPLATE = """
 
     let _evtSource = null;
 
+    let db;
+    function initIndexedDB() {
+      const request = indexedDB.open('arbor_offline_db', 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('queued_mutations')) {
+          db.createObjectStore('queued_mutations', { keyPath: 'timestamp' });
+        }
+      };
+      request.onsuccess = (e) => { db = e.target.result; };
+      request.onerror = (e) => { console.error('IndexedDB init error:', e); };
+    }
+
+    function queueMutation(payload) {
+      if (!db) return;
+      const tx = db.transaction('queued_mutations', 'readwrite');
+      const store = tx.objectStore('queued_mutations');
+      store.put(payload);
+      tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
+    }
+
+    function getQueuedMutations() {
+      return new Promise((resolve) => {
+        if (!db) return resolve([]);
+        const tx = db.transaction('queued_mutations', 'readonly');
+        const store = tx.objectStore('queued_mutations');
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result);
+      });
+    }
+
+    function clearQueuedMutations(timestamps) {
+      if (!db) return;
+      const tx = db.transaction('queued_mutations', 'readwrite');
+      const store = tx.objectStore('queued_mutations');
+      if (timestamps && timestamps.length > 0) {
+        timestamps.forEach(ts => store.delete(ts));
+      } else {
+        store.clear();
+      }
+      tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
+    }
+
+    function updateOfflineBannerQueueCount() {
+      if (!db) return;
+      const tx = db.transaction('queued_mutations', 'readonly');
+      const req = tx.objectStore('queued_mutations').count();
+      req.onsuccess = () => {
+        const count = req.result;
+        const banner = document.getElementById('footerSyncStatus');
+        if (count > 0 && (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline'))) {
+          banner.innerHTML = `<span class="font-mono text-ember-dark font-medium">Offline (${count} edits queued)</span>`;
+        }
+      };
+    }
+
+    async function flushQueuedMutations() {
+      const mutations = await getQueuedMutations();
+      if (mutations.length === 0) return;
+      // Sort by timestamp just in case
+      mutations.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      try {
+        const res = await apiFetch('/api/batch_update', {
+          method: 'POST',
+          body: JSON.stringify({ updates: mutations })
+        });
+        if (res && (res.success || res.updated_count !== undefined)) {
+          clearQueuedMutations(mutations.map(m => m.timestamp));
+          showToast(`✓ Reconnected: ${mutations.length} queued edits synced to host`);
+          const banner = document.getElementById('footerSyncStatus');
+          banner.innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ All synced</span>';
+        }
+      } catch (err) {
+        console.error('Failed to flush queued mutations', err);
+      }
+    }
+
     function updateConnectionState(state) {
       const badge = document.getElementById('pingBadge');
       const footerHost = document.getElementById('footerTickerHost');
@@ -2806,6 +2900,7 @@ INDEX_TEMPLATE = """
 
         _evtSource.onopen = function() {
           updateConnectionState('connected');
+          flushQueuedMutations();
         };
 
         _evtSource.onerror = function() {
@@ -4365,14 +4460,38 @@ INDEX_TEMPLATE = """
         id: currentOid,
         reviewed: isReviewed,
         registration: regPayload,
-        observation: obsPayload
+        observation: obsPayload,
+        timestamp: new Date().toISOString()
       };
+
+      if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
+        queueMutation(payload);
+
+        // Optimistically update UI models to prevent local interruption
+        if (currentRecord) {
+          currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+          updateReviewButtonUI();
+        }
+
+        const listItem = objectList.find(o => String(o.id) === String(currentOid));
+        if (listItem) {
+          listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+        }
+
+        return;
+      }
 
       try {
         const res = await apiFetch('/api/update', {
           method: 'POST',
           body: JSON.stringify(payload)
         });
+
+        // Handle case where fetch returns a network error or empty object instead of throwing
+        if (!res || res.error === 'Failed to fetch' || (Object.keys(res).length === 0)) {
+           throw new Error('Network failure');
+        }
+
         document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
 
         if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
@@ -4396,7 +4515,18 @@ INDEX_TEMPLATE = """
             document.getElementById('footerSyncStatusText').classList.add('hidden');
         }
       } catch (err) {
-        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-ember-dark font-medium" id="footerSyncStatusText">⚠ Sync Error</span>';
+        queueMutation(payload);
+
+        // Optimistically update UI models to prevent local interruption
+        if (currentRecord) {
+          currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+          updateReviewButtonUI();
+        }
+
+        const listItem = objectList.find(o => String(o.id) === String(currentOid));
+        if (listItem) {
+          listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+        }
       }
     }
 
