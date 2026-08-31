@@ -698,20 +698,21 @@ class ImageHandlerMixin:
             # 3. Handle Auto-Scroll
             if active_card:
                 self.thumb_canvas.update_idletasks()
-                card_x = active_card.winfo_x()
-                card_w = active_card.winfo_width()
-                canvas_w = self.thumb_canvas.winfo_width()
+                if active_card.winfo_exists() and self.thumb_canvas.winfo_exists():
+                    card_x = active_card.winfo_x()
+                    card_w = active_card.winfo_width()
+                    canvas_w = self.thumb_canvas.winfo_width()
 
-                scroll_region = self.thumb_canvas.bbox("all")
-                if scroll_region:
-                    total_w = scroll_region[2] - scroll_region[0]
-                    if total_w > canvas_w:
-                        if card_x + card_w > self.thumb_canvas.canvasx(canvas_w):
-                            target_x = card_x + card_w - canvas_w + sc(8)
-                            self.thumb_canvas.xview_moveto(target_x / total_w)
-                        elif card_x < self.thumb_canvas.canvasx(0):
-                            target_x = card_x - sc(8)
-                            self.thumb_canvas.xview_moveto(target_x / total_w)
+                    scroll_region = self.thumb_canvas.bbox("all")
+                    if scroll_region:
+                        total_w = scroll_region[2] - scroll_region[0]
+                        if total_w > canvas_w:
+                            if card_x + card_w > self.thumb_canvas.canvasx(canvas_w):
+                                target_x = card_x + card_w - canvas_w + sc(8)
+                                self.thumb_canvas.xview_moveto(target_x / total_w)
+                            elif card_x < self.thumb_canvas.canvasx(0):
+                                target_x = card_x - sc(8)
+                                self.thumb_canvas.xview_moveto(target_x / total_w)
             return
 
         for w in self.image_container.winfo_children():
@@ -884,22 +885,23 @@ class ImageHandlerMixin:
         # Keyboard Navigation Auto-Scroll logic
         if active_card:
             self.thumb_canvas.update_idletasks()
-            card_x = active_card.winfo_x()
-            card_w = active_card.winfo_width()
-            canvas_w = self.thumb_canvas.winfo_width()
+            if active_card.winfo_exists() and self.thumb_canvas.winfo_exists():
+                card_x = active_card.winfo_x()
+                card_w = active_card.winfo_width()
+                canvas_w = self.thumb_canvas.winfo_width()
 
-            scroll_region = self.thumb_canvas.bbox("all")
-            if scroll_region:
-                total_w = scroll_region[2] - scroll_region[0]
-                if total_w > canvas_w:
-                    # If active thumbnail card is scrolled off-screen to the right
-                    if card_x + card_w > self.thumb_canvas.canvasx(canvas_w):
-                        target_x = card_x + card_w - canvas_w + sc(8)
-                        self.thumb_canvas.xview_moveto(target_x / total_w)
-                    # If active thumbnail card is scrolled off-screen to the left
-                    elif card_x < self.thumb_canvas.canvasx(0):
-                        target_x = card_x - sc(8)
-                        self.thumb_canvas.xview_moveto(target_x / total_w)
+                scroll_region = self.thumb_canvas.bbox("all")
+                if scroll_region:
+                    total_w = scroll_region[2] - scroll_region[0]
+                    if total_w > canvas_w:
+                        # If active thumbnail card is scrolled off-screen to the right
+                        if card_x + card_w > self.thumb_canvas.canvasx(canvas_w):
+                            target_x = card_x + card_w - canvas_w + sc(8)
+                            self.thumb_canvas.xview_moveto(target_x / total_w)
+                        # If active thumbnail card is scrolled off-screen to the left
+                        elif card_x < self.thumb_canvas.canvasx(0):
+                            target_x = card_x - sc(8)
+                            self.thumb_canvas.xview_moveto(target_x / total_w)
 
         self._rendered_paths = self._image_paths
 
