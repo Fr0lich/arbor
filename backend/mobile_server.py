@@ -2724,9 +2724,18 @@ INDEX_TEMPLATE = """
 
     async function fetchHistoricalData(oid) {
       try {
+        const cachedData = await getCachedHistoricalData(oid);
+        if (cachedData) {
+          historicalData = cachedData;
+          injectHistoricalData();
+        }
+
         const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}/history`);
-        historicalData = data.historical_data || {};
-        injectHistoricalData();
+        if (data) {
+          historicalData = data.historical_data || {};
+          cacheHistoricalData(oid, historicalData);
+          injectHistoricalData();
+        }
       } catch (err) {
         console.error("Failed to fetch historical data:", err);
       }
@@ -3069,7 +3078,7 @@ INDEX_TEMPLATE = """
     let db;
     function initIndexedDB() {
       return new Promise((resolve, reject) => {
-        const request = indexedDB.open('arbor_offline_db', 2);
+        const request = indexedDB.open('arbor_offline_db', 3);
         request.onupgradeneeded = (e) => {
           const dbInstance = e.target.result;
           if (!dbInstance.objectStoreNames.contains('queued_mutations')) {
@@ -3077,6 +3086,9 @@ INDEX_TEMPLATE = """
           }
           if (!dbInstance.objectStoreNames.contains('api_cache')) {
             dbInstance.createObjectStore('api_cache', { keyPath: 'url' });
+          }
+          if (!dbInstance.objectStoreNames.contains('historical_cache')) {
+            dbInstance.createObjectStore('historical_cache', { keyPath: 'oid' });
           }
         };
         request.onsuccess = (e) => {
@@ -3104,6 +3116,28 @@ INDEX_TEMPLATE = """
         try {
           const tx = db.transaction('api_cache', 'readonly');
           const req = tx.objectStore('api_cache').get(url);
+          req.onsuccess = () => resolve(req.result ? req.result.data : null);
+          req.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    }
+
+    function cacheHistoricalData(oid, data) {
+      if (!db) return;
+      try {
+        const tx = db.transaction('historical_cache', 'readwrite');
+        tx.objectStore('historical_cache').put({ oid, data });
+      } catch (e) { console.error('Cache history error', e); }
+    }
+
+    function getCachedHistoricalData(oid) {
+      return new Promise((resolve) => {
+        if (!db) return resolve(null);
+        try {
+          const tx = db.transaction('historical_cache', 'readonly');
+          const req = tx.objectStore('historical_cache').get(oid);
           req.onsuccess = () => resolve(req.result ? req.result.data : null);
           req.onerror = () => resolve(null);
         } catch (e) {
@@ -3781,6 +3815,30 @@ INDEX_TEMPLATE = """
           </div>
         `;
       }).join('');
+
+      prefetchVisibleHistory(sorted);
+    }
+
+    async function prefetchVisibleHistory(list) {
+      // Pre-fetch the first 10 items in background
+      const limit = Math.min(10, list.length);
+      for (let i = 0; i < limit; i++) {
+        const item = list[i];
+        if (!item || !item.id) continue;
+
+        try {
+          const cachedData = await getCachedHistoricalData(item.id);
+          if (!cachedData) {
+            // Not in cache, fetch and store
+            const res = await apiFetch(`/api/object/${encodeURIComponent(item.id)}/history`);
+            if (res && res.historical_data) {
+              cacheHistoricalData(item.id, res.historical_data);
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to prefetch history for ${item.id}`, err);
+        }
+      }
     }
 
     async function showListView(manageHistory = true) {
