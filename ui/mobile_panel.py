@@ -364,6 +364,8 @@ class MobilePanel:
             )
             self.server.start()
         else:
+            self.server.app_state = self.app_state
+            self.server.root_tk = self.root
             self.server.on_edit_callback = self._on_mobile_edit
 
         self.server.on_client_connect_callback = self._on_client_connect
@@ -410,6 +412,13 @@ class MobilePanel:
             self.log(
                 f"Server started in LAN-only mode: http://{local_ip}:{self.port}")
 
+    def _is_alive(self):
+        """Check if widget hierarchy is still valid and not destroyed."""
+        try:
+            return bool(self.winfo_exists()) and bool(getattr(self, 'client_badge', None)) and bool(self.client_badge.winfo_exists())
+        except Exception:
+            return False
+
     def stop(self):
         """Stop the tunnel (does not save data — wrapper handles that)."""
         if self.server:
@@ -417,6 +426,10 @@ class MobilePanel:
                 self.server.broadcast_event('session_ended', {})
             except Exception:
                 pass
+            if getattr(self.server, 'on_client_connect_callback', None) == self._on_client_connect:
+                self.server.on_client_connect_callback = None
+            if getattr(self.server, 'on_edit_callback', None) == self._on_mobile_edit:
+                self.server.on_edit_callback = None
 
         if self.tunnel:
             self.tunnel.stop()
@@ -425,10 +438,19 @@ class MobilePanel:
     def log(self, message: str):
         """Append a timestamped line to the activity feed."""
         def _append():
-            ts = datetime.now().strftime("%H:%M:%S")
-            self.feed_list.insert(tk.END, f"[{ts}] {message}")
-            self.feed_list.see(tk.END)
-        self.root.after(0, _append)
+            if not self._is_alive():
+                return
+            try:
+                ts = datetime.now().strftime("%H:%M:%S")
+                self.feed_list.insert(tk.END, f"[{ts}] {message}")
+                self.feed_list.see(tk.END)
+            except Exception:
+                pass
+        try:
+            if self._is_alive():
+                self.root.after(0, _append)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Internal callbacks
@@ -436,6 +458,8 @@ class MobilePanel:
 
     def _render_qr(self, url_to_encode):
         """Generate and display a QR code for the given URL."""
+        if not self._is_alive():
+            return
         try:
             qr = qrcode.QRCode(box_size=3, border=1)
             qr.add_data(url_to_encode)
@@ -444,68 +468,103 @@ class MobilePanel:
             self.qr_image_ref = ImageTk.PhotoImage(img)
             self.qr_label.config(image=self.qr_image_ref, text="")
         except Exception:
-            self.qr_label.config(text=f"Scan URL:\n{url_to_encode[:25]}...")
+            try:
+                self.qr_label.config(text=f"Scan URL:\n{url_to_encode[:25]}...")
+            except Exception:
+                pass
 
     def switch_qr(self, mode):
         """Toggle the QR code between local and public URL."""
+        if not self._is_alive():
+            return
         self.current_qr_mode = mode
-        if mode == "local":
-            self.btn_qr_local.config(
-                bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
-            self.btn_qr_public.config(
-                bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
-            self.url_var.set(self.local_url_with_token)
-            self._render_qr(self.local_url_with_token)
-        else:
-            self.btn_qr_public.config(
-                bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
-            self.btn_qr_local.config(
-                bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
-            url = self.public_url_with_token or self.local_url_with_token
-            self.url_var.set(url)
-            self._render_qr(url)
+        try:
+            if mode == "local":
+                self.btn_qr_local.config(
+                    bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+                self.btn_qr_public.config(
+                    bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+                self.url_var.set(self.local_url_with_token)
+                self._render_qr(self.local_url_with_token)
+            else:
+                self.btn_qr_public.config(
+                    bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+                self.btn_qr_local.config(
+                    bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+                url = self.public_url_with_token or self.local_url_with_token
+                self.url_var.set(url)
+                self._render_qr(url)
+        except Exception:
+            pass
 
     def _on_tunnel_status(self, status):
         def _update():
-            self.status_lbl.config(text=status, fg="#d95c14")
-            self.status_dot.config(fg="#d95c14")
-            self.tunnel_lbl.config(text="Tunnel: Disconnected", fg="#d95c14")
-            self.feed_list.insert(tk.END, status)
-            self.feed_list.see(tk.END)
-        self.root.after(0, _update)
+            if not self._is_alive():
+                return
+            try:
+                self.status_lbl.config(text=status, fg="#d95c14")
+                self.status_dot.config(fg="#d95c14")
+                self.tunnel_lbl.config(text="Tunnel: Disconnected", fg="#d95c14")
+                self.feed_list.insert(tk.END, status)
+                self.feed_list.see(tk.END)
+            except Exception:
+                pass
+        try:
+            if self._is_alive():
+                self.root.after(0, _update)
+        except Exception:
+            pass
 
     def _on_tunnel_ready(self, url):
         def _update():
-            self.public_url_with_token = f"{url}?token={self.server.session_token}"
-            self.status_dot.config(fg="#2e7d32")
-            self.status_lbl.config(
-                text="🟢 Public Tunnel Live & Secure", fg="#1b4332")
-            self.tunnel_lbl.config(
-                text=f"Public: {url}", fg="#2e7d32", font=("Segoe UI", 8))
-            self.btn_qr_public.config(text="🌐 Public (Internet) ✓")
-            # Always switch to the public QR as soon as the tunnel is ready
-            self.switch_qr("public")
-            self.feed_list.insert(
-                tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] Public tunnel ready: {url}")
-            self.feed_list.see(tk.END)
-        self.root.after(0, _update)
+            if not self._is_alive():
+                return
+            try:
+                self.public_url_with_token = f"{url}?token={self.server.session_token}"
+                self.status_dot.config(fg="#2e7d32")
+                self.status_lbl.config(
+                    text="🟢 Public Tunnel Live & Secure", fg="#1b4332")
+                self.tunnel_lbl.config(
+                    text=f"Public: {url}", fg="#2e7d32", font=("Segoe UI", 8))
+                self.btn_qr_public.config(text="🌐 Public (Internet) ✓")
+                # Always switch to the public QR as soon as the tunnel is ready
+                self.switch_qr("public")
+                self.feed_list.insert(
+                    tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] Public tunnel ready: {url}")
+                self.feed_list.see(tk.END)
+            except Exception:
+                pass
+        try:
+            if self._is_alive():
+                self.root.after(0, _update)
+        except Exception:
+            pass
 
     def _on_client_connect(self, active_count):
         def _update():
-            if active_count > 0:
-                self.client_badge.config(
-                    text=f"📱 Phone Connected ({active_count} Online)",
-                    fg="#2e7d32",
-                    font=("Segoe UI", 9, "bold"),
-                )
-            else:
-                self.client_badge.config(
-                    text="📱 Offline", fg="#5a655e", font=("Segoe UI", 9)
-                )
-        self.root.after(0, _update)
+            if not self._is_alive():
+                return
+            try:
+                if active_count > 0:
+                    self.client_badge.config(
+                        text=f"📱 Phone Connected ({active_count} Online)",
+                        fg="#2e7d32",
+                        font=("Segoe UI", 9, "bold"),
+                    )
+                else:
+                    self.client_badge.config(
+                        text="📱 Offline", fg="#5a655e", font=("Segoe UI", 9)
+                    )
+            except Exception:
+                pass
+        try:
+            if self._is_alive():
+                self.root.after(0, _update)
+        except Exception:
+            pass
 
     def _on_mobile_edit(self, oid, summary):
-        # Log to feed (fixed: use real timestamp, not thread name)
+        # Log to feed
         self.log(summary)
         # Notify the wrapper (e.g. desktop UI sync)
         if self.on_edit:

@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, simpledialog
 import config
 from config import sc
-from ui.widgets import ArborTextField, ArborDropdown
+from ui.widgets import ArborTextField, ArborDropdown, SchemaFormBuilder
 from ui.state import app_bus
 
 # Color scheme definitions matching Filter menu & Historical Conflict Resolver (Zero emojis/symbols)
@@ -185,6 +185,10 @@ class LocationPanel(tk.Frame):
         self.field_entries = []
         self.colors = COLORS_DARK if self.dark_mode else COLORS_LIGHT
         
+        # Subscribe to EventBus
+        self.app_bus = app_bus
+        self.app_bus.subscribe("LOCATION_DATA_CHANGED", self._on_bus_data_changed)
+
         self.configure(bg=self.colors["bg"])
         self.build_ui()
 
@@ -382,6 +386,19 @@ class LocationPanel(tk.Frame):
         )
         return card
 
+    def _build_loan_status_card_cell(self, parent):
+        c = self.colors
+        cell = tk.Frame(parent, bg=c["bg"])
+        loan_lbl = tk.Label(
+            cell, text="LOAN STATUS",
+            font=("JetBrains Mono", sc(9), "bold"),
+            bg=c["bg"], fg=c["text_muted"], anchor="w"
+        )
+        loan_lbl.pack(fill="x", pady=(0, sc(2)))
+        loan_card = self._build_loan_status_card(cell, is_horiz=True)
+        loan_card.pack(fill="x")
+        return cell
+
     # -------------------------------------------------------------------------
     # Field Builder Helper
     # -------------------------------------------------------------------------
@@ -464,18 +481,16 @@ class LocationPanel(tk.Frame):
         
         tk.Frame(self, bg=c["border"], height=1).pack(fill="x", padx=sc(8), pady=(0, sc(6)))
         
-        # Fields Stack
+        # Fields Stack via SchemaFormBuilder
         field_defs = {f["name"]: f for f in self._get_field_defs()}
         order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
+        active_field_defs = [field_defs[name] for name in order if name in field_defs]
         
         content = tk.Frame(self, bg=c["bg"])
         content.pack(fill="both", expand=True, padx=sc(8))
         
-        for name in order:
-            fdef = field_defs.get(name)
-            if not fdef: continue
-            row = self._create_field_widget(content, name, fdef, is_horiz=False)
-            row.pack(fill="x", pady=sc(3))
+        builder = SchemaFormBuilder(content, self.colors)
+        builder.build_stack(active_field_defs, self.location_vars, pady=3)
             
         tk.Frame(content, bg=c["border"], height=1).pack(fill="x", pady=sc(6))
         
@@ -516,23 +531,16 @@ class LocationPanel(tk.Frame):
         
         tk.Frame(self, bg=c["border"], height=1).pack(fill="x", side="top")
         
-        # 5-Column Grid Content
+        # 5-Column Grid Content via SchemaFormBuilder
         content = tk.Frame(self, bg=c["bg"])
         content.pack(fill="x", padx=sc(8), pady=sc(6))
         
-        for i in range(5):
-            content.columnconfigure(i, weight=1, uniform="col")
-            
         field_defs = {f["name"]: f for f in self._get_field_defs()}
         order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
+        active_field_defs = [field_defs[name] for name in order if name in field_defs]
         
-        for idx, name in enumerate(order):
-            fdef = field_defs.get(name)
-            if not fdef: continue
-            cell = tk.Frame(content, bg=c["bg"])
-            cell.grid(row=0, column=idx, sticky="nsew", padx=sc(4))
-            row = self._create_field_widget(cell, name, fdef, is_horiz=True)
-            row.pack(fill="x")
+        builder = SchemaFormBuilder(content, self.colors)
+        builder.build_grid(active_field_defs, self.location_vars, columns=5)
 
     # -------------------------------------------------------------------------
     # Mode C: Horizontal 2-Row UI (Middle Column Alternate)
@@ -567,49 +575,20 @@ class LocationPanel(tk.Frame):
         content = tk.Frame(self, bg=c["bg"])
         content.pack(fill="x", padx=sc(8), pady=sc(6))
         
-        content.columnconfigure(0, weight=1, uniform="loc_col")
-        content.columnconfigure(1, weight=1, uniform="loc_col")
-        content.columnconfigure(2, weight=1, uniform="loc_col")
-        
-        # Row 0: Stored as, Building, Floor
-        c0 = tk.Frame(content, bg=c["bg"])
-        c0.grid(row=0, column=0, sticky="nsew", padx=sc(4), pady=(0, sc(6)))
-        if field_defs.get("Stored as"):
-            self._create_field_widget(c0, "Stored as", field_defs["Stored as"], is_horiz=True).pack(fill="x")
-            
-        c1 = tk.Frame(content, bg=c["bg"])
-        c1.grid(row=0, column=1, sticky="nsew", padx=sc(4), pady=(0, sc(6)))
-        if field_defs.get("Building"):
-            self._create_field_widget(c1, "Building", field_defs["Building"], is_horiz=True).pack(fill="x")
-            
-        c2 = tk.Frame(content, bg=c["bg"])
-        c2.grid(row=0, column=2, sticky="nsew", padx=sc(4), pady=(0, sc(6)))
-        if field_defs.get("Floor"):
-            self._create_field_widget(c2, "Floor", field_defs["Floor"], is_horiz=True).pack(fill="x")
-
-        # Row 1: Cabinet, Extra, Loan status
-        c3 = tk.Frame(content, bg=c["bg"])
-        c3.grid(row=1, column=0, sticky="nsew", padx=sc(4))
-        if field_defs.get("Cabinet"):
-            self._create_field_widget(c3, "Cabinet", field_defs["Cabinet"], is_horiz=True).pack(fill="x")
-            
-        c4 = tk.Frame(content, bg=c["bg"])
-        c4.grid(row=1, column=1, sticky="nsew", padx=sc(4))
-        if field_defs.get("Extra"):
-            self._create_field_widget(c4, "Extra", field_defs["Extra"], is_horiz=True).pack(fill="x")
-            
-        c5 = tk.Frame(content, bg=c["bg"])
-        c5.grid(row=1, column=2, sticky="nsew", padx=sc(4))
-        
-        loan_lbl = tk.Label(
-            c5, text="LOAN STATUS",
-            font=("JetBrains Mono", sc(9), "bold"),
-            bg=c["bg"], fg=c["text_muted"], anchor="w"
+        builder = SchemaFormBuilder(content, self.colors)
+        layout_rows = [
+            ["Stored as", "Building", "Floor"],
+            ["Cabinet", "Extra", "Loan status"]
+        ]
+        custom_widgets = {
+            "Loan status": self._build_loan_status_card_cell
+        }
+        builder.build_grid(
+            field_defs,
+            self.location_vars,
+            layout_rows=layout_rows,
+            custom_widgets=custom_widgets
         )
-        loan_lbl.pack(fill="x", pady=(0, sc(2)))
-        
-        loan_card = self._build_loan_status_card(c5, is_horiz=True)
-        loan_card.pack(fill="x")
 
     # -------------------------------------------------------------------------
     # Data Accessors
@@ -618,12 +597,15 @@ class LocationPanel(tk.Frame):
     def _on_bus_data_changed(self, payload):
         if not self.winfo_exists():
             return
-        if "location" in payload:
+        if isinstance(payload, dict) and "location" in payload:
             self.set_data(payload["location"])
 
     def destroy(self):
-        if hasattr(self, "app_bus"):
-            self.app_bus.unsubscribe("LOCATION_DATA_CHANGED", self._on_bus_data_changed)
+        if hasattr(self, "app_bus") and self.app_bus is not None:
+            try:
+                self.app_bus.unsubscribe("LOCATION_DATA_CHANGED", self._on_bus_data_changed)
+            except Exception:
+                pass
         super().destroy()
 
     def get_data(self):
@@ -636,6 +618,7 @@ class LocationPanel(tk.Frame):
         for k, v in data_dict.items():
             if k in self.location_vars:
                 self.location_vars[k].set(str(v))
+
 
 
 # -----------------------------------------------------------------------------

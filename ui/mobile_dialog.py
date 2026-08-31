@@ -64,8 +64,9 @@ class MobileDialog:
             reuse_server=self.server,
         )
 
-        # Store server reference on parent UI for future reuse
+        # Store server reference on parent UI and app state for future reuse
         self.parent_ui._mobile_server_instance = self.panel.server
+        self.app_state._mobile_server_instance = self.panel.server
 
         self.win.protocol("WM_DELETE_WINDOW", self._end_session)
 

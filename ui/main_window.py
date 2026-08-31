@@ -16,6 +16,10 @@ from ui.location_panel import create_location_panel
 from ui.dashboard import DashboardMixin
 from ui.database_ops import DatabaseOpsMixin
 from ui.log_viewer import LogViewerMixin
+from backend.data_store import ObjectDataStore
+from backend.task_queue import app_worker
+from ui.layout_manager import LayoutStateManager
+from ui.state import app_bus, PROBLEM_STATE_CHANGED, OBJECT_DATA_CHANGED
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -318,8 +322,13 @@ class ObjectProgramUI(
         self.app = app
         self._loading_window = None
 
+        self.data_store = ObjectDataStore(self.app)
+        self.layout_manager = LayoutStateManager(self)
+        self.app_bus = app_bus
+
         if self.app.undo_stacks is None:
             self.app.undo_stacks = {}
+
 
 
         self.object_loaded = False
@@ -616,6 +625,8 @@ class ObjectProgramUI(
         # U2-E: Automatically apply hover to all tk.Button elements in main UI
         _apply_hover_to_all_tk_buttons(self.root, self)
         self._apply_pin_state()
+        app_worker.start(self.root)
+
 
 
     def _get_http_session(self):
@@ -1137,7 +1148,11 @@ class ObjectProgramUI(
             name = field["name"]
             var = tk.BooleanVar()
             self.problem_vars[name] = var
-            var.trace_add("write", lambda *_, n=name: self.update_problems_default_view())
+            var.trace_add("write", lambda *_, n=name: (
+                self.update_problems_default_view(),
+                self.app_bus.publish(PROBLEM_STATE_CHANGED, {"field": n, "value": self.problem_vars.get(n, tk.BooleanVar()).get()})
+            ))
+
 
         if not hasattr(self, "images_missing_var"):
             self.images_missing_var = tk.StringVar()
@@ -5938,78 +5953,17 @@ class ObjectProgramUI(
         return str(value)
 
     def _extract_object_payload(self, oid):
-        # Convert oid type for pandas index compatibility
-        if hasattr(self, "reg_by_id") and self.reg_by_id is not None and oid not in self.reg_by_id.index:
-            try:
-                if str(oid).isdigit():
-                    int_oid = int(oid)
-                    if int_oid in self.reg_by_id.index:
-                        oid = int_oid
-            except Exception:
-                pass
-        elif self.app.df_reg is not None and oid not in self.app.df_reg.index:
-            try:
-                if str(oid).isdigit():
-                    int_oid = int(oid)
-                    if int_oid in self.app.df_reg.index:
-                        oid = int_oid
-            except Exception:
-                pass
+        if not hasattr(self, "data_store") or self.data_store is None:
+            self.data_store = ObjectDataStore(self.app)
 
-        payload = {"oid": oid}
-
-        # Collect suggestions for this specific ObjectID
-        current_object_suggestions = {}
-        if oid and self.app.historical_dbs:
-            for db in self.app.historical_dbs:
-                dict_cache = self._get_db_dict_cache(db, oid)
-                oid_data = dict_cache.get(oid, {})
-                for field, field_vals in oid_data.items():
-                    if field in self.reg_columns:
-                        vals = current_object_suggestions.setdefault(field, [])
-                        for v in field_vals:
-                            if v not in vals:
-                                vals.append(v)
-        payload["current_object_suggestions"] = current_object_suggestions
-
-        reg_dict = self._get_reg_dict()
-        obs_dict = self._get_obs_dict()
-        reg = reg_dict.get(oid)
-        if reg is None:
-            try:
-                if hasattr(self, "reg_by_id") and self.reg_by_id is not None:
-                    reg = self.reg_by_id.loc[oid]
-                elif self.app.df_reg is not None:
-                    reg = self.app.df_reg.loc[oid]
-
-                if isinstance(reg, pd.DataFrame):
-                    reg = reg.iloc[0].to_dict()
-                elif isinstance(reg, pd.Series):
-                    reg = reg.to_dict()
-            except Exception:
-                reg = {}
-        payload["reg"] = reg
+        payload = self.data_store.get_object_payload(oid, reg_columns=getattr(self, "reg_columns", None))
+        reg = payload.get("reg", {})
+        obs = payload.get("obs", {})
 
         genus = str(reg.get("Genus", "") or "").strip()
         species = str(reg.get("Species", "") or "").strip()
         taxon_name = f"{genus} {species}".strip() if (genus or species) else "Unidentified Specimen"
         payload["taxon_name"] = taxon_name
-
-        obs = obs_dict.get(oid)
-        if obs is None:
-            try:
-                if hasattr(self, "obs_by_id") and self.obs_by_id is not None:
-                    obs = self.obs_by_id.loc[oid]
-                elif self.app.df_obs is not None:
-                    obs = self.app.df_obs.loc[oid]
-
-                if isinstance(obs, pd.DataFrame):
-                    obs = obs.iloc[0].to_dict()
-                elif isinstance(obs, pd.Series):
-                    obs = obs.to_dict()
-            except Exception:
-                obs = {}
-        payload["obs"] = obs
 
         if self.image_mode == "online":
             payload["images_missing_var"] = "Online images"
@@ -6027,6 +5981,7 @@ class ObjectProgramUI(
                 payload["images_missing_color"] = "green"
 
         return payload
+
 
     def _render_object_payload(self, payload):
         oid = payload["oid"]
@@ -8480,29 +8435,44 @@ class ObjectProgramUI(
         __import__("config").set_last_dir("last_db_dir", path)
 
         try:
-            ids = self.app.active_object_ids
-            df_reg_exp = self.app.df_reg.loc[ids].reset_index()
-            df_obs_exp = self.app.df_obs.loc[ids].reset_index()
-            df_merged = df_reg_exp.merge(df_obs_exp, on="ObjectID", suffixes=("", "_obs"))
+            ids = list(self.app.active_object_ids)
+            with self.app.df_lock:
+                df_reg_copy = self.app.df_reg.loc[ids].reset_index() if self.app.df_reg is not None else None
+                df_obs_copy = self.app.df_obs.loc[ids].reset_index() if self.app.df_obs is not None else None
 
-            from utils import sanitize_df_for_excel
-            df_merged_safe = sanitize_df_for_excel(df_merged)
+            self.system_status.config(text=f"Exporting {len(ids)} objects...")
 
-            if path.lower().endswith(".csv"):
-                df_merged_safe.to_csv(path, index=False, encoding="utf-8-sig")
-            else:
-                df_merged_safe.to_excel(path, index=False, engine="openpyxl")
+            def _do_export():
+                if df_reg_copy is None or df_obs_copy is None:
+                    raise ValueError("No data to export")
+                df_merged = df_reg_copy.merge(df_obs_copy, on="ObjectID", suffixes=("", "_obs"))
+                from utils import sanitize_df_for_excel
+                df_merged_safe = sanitize_df_for_excel(df_merged)
 
-            self.system_status.config(
-                text=f"Exported {len(ids)} objects  {os.path.basename(path)}"
-            )
-            messagebox.showinfo(
-                "Export complete",
-                f"Exported {len(ids)} objects to:\n{os.path.basename(path)}"
-            )
+                if path.lower().endswith(".csv"):
+                    df_merged_safe.to_csv(path, index=False, encoding="utf-8-sig")
+                else:
+                    df_merged_safe.to_excel(path, index=False, engine="openpyxl")
+                return len(ids)
+
+            def _on_export_done(result):
+                if result is not None:
+                    self.system_status.config(
+                        text=f"Exported {result} objects  {os.path.basename(path)}"
+                    )
+                    messagebox.showinfo(
+                        "Export complete",
+                        f"Exported {result} objects to:\n{os.path.basename(path)}"
+                    )
+
+            def _on_export_err(err):
+                messagebox.showerror("Export failed", str(err))
+
+            app_worker.run_in_background(_do_export, _on_export_done, error_callback=_on_export_err)
 
         except Exception as e:
             messagebox.showerror("Export failed", str(e))
+
 
 
 # ---- Sort object list

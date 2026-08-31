@@ -358,3 +358,81 @@ def test_mobile_objects_mixed_and_numeric_dtypes(mock_app_state):
     assert res_prob.json["total_matching"] == 1
     assert res_prob.json["objects"][0]["id"] == "1024"
 
+
+def test_mixed_int64_and_str_index_matching(tmp_path):
+    """Verify that integer vs string index dtypes across df_reg and df_obs are handled seamlessly."""
+    app = AppState()
+    app.config = {
+        "ui_sections": {
+            "registration": [{"name": "Genus"}, {"name": "Species"}],
+            "location": [{"name": "Cabinet"}],
+            "problems": [{"name": "MissingLabel"}]
+        }
+    }
+    app.df_reg = pd.DataFrame({
+        "Genus": ["Pinus", "Betula"],
+        "Species": ["sylvestris", "pendula"],
+        "Cabinet": ["Cab 1", "Cab 2"]
+    }, index=pd.Index([1001, 1002], name="ObjectID"))  # int64 index
+
+    app.df_obs = pd.DataFrame({
+        "Reviewed": [True, False],
+        "Cabinet": ["Cab 1", "Cab 2"]
+    }, index=pd.Index(["1001", "1002"], name="ObjectID"))  # str index
+
+    server = MobileServer(app, port=5093)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # 1. Status filter matching with mismatched index dtypes
+    res_rev = client.get('/api/objects?status=reviewed', headers=headers)
+    assert res_rev.status_code == 200
+    assert res_rev.json["total_matching"] == 1
+    assert res_rev.json["objects"][0]["id"] == "1001"
+
+    # 2. Detail lookup with string ID
+    res_det = client.get('/api/object/1001', headers=headers)
+    assert res_det.status_code == 200
+    assert res_det.json["scientific_name"] == "Pinus sylvestris"
+
+    # 3. Update single object with string ID
+    res_upd = client.post('/api/update', headers=headers, json={
+        "id": "1001",
+        "reviewed": True,
+        "observation": {"Cabinet": "Cab 99"}
+    })
+    assert res_upd.status_code == 200
+    assert app.df_obs.at["1001", "Cabinet"] == "Cab 99"
+
+    # 4. Batch update with string IDs
+    res_batch = client.post('/api/batch_update', headers=headers, json={
+        "updates": [
+            {"id": "1002", "reviewed": True, "observation": {"Cabinet": "Cab 88"}}
+        ]
+    })
+    assert res_batch.status_code == 200
+    assert res_batch.json["updated_count"] == 1
+    assert app.df_obs.at["1002", "Cabinet"] == "Cab 88"
+
+
+def test_sse_headers_and_initial_connect_handshake(mock_app_state):
+    """Verify SSE endpoint returns anti-buffering headers and an immediate connected event."""
+    server = MobileServer(mock_app_state, port=5092)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    response = client.get('/api/events', headers=headers)
+    assert response.status_code == 200
+    assert response.headers.get("Content-Type") == "text/event-stream; charset=utf-8"
+    assert "no-cache" in response.headers.get("Cache-Control", "")
+    assert response.headers.get("X-Accel-Buffering") == "no"
+    assert response.headers.get("Connection") == "keep-alive"
+
+    # Read the first event yielded by the generator
+    first_line = next(response.iter_encoded())
+    decoded = first_line.decode('utf-8')
+    assert "data: " in decoded
+    parsed = json.loads(decoded.replace("data: ", "").strip())
+    assert parsed["type"] == "connected"
+
+

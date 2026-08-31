@@ -2018,11 +2018,140 @@ class ArborDropdown(tk.Frame):
 class SchemaFormBuilder:
     """
     A builder class to dynamically generate form layouts based on configuration dictionaries.
+    Supports grouped forms, multi-column grids, custom row layouts, and varied field types
+    (text, choices/dropdowns, readonly, multiline).
     """
-    def __init__(self, parent_frame, colors, group_defs):
+    def __init__(self, parent_frame, colors, group_defs=None):
         self.parent = parent_frame
         self.colors = colors
-        self.group_defs = group_defs
+        self.group_defs = group_defs or []
+
+    def _create_field_widget(self, parent, field_name, fdef, var, bg_color=None):
+        from config import sc
+        bg = bg_color or self.colors.get("surface", self.parent.cget("bg"))
+        ftype = fdef.get("type", "text") if isinstance(fdef, dict) else "text"
+
+        if ftype == "choice":
+            choices = fdef.get("choices", []) if isinstance(fdef, dict) else []
+            widget = ArborDropdown(
+                parent,
+                variable=var,
+                label_text=field_name,
+                choices=choices,
+                colors=self.colors,
+                bg=bg
+            )
+        else:
+            readonly = fdef.get("readonly", False) if isinstance(fdef, dict) else False
+            multiline = fdef.get("multiline", False) if isinstance(fdef, dict) else False
+            widget = ArborTextField(
+                parent,
+                variable=var,
+                label_text=field_name,
+                colors=self.colors,
+                readonly=readonly,
+                multiline=multiline,
+                bg=bg
+            )
+        return widget
+
+    def build_grid(self, field_defs, variables_dict, columns=1, layout_rows=None, custom_widgets=None):
+        """
+        Builds fields in a grid layout.
+        - field_defs: list of dicts (or dict mapping name -> fdef)
+        - variables_dict: dict mapping field_name -> tk.StringVar
+        - columns: number of equal-width columns (if layout_rows is not given)
+        - layout_rows: list of lists specifying field names in each row, e.g.
+                       [['Stored as', 'Building', 'Floor'], ['Cabinet', 'Extra', 'Loan status']]
+        - custom_widgets: dict mapping field_name/placeholder -> callable(parent) or prebuilt widget
+        Returns dict of created field widgets.
+        """
+        from config import sc
+        widgets = {}
+        custom_widgets = custom_widgets or {}
+
+        # Normalize field_defs to dict name -> def
+        if isinstance(field_defs, list):
+            fdef_map = {f["name"] if isinstance(f, dict) else str(f): (f if isinstance(f, dict) else {"name": str(f)}) for f in field_defs}
+        elif isinstance(field_defs, dict):
+            fdef_map = field_defs
+        else:
+            fdef_map = {}
+
+        if layout_rows:
+            # Layout specified by exact row lists
+            for r_idx, row_fields in enumerate(layout_rows):
+                num_cols = max(len(row_fields), 1)
+                for c_idx in range(num_cols):
+                    self.parent.columnconfigure(c_idx, weight=1, uniform=f"grid_col_{r_idx}")
+
+                for c_idx, fname in enumerate(row_fields):
+                    if fname in custom_widgets:
+                        custom_item = custom_widgets[fname]
+                        if callable(custom_item):
+                            cw = custom_item(self.parent)
+                        else:
+                            cw = custom_item
+                        cw.grid(row=r_idx, column=c_idx, sticky="nsew", padx=sc(4), pady=sc(3))
+                        widgets[fname] = cw
+                        continue
+
+                    fdef = fdef_map.get(fname, {"name": fname})
+                    if fname not in variables_dict:
+                        variables_dict[fname] = tk.StringVar(value="")
+
+                    w = self._create_field_widget(self.parent, fname, fdef, variables_dict[fname], bg_color=self.parent.cget("bg"))
+                    w.grid(row=r_idx, column=c_idx, sticky="nsew", padx=sc(4), pady=sc(3))
+                    widgets[fname] = w
+        else:
+            # Layout by columns
+            field_list = list(fdef_map.keys())
+            num_cols = max(columns, 1)
+            for c_idx in range(num_cols):
+                self.parent.columnconfigure(c_idx, weight=1, uniform="grid_col")
+
+            for idx, fname in enumerate(field_list):
+                r_idx = idx // num_cols if num_cols > 1 else idx
+                c_idx = idx % num_cols if num_cols > 1 else 0
+
+                if fname in custom_widgets:
+                    custom_item = custom_widgets[fname]
+                    if callable(custom_item):
+                        cw = custom_item(self.parent)
+                    else:
+                        cw = custom_item
+                    cw.grid(row=r_idx, column=c_idx, sticky="nsew", padx=sc(4), pady=sc(3))
+                    widgets[fname] = cw
+                    continue
+
+                fdef = fdef_map.get(fname, {"name": fname})
+                if fname not in variables_dict:
+                    variables_dict[fname] = tk.StringVar(value="")
+
+                w = self._create_field_widget(self.parent, fname, fdef, variables_dict[fname], bg_color=self.parent.cget("bg"))
+                w.grid(row=r_idx, column=c_idx, sticky="nsew", padx=sc(4), pady=sc(3))
+                widgets[fname] = w
+
+    def build_stack(self, field_defs, variables_dict, pady=3):
+        """
+        Builds fields in a vertical stack using pack().
+        """
+        from config import sc
+        widgets = {}
+        if isinstance(field_defs, list):
+            fdef_map = {f["name"] if isinstance(f, dict) else str(f): (f if isinstance(f, dict) else {"name": str(f)}) for f in field_defs}
+        elif isinstance(field_defs, dict):
+            fdef_map = field_defs
+        else:
+            fdef_map = {}
+
+        for fname, fdef in fdef_map.items():
+            if fname not in variables_dict:
+                variables_dict[fname] = tk.StringVar(value="")
+            w = self._create_field_widget(self.parent, fname, fdef, variables_dict[fname], bg_color=self.parent.cget("bg"))
+            w.pack(fill="x", pady=sc(pady))
+            widgets[fname] = w
+        return widgets
 
     def build(self, variables_dict):
         """
@@ -2030,13 +2159,14 @@ class SchemaFormBuilder:
         variables_dict should be a dictionary mapping field names to tk.StringVar objects.
         Returns a dictionary of created widgets mapped by field name.
         """
+        from config import sc
         widgets = {}
         for row_idx, group in enumerate(self.group_defs):
             group_name = group.get("name", "")
             fields = group.get("fields", [])
 
             # Group Container
-            group_frame = tk.Frame(self.parent, bg=self.colors["bg"])
+            group_frame = tk.Frame(self.parent, bg=self.colors.get("bg", self.parent.cget("bg")))
             group_frame.pack(fill="x", pady=(0, sc(16)))
 
             # Group Header
@@ -2044,13 +2174,14 @@ class SchemaFormBuilder:
                 lbl = tk.Label(
                     group_frame, text=group_name.upper(),
                     font=("JetBrains Mono", sc(10), "bold"),
-                    bg=self.colors["bg"], fg=self.colors["text_muted"],
+                    bg=self.colors.get("bg", self.parent.cget("bg")),
+                    fg=self.colors.get("text_muted", "#444748"),
                     anchor="w"
                 )
                 lbl.pack(fill="x", pady=(0, sc(4)))
 
             # Content grid
-            content_frame = tk.Frame(group_frame, bg=self.colors["bg"])
+            content_frame = tk.Frame(group_frame, bg=self.colors.get("bg", self.parent.cget("bg")))
             content_frame.pack(fill="x")
 
             # For each field, place it in a grid column
@@ -2058,18 +2189,26 @@ class SchemaFormBuilder:
             for i in range(num_cols):
                 content_frame.columnconfigure(i, weight=1, uniform="col")
 
-            for col_idx, field_name in enumerate(fields):
-                if field_name not in variables_dict:
-                    variables_dict[field_name] = tk.StringVar()
+            for col_idx, field_item in enumerate(fields):
+                if isinstance(field_item, dict):
+                    field_name = field_item.get("name", "")
+                    fdef = field_item
+                else:
+                    field_name = str(field_item)
+                    fdef = {"name": field_name}
 
-                field_widget = ArborTextField(
+                if field_name not in variables_dict:
+                    variables_dict[field_name] = tk.StringVar(value="")
+
+                field_widget = self._create_field_widget(
                     content_frame,
-                    variable=variables_dict[field_name],
-                    label_text=field_name,
-                    colors=self.colors,
-                    bg=self.colors["bg"]
+                    field_name,
+                    fdef,
+                    variables_dict[field_name],
+                    bg_color=self.colors.get("bg", self.parent.cget("bg"))
                 )
                 field_widget.grid(row=0, column=col_idx, sticky="ew", padx=sc(4))
                 widgets[field_name] = field_widget
 
         return widgets
+

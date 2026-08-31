@@ -29,5 +29,12 @@ class EventBus:
             except Exception as e:
                 print(f"Error in event {event_type} handler: {e}")
 
+# Standard Event Names
+LOCATION_DATA_CHANGED = "LOCATION_DATA_CHANGED"
+PROBLEM_STATE_CHANGED = "PROBLEM_STATE_CHANGED"
+OBJECT_DATA_CHANGED = "OBJECT_DATA_CHANGED"
+OBJECT_LOADED = "OBJECT_LOADED"
+
 # Global Event Bus instance
 app_bus = EventBus()
+
