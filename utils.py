@@ -14,11 +14,15 @@ def fmt_pandas_val(val):
     return str(val)
 
 
+import re
+
 def sanitize_df_for_excel(df: pd.DataFrame) -> pd.DataFrame:
-    """Sanitize DataFrame string columns to prevent CSV/Excel formula injection.
+    """Sanitize DataFrame string columns to prevent CSV/Excel formula injection
+    and remove illegal XML characters.
 
     Prepends a single quote to strings starting with dangerous characters
     (=, +, -, @, \t, \r, cmd|) to force Excel to treat them as plain text.
+    Removes timezone information from datetime objects.
     """
     if df is None or df.empty:
         return df
@@ -26,15 +30,31 @@ def sanitize_df_for_excel(df: pd.DataFrame) -> pd.DataFrame:
     df_safe = df.copy()
     dangerous_starts = ('=', '+', '-', '@', '\t', '\r')
 
+    # ILLEGAL_CHARACTERS_RE pattern from openpyxl/cell/cell.py
+    ILLEGAL_CHARACTERS_RE = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
+
     for col in df_safe.columns:
         if df_safe[col].dtype.name == 'category':
             df_safe[col] = df_safe[col].astype('object')
-        df_safe[col] = df_safe[col].map(
-            lambda x: f"'{x}" if isinstance(x, str) and (
-                str(x).lstrip().startswith(dangerous_starts) or
-                str(x).lstrip().lower().startswith("cmd|")
-            ) else x
-        )
+
+        # Fast path for timezone aware series
+        if hasattr(df_safe[col].dtype, "tz") and df_safe[col].dtype.tz is not None:
+            df_safe[col] = df_safe[col].dt.tz_localize(None)
+
+        def sanitize_val(x):
+            # 1. Remove timezone from timestamps (if mixed types)
+            if isinstance(x, pd.Timestamp) and x.tz is not None:
+                x = x.tz_localize(None)
+
+            # 2. Sanitize strings
+            if isinstance(x, str):
+                if x.lstrip().startswith(dangerous_starts) or x.lstrip().lower().startswith("cmd|"):
+                    x = f"'{x}"
+                x = ILLEGAL_CHARACTERS_RE.sub('', x)
+            return x
+
+        df_safe[col] = df_safe[col].map(sanitize_val)
+
     return df_safe
 
 
