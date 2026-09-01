@@ -62,7 +62,6 @@ def test_unified_settings_push_layout_to_app(tk_root):
 
     assert mock_app.location_in_center_var.get() is True
     assert mock_app.draft_location_in_center_var.get() is True
-    mock_app.toggle_location_panel.assert_called_once()
     win.win.destroy()
 
 

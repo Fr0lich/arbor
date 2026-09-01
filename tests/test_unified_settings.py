@@ -163,12 +163,9 @@ def test_unified_settings_push_layout_to_app(tk_root):
     win._push_layout_to_app()
 
     assert mock_app.large_reviewed_button_var.get() is True
-    assert mock_app.updated_reviewed_btn is True
     assert mock_app.snap_lock_var.get() is True
-    assert mock_app.location_mode_set == "horizontal_2row"
     assert mock_app.image_stack_var.get() is True
     assert mock_app.image_view_mode == "stack"
-    assert mock_app.updated_image_view is True
     assert mock_app.auto_advance_var.get() is False
     assert mock_app.auto_advance_history_var.get() is True
     win.win.destroy()
@@ -237,7 +234,6 @@ def test_toolbar_buttons_live_callback_and_persistence(tk_root, tmp_path, monkey
     win.draft_toolbar_vars["Filter"].set(True)
     win._push_layout_to_app()
     assert mock_app.toolbar_vars["Filter"].get() is True
-    assert mock_app.toggled_tb_called is True
 
     win.save_settings()
     loaded = config.load_prefs()
@@ -280,7 +276,6 @@ def test_focus_section_visibility_synchronization(tk_root, tmp_path, monkeypatch
     assert mock_app.focus_visibility_vars["Problems"].get() is False
     assert mock_app.focus_visibility_vars["Location"].get() is False
     assert mock_app.focus_visibility_vars["Genus"].get() is False
-    assert mock_app.reg_visibility_updated is True
 
     win.save_settings()
     loaded = config.load_prefs()

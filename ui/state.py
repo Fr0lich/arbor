@@ -35,6 +35,8 @@ PROBLEM_STATE_CHANGED = "PROBLEM_STATE_CHANGED"
 OBJECT_DATA_CHANGED = "OBJECT_DATA_CHANGED"
 OBJECT_LOADED = "OBJECT_LOADED"
 DATABASE_UPDATED = "DATABASE_UPDATED"
+SETTINGS_CHANGED = "SETTINGS_CHANGED"  # payload kwargs: key (str), value (Any)
+LAYOUT_CHANGED = "LAYOUT_CHANGED"      # payload kwargs: preset (dict)
 
 # Global Event Bus instance
 app_bus = EventBus()

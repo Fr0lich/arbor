@@ -22,6 +22,7 @@ if parent_dir not in sys.path:
 import config
 from config import sc
 from ui.widgets import ToggleSwitch, create_toggle_row, create_info_badge
+from ui.state import app_bus, SETTINGS_CHANGED, LAYOUT_CHANGED
 
 SETTING_INFO_TEXTS = {
     "focus_fallback": (
@@ -716,6 +717,34 @@ class UnifiedSettingsWindow:
                      font=self.FONT_SUBTITLE, fg=self.COLORS["on_surface_variant"],
                      bg=self.COLORS["card_bg"]).pack(anchor="w")
 
+    def _collect_layout_state(self):
+        """Collect and return a comprehensive dictionary of all current layout values."""
+        preset = {
+            "show_list": self.var_show_list.get(),
+            "show_search": self.var_show_search.get(),
+            "show_reg": self.var_show_reg.get(),
+            "show_images": self.var_show_images.get(),
+            "location_in_center": self.var_location_center.get(),
+            "location_2row": self.var_location_2row.get(),
+            "show_image_tools": self.var_show_image_tools.get(),
+            "show_bulk_edit": self.var_show_bulk_edit.get(),
+            "image_stack": self.var_image_stack.get(),
+            "large_reviewed_button": self.var_large_reviewed_btn.get(),
+            "snap_lock": self.var_snap_lock.get(),
+            "auto_advance": self.var_auto_advance.get(),
+            "auto_advance_history": self.var_auto_advance_history.get(),
+            "auto_resolve_conflicts": self.var_auto_resolve.get(),
+            "strict_input_validation": self.var_strict_validation.get(),
+            "toolbar_buttons": {k: v.get() for k, v in self.draft_toolbar_vars.items()},
+            "focus_mode": self.var_focus_mode.get(),
+            "focus_fallback": self.var_focus_fallback.get(),
+            "focus_dynamic_update": self.var_focus_dynamic.get(),
+            "focus_sec_problems": self.var_focus_sec_problems.get(),
+            "focus_sec_location": self.var_focus_sec_location.get(),
+            "focus_visibility": {k: v.get() for k, v in self.draft_focus_visibility_vars.items()}
+        }
+        return preset
+
     def _push_layout_to_app(self):
         """Push draft layout variables to the host application and apply immediately."""
         if not self.app:
@@ -759,17 +788,11 @@ class UnifiedSettingsWindow:
             if hasattr(self.app, "image_stack_var"):
                 self.app.image_stack_var.set(self.var_image_stack.get())
                 self.app.image_view_mode = "stack" if self.var_image_stack.get() else "gallery"
-                if hasattr(self.app, "update_image_view_button"):
-                    self.app.update_image_view_button()
-                if hasattr(self.app, "refresh_image_view"):
-                    self.app.refresh_image_view()
             if hasattr(self.app, "draft_image_stack_var"):
                 self.app.draft_image_stack_var.set(self.var_image_stack.get())
 
             if hasattr(self.app, "large_reviewed_button_var"):
                 self.app.large_reviewed_button_var.set(self.var_large_reviewed_btn.get())
-                if hasattr(self.app, "update_reviewed_button_state"):
-                    self.app.update_reviewed_button_state()
 
             if hasattr(self.app, "snap_lock_var"):
                 self.app.snap_lock_var.set(self.var_snap_lock.get())
@@ -783,18 +806,12 @@ class UnifiedSettingsWindow:
             if hasattr(self.app, "strict_input_validation_var"):
                 self.app.strict_input_validation_var.set(self.var_strict_validation.get())
 
-            if hasattr(self.app, "location_panel_horiz") and hasattr(self.app.location_panel_horiz, "set_layout_mode"):
-                mode = "horizontal_2row" if self.var_location_2row.get() else "horizontal_1row"
-                self.app.location_panel_horiz.set_layout_mode(mode)
-
             # Sync toolbar vars
             for k, v in self.draft_toolbar_vars.items():
                 if hasattr(self.app, "toolbar_vars") and k in self.app.toolbar_vars:
                     self.app.toolbar_vars[k].set(v.get())
                 if hasattr(self.app, "draft_toolbar_vars") and k in self.app.draft_toolbar_vars:
                     self.app.draft_toolbar_vars[k].set(v.get())
-            if hasattr(self.app, "_toggle_toolbar_buttons"):
-                self.app._toggle_toolbar_buttons()
 
             # Sync focus mode & visibility
             if hasattr(self.app, "focus_mode_var"):
@@ -811,24 +828,9 @@ class UnifiedSettingsWindow:
                 for k, v in self.draft_focus_visibility_vars.items():
                     if k in self.app.focus_visibility_vars:
                         self.app.focus_visibility_vars[k].set(v.get())
-            if hasattr(self.app, "update_reg_fields_visibility"):
-                self.app.update_reg_fields_visibility()
 
-            # Trigger panel updates directly on app
-            if hasattr(self.app, "toggle_list_panel"):
-                self.app.toggle_list_panel()
-            if hasattr(self.app, "toggle_search_panel"):
-                self.app.toggle_search_panel()
-            if hasattr(self.app, "toggle_location_panel"):
-                self.app.toggle_location_panel()
-            if hasattr(self.app, "toggle_images_panel"):
-                self.app.toggle_images_panel()
-            if hasattr(self.app, "toggle_reg_panel"):
-                self.app.toggle_reg_panel()
-            if hasattr(self.app, "toggle_image_tools"):
-                self.app.toggle_image_tools()
-            if hasattr(self.app, "toggle_bulk_edit_btn"):
-                self.app.toggle_bulk_edit_btn()
+            # Publish layout change event to EventBus
+            app_bus.publish(LAYOUT_CHANGED, preset=self._collect_layout_state())
         except Exception as e:
             print(f"[UnifiedSettings] Error pushing layout to app: {e}")
 
@@ -1260,19 +1262,15 @@ class UnifiedSettingsWindow:
 
     # ── LIVE CALLBACKS ───────────────────────────────────────────────────────
     def _notify_live(self, key, value):
-        """Dispatches live updates to external observers or host application."""
+        """Dispatches live updates to external observers or host application via EventBus."""
+        # Publish to the EventBus — primary notification path
+        app_bus.publish(SETTINGS_CHANGED, key=key, value=value)
+        # Fallback: direct caller-supplied callbacks (legacy support)
         if key in self.live_callbacks:
             try:
                 self.live_callbacks[key](value)
             except Exception as e:
-                print(f"[UnifiedSettings] Callback error for '{key}': {e}")
-        elif self.app and hasattr(self.app, f"on_settings_live_{key}"):
-            try:
-                getattr(self.app, f"on_settings_live_{key}")(value)
-            except Exception as e:
-                print(f"[UnifiedSettings] App handler error for '{key}': {e}")
-        else:
-            print(f"[UnifiedSettings Live Observer] {key} -> {value}")
+                pass
 
     # ── RESTORE DEFAULTS ─────────────────────────────────────────────────────
     def restore_defaults(self):

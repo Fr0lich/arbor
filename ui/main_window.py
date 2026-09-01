@@ -20,7 +20,7 @@ from ui.log_viewer import LogViewerMixin
 from backend.data_store import ObjectDataStore
 from backend.task_queue import app_worker
 from ui.layout_manager import LayoutStateManager
-from ui.state import app_bus, PROBLEM_STATE_CHANGED, OBJECT_DATA_CHANGED, DATABASE_UPDATED
+from ui.state import app_bus, PROBLEM_STATE_CHANGED, OBJECT_DATA_CHANGED, DATABASE_UPDATED, SETTINGS_CHANGED, LAYOUT_CHANGED
 import ui.help_dialogs as help_dialogs
 import ui.ignored_words_dialog as ignored_words_dialog
 from ui.presets_panel import PresetsManager
@@ -322,9 +322,19 @@ class ObjectProgramUI(
     def image_zoom_factor(self):
         return getattr(self.image_panel, "image_zoom_factor", 1.0) if hasattr(self, "image_panel") else 1.0
 
+    @image_zoom_factor.setter
+    def image_zoom_factor(self, value):
+        if hasattr(self, "image_panel"):
+            self.image_panel.image_zoom_factor = value
+
     @property
     def image_rotation_angle(self):
         return getattr(self.image_panel, "image_rotation_angle", 0) if hasattr(self, "image_panel") else 0
+
+    @image_rotation_angle.setter
+    def image_rotation_angle(self, value):
+        if hasattr(self, "image_panel"):
+            self.image_panel.image_rotation_angle = value
 
     @property
     def image_mode(self):
@@ -545,7 +555,6 @@ class ObjectProgramUI(
 
 
         self.object_loaded = False
-        self._image_paths = []
         self._rendered_paths = None
         self._thumb_cards = []
 
@@ -569,7 +578,6 @@ class ObjectProgramUI(
         self.prob_label_widgets = {} # ttk.Label per mapped problem field
         self.location_vars = {}
         self.filter_vars = {}
-        self.images_missing_var = tk.StringVar(value="")
         
         self.toolbar_buttons = {}
         self.toolbar_vars = {}
@@ -584,14 +592,11 @@ class ObjectProgramUI(
 
         self.show_list_var = tk.BooleanVar(value=_init_prefs.get("show_list", True))
         self.show_search_var = tk.BooleanVar(value=_init_prefs.get("show_search", True))
-        self.show_images_var = tk.BooleanVar(value=_init_prefs.get("show_images", True))
         self.location_in_center_var = tk.BooleanVar(value=_init_prefs.get("location_in_center", False))
-        self.show_image_tools_var = tk.BooleanVar(value=_init_prefs.get("show_image_tools", True))
         self.show_bulk_edit_var = tk.BooleanVar(value=_init_prefs.get("show_bulk_edit", True))
         self.show_reg_var = tk.BooleanVar(value=_init_prefs.get("show_reg", True))
         
         self.snap_lock_var = tk.BooleanVar(value=_init_prefs.get("snap_lock", False))
-        self.image_stack_var = tk.BooleanVar(value=_init_prefs.get("image_stack", False))
         self.focus_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("focus_dynamic_update", True))
         self.layout_dynamic_update_var = tk.BooleanVar(value=_init_prefs.get("layout_dynamic_update", True))
         self.large_reviewed_button_var = tk.BooleanVar(value=_init_prefs.get("large_reviewed_button", True))
@@ -623,7 +628,6 @@ class ObjectProgramUI(
 
 
 
-        self.image_render_cache = OrderedDict()
         self.dark_mode_active = False
         if getattr(sys, 'frozen', False):
             _app_base_dir = os.path.dirname(sys.executable)
@@ -633,9 +637,6 @@ class ObjectProgramUI(
         self.ignored_words = []
         self.ignored_words_variations = tk.BooleanVar(value=True)
         self.load_ignored_words()
-        self.original_pil_cache = OrderedDict()
-        self.image_zoom_factor = 1.0
-        self.image_rotation_angle = 0
         self.filter_window = None
         self.history_window = None
         self.recent_window = None
@@ -652,11 +653,8 @@ class ObjectProgramUI(
 
         self.root.title("arbor")
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.image_mode = None  # "folder" eller "online"
-        self.image_folder = None
         self.image_index = {}   # ObjectID -> list of file paths
         self.image_status = {}
-        self.image_cache = OrderedDict()  # url -> ImageTk.PhotoImage
 
 
         # Lazy-initialized on first image fetch; see _get_http_session()
@@ -3113,6 +3111,8 @@ class ObjectProgramUI(
         )
         self.root.bind_all("<Button-1>", self._on_global_click_for_drawer, add="+")
         self.app_bus.subscribe(DATABASE_UPDATED, self._on_database_updated_event)
+        self.app_bus.subscribe(SETTINGS_CHANGED, self._on_settings_changed_event)
+        self.app_bus.subscribe(LAYOUT_CHANGED, self._on_layout_changed_event)
 
         self.review_progress_label = None
         self.review_progress = None
@@ -4773,6 +4773,61 @@ class ObjectProgramUI(
             self._mobile_dialog.win.lift()
             self._mobile_dialog.win.focus_force()
             self._update_push_to_phone_state()
+
+    def _on_settings_changed_event(self, key, value, **kwargs):
+        self.root.after(0, lambda k=key, v=value: self._apply_settings_change(k, v))
+
+    def _apply_settings_change(self, key, value):
+        # Dispatch to existing handler methods based on key
+        handler = getattr(self, f"on_settings_live_{key}", None)
+        if handler:
+            try:
+                handler(value)
+            except Exception:
+                pass
+
+    def _on_layout_changed_event(self, preset, **kwargs):
+        self.root.after(0, lambda p=preset: self._apply_layout_preset(p))
+
+    def _apply_layout_preset(self, preset):
+        # Conditionally call layout methods based on the preset payload
+        if preset.get("show_list") is not None and hasattr(self, "toggle_list_panel"):
+            self.toggle_list_panel()
+        if preset.get("show_search") is not None and hasattr(self, "toggle_search_panel"):
+            self.toggle_search_panel()
+        if preset.get("location_in_center") is not None and hasattr(self, "toggle_location_panel"):
+            self.toggle_location_panel()
+        if preset.get("show_images") is not None and hasattr(self, "toggle_images_panel"):
+            self.toggle_images_panel()
+        if preset.get("show_reg") is not None and hasattr(self, "toggle_reg_panel"):
+            self.toggle_reg_panel()
+        if preset.get("show_image_tools") is not None and hasattr(self, "toggle_image_tools"):
+            self.toggle_image_tools()
+        if preset.get("show_bulk_edit") is not None and hasattr(self, "toggle_bulk_edit_btn"):
+            self.toggle_bulk_edit_btn()
+
+        if preset.get("focus_mode") is not None or preset.get("focus_visibility") is not None:
+            if hasattr(self, "update_reg_fields_visibility"):
+                self.update_reg_fields_visibility()
+
+        if preset.get("image_stack") is not None:
+            if hasattr(self, "update_image_view_button"):
+                self.update_image_view_button()
+            if hasattr(self, "refresh_image_view"):
+                self.refresh_image_view()
+
+        if preset.get("large_reviewed_button") is not None and hasattr(self, "update_reviewed_button_state"):
+            self.update_reviewed_button_state()
+
+        if preset.get("toolbar_buttons") is not None and hasattr(self, "_toggle_toolbar_buttons"):
+            self._toggle_toolbar_buttons()
+
+        if preset.get("location_2row") is not None and hasattr(self, "location_panel_horiz") and hasattr(self.location_panel_horiz, "set_layout_mode"):
+            mode = "horizontal_2row" if preset.get("location_2row") else "horizontal_1row"
+            self.location_panel_horiz.set_layout_mode(mode)
+
+        if hasattr(self, "refresh_styles_and_highlights"):
+            self.refresh_styles_and_highlights()
 
     def _on_database_updated_event(self, **kwargs):
         self.root.after(0, lambda: self._do_database_update(**kwargs))
