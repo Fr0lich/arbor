@@ -56,9 +56,22 @@ Arbor runs a Tkinter UI on the main thread alongside a Flask mobile companion se
 
 *   **Flask Mobile Server:**
     *   **Persistent Singleton:** To safely manage a background Flask server in a Tkinter app and avoid Werkzeug context restart issues, run the Flask app as a persistent singleton thread. Only toggle the external tunnel or regenerate access credentials (like a PIN) on subsequent starts and stops, rather than shutting down the Flask server entirely.
+    *   **DataFrame Lock TOCTOU:**
+        *   Never check `if df_reg is None:` outside a `with app_state.df_lock:` block. Checking outside and acquiring the lock later creates a time-of-check/time-of-use race: the DataFrame can become `None` between the check and the lock acquisition. Always move null-guards to be the **first statement inside** the `with df_lock:` block.
 * **Background Tasks & UI Updates (Task Queue & EventBus):**
     *   **BackgroundWorker:** Heavy Python operations (file I/O, large pandas calculations) should be offloaded to the centralized `BackgroundWorker` (in `backend/task_queue.py`) via `app_worker.run_in_background(func, callback)`. Avoid spawning raw daemon threads unless strictly necessary for long-lived processes.
     *   **EventBus Integration:** Background threads and external modules (e.g., `MobileServer`, Background Workers) must **never** call UI update methods (like `self.main_window.update_ui()`) directly, and should avoid cross-thread Tkinter event generation. Instead, use the global `EventBus` (`app_bus.publish('EVENT_NAME')` from `ui/state.py`). The Tkinter UI components will subscribe to these events and schedule their own safe redraws via `self.root.after(0, ...)`.
+    *   **EventBus Thread Safety — Publish Must Be on the Main Thread:**
+        *   `app_bus.publish()` is NOT thread-safe from a Tkinter perspective. Even though it uses a lock internally, it invokes subscriber callbacks synchronously on whatever thread calls it. If a subscriber touches a Tkinter widget, calling `app_bus.publish()` from a background thread will corrupt UI state.
+        *   **Rule:** Background threads (Flask routes, worker threads) must **never** call `app_bus.publish()` directly. Always marshal the publish call to the main thread first:
+            ```python
+            # Correct — called from a background thread:
+            self.root_tk.after(0, lambda: app_bus.publish(EVENT_NAME, **kwargs))
+            ```
+        *   The subscriber itself does NOT need to wrap with `root.after()` if the publish is already marshaled, but wrapping defensively is always acceptable.
+    *   **EventBus Subscriber Cleanup — Always Use `subscribe_managed()`:**
+        *   The `EventBus` stores callbacks as strong references. A widget that subscribes but is destroyed without calling `unsubscribe()` will permanently hold a reference and may receive callbacks on a destroyed widget, causing `TclError`.
+        *   **Rule:** Always use `app_bus.subscribe_managed(widget, event_type, callback)` instead of `app_bus.subscribe()`. This automatically wires up `<Destroy>` cleanup on the widget. Only use bare `subscribe()` for objects that are never destroyed (e.g., module-level singletons).
 *   **Subprocesses & Tunnels:**
     *   When running a long-lived background subprocess (e.g., an SSH tunnel using `subprocess.Popen`) where output is continually monitored via a blocking call like `readline()`, ensure the read operation does not indefinitely prevent checking for shutdown events. Wrap the subprocess loop in a `try...finally` block that explicitly calls `process.kill()` or `process.terminate()` to guarantee clean termination and prevent orphaned processes.
 *   **Server-Sent Events (SSE):**
