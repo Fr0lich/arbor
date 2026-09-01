@@ -1665,7 +1665,7 @@ self.addEventListener('fetch', (event) => {
 
             if self.root_tk:
                 try:
-                    app_bus.publish(DATABASE_UPDATED, mobile_edit=True)
+                    self.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED, mobile_edit=True))
                 except Exception:
                     pass
 
@@ -1838,7 +1838,7 @@ self.addEventListener('fetch', (event) => {
 
             if self.root_tk:
                 try:
-                    app_bus.publish(DATABASE_UPDATED, mobile_edit=True)
+                    self.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED, mobile_edit=True))
                 except Exception:
                     pass
 
