@@ -52,11 +52,10 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Effort:** Medium
 * **Recommended change:** Use Python `threading` and a `queue.Queue`. Start the load in a thread, and use `root.after(100, check_queue)` to poll for completion, allowing the Loading Window animation to play smoothly.
 
-### Unify Application State Architecture
-* **Why it matters:** The state is spread out. `self.app.df_reg`, `self.vars`, and `self.advanced_prefs` are mutated directly by UI code across 15 different files. Debugging state bugs is a nightmare.
-* **Impact:** High (Architecture / Maintainability)
-* **Effort:** Large
-* **Recommended change:** Use `models.AppState` as a strict "Single Source of Truth." UI should dispatch events to update the state, and the state should trigger UI redraws (similar to an MVC or Flux architecture).
+### Unify Application State Architecture — STATUS: PARTIALLY COMPLETE
+* **What is done:** `models.AppState` exists and is used as the single source of truth. It includes `df_lock: threading.RLock` which is correctly acquired around all DataFrame mutations in `mobile_server.py`, `database_ops.py`, and `main_window.py`. Do NOT re-implement this.
+* **What remains:** The direct mutation of `self.app.*` Tkinter variables from `ui/unified_settings.py` (`_push_layout_to_app()`) still bypasses the EventBus. This is tracked as a specific migration item.
+* **Impact:** Medium (Architecture / Maintainability)
 
 ### Refactor Tkinter UI Mixins to Composition
 * **Why it matters:** `ObjectProgramUI` inherits from `AutosaveMixin`, `ImageHandlerMixin`, `DatabaseOpsMixin`, etc. This leads to massive namespace pollution (`self` has hundreds of methods).
@@ -89,6 +88,12 @@ Based on a thorough review of the codebase (particularly `ui/main_window.py`, `u
 * **Impact:** High (Prevents UI freezing and OS "Not Responding" states)
 * **Effort:** Medium
 * **Recommended change:** Refactor heavy Pandas operations (like bulk edits, full exports) and database loading to use `app_worker.run_in_background()` with success/error callbacks.
+
+### Enforce `subscribe_managed()` for All EventBus Subscriptions
+* **Why it matters:** `EventBus` holds strong references to subscriber callbacks. Destroyed widgets that did not call `unsubscribe()` cause `TclError` crashes and memory leaks. Several components (`main_window.py`, `status_bar.py`) subscribe without any cleanup.
+* **Impact:** Medium (Reliability / Memory)
+* **Effort:** Small
+* **Recommended change:** Use `app_bus.subscribe_managed(widget, event_type, callback)` for all widget-bound subscriptions. The `subscribe_managed` method exists on `EventBus` in `ui/state.py` and auto-wires `<Destroy>` cleanup.
 
 ### Utilize `EventBus` for Cross-Component Communication
 * **Why it matters:** `ObjectProgramUI` is tightly coupled with almost all components. Background threads and other UI panels often call methods directly on `main_window`, causing spaghetti state and threading issues.

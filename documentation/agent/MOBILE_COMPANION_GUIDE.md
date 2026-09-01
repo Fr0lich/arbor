@@ -40,4 +40,12 @@ When building or modifying backend endpoints and mobile frontends, adhere to the
 
 ### D. Syncing with Tkinter
 - When updating the desktop application's data from a background process (like the mobile server's sync event), avoid calling `self.commit_current_object()` in the Tkinter UI. Doing so mistakenly overwrites newly synced in-memory DataFrames with stale data currently in the widgets. Instead, reload the UI and explicitly invalidate memory caches.
-- **EventBus Integration:** The Mobile Server runs in a background thread and must **never** directly invoke methods on Tkinter UI instances (like `main_window`). Instead, it should import the global `app_bus` (from `ui.state`) and use `app_bus.publish('DATABASE_UPDATED')`. The Tkinter UI should subscribe to these events and schedule its own UI reload securely using `self.root.after()`.
+- **EventBus Integration:** The Mobile Server runs in a background thread and must **never** directly invoke methods on Tkinter UI instances (like `main_window`). Instead, it should import the global `app_bus` (from `ui.state`) and notify the UI via the EventBus. **However, because Flask routes run on a background thread, `app_bus.publish()` must be wrapped in `root_tk.after(0, ...)` to marshal it to the Tkinter main thread before dispatch:**
+    ```python
+    # CORRECT — inside a Flask route handler running on a background thread:
+    if self.root_tk:
+        self.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED, mobile_edit=True))
+    # INCORRECT — calling publish() directly from a background thread:
+    # app_bus.publish(DATABASE_UPDATED, mobile_edit=True)  ← DO NOT DO THIS
+    ```
+  The Tkinter UI should subscribe to these events and schedule its own UI reload using `self.root.after(0, ...)` inside the subscriber callback.
