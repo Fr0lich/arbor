@@ -3267,7 +3267,7 @@ class ObjectProgramUI(
 
         self.image_panel = ImagePanel(
             self.middle_panes,
-            app=self,
+            app=self.app,
             app_bus=app_bus,
             keybindings=self.keybindings,
             dark_mode=getattr(self, "dark_mode_active", False)
