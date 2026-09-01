@@ -100,23 +100,7 @@ class FilterPanel:
             insertbackground="#000000"
         )
         app._inline_search_entry.pack(side="left", fill="x", expand=True, padx=(sc(8), sc(4)), pady=sc(5))
-        app._inline_search_entry.bind("<KeyRelease>",  app._on_inline_search_key)
-        app._inline_search_entry.bind("<Escape>",      app._clear_inline_search)
-        app._inline_search_entry.bind("<FocusIn>",     app._search_focus_in)
-        app._inline_search_entry.bind("<FocusOut>",    app._search_focus_out)
-        app._inline_search_entry.bind("<Button-1>",    app._search_focus_in)
-        app._inline_search_entry.bind("<Return>",      app._on_search_bar_enter)
-        app._inline_search_entry.bind("<Down>",        app._on_search_arrow_down)
-        app._inline_search_entry.bind("<Up>",          app._on_search_arrow_up)
-
-        def _focus_list(event):
-            app.object_list.focus_set()
-            if not app.object_list.selection():
-                children = app.object_list.get_children()
-                if children:
-                    app.object_list.selection_set(children[0])
-            return "break"
-        app._inline_search_entry.bind("<Tab>", _focus_list)
+        app.keybindings.bind_search_shortcuts(app._inline_search_entry)
 
         # Placeholder setup
         app._inline_search_entry.insert(0, app._inline_search_placeholder)

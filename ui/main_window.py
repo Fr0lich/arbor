@@ -1,3 +1,4 @@
+from ui.keybindings import KeybindingManager
 """
 ui/main_window.py
 
@@ -327,6 +328,7 @@ class ObjectProgramUI(
         self.root = root
         self.app = app
         self._loading_window = None
+        self.keybindings = KeybindingManager(self, self.root)
 
         self.data_store = ObjectDataStore(self.app)
         self.layout_manager = LayoutStateManager(self)
@@ -496,80 +498,7 @@ class ObjectProgramUI(
 
         
 
-        self.root.bind("<Left>", self._safe_nav_left)
-        self.root.bind("<Right>", self._safe_nav_right)
-        
-        self.root.bind("<Control-n>", lambda e: self.add_new_object())
-        self.root.bind("<Control-N>", lambda e: self._quick_new_object())
-        self.root.bind("<Control-D>", lambda e: self._duplicate_current_object())
-        self.root.bind("<Control-Delete>", lambda e: self.delete_current_object())
-        
-        # Database Statistics shortcut
-        self.root.bind("<Control-j>", lambda e: self.show_statistics())
-        self.root.bind("<Control-s>", lambda e: self.save_session("SAVE"))
-        self.root.bind("<Control-g>", lambda e: self.open_filter_menu())
-        self.root.bind("<Control-z>", self._smart_undo)
-        self.root.bind("<Control-y>", self.redo)
-        self.root.bind("<Control-n>", self._shortcut_new_object)
-        self.root.bind("<F1>", lambda e: self.show_shortcuts())
-        self.root.bind("<Control-r>", lambda e: self.mark_current_as_reviewed())
-        self.root.bind("<Control-Return>", lambda e: self.mark_current_as_reviewed())
-        self.root.bind("<Control-KP_Enter>", lambda e: self.mark_current_as_reviewed())
-
-        self.root.bind("<space>", self._toggle_problem_checkbox)
-
-        self.root.bind("<Control-q>", self.toggle_focus_mode_shortcut)
-        self.root.bind("<Control-h>", self.open_history_shortcut)
-
-        self.root.bind("<Control-e>", self._focus_first_reg)
-        self.root.bind("<Control-Prior>", lambda e: self._switch_reg_tab(-1))
-        self.root.bind("<Control-Next>", lambda e: self._switch_reg_tab(1))
-
-        
-
-
-        self.root.bind("<Control-l>", self._focus_first_location)
-        self.root.bind("<Control-p>", self._focus_first_problem)
-        self.root.bind("<Control-i>", self._focus_first_reg)
-        self.root.bind("<Control-Shift-P>", self._focus_first_problem)
-        self.root.bind("<F3>", self._focus_first_problem)
-        self.root.bind("<Control-Shift-L>", self._focus_first_location)
-        self.root.bind("<F4>", self._focus_first_location)
-
-        self.root.bind("<Alt-Left>", lambda e: self.go_back())
-        self.root.bind("<Alt-Right>", lambda e: self.go_forward())
-
-
-        self.root.bind("<Control-b>", self._next_image_shortcut)
-        self.root.bind("<Shift-Left>", self._prev_image_shortcut)
-        self.root.bind("<Shift-Right>", self._next_image_shortcut)
-        self.root.bind("<Control-plus>", lambda e: self.zoom_image_in())
-        self.root.bind("<Control-equal>", lambda e: self.zoom_image_in())
-        self.root.bind("<Control-minus>", lambda e: self.zoom_image_out())
-        self.root.bind("<Alt-r>", lambda e: self.rotate_image())
-        self.root.bind("<Control-R>", lambda e: self.rotate_image())
-        self.root.bind("<Control-Key-0>", lambda e: self.reset_image_view())
-
-
-        self.root.bind("<Control-Delete>", self._shortcut_delete_object)
-        self.root.bind("<Control-Shift-N>", self._shortcut_quick_new_object)
-        self.root.bind("<Control-Shift-D>", self._shortcut_duplicate_object)
-        self.root.bind("<Control-Shift-C>", self._copy_field_value)
-        self.root.bind("<Control-Shift-V>", self._paste_field_value)
-
-        self.root.bind("<Control-k>", self._apply_default_data_preset_shortcut)
-        self.root.bind("<Control-K>", self._apply_default_data_preset_shortcut)
-
-        self.root.bind("<Control-o>", self.handle_ctrl_o)
-        self.root.bind("<Control-O>", self.handle_ctrl_o)
-
-        self.root.bind("<Control-f>", self.handle_ctrl_f)
-        self.root.bind("<Control-F>", self.handle_ctrl_f)
-
-        # Collapsible Panel Toggles for Laptop Views
-        self.root.bind("<F6>", self.toggle_list_panel_shortcut)
-        self.root.bind("<F7>", self.toggle_reg_panel_shortcut)
-        self.root.bind("<F8>", self.toggle_images_panel_shortcut)
+        self.keybindings.bind_global_shortcuts()
 
 
 
@@ -854,11 +783,7 @@ class ObjectProgramUI(
                     entry_container.pack(side="left", fill="x", expand=True)
         
         self.location_entries.append(widget)
-        widget.bind("<Shift-Up>", self._location_nav_up)
-        widget.bind("<Shift-Down>", self._location_nav_down)
-        widget.bind("<Control-Up>", self._location_nav_up)
-        widget.bind("<Control-Down>", self._location_nav_down)
-        widget.bind("<Return>", self._location_nav_down)
+        self.keybindings.bind_location_shortcuts(widget)
         
         return container
 
@@ -5417,11 +5342,7 @@ class ObjectProgramUI(
             self.location_entries.append(widget)
 
             # Keyboard navigation bindings for entries inside pop-up
-            widget.bind("<Shift-Up>", self._location_nav_up)
-            widget.bind("<Shift-Down>", self._location_nav_down)
-            widget.bind("<Control-Up>", self._location_nav_up)
-            widget.bind("<Control-Down>", self._location_nav_down)
-            widget.bind("<Return>", self._location_nav_down)
+            self.keybindings.bind_location_shortcuts(widget)
 
         grid_frame.columnconfigure(1, weight=1)
 
@@ -5629,11 +5550,7 @@ class ObjectProgramUI(
             cb.grid(row=row, column=col, sticky="w", padx=10, pady=8)
             self.problem_checkbuttons.append(cb)
 
-            cb.bind("<Shift-Up>", self._problem_nav_up)
-            cb.bind("<Shift-Down>", self._problem_nav_down)
-            cb.bind("<Control-Up>", self._problem_nav_up)
-            cb.bind("<Control-Down>", self._problem_nav_down)
-            cb.bind("<Return>", lambda e, c=cb: self._toggle_specific_checkbox(c))
+            self.keybindings.bind_problem_shortcuts(cb)
 
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
