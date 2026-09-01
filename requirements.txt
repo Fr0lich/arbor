@@ -5,3 +5,6 @@ requests
 python-calamine
 pytablericons
 flask
+qrcode
+pytest-xvfb
+xvfbwrapper
