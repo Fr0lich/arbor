@@ -4,6 +4,8 @@ import tkinter as tk
 from ui.main_window import ObjectProgramUI
 from ui.historical_resolver import HistoricalConflictResolverWindow
 from ui.widgets import TreeviewListboxWrapper
+from ui.image_panel import ImagePanel
+from unittest.mock import MagicMock
 
 class MockApp:
     def __init__(self, df_reg, df_obs):
@@ -39,6 +41,18 @@ class MockApp:
         }
 
 def create_mock_ui(root, app):
+    app.config = {
+        "ui_sections": {
+            "problems": [
+                {"name": "Genus_Problem", "type": "bool", "maps_to": "Genus"},
+                {"name": "Species_Problem", "type": "bool", "maps_to": "Species"}
+            ],
+            "registration": [
+                {"name": "Genus", "type": "text"},
+                {"name": "Species", "type": "text"}
+            ]
+        }
+    }
     mw = ObjectProgramUI(root, app)
     mw.initializing = False
     mw.reg_by_id = app.df_reg
@@ -47,6 +61,15 @@ def create_mock_ui(root, app):
     mw.problem_columns = ["Genus_Problem", "Species_Problem"]
     mw.reg_columns = ["Genus", "Species"]
     mw.choice_fields = set()
+    mw.image_panel = MagicMock()
+    mw.image_panel.image_zoom_factor = 1.0
+    mw.image_panel.image_rotation_angle = 0
+    mw.image_panel.images_missing_var = tk.StringVar()
+    mw.image_panel.images_missing_label = tk.Label(root)
+    mw.image_panel.image_container = tk.Frame(root)
+    mw.image_panel.show_images_var = tk.BooleanVar(value=True)
+    mw.image_panel.show_image_tools_var = tk.BooleanVar(value=True)
+    mw._preload_adjacent_images = MagicMock()
 
     mw.show_all_history_var = tk.BooleanVar(value=False)
     mw.current_object_suggestions = {}
@@ -63,9 +86,6 @@ def create_mock_ui(root, app):
     mw.title_label = tk.Label(root)
     mw.object_id_var = tk.StringVar()
     mw.no_image_label = tk.Label(root)
-    mw.images_missing_label = tk.Label(root)
-    mw.images_missing_var = tk.StringVar()
-    mw.image_container = tk.Frame(root)
     mw.location_summary_label = tk.Label(root)
     mw.no_problems_msg_label = tk.Label(root)
     mw.object_list = TreeviewListboxWrapper(root, mw)
