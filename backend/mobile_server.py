@@ -267,7 +267,14 @@ def _get_allowed_columns(config):
     return allowed_reg_cols, allowed_obs_cols
 
 def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, allowed_reg_cols=None, allowed_obs_cols=None, recent_edits=None, client_timestamp=None):
-    """Execute single record update core with dtype safety, undo snapshots, audit logging, and change tracking."""
+    """
+    Execute single record update core with dtype safety, undo snapshots, audit logging, and change tracking.
+
+    # THREADING CONTRACT: Caller must hold `app_state.df_lock` (RLock) before
+    # calling this function. This function reads and mutates df_reg and df_obs
+    # without acquiring the lock internally, to allow the caller to batch multiple
+    # operations under a single lock acquisition.
+    """
     if app_state.df_reg is None:
         return None, "No active database loaded"
 
@@ -932,15 +939,6 @@ self.addEventListener('fetch', (event) => {
 
         @app.route('/api/objects', methods=['GET'])
         def get_objects():
-            if self.app_state.df_reg is None:
-                return jsonify({
-                    "total_matching": 0,
-                    "offset": 0,
-                    "limit": 0,
-                    "objects": [],
-                    "facets": {"reviewed_count": 0, "pending_count": 0, "cabinets": {}}
-                })
-
             query = request.args.get('q', '').strip().lower()
             status_filter = request.args.get('status', 'all').lower()
 
@@ -967,6 +965,15 @@ self.addEventListener('fetch', (event) => {
             offset = max(0, int(request.args.get('offset', 0)))
 
             with self.app_state.df_lock:
+                if self.app_state.df_reg is None:
+                    return jsonify({
+                        "total_matching": 0,
+                        "offset": 0,
+                        "limit": 0,
+                        "objects": [],
+                        "facets": {"reviewed_count": 0, "pending_count": 0, "cabinets": {}}
+                    })
+
                 df_reg = self.app_state.df_reg
                 df_obs = self.app_state.df_obs
                 history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
@@ -1389,12 +1396,12 @@ self.addEventListener('fetch', (event) => {
 
         @app.route('/api/object/<oid>', methods=['GET'])
         def get_object_detail(oid):
-            if self.app_state.df_reg is None:
-                return jsonify({"error": "No database loaded"}), 400
-
             oid = str(oid).strip()
 
             with self.app_state.df_lock:
+                if self.app_state.df_reg is None:
+                    return jsonify({"error": "No database loaded"}), 400
+
                 reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
                 if reg_oid is None:
                     return jsonify({"error": f"Object {oid} not found"}), 404
@@ -1682,9 +1689,6 @@ self.addEventListener('fetch', (event) => {
 
         @app.route('/api/object/<oid>/photo', methods=['POST'])
         def attach_photo(oid):
-            if self.app_state.df_reg is None:
-                return jsonify({"error": "No database loaded"}), 400
-
             oid = str(oid).strip()
 
             if 'image' not in request.files and 'file' not in request.files:
@@ -1698,6 +1702,9 @@ self.addEventListener('fetch', (event) => {
             category = request.form.get('category', '').strip()
 
             with self.app_state.df_lock:
+                if self.app_state.df_reg is None:
+                    return jsonify({"error": "No database loaded"}), 400
+
                 reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
                 if reg_oid is None:
                     return jsonify({"error": f"Object {oid} not found"}), 404
