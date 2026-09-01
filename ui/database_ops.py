@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 from ui.state import app_bus, DATABASE_UPDATED
 from utils import debug_error
+from backend.task_queue import app_worker
 from repository import ExcelRepository, REVIEWED_COLUMN
 
 class DatabaseOpsMixin:
@@ -74,27 +75,25 @@ class DatabaseOpsMixin:
             if _outer_callback:
                 _outer_callback(success, err)
 
-        def save_worker():
-            try:
-                from repository import SQLiteRepository
-                SQLiteRepository.export_to_excel(
-                    sqlite_path=None,
-                    excel_path=path,
-                    config=self.app.config,
-                    df_reg=df_reg_copy,
-                    df_obs=df_obs_copy,
-                    df_log=df_log_copy,
-                    df_photo=df_photo_copy
-                )
-                self.root.after(0, lambda: _on_done(True, None))
-            except Exception as e:
-                from utils import debug_error
-                debug_error("_write_excel_async worker", str(e))
-                err_msg = str(e)
-                self.root.after(0, lambda err=err_msg: _on_done(False, err))
+        def _do_save():
+            from repository import SQLiteRepository
+            SQLiteRepository.export_to_excel(
+                sqlite_path=None,
+                excel_path=path,
+                config=self.app.config,
+                df_reg=df_reg_copy,
+                df_obs=df_obs_copy,
+                df_log=df_log_copy,
+                df_photo=df_photo_copy
+            )
+            return True
 
-        import threading
-        threading.Thread(target=save_worker, daemon=True).start()
+        def _on_error(err):
+            from utils import debug_error
+            debug_error("_write_excel_async worker", str(err))
+            _on_done(False, str(err))
+
+        app_worker.run_in_background(_do_save, lambda res: _on_done(True, None), error_callback=_on_error)
 
 
     def create_new_database(self):
@@ -684,36 +683,33 @@ class DatabaseOpsMixin:
                     df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None
                     df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
 
-                def _worker():
-                    try:
-                        from repository import SQLiteRepository
-                        SQLiteRepository.export_to_excel(
-                            sqlite_path, path,
-                            self.app.config,
-                            df_reg=df_reg_copy, df_obs=df_obs_copy, df_log=df_log_copy, df_photo=df_photo_copy
-                        )
+                def _do_export():
+                    from repository import SQLiteRepository
+                    SQLiteRepository.export_to_excel(
+                        sqlite_path, path,
+                        self.app.config,
+                        df_reg=df_reg_copy, df_obs=df_obs_copy, df_log=df_log_copy, df_photo=df_photo_copy
+                    )
+                    return True
 
-                        def _on_export_success():
-                            self.app.excel_path = path
-                            self.app.output_path = path
-                            self.app.dirty = False
-                            app_bus.publish(DATABASE_UPDATED)
-                            self.system_status.config(text=f"Saved: {os.path.basename(path)}")
-                            self._hide_progress("Export complete")
-                            self.show_banner(f"Exported to: {path}", "success")
+                def _on_done(result):
+                    self.app.excel_path = path
+                    self.app.output_path = path
+                    self.app.dirty = False
+                    app_bus.publish(DATABASE_UPDATED)
+                    self.system_status.config(text=f"Saved: {os.path.basename(path)}")
+                    self._hide_progress("Export complete")
+                    self.show_banner(f"Exported to: {path}", "success")
 
-                        self.root.after(0, _on_export_success)
-                    except Exception as e:
-                        from utils import debug_error
-                        import traceback
-                        tb = traceback.format_exc()
-                        debug_error("save_as_export_to_excel", str(e))
-                        self.root.after(0, lambda err=str(e), t=tb: (
-                            self._hide_progress("Export failed"),
-                            self.show_traceback_dialog("Export Error", f"Failed to export: {err}", t)
-                        ))
-                import threading
-                threading.Thread(target=_worker, daemon=True).start()
+                def _on_error(err):
+                    from utils import debug_error
+                    import traceback
+                    tb = "".join(traceback.format_exception(type(err), err, err.__traceback__)) if hasattr(err, "__traceback__") else str(err)
+                    debug_error("save_as_export_to_excel", str(err))
+                    self._hide_progress("Export failed")
+                    self.show_traceback_dialog("Export Error", f"Failed to export: {err}", tb)
+
+                app_worker.run_in_background(_do_export, _on_done, error_callback=_on_error)
             else:
                 self.app.excel_path = path
                 self.app.output_path = path
@@ -823,29 +819,28 @@ class DatabaseOpsMixin:
                 self.data_status.config(text=l, foreground="gray")
             ))
 
-        def _worker():
-            try:
-                from repository import SQLiteRepository
-                SQLiteRepository.export_to_excel(
-                    source_path if is_sqlite else None, excel_path,
-                    self.app.config,
-                    progress_callback=_on_progress,
-                    df_reg=df_reg_copy,
-                    df_obs=df_obs_copy,
-                    df_log=df_log_copy,
-                    df_photo=df_photo_copy
-                )
-                self.root.after(0, lambda: (
-                    self._hide_progress("Export complete"),
-                    self.show_banner(f"Exported to: {excel_path}", "success")
-                ))
-            except Exception as e:
-                debug_error("export_to_excel", str(e))
-                import traceback
-                tb = traceback.format_exc()
-                self.root.after(0, lambda err=str(e), t=tb: (
-                    self._hide_progress("Export failed"),
-                    self.show_traceback_dialog("Export Error", f"Failed to export: {err}", t)
-                ))
+        def _do_export():
+            from repository import SQLiteRepository
+            SQLiteRepository.export_to_excel(
+                source_path if is_sqlite else None, excel_path,
+                self.app.config,
+                progress_callback=_on_progress,
+                df_reg=df_reg_copy,
+                df_obs=df_obs_copy,
+                df_log=df_log_copy,
+                df_photo=df_photo_copy
+            )
+            return True
 
-        threading.Thread(target=_worker, daemon=True).start()
+        def _on_done(result):
+            self._hide_progress("Export complete")
+            self.show_banner(f"Exported to: {excel_path}", "success")
+
+        def _on_error(err):
+            debug_error("export_to_excel", str(err))
+            import traceback
+            tb = "".join(traceback.format_exception(type(err), err, err.__traceback__)) if hasattr(err, "__traceback__") else str(err)
+            self._hide_progress("Export failed")
+            self.show_traceback_dialog("Export Error", f"Failed to export: {err}", tb)
+
+        app_worker.run_in_background(_do_export, _on_done, error_callback=_on_error)
