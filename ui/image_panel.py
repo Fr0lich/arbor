@@ -1335,6 +1335,68 @@ class ImagePanel(ttk.Frame):
             webbrowser.open(f"https://www.unimus.no/photos/image/jpeg/{filename}")
 
 
+
+    def _preload_adjacent_images(self, oid):
+        if not self.show_images_var.get():
+            return
+        if self.image_mode != "folder" or not self.app.config or not self.app.config.get("has_images", True):
+            return
+
+        if oid not in self.app.active_object_ids:
+            return
+
+        idx = self.app.active_object_ids.index(oid)
+        adjacent_oids = []
+        if idx > 0:
+            adjacent_oids.append(self.app.active_object_ids[idx - 1])
+        if idx < len(self.app.active_object_ids) - 1:
+            adjacent_oids.append(self.app.active_object_ids[idx + 1])
+
+        paths_to_load = []
+        for adj_oid in adjacent_oids:
+            adj_paths = self.image_index.get(adj_oid, [])
+            if adj_paths:
+                first_path = adj_paths[0][1] if isinstance(adj_paths[0], tuple) else adj_paths[0]
+                if first_path not in self.image_cache:
+                    paths_to_load.append(first_path)
+
+        if not paths_to_load:
+            return
+
+        def preload_worker():
+            try:
+                available_width = self.image_canvas.winfo_width()
+                if available_width < 300:
+                    available_width = 800
+                max_width = int((available_width / 2) * 0.95)
+                max_height = int(self.root.winfo_height() * 0.85)
+            except Exception:
+                max_width, max_height = 400, 400
+
+            for path in paths_to_load:
+                try:
+                    img = Image.open(path)
+                    img.load()
+                    img.thumbnail((max_width, max_height), Image.LANCZOS)
+                    self.root.after(0, lambda p=path, im=img: self._cache_preloaded_image(p, im))
+                except Exception:
+                    pass
+
+        threading.Thread(target=preload_worker, daemon=True).start()
+
+
+    def _cache_preloaded_image(self, path, pil_img):
+        if path in self.image_cache:
+            return
+        try:
+            tk_img = ImageTk.PhotoImage(pil_img)
+            self.image_cache[path] = tk_img
+            if len(self.image_cache) > MAX_IMAGE_CACHE:
+                self.image_cache.popitem(last=False)
+        except Exception:
+            pass
+
+
 # -----------------------------------------------------------------------------
 # Standalone Test Harness
 # -----------------------------------------------------------------------------

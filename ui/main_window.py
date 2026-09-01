@@ -476,6 +476,10 @@ class ObjectProgramUI(
         if hasattr(self, "image_panel"):
             self.image_panel.build_image_index(folder)
 
+    def _preload_adjacent_images(self, oid):
+        if hasattr(self, "image_panel"):
+            self.image_panel._preload_adjacent_images(oid)
+
     def build_online_image_urls(self, oid):
         if hasattr(self, "image_panel"):
             return self.image_panel.build_online_image_urls(oid)
