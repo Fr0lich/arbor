@@ -56,9 +56,9 @@ Arbor runs a Tkinter UI on the main thread alongside a Flask mobile companion se
 
 *   **Flask Mobile Server:**
     *   **Persistent Singleton:** To safely manage a background Flask server in a Tkinter app and avoid Werkzeug context restart issues, run the Flask app as a persistent singleton thread. Only toggle the external tunnel or regenerate access credentials (like a PIN) on subsequent starts and stops, rather than shutting down the Flask server entirely.
-*   **Background Tasks & UI Updates:**
-    *   **Daemon Threads:** Background tasks (like periodic internet connectivity checks) must use daemon threads.
-    *   **Safe UI Updates:** Tkinter is not thread-safe. Any UI updates originating from background threads must be safely scheduled on the main thread using `root.after()`.
+* **Background Tasks & UI Updates (Task Queue & EventBus):**
+    *   **BackgroundWorker:** Heavy Python operations (file I/O, large pandas calculations) should be offloaded to the centralized `BackgroundWorker` (in `backend/task_queue.py`) via `app_worker.run_in_background(func, callback)`. Avoid spawning raw daemon threads unless strictly necessary for long-lived processes.
+    *   **EventBus Integration:** Background threads and external modules (e.g., `MobileServer`, Background Workers) must **never** call UI update methods (like `self.main_window.update_ui()`) directly, and should avoid cross-thread Tkinter event generation. Instead, use the global `EventBus` (`app_bus.publish('EVENT_NAME')` from `ui/state.py`). The Tkinter UI components will subscribe to these events and schedule their own safe redraws via `self.root.after(0, ...)`.
 *   **Subprocesses & Tunnels:**
     *   When running a long-lived background subprocess (e.g., an SSH tunnel using `subprocess.Popen`) where output is continually monitored via a blocking call like `readline()`, ensure the read operation does not indefinitely prevent checking for shutdown events. Wrap the subprocess loop in a `try...finally` block that explicitly calls `process.kill()` or `process.terminate()` to guarantee clean termination and prevent orphaned processes.
 *   **Server-Sent Events (SSE):**

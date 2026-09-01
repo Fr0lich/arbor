@@ -228,11 +228,16 @@ Arbor is executed on high-resolution, variable-DPI displays.
   - *Incorrect:* `font=("Inter", 12)` or `width=100`
   - *Correct:* `font=("Inter", sc(12))` or `width=sc(100)`
 
-### Rule 3: Single-Threaded Tkinter Event Loop
-- **Non-blocking Operations:** Heavy tasks, image fetching, and database operations should occur in a background thread or be scheduled incrementally using `root.after()`.
+### Rule 3: Single-Threaded Tkinter Event Loop (BackgroundWorker & EventBus)
+- **Non-blocking Operations:** Heavy tasks, image fetching, and database operations must **never** block the mainloop. Use the centralized `BackgroundWorker` (via `app_worker.run_in_background()` in `backend/task_queue.py`) for heavy workloads, allowing it to schedule completion callbacks back on the main thread automatically.
+- **Event-Driven UI Updates:** Do not hard-couple UI components. Use the `EventBus` (`ui/state.py`) to broadcast state changes (`app_bus.publish()`). Components should subscribe to relevant events and update themselves safely.
 - **Eager Error Capturing:** When scheduling deferred callbacks (e.g., `self.root.after`) inside exception handling blocks, capture the target exception message or traceback eagerly using default argument parameters (e.g., `lambda em=err_msg: ...`) rather than referencing free variables from the deleted exception scope to avoid silent `NameError` exceptions.
 
-### Rule 4: Compact Form Serialization (Autosaves)
+### Rule 4: Component Decoupling (`unified_settings.py` vs `main_window.py`)
+- Arbor is actively moving away from monolithic UI structures (like the 7000+ line `ui/main_window.py`).
+- When modifying settings, use the modular structure defined in `ui/unified_settings.py` instead of adding logic to deprecated monolithic files. New UI panels should be built as independent classes that interact via the `EventBus`.
+
+### Rule 5: Compact Form Serialization (Autosaves)
 - **Use `.autosave.json`:** Temporary background sessions are serialized into the secure JSON format (`.autosave.json`). Ensure any custom UI state is serializable or properly decoupled from visual Tkinter widgets.
 - **Edit Source, Not Artifacts:** If a file is a compiled build artifact, do not edit it directly. Trace the code back to its Python source under the `ui/` directory and recompile accordingly.
 
