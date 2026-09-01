@@ -9,7 +9,7 @@ dynamic database visualizer window using Tkinter.
 
 from ui.widgets import ToggleSwitch, TreeviewListboxWrapper
 from ui.autosave_handler import AutosaveMixin
-from ui.image_handler import ImageHandlerMixin
+from ui.image_panel import ImagePanel
 from ui.historical_suggestions import HistoricalSuggestionsMixin
 from ui.layout_settings import LayoutSettingsMixin
 from ui.unified_settings import open_unified_settings
@@ -270,7 +270,6 @@ class ToolTipManager:
 
 class ObjectProgramUI(
     AutosaveMixin,
-    ImageHandlerMixin,
     HistoricalSuggestionsMixin,
     LayoutSettingsMixin,
     DashboardMixin,
@@ -297,6 +296,212 @@ class ObjectProgramUI(
         prefs[key] = value
         config.save_prefs(prefs)
         setattr(self, key, value)
+
+    # ---------- ImagePanel Delegation ----------
+    @property
+    def image_paths(self):
+        return getattr(self.image_panel, "image_paths", []) if hasattr(self, "image_panel") else []
+
+    @property
+    def _image_paths(self):
+        return getattr(self.image_panel, "_image_paths", []) if hasattr(self, "image_panel") else []
+
+    @property
+    def image_render_cache(self):
+        return getattr(self.image_panel, "image_render_cache", {}) if hasattr(self, "image_panel") else {}
+
+    @property
+    def original_pil_cache(self):
+        return getattr(self.image_panel, "original_pil_cache", {}) if hasattr(self, "image_panel") else {}
+
+    @property
+    def image_cache(self):
+        return getattr(self.image_panel, "image_cache", {}) if hasattr(self, "image_panel") else {}
+
+    @property
+    def image_zoom_factor(self):
+        return getattr(self.image_panel, "image_zoom_factor", 1.0) if hasattr(self, "image_panel") else 1.0
+
+    @property
+    def image_rotation_angle(self):
+        return getattr(self.image_panel, "image_rotation_angle", 0) if hasattr(self, "image_panel") else 0
+
+    @property
+    def image_mode(self):
+        return getattr(self.image_panel, "image_mode", None) if hasattr(self, "image_panel") else None
+
+    @image_mode.setter
+    def image_mode(self, value):
+        if hasattr(self, "image_panel"):
+            self.image_panel.image_mode = value
+
+    @property
+    def image_folder(self):
+        return getattr(self.image_panel, "image_folder", None) if hasattr(self, "image_panel") else None
+
+    @image_folder.setter
+    def image_folder(self, value):
+        if hasattr(self, "image_panel"):
+            self.image_panel.image_folder = value
+
+    @property
+    def image_index(self):
+        return getattr(self.image_panel, "image_index", {}) if hasattr(self, "image_panel") else {}
+
+    @image_index.setter
+    def image_index(self, value):
+        if hasattr(self, "image_panel"):
+            self.image_panel.image_index = value
+
+    @property
+    def image_view_mode(self):
+        return getattr(self.image_panel, "image_view_mode", "gallery") if hasattr(self, "image_panel") else "gallery"
+
+    @image_view_mode.setter
+    def image_view_mode(self, value):
+        if hasattr(self, "image_panel"):
+            self.image_panel.image_view_mode = value
+
+    @property
+    def image_container(self):
+        return getattr(self.image_panel, "image_container", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def image_canvas(self):
+        return getattr(self.image_panel, "image_canvas", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def image_scroll(self):
+        return getattr(self.image_panel, "image_scroll", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def image_toolbar(self):
+        return getattr(self.image_panel, "image_toolbar", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def view_btn(self):
+        return getattr(self.image_panel, "view_btn", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def images_missing_label(self):
+        return getattr(self.image_panel, "images_missing_label", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def image_count_label(self):
+        return getattr(self.image_panel, "image_count_label", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def images_missing_var(self):
+        return getattr(self.image_panel, "images_missing_var", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def show_images_var(self):
+        return getattr(self.image_panel, "show_images_var", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def show_image_tools_var(self):
+        return getattr(self.image_panel, "show_image_tools_var", None) if hasattr(self, "image_panel") else None
+
+    @property
+    def image_stack_var(self):
+        return getattr(self.image_panel, "image_stack_var", None) if hasattr(self, "image_panel") else None
+
+    def load_images(self, oid):
+        if hasattr(self, "image_panel"):
+            self.image_panel.load_images(oid)
+
+    def refresh_image_view(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.refresh_image_view()
+
+    def refresh_image_rendering(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.refresh_image_rendering()
+
+    def zoom_image_in(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.zoom_image_in()
+
+    def zoom_image_out(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.zoom_image_out()
+
+    def rotate_image(self, angle=-90):
+        if hasattr(self, "image_panel"):
+            self.image_panel.rotate_image(angle)
+
+    def reset_image_view(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.reset_image_view()
+
+    def fit_image_view(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.fit_image_view()
+
+    def toggle_image_view(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.toggle_image_view()
+
+    def update_image_view_button(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.update_image_view_button()
+
+    def open_image_menu(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.open_image_menu()
+
+    def select_image_folder(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.select_image_folder()
+
+    def enable_online_images(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.enable_online_images()
+
+    def enable_offline_mode(self):
+        if hasattr(self, "image_panel"):
+            self.image_panel.enable_offline_mode()
+
+    def build_image_index(self, folder):
+        if hasattr(self, "image_panel"):
+            self.image_panel.build_image_index(folder)
+
+    def build_online_image_urls(self, oid):
+        if hasattr(self, "image_panel"):
+            return self.image_panel.build_online_image_urls(oid)
+        return []
+
+    def _next_image_shortcut(self, event=None):
+        if hasattr(self, "image_panel"):
+            self.image_panel._next_image_shortcut(event)
+
+    def _prev_image_shortcut(self, event=None):
+        if hasattr(self, "image_panel"):
+            self.image_panel._prev_image_shortcut(event)
+
+    def _on_canvas_resize(self, event):
+        if hasattr(self, "image_panel"):
+            self.image_panel._on_canvas_resize(event)
+
+    def _on_image_scroll(self, *args):
+        if hasattr(self, "image_panel"):
+            self.image_panel._on_image_scroll(*args)
+
+    def _on_pan_start(self, event):
+        if hasattr(self, "image_panel"):
+            self.image_panel._on_pan_start(event)
+
+    def _on_pan_drag(self, event):
+        if hasattr(self, "image_panel"):
+            self.image_panel._on_pan_drag(event)
+
+    def _on_pan_release(self, event, click_callback=None):
+        if hasattr(self, "image_panel"):
+            self.image_panel._on_pan_release(event, click_callback)
+
+    def open_image_popup(self, tk_img, source=None, is_online=False):
+        if hasattr(self, "image_panel"):
+            self.image_panel.open_image_popup(tk_img, source, is_online)
 
     @property
     def autoAdvanceOnReview(self):
@@ -3060,122 +3265,15 @@ class ObjectProgramUI(
         self.loc_frame_horizontal = tk.Frame(self.middle_panes, bg="#f5f5f5")
         # will be added in toggle_location_panel()
 
-        right = ttk.Frame(self.middle_panes, style="MiddlePane.TFrame")
-        self.right_frame = right
-        # U2-A: 200px minimum ensures image panel never collapses below usable size
-        self.middle_panes.add(right, weight=3)
-
-        header = ttk.Frame(right, style="MiddlePane.TFrame")
-        header.pack(fill="x", pady=(4, 4), padx=6)
-
-# open header (formerly Images)
-        ttk.Label(
-            header,
-            text=" ",
-            font=("Segoe UI", sc(10), "bold"),
-            style="MiddlePane.TLabel"
-        ).pack(side="left")
-
-        self.image_count_label = ttk.Label(
-            header,
-            text="0 images",
-            foreground="gray",
-            style="MiddlePane.TLabel"
+        self.image_panel = ImagePanel(
+            self.middle_panes,
+            app=self,
+            app_bus=app_bus,
+            keybindings=self.keybindings,
+            dark_mode=getattr(self, "dark_mode_active", False)
         )
-        self.image_count_label.pack(side="left", padx=(10, 0))
-
-        self.view_btn = ttk.Button(
-            header,
-            text="View: Gallery",
-            style="Nav.TButton",
-            command=self.toggle_image_view
-        , cursor="hand2")
-        self.view_btn.pack(side="right")
-        self.add_tooltip(self.view_btn, "Toggle Gallery / Stack View")
-        self.update_image_view_button()
-
-        self.source_btn = ttk.Button(
-            header,
-            text="Source...",
-            style="Nav.TButton",
-            command=self.open_image_menu
-        , cursor="hand2")
-        self.source_btn.pack(side="right", padx=(0, 4))
-        self.add_tooltip(self.source_btn, "Select image source folder")
-
-        self.images_missing_label = ttk.Label(
-            header,
-            text="",
-            foreground="#c93a40",
-            font=("Segoe UI", sc(9), "bold"),
-            style="MiddlePane.TLabel"
-        )
-        self.images_missing_label.pack(side="right", padx=(0, 8))
-
-        # Image Control Overlay Toolbar
-        from ui.image_toolbar import create_image_toolbar
-        self.image_toolbar = create_image_toolbar(
-            parent=right,
-            live_callbacks={
-                "zoom_in": self.zoom_image_in,
-                "zoom_out": self.zoom_image_out,
-                "rotate_cw": lambda: self.rotate_image(90) if hasattr(self, 'rotate_image') else None,
-                "rotate_ccw": lambda: self.rotate_image(-90) if hasattr(self, 'rotate_image') else None,
-                "reset": self.reset_image_view,
-                "fit": getattr(self, "fit_image_view", self.reset_image_view),
-                "design_toggle": lambda mode: self.save_user_pref("image_button_style", mode)
-            },
-            design_mode=getattr(self, "image_button_style", "standard"),
-            dark_mode=getattr(self, "dark_mode_active", False),
-            zoom_level=getattr(self, "image_zoom_factor", 1.0),
-            rotation_angle=getattr(self, "image_rotation_angle", 0)
-        )
-        self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2))
-
-        image_box = ttk.Frame(right, relief="flat", padding=0, style="MiddlePane.TFrame")
-        self.image_box = image_box
-        image_box.pack(fill="both", expand=True)
-
-        self.image_canvas = tk.Canvas(image_box, highlightthickness=0)
-
-        self.image_scroll = ttk.Scrollbar(
-            image_box,
-            orient="vertical",
-            command=self.image_canvas.yview
-        )
-
-        self.image_container = ttk.Frame(self.image_canvas)
-
-        self.image_window = self.image_canvas.create_window(
-            (0, 0),
-            window=self.image_container,
-            anchor="nw"
-        )
-
-        self.image_container.bind(
-            "<Configure>",
-            lambda e: self.image_canvas.configure(scrollregion=self.image_canvas.bbox("all"))
-        )
-
-        self.image_canvas.configure(yscrollcommand=self._on_image_scroll)
-        
-        self.image_canvas.pack(side="left", fill="both", expand=True)
-
-        self.image_canvas.bind("<ButtonPress-1>", self._on_pan_start)
-        self.image_canvas.bind("<B1-Motion>", self._on_pan_drag)
-        self.image_scroll.pack(side="right", fill="y")
-
-        self.image_canvas.bind("<Configure>", self._on_canvas_resize)
-
-        self.image_container.columnconfigure(0, weight=1)
-        self.image_container.columnconfigure(1, weight=1)
-
-        self.no_image_label = ttk.Label(
-            self.image_container,
-            text="No images available",
-            foreground="gray"
-        )
-        self.no_image_label.pack(pady=20)
+        self.right_frame = self.image_panel
+        self.middle_panes.add(self.image_panel, weight=3)
 
         # Right (Scrollable registration area)
         reg_outer = ttk.Frame(panes, style="RightPane.TFrame")

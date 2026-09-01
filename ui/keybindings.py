@@ -121,3 +121,17 @@ class KeybindingManager:
         widget.bind("<Control-Up>", self.ui._problem_nav_up)
         widget.bind("<Control-Down>", self.ui._problem_nav_down)
         widget.bind("<Return>", lambda e, c=widget: self.ui._toggle_specific_checkbox(c))
+
+    def bind_image_shortcuts(self, target=None):
+        """Binds keyboard shortcuts specific to the Image Panel."""
+        t = target if target is not None else self.ui
+        self.root.bind("<Control-b>", getattr(t, "_next_image_shortcut", self.ui._next_image_shortcut))
+        self.root.bind("<Shift-Left>", getattr(t, "_prev_image_shortcut", self.ui._prev_image_shortcut))
+        self.root.bind("<Shift-Right>", getattr(t, "_next_image_shortcut", self.ui._next_image_shortcut))
+        self.root.bind("<Control-plus>", lambda e: t.zoom_image_in())
+        self.root.bind("<Control-equal>", lambda e: t.zoom_image_in())
+        self.root.bind("<Control-minus>", lambda e: t.zoom_image_out())
+        self.root.bind("<Alt-r>", lambda e: t.rotate_image())
+        self.root.bind("<Control-R>", lambda e: t.rotate_image())
+        self.root.bind("<Control-Key-0>", lambda e: t.reset_image_view())
+
