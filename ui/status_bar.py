@@ -124,8 +124,8 @@ class StatusBarPanel:
         self.ui.sb_help_btn = self.sb_help_btn
 
         # Subscribe to app_bus events
-        app_bus.subscribe(OBJECT_DATA_CHANGED, self._on_bus_data_changed)
-        app_bus.subscribe(OBJECT_LOADED, self._on_bus_object_loaded)
+        app_bus.subscribe_managed(self.frame, OBJECT_DATA_CHANGED, self._on_bus_data_changed)
+        app_bus.subscribe_managed(self.frame, OBJECT_LOADED, self._on_bus_object_loaded)
 
     def _on_bus_data_changed(self, *args, **kwargs):
         if self.frame.winfo_exists():

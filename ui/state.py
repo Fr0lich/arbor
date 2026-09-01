@@ -13,6 +13,22 @@ class EventBus:
             if callback not in self._subscribers[event_type]:
                 self._subscribers[event_type].append(callback)
 
+    def subscribe_managed(self, widget, event_type: str, callback: Callable):
+        """Subscribe callback and automatically unsubscribe when widget is destroyed.
+
+        Args:
+            widget: A Tkinter widget. Its <Destroy> event is bound to trigger cleanup.
+            event_type: The event name string to subscribe to.
+            callback: The callable to invoke when the event is published.
+        """
+        self.subscribe(event_type, callback)
+        def _on_widget_destroy(event, et=event_type, cb=callback):
+            # Only unsubscribe if the destroyed widget IS the subscribed widget,
+            # not a child widget firing its own Destroy event bubbling up.
+            if event.widget is widget:
+                self.unsubscribe(et, cb)
+        widget.bind("<Destroy>", _on_widget_destroy, add="+")
+
     def unsubscribe(self, event_type: str, callback: Callable):
         with self._lock:
             if event_type in self._subscribers:

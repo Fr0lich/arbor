@@ -3110,9 +3110,9 @@ class ObjectProgramUI(
             highlightbackground=config.DRAWER_THEME.get("drawer_border", "#c4c7c7")
         )
         self.root.bind_all("<Button-1>", self._on_global_click_for_drawer, add="+")
-        self.app_bus.subscribe(DATABASE_UPDATED, self._on_database_updated_event)
-        self.app_bus.subscribe(SETTINGS_CHANGED, self._on_settings_changed_event)
-        self.app_bus.subscribe(LAYOUT_CHANGED, self._on_layout_changed_event)
+        self.app_bus.subscribe_managed(self.root, DATABASE_UPDATED, self._on_database_updated_event)
+        self.app_bus.subscribe_managed(self.root, SETTINGS_CHANGED, self._on_settings_changed_event)
+        self.app_bus.subscribe_managed(self.root, LAYOUT_CHANGED, self._on_layout_changed_event)
 
         self.review_progress_label = None
         self.review_progress = None
