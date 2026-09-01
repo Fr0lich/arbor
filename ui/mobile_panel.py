@@ -7,7 +7,7 @@ import qrcode
 from PIL import ImageTk
 
 from backend.mobile_server import MobileServer, get_local_ip
-from backend.tunnel import PinggyTunnel
+from backend.tunnel import PinggyTunnel, CloudflareTunnel
 
 
 class MobilePanel:
@@ -135,6 +135,54 @@ class MobilePanel:
             font=("Segoe UI", 9),
             cursor="hand2"
         ).pack(anchor="w", pady=(0, 15))
+
+        # Tunnel Provider choice
+        self.provider_frame = tk.Frame(self.setup_frame, bg="#ffffff")
+        self.provider_frame.pack(anchor="w", pady=(0, 15), padx=20)
+
+        tk.Label(
+            self.provider_frame,
+            text="Tunnel Provider:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#ffffff",
+            fg="#1b4332",
+        ).pack(anchor="w", pady=(0, 2))
+
+        self.provider_choice = tk.StringVar(value="cloudflare")
+
+        self.rb_cloudflare = tk.Radiobutton(
+            self.provider_frame,
+            text="Cloudflare (Recommended for Firewalls)",
+            variable=self.provider_choice,
+            value="cloudflare",
+            bg="#ffffff",
+            font=("Segoe UI", 9),
+            cursor="hand2"
+        )
+        self.rb_cloudflare.pack(anchor="w")
+
+        self.rb_pinggy = tk.Radiobutton(
+            self.provider_frame,
+            text="Pinggy / SSH",
+            variable=self.provider_choice,
+            value="pinggy",
+            bg="#ffffff",
+            font=("Segoe UI", 9),
+            cursor="hand2"
+        )
+        self.rb_pinggy.pack(anchor="w")
+
+        def _on_network_choice_changed(*args):
+            if self.network_choice.get() == "local":
+                self.rb_cloudflare.config(state=tk.DISABLED)
+                self.rb_pinggy.config(state=tk.DISABLED)
+                self.provider_frame.pack_forget()
+            else:
+                self.rb_cloudflare.config(state=tk.NORMAL)
+                self.rb_pinggy.config(state=tk.NORMAL)
+                self.provider_frame.pack(anchor="w", pady=(0, 15), padx=20, before=self.start_btn)
+
+        self.network_choice.trace_add("write", _on_network_choice_changed)
 
         self.start_btn = ttk.Button(
             self.setup_frame,
@@ -400,8 +448,12 @@ class MobilePanel:
             )
             self.log(f"Local LAN fallback: http://{local_ip}:{self.port}")
 
-            # Start localhost.run tunnel in background
-            self.tunnel = PinggyTunnel(self.port)
+            # Start tunnel in background based on provider choice
+            if getattr(self, 'provider_choice', tk.StringVar(value='cloudflare')).get() == 'cloudflare':
+                self.tunnel = CloudflareTunnel(self.port)
+            else:
+                self.tunnel = PinggyTunnel(self.port)
+
             self.tunnel.start(self._on_tunnel_ready, self._on_tunnel_status)
         else:
             # Local only mode
