@@ -4533,7 +4533,8 @@ class ObjectProgramUI(
                 for w in self.image_container.winfo_children():
                     w.destroy()
 
-            self.no_image_label.pack_forget()
+            if hasattr(self, "no_image_label") and self.no_image_label.winfo_exists():
+                self.no_image_label.pack_forget()
 
             if not skip_heavy:
                 self.images_missing_label.config(text="")
