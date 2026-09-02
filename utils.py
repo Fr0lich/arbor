@@ -28,6 +28,19 @@ def sanitize_df_for_excel(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     df_safe = df.copy()
+    if df_safe.columns.duplicated().any():
+        seen = {}
+        new_cols = []
+        for col in df_safe.columns:
+            c_str = str(col).strip()
+            if c_str in seen:
+                seen[c_str] += 1
+                new_cols.append(f"{c_str}.{seen[c_str]}")
+            else:
+                seen[c_str] = 0
+                new_cols.append(c_str)
+        df_safe.columns = new_cols
+
     dangerous_starts = ('=', '+', '-', '@', '\t', '\r')
 
     # ILLEGAL_CHARACTERS_RE pattern from openpyxl/cell/cell.py

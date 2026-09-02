@@ -564,8 +564,15 @@ class LayoutSettingsMixin:
         self.dark_mode_active = not self.dark_mode_active
         self.apply_theme()
 
-    def _ensure_theme_widgets_registered(self):
-        if getattr(self, "_theme_widgets_registered", False):
+    def _ensure_theme_widgets_registered(self, force=False):
+        if getattr(self, "_theme_widgets_registered", False) and not force:
+            # Filter out any destroyed widgets to prevent leaks
+            self._theme_sb_top_widgets = [w for w in getattr(self, "_theme_sb_top_widgets", []) if w.winfo_exists()]
+            self._theme_sb_bottom_widgets = [w for w in getattr(self, "_theme_sb_bottom_widgets", []) if w.winfo_exists()]
+            self._theme_loc_vert_widgets = [w for w in getattr(self, "_theme_loc_vert_widgets", []) if w.winfo_exists()]
+            self._theme_loc_horiz_widgets = [w for w in getattr(self, "_theme_loc_horiz_widgets", []) if w.winfo_exists()]
+            self._theme_loc_labels = [w for w in getattr(self, "_theme_loc_labels", []) if w.winfo_exists()]
+            self._theme_loc_checkbuttons = [w for w in getattr(self, "_theme_loc_checkbuttons", []) if w.winfo_exists()]
             return
         
         self._theme_sb_top_widgets = []
@@ -579,8 +586,9 @@ class LayoutSettingsMixin:
             if not parent:
                 return
             for child in parent.winfo_children():
-                lst.append(child)
-                collect_widgets(child, lst)
+                if child.winfo_exists():
+                    lst.append(child)
+                    collect_widgets(child, lst)
                 
         if hasattr(self, "sb_top"):
             collect_widgets(self.sb_top, self._theme_sb_top_widgets)
@@ -610,7 +618,7 @@ class LayoutSettingsMixin:
 
         if hasattr(self, "image_toolbar") and hasattr(self.image_toolbar, "set_dark_mode"):
             self.image_toolbar.set_dark_mode(self.dark_mode_active)
-        self._ensure_theme_widgets_registered()
+        self._ensure_theme_widgets_registered(force=True)
         style = ttk.Style(self.root)
         theme_name = config.get_theme()
 
@@ -702,7 +710,7 @@ class LayoutSettingsMixin:
                       indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
 
             style.configure("Treeview", background=field_bg, foreground=fg_color,
-                            fieldbackground=field_bg, bordercolor=border_color, rowheight=28)
+                            fieldbackground=field_bg, bordercolor=border_color, rowheight=sc(28))
             style.map("Treeview", background=[("selected", select_bg)])
 
             self.object_list.tag_configure("odd", background="#212622")
@@ -911,7 +919,7 @@ class LayoutSettingsMixin:
                       indicatorbackground=[("pressed", bg_color), ("selected", select_bg)])
 
             style.configure("Treeview", background=field_bg, foreground=fg_color,
-                            fieldbackground=field_bg, bordercolor=border_color, rowheight=28)
+                            fieldbackground=field_bg, bordercolor=border_color, rowheight=sc(28))
             style.map("Treeview", background=[("selected", select_bg)])
             style.configure("Treeview.Heading", background="#e9ece5", foreground=fg_color, bordercolor=border_color)
             style.map("Treeview.Heading", background=[("active", select_bg)])
@@ -1113,6 +1121,11 @@ class LayoutSettingsMixin:
         if hasattr(self, "location_panel_horiz") and hasattr(self.location_panel_horiz, "set_dark_mode"):
             try:
                 self.location_panel_horiz.set_dark_mode(self.dark_mode_active)
+            except Exception:
+                pass
+        if hasattr(self, "image_panel") and hasattr(self.image_panel, "set_dark_mode"):
+            try:
+                self.image_panel.set_dark_mode(self.dark_mode_active)
             except Exception:
                 pass
 

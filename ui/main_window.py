@@ -2333,6 +2333,14 @@ class ObjectProgramUI(
 #---- def redo
 
     def redo(self, event=None):
+        widget = self.root.focus_get()
+        if isinstance(widget, tk.Text):
+            try:
+                widget.edit_redo()
+            except tk.TclError:
+                pass
+            return "break"
+
         oid = self.app.current_object_id
         if not oid:
             return
@@ -3878,27 +3886,26 @@ class ObjectProgramUI(
                 self.loaded_problem_states[col] = new
 
         # -------- LOCATION --------
-        if not skip_heavy:
-            loc_changed = False
+        loc_changed = False
+        for col, var in self.location_vars.items():
+            old = utils.fmt_pandas_val(self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
+            new = var.get()
+
+            if old != new:
+                ensure_undo()
+                self.app.df_obs.at[oid, col] = new
+                if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                    self._cached_obs_dict[oid][col] = new
+                loc_changed = True
+
+        if loc_changed:
+            loc_changed_fields.append("Location")
+            loc_vals = []
             for col, var in self.location_vars.items():
-                old = utils.fmt_pandas_val(self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
-                new = var.get()
-
-                if old != new:
-                    ensure_undo()
-                    self.app.df_obs.at[oid, col] = new
-                    if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
-                        self._cached_obs_dict[oid][col] = new
-                    loc_changed = True
-
-            if loc_changed:
-                loc_changed_fields.append("Location")
-                loc_vals = []
-                for col, var in self.location_vars.items():
-                    val = var.get()
-                    if val:
-                        loc_vals.append(f"{col}: {val}")
-                loc_changed_values.append(", ".join(loc_vals))
+                val = var.get()
+                if val:
+                    loc_vals.append(f"{col}: {val}")
+            loc_changed_values.append(", ".join(loc_vals))
 
         # -------- REVIEWED --------
         old = bool(self.app.df_obs.at[oid, REVIEWED_COLUMN]) if oid in self.app.df_obs.index and REVIEWED_COLUMN in self.app.df_obs.columns else False
@@ -4906,12 +4913,12 @@ class ObjectProgramUI(
             self.root.after(50, lambda: self._autosave_tick(skip_commit=True))
 
     def on_close(self):
+        self.commit_current_object()
         if self.app.dirty:
             res = messagebox.askyesnocancel("Unsaved changes", "Save before exiting?")
             if res is None:
                 return
             if res:
-                self.commit_current_object()
                 try:
                     self._write_excel(self.app.output_path)
                 except Exception as e:
@@ -4946,6 +4953,12 @@ class ObjectProgramUI(
                 if show_log:
                     self.show_error_log_window(get_session_log_path())
                     return   # Let user close the log window; they can exit from there
+        except Exception:
+            pass
+
+        try:
+            from backend.task_queue import app_worker
+            app_worker.stop()
         except Exception:
             pass
 
@@ -6488,6 +6501,17 @@ class ObjectProgramUI(
         if getattr(self.object_list, "active_view", None) == "detailed":
             self.object_list._schedule_viewport_update()
 
+        # Re-synchronize treeview selection with current_object_id
+        if self.app.current_object_id and self.app.current_object_id in self.app.active_object_ids:
+            try:
+                curr_idx = self.app.active_object_ids.index(self.app.current_object_id)
+                self.object_list.selection_clear(0, tk.END)
+                self.object_list.selection_set(curr_idx)
+                self.object_list.see(curr_idx)
+                self.object_list.activate(curr_idx)
+            except Exception:
+                pass
+
 
     def update_filter_button_text(self):
         active = [k for k, v in self.filter_vars.items() if v.get()]
@@ -7392,6 +7416,7 @@ class ObjectProgramUI(
         oid = self.app.current_object_id
         if not oid:
             return
+        self.commit_current_object()
         was_reviewed = bool(self.reviewed_var.get())
         self._toggle_reviewed_for_id(oid)
         

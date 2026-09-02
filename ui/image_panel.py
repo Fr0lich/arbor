@@ -17,6 +17,7 @@ from config import sc
 from ui.image_toolbar import create_image_toolbar
 
 MAX_IMAGE_CACHE = 40
+MAX_PIL_CACHE = 15
 _NUMERIC_OID_PATTERN = re.compile(r"(\d+)")
 
 
@@ -59,6 +60,7 @@ class ImagePanel(ttk.Frame):
         self.image_render_cache = OrderedDict()
         self.original_pil_cache = OrderedDict()
         self.image_cache = OrderedDict()
+        self._pil_cache_lock = threading.Lock()
 
         self.image_zoom_factor = 1.0
         self.image_rotation_angle = 0
@@ -801,14 +803,14 @@ class ImagePanel(ttk.Frame):
                 if token != getattr(self, "_image_load_token", 0):
                     return
 
-                if path not in self.original_pil_cache:
-                    pil_img = Image.open(path)
-                    pil_img.load()
-                    self.original_pil_cache[path] = pil_img
-                    if len(self.original_pil_cache) > 40:
-                        self.original_pil_cache.popitem(last=False)
-
-                img = self.original_pil_cache[path].copy()
+                with self._pil_cache_lock:
+                    if path not in self.original_pil_cache:
+                        pil_img = Image.open(path)
+                        pil_img.load()
+                        self.original_pil_cache[path] = pil_img
+                        if len(self.original_pil_cache) > MAX_PIL_CACHE:
+                            self.original_pil_cache.popitem(last=False)
+                    img = self.original_pil_cache[path].copy()
 
                 prefs = config.load_prefs() or {}
                 advanced_prefs = prefs.get("advanced", {})
@@ -905,12 +907,12 @@ class ImagePanel(ttk.Frame):
         if token != self._image_load_token:
             return
 
-        if url not in self.original_pil_cache:
-            self.original_pil_cache[url] = img.copy()
-            if len(self.original_pil_cache) > 40:
-                self.original_pil_cache.popitem(last=False)
-
-        pil_img = self.original_pil_cache[url].copy()
+        with self._pil_cache_lock:
+            if url not in self.original_pil_cache:
+                self.original_pil_cache[url] = img.copy()
+                if len(self.original_pil_cache) > MAX_PIL_CACHE:
+                    self.original_pil_cache.popitem(last=False)
+            pil_img = self.original_pil_cache[url].copy()
         if self.image_rotation_angle != 0:
             pil_img = pil_img.rotate(self.image_rotation_angle, expand=True)
 

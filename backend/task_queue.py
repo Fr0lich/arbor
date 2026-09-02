@@ -6,28 +6,64 @@ class BackgroundWorker:
         self.task_queue = queue.Queue()
         self.root = None
         self._polling = False
+        self._lock = threading.Lock()
 
     def start(self, root):
         """Starts the main-thread polling loop using root.after()"""
-        if self._polling:
-            return
-        self.root = root
-        self._polling = True
+        with self._lock:
+            if self._polling:
+                return
+            self.root = root
+            self._polling = True
         self._poll()
 
+    def stop(self):
+        """Stops the main-thread polling loop and drains any pending tasks."""
+        with self._lock:
+            self._polling = False
+            self.root = None
+        # Drain the task queue
+        try:
+            while True:
+                self.task_queue.get_nowait()
+        except queue.Empty:
+            pass
+
     def _poll(self):
-        if not self._polling or not self.root:
+        with self._lock:
+            if not self._polling or not self.root:
+                return
+            root_ref = self.root
+
+        try:
+            if not root_ref.winfo_exists():
+                self.stop()
+                return
+        except Exception:
+            self.stop()
             return
 
         try:
             while True:
                 task = self.task_queue.get_nowait()
                 if callable(task):
-                    task()
+                    try:
+                        task()
+                    except Exception as e:
+                        print(f"Background task callback error: {e}")
         except queue.Empty:
             pass
         finally:
-            self.root.after(100, self._poll)
+            with self._lock:
+                should_reschedule = self._polling and self.root is not None
+            if should_reschedule:
+                try:
+                    if root_ref.winfo_exists():
+                        root_ref.after(100, self._poll)
+                    else:
+                        self.stop()
+                except Exception:
+                    self.stop()
 
     def run_in_background(self, func, callback=None, error_callback=None):
         """
@@ -44,7 +80,10 @@ class BackgroundWorker:
                 err = e
                 print(f"Background task error: {e}")
 
-            if self.root and self._polling:
+            with self._lock:
+                is_active = self.root is not None and self._polling
+
+            if is_active:
                 if err is not None and error_callback:
                     self.task_queue.put(lambda: error_callback(err))
                 elif callback:

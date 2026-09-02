@@ -161,6 +161,56 @@ class TestExcelArchitecture:
                     df_obs=df_obs
                 )
             assert "The file is open in Microsoft Excel" in str(exc_info.value)
-            # Ensure tmp file was removed
-            tmp_path_check = excel_path + ".tmp.xlsx"
-            assert not os.path.exists(tmp_path_check)
+            # Ensure no orphan tmp file matching .tmp.xlsx remains
+            remaining_tmps = [f for f in os.listdir(str(tmp_path)) if f.endswith(".tmp.xlsx")]
+            assert len(remaining_tmps) == 0
+
+    def test_scientific_notation_and_formula_errors_in_object_id(self):
+        from repository import _normalize_object_id_series
+        # Scientific notation: 1E+05 -> 100000, 1.0e+05 -> 100000, 1.5e3 -> 1500
+        # Preserving leading zeros: "00123" -> "00123"
+        # Alphanumeric: "BOT-1E5" -> "BOT-1E5"
+        # Formula errors: "#REF!", "#VALUE!" -> ""
+        oids = pd.Series(["1E+05", "1.0E+05", "1e5", "1.5e3", "00123", "BOT-1E5", "#REF!", "#VALUE!", None])
+        res = list(_normalize_object_id_series(oids))
+        assert res == ["100000", "100000", "100000", "1500", "00123", "BOT-1E5", "", "", ""]
+
+    def test_header_promotion_and_blank_columns(self):
+        from repository import _detect_and_promote_header, _clean_trailing_and_blank_columns
+        # DataFrame with leading title row and blank row before real header
+        raw_data = [
+            ["Museum Specimen Database 2026", None, None],
+            [None, None, None],
+            ["ObjectID", "Genus", "Unnamed: 2"],
+            ["1001", "Quercus", None],
+            ["1002", "Pinus", None],
+            [None, None, None]  # Trailing ghost row
+        ]
+        df = pd.DataFrame(raw_data)
+        df_promoted = _detect_and_promote_header(df, "ObjectID")
+        assert "ObjectID" in df_promoted.columns
+        assert "Genus" in df_promoted.columns
+
+        df_cleaned = _clean_trailing_and_blank_columns(df_promoted)
+        assert "Unnamed: 2" not in df_cleaned.columns
+        assert len(df_cleaned) == 2
+        assert list(df_cleaned["ObjectID"]) == ["1001", "1002"]
+
+    def test_duplicate_column_deduplication(self):
+        from repository import _deduplicate_columns
+        from utils import sanitize_df_for_excel
+        import sqlite3
+
+        df_dups = pd.DataFrame([["val1", "val2", "val3"]], columns=["Comment", "Comment", "Comment"])
+        deduped = _deduplicate_columns(df_dups)
+        assert list(deduped.columns) == ["Comment", "Comment.1", "Comment.2"]
+
+        # sanitize_df_for_excel should not crash on duplicate columns
+        safe_df = sanitize_df_for_excel(df_dups)
+        assert safe_df is not None
+
+        # SQLite to_sql should succeed with deduplicated columns
+        conn = sqlite3.connect(":memory:")
+        deduped.to_sql("test_table", conn, index=False)
+        read_back = pd.read_sql("SELECT * FROM test_table", conn)
+        assert len(read_back) == 1

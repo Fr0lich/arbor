@@ -19,6 +19,7 @@ import pandas as pd
 import config
 from utils import debug_error
 from ui.state import app_bus, DATABASE_UPDATED
+from repository import REVIEWED_COLUMN
 
 def sanitize_value(val):
     if pd.isna(val) or val is None:
@@ -308,6 +309,7 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
         if stacks:
             last_edit_time = stacks[-1].get("timestamp")
             if last_edit_time:
+                is_stale = False
                 try:
                     c_dt = pd.to_datetime(client_timestamp)
                     if c_dt.tzinfo is None or c_dt.tz is None:
@@ -321,10 +323,50 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
                     else:
                         h_dt = h_dt.tz_convert("UTC")
 
-                    if c_dt < h_dt:
-                        return None, f"Conflict: Host has newer changes for {oid}"
+                    is_stale = (c_dt < h_dt)
                 except Exception:
-                    if str(client_timestamp) < str(last_edit_time):
+                    is_stale = (str(client_timestamp) < str(last_edit_time))
+
+                if is_stale:
+                    # Field-level conflict resolution: compare against baseline before host edits
+                    base_snapshot = None
+                    for snap in stacks:
+                        snap_time = snap.get("timestamp")
+                        if snap_time:
+                            try:
+                                s_dt = pd.to_datetime(snap_time)
+                                if s_dt.tzinfo is None or s_dt.tz is None:
+                                    s_dt = s_dt.tz_localize("local").tz_convert("UTC")
+                                else:
+                                    s_dt = s_dt.tz_convert("UTC")
+                                if s_dt > c_dt:
+                                    base_snapshot = snap
+                                    break
+                            except Exception:
+                                if str(snap_time) > str(client_timestamp):
+                                    base_snapshot = snap
+                                    break
+
+                    if base_snapshot is None:
+                        base_snapshot = stacks[-1]
+
+                    curr_reg = app_state.df_reg.loc[resolved_reg_oid].to_dict()
+                    resolved_obs_oid_check = _resolve_oid_in_df(app_state.df_obs, oid)
+                    curr_obs = app_state.df_obs.loc[resolved_obs_oid_check].to_dict() if (app_state.df_obs is not None and resolved_obs_oid_check is not None) else {}
+
+                    base_reg = base_snapshot.get("reg", {})
+                    base_obs = base_snapshot.get("obs", {})
+
+                    host_mod_reg = {k for k, v in curr_reg.items() if str(v) != str(base_reg.get(k, ""))}
+                    host_mod_obs = {k for k, v in curr_obs.items() if str(v) != str(base_obs.get(k, ""))}
+
+                    incoming_reg = set(reg_updates.keys()) if reg_updates else set()
+                    incoming_obs = set(obs_updates.keys()) if obs_updates else set()
+                    if reviewed is not None:
+                        incoming_obs.add(REVIEWED_COLUMN)
+
+                    # If incoming fields overlap with modified fields on the host, reject as conflict
+                    if (incoming_reg & host_mod_reg) or (incoming_obs & host_mod_obs):
                         return None, f"Conflict: Host has newer changes for {oid}"
 
     # 1. Snapshot for Undo Stack
@@ -492,6 +534,7 @@ class MobileServer:
         self.port = port
         self.on_edit_callback = on_edit_callback
         self.flask_app = Flask(__name__)
+        self.flask_app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
         self.session_token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
         self.pin = ''.join(random.choices(string.digits, k=4))
         self.thread = None
@@ -1672,7 +1715,8 @@ self.addEventListener('fetch', (event) => {
                     client_timestamp=client_timestamp
                 )
                 if err:
-                    return jsonify({"error": err}), 404
+                    code = 409 if "Conflict" in err else 404
+                    return jsonify({"error": err}), code
 
                 self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
                 self.app_state.dirty = True
@@ -1725,6 +1769,7 @@ self.addEventListener('fetch', (event) => {
         @app.route('/api/object/<oid>/photo', methods=['POST'])
         def attach_photo(oid):
             oid = str(oid).strip()
+            safe_oid = re.sub(r'[^\w\-.]', '_', oid)
 
             if 'image' not in request.files and 'file' not in request.files:
                 return jsonify({"error": "No image payload found"}), 400
@@ -1756,17 +1801,43 @@ self.addEventListener('fetch', (event) => {
             _, ext = os.path.splitext(original_filename)
             if not ext:
                 ext = ".jpg"
+            ext = ext.lower()
+            allowed_exts = {'.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.bmp'}
+            if ext not in allowed_exts:
+                return jsonify({"error": f"Unsupported image file extension: {ext}"}), 400
 
-            new_filename = f"{oid}_{timestamp}{ext}"
+            new_filename = f"{safe_oid}_{timestamp}{ext}"
             file_path = os.path.join(photos_dir, new_filename)
 
             try:
                 file.save(file_path)
             except Exception as e:
                 debug_error("Photo Upload Error", str(e))
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
                 return jsonify({"error": "Failed to save image"}), 500
 
             with self.app_state.df_lock:
+                if self.app_state.df_reg is None:
+                    if os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                        except OSError:
+                            pass
+                    return jsonify({"error": "Database unloaded during upload"}), 400
+
+                reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
+                if reg_oid is None:
+                    if os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                        except OSError:
+                            pass
+                    return jsonify({"error": f"Object {oid} not found"}), 404
+
                 if getattr(self.app_state, 'df_photo', None) is None:
                     self.app_state.df_photo = pd.DataFrame(columns=["PhotoPath", "FileName", "Caption", "Timestamp"])
                     self.app_state.df_photo.index.name = "ObjectID"
@@ -1817,6 +1888,13 @@ self.addEventListener('fetch', (event) => {
                 self.app_state._log_records.append(log_entry)
                 self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
                 self.app_state.dirty = True
+
+            if hasattr(self.app_state, 'root_tk') and self.app_state.root_tk:
+                try:
+                    from ui.state import app_bus, DATABASE_UPDATED
+                    self.app_state.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
+                except Exception:
+                    pass
 
             return jsonify({
                 "success": True,
@@ -3467,6 +3545,12 @@ INDEX_TEMPLATE = """
           _reconnectDelay = 2000;
           startPing();
           flushQueuedMutations();
+          fetchStatus();
+          if (currentOid && dirtyFields.size === 0) {
+            loadRecord(currentOid, true);
+          } else if (!currentOid) {
+            fetchList();
+          }
         };
 
         _evtSource.onerror = function() {

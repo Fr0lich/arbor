@@ -441,10 +441,6 @@ class NewDatabaseWizard:
 
     def _on_cancel(self):
         if messagebox.askyesno("Cancel Setup", "Are you sure you want to exit the database setup wizard?", parent=self.win):
-            try:
-                self.win.unbind_all("<MouseWheel>")
-            except Exception:
-                pass
             self.win.destroy()
 
     def _validate_step(self, step):

@@ -100,3 +100,54 @@ def test_accordion_card_toggle_behavior(tk_root):
     _toggle()
     assert body_frame.winfo_manager() == "pack"
     assert toggle_lbl.cget("text") == "▼"
+
+
+def test_redo_with_text_widget(tk_root):
+    from ui.main_window import ObjectProgramUI
+    main = MagicMock()
+    main.root = tk_root
+    text = tk.Text(tk_root, undo=True)
+    text.pack()
+    main.root.focus_get = MagicMock(return_value=text)
+
+    # Call unbound method redo passing main mock
+    res = ObjectProgramUI.redo(main)
+    assert res == "break"
+    # Ensure app redo stack was not touched
+    assert not main.app.redo_stacks.get.called
+
+
+def test_location_persisted_even_with_skip_heavy(tk_root):
+    from ui.main_window import ObjectProgramUI
+    from models import AppState
+
+    # Construct minimal app
+    app = AppState()
+    app.current_object_id = "101"
+    app.df_reg = pd.DataFrame({"Genus": ["Quercus"]}, index=pd.Index(["101"], name="ObjectID"))
+    app.df_obs = pd.DataFrame({"Cabinet": ["Cab-A"], "Reviewed": [False]}, index=pd.Index(["101"], name="ObjectID"))
+    app.output_path = "dummy.xlsx"
+
+    main = MagicMock()
+    main.app = app
+    main.root = tk_root
+    main.initializing = False
+    main.reg_entries = {}
+    main.reg_vars = {}
+    main.location_vars = {"Cabinet": tk.StringVar(value="Cab-B")}  # User modified Cabinet
+    main.reviewed_var = tk.BooleanVar(value=False)
+    main.problem_vars = {}
+    main.loaded_problem_states = {}
+    main.reg_field_widgets = {}
+    main.app.active_object_ids = ["101"]
+    main.app.redo_stacks = {}
+    main.app.undo_stacks = {}
+    main._cached_obs_dict = {"101": {"Cabinet": "Cab-A", "Reviewed": False}}
+    main._is_navigating = True  # Simulating active arrow navigation
+
+    # Run commit_current_object with skip_heavy=True
+    ObjectProgramUI.commit_current_object(main, skip_heavy=True)
+
+    # Location edit MUST be persisted in df_obs even when skip_heavy=True
+    assert app.df_obs.at["101", "Cabinet"] == "Cab-B"
+    assert app.dirty is True

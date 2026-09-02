@@ -4,6 +4,8 @@ import os
 import shutil
 import sqlite3
 import datetime
+import time
+import re
 from utils import debug_error
 
 # ---------------------------------------------------------------------------
@@ -17,6 +19,10 @@ ONLINE_EXISTS_COLUMN = "Online_Images_Exist"
 
 _TRUTHY_SET = frozenset({"true", "1", "yes", "y", "t", "on", 1, 1.0, True})
 _FALSY_SET = frozenset({"false", "0", "no", "n", "f", "off", "", 0, 0.0, False})
+_SCIENTIFIC_REGEX = re.compile(r'^[+-]?(?:\d+\.?\d*|\.\d+)[eE][+-]?\d+$')
+_FORMULA_ERRORS = frozenset({
+    '#REF!', '#VALUE!', '#N/A', '#DIV/0!', '#NAME?', '#NUM!', '#NULL!', '#CALC!', '#SPILL!'
+})
 
 
 def _coerce_bool_series(series: pd.Series, default: bool = False) -> pd.Series:
@@ -54,8 +60,27 @@ def _coerce_bool_series(series: pd.Series, default: bool = False) -> pd.Series:
     return res
 
 
+def _normalize_single_id(val: str) -> str:
+    """Normalize a single ObjectID string: strips float .0, converts scientific notation, strips formula errors."""
+    if not val or val in _FORMULA_ERRORS:
+        return ""
+    # Strip trailing .0 if integer representation
+    if val.endswith(".0") and (val[:-2].isdigit() or (val.startswith("-") and val[1:-2].isdigit())):
+        return val[:-2]
+    # Check scientific notation (e.g. 1E+05, 1.0e+05)
+    if _SCIENTIFIC_REGEX.match(val):
+        try:
+            f = float(val)
+            if f.is_integer():
+                return str(int(f))
+            return f"{f:f}".rstrip('0').rstrip('.')
+        except (ValueError, OverflowError):
+            pass
+    return val
+
+
 def _normalize_object_id_series(series: pd.Series) -> pd.Series:
-    """Normalize ObjectID series preserving leading zeros and stripping integer float noise (.0)."""
+    """Normalize ObjectID series preserving leading zeros, expanding scientific notation, and stripping float .0 noise."""
     if series is None or series.empty:
         return series
 
@@ -64,12 +89,81 @@ def _normalize_object_id_series(series: pd.Series) -> pd.Series:
     s = series.fillna("").astype(str).str.strip()
     s = s.replace(['nan', 'None', '<NA>'], '')
 
-    # Vectorized stripping of .0 if it represents an integer
-    # e.g. "123.0" -> "123", but "12.0.0" shouldn't be altered here
-    mask_dot_zero = s.str.endswith(".0") & s.str.slice(0, -2).str.lstrip("-").str.isdigit()
-    s.loc[mask_dot_zero] = s.loc[mask_dot_zero].str.slice(0, -2)
+    return s.map(_normalize_single_id)
 
-    return s
+
+def _deduplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure all column names in a DataFrame are unique, stripped strings."""
+    if df is None or df.empty:
+        return df
+    cols = []
+    seen = {}
+    for col in df.columns:
+        c_str = str(col).strip()
+        if c_str in seen:
+            seen[c_str] += 1
+            cols.append(f"{c_str}.{seen[c_str]}")
+        else:
+            seen[c_str] = 0
+            cols.append(c_str)
+    if cols != list(df.columns):
+        df = df.copy(deep=False)
+        df.columns = cols
+    return df
+
+
+def _detect_and_promote_header(df: pd.DataFrame, expected_col: str = "ObjectID", max_scan_rows: int = 15) -> pd.DataFrame:
+    """Detect if the true header row is offset downward due to empty or title rows."""
+    if df is None or df.empty:
+        return df
+
+    # Case-insensitive check if expected_col is already in columns
+    col_map = {str(c).strip().lower(): c for c in df.columns}
+    target_lower = expected_col.strip().lower()
+    if target_lower in col_map:
+        if col_map[target_lower] != expected_col:
+            df = df.rename(columns={col_map[target_lower]: expected_col})
+        return df
+
+    # Scan the first max_scan_rows to find where expected_col appears
+    for row_idx in range(min(len(df), max_scan_rows)):
+        row_vals = [str(v).strip().lower() for v in df.iloc[row_idx].values if pd.notna(v)]
+        if target_lower in row_vals:
+            new_header = [str(c).strip() if pd.notna(c) else f"Unnamed_{i}" for i, c in enumerate(df.iloc[row_idx])]
+            df_promoted = df.iloc[row_idx + 1:].copy()
+            df_promoted.columns = new_header
+            df_promoted.reset_index(drop=True, inplace=True)
+            col_map_new = {str(c).strip().lower(): c for c in df_promoted.columns}
+            if target_lower in col_map_new and col_map_new[target_lower] != expected_col:
+                df_promoted = df_promoted.rename(columns={col_map_new[target_lower]: expected_col})
+            return df_promoted
+
+    return df
+
+
+def _clean_trailing_and_blank_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop unnamed columns that are entirely blank and drop ghost rows that are completely empty."""
+    if df is None or df.empty:
+        return df
+
+    # 1. Drop unnamed/blank columns that contain no data
+    cols_to_drop = []
+    for col in df.columns:
+        col_str = str(col).strip()
+        if col_str.startswith("Unnamed:") or col_str.startswith("Unnamed_") or col_str == "":
+            s = df[col]
+            if s.isna().all() or (s.fillna("").astype(str).str.strip() == "").all():
+                cols_to_drop.append(col)
+    if cols_to_drop:
+        df = df.drop(columns=cols_to_drop)
+
+    # 2. Drop completely empty ghost rows (all NaN or all empty string)
+    if not df.empty:
+        is_empty_row = df.isna() | (df.astype(str).apply(lambda col: col.str.strip() == ""))
+        df = df.loc[~is_empty_row.all(axis=1)].copy()
+        df.reset_index(drop=True, inplace=True)
+
+    return df
 
 
 def _open_excel_reader(path: str) -> pd.ExcelFile:
@@ -290,6 +384,7 @@ class ExcelRepository:
                 df_reg = pd.read_excel(xls, sheet_name=matched_reg)
             else:
                 df_reg = pd.read_excel(xls, sheet_name=target_reg)  # Let it raise with original target name
+            df_reg = _clean_trailing_and_blank_columns(_deduplicate_columns(_detect_and_promote_header(df_reg, "ObjectID")))
 
             # Read Observation sheet
             target_obs = sheets.get("obs", "Observation")
@@ -298,6 +393,7 @@ class ExcelRepository:
                 df_obs = pd.read_excel(xls, sheet_name=matched_obs)
             else:
                 df_obs = pd.DataFrame(columns=["ObjectID"])
+            df_obs = _clean_trailing_and_blank_columns(_deduplicate_columns(_detect_and_promote_header(df_obs, "ObjectID")))
 
             # Read Photo sheet (optional)
             target_photo = sheets.get("photo", "Photo")
@@ -306,6 +402,8 @@ class ExcelRepository:
                 df_photo = pd.read_excel(xls, sheet_name=matched_photo)
             else:
                 df_photo = pd.DataFrame(columns=["ObjectID"])
+            if not df_photo.empty:
+                df_photo = _clean_trailing_and_blank_columns(_deduplicate_columns(_detect_and_promote_header(df_photo, "ObjectID")))
 
             # Ensure mapped registration fields exist before normalisation
             missing_mapped_fields = [col for col in mapped_fields if col not in df_reg.columns]
@@ -326,6 +424,8 @@ class ExcelRepository:
                 df_log = pd.read_excel(xls, sheet_name=matched_log)
             else:
                 df_log = pd.DataFrame()
+            if not df_log.empty:
+                df_log = _clean_trailing_and_blank_columns(_deduplicate_columns(df_log))
             
         df_log = _normalise_log_dataframe(df_log)
 
@@ -350,48 +450,55 @@ class SQLiteRepository:
         Returns:
             (df_reg, df_obs, df_photo, df_log) — four pandas DataFrames.
         """
-        conn = sqlite3.connect(path)
+        conn = sqlite3.connect(path, timeout=30.0)
         try:
-            df_reg = pd.read_sql("SELECT * FROM Registration", conn)
-        except Exception as e:
-            debug_error("load_sqlite: Registration table missing or unreadable", str(e))
-            df_reg = pd.DataFrame()
-
-        try:
-            df_obs = pd.read_sql("SELECT * FROM Observation", conn)
-        except Exception as e:
-            debug_error("load_sqlite: Observation table missing or unreadable", str(e))
-            df_obs = pd.DataFrame()
-
-        # Check optional tables using sqlite_master
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Photo'")
-        photo_exists = cursor.fetchone() is not None
-
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Log'")
-        log_exists = cursor.fetchone() is not None
-
-        if photo_exists:
             try:
-                df_photo = pd.read_sql("SELECT * FROM Photo", conn)
+                conn.execute("PRAGMA journal_mode = WAL;")
+            except sqlite3.OperationalError:
+                pass
+            conn.execute("PRAGMA busy_timeout = 30000;")
+
+            try:
+                df_reg = pd.read_sql("SELECT * FROM Registration", conn)
             except Exception as e:
-                debug_error("load_sqlite: Photo table unreadable", str(e))
+                debug_error("load_sqlite: Registration table missing or unreadable", str(e))
+                df_reg = pd.DataFrame()
+
+            try:
+                df_obs = pd.read_sql("SELECT * FROM Observation", conn)
+            except Exception as e:
+                debug_error("load_sqlite: Observation table missing or unreadable", str(e))
+                df_obs = pd.DataFrame()
+
+            # Check optional tables using sqlite_master
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Photo'")
+            photo_exists = cursor.fetchone() is not None
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Log'")
+            log_exists = cursor.fetchone() is not None
+
+            if photo_exists:
+                try:
+                    df_photo = pd.read_sql("SELECT * FROM Photo", conn)
+                except Exception as e:
+                    debug_error("load_sqlite: Photo table unreadable", str(e))
+                    df_photo = pd.DataFrame(columns=["ObjectID"])
+            else:
                 df_photo = pd.DataFrame(columns=["ObjectID"])
-        else:
-            df_photo = pd.DataFrame(columns=["ObjectID"])
 
-        if log_exists:
-            try:
-                df_log = pd.read_sql("SELECT * FROM Log", conn)
-            except Exception as e:
-                debug_error("load_sqlite: Log table unreadable", str(e))
+            if log_exists:
+                try:
+                    df_log = pd.read_sql("SELECT * FROM Log", conn)
+                except Exception as e:
+                    debug_error("load_sqlite: Log table unreadable", str(e))
+                    df_log = pd.DataFrame()
+            else:
                 df_log = pd.DataFrame()
-        else:
-            df_log = pd.DataFrame()
-            
-        df_log = _normalise_log_dataframe(df_log)
-
-        conn.close()
+                
+            df_log = _normalise_log_dataframe(df_log)
+        finally:
+            conn.close()
 
         # Normalise both main dataframes
         df_reg, df_obs = _normalise_dataframes(df_reg, df_obs, config)
@@ -416,22 +523,23 @@ class SQLiteRepository:
             df_photo: Photo dataframe.
             df_log:   Log dataframe.
         """
-        conn = sqlite3.connect(path)
+        conn = sqlite3.connect(path, timeout=30.0)
         try:
             # Optimize transaction overhead and SQLite performance pragmas
             conn.execute("PRAGMA journal_mode = WAL;")
             conn.execute("PRAGMA synchronous = NORMAL;")
+            conn.execute("PRAGMA busy_timeout = 30000;")
 
-            df_reg_save = df_reg.copy()
+            df_reg_save = _deduplicate_columns(df_reg.copy())
             if "ObjectID" not in df_reg_save.columns:
                 df_reg_save = df_reg_save.reset_index()
 
-            df_obs_save = df_obs.copy()
+            df_obs_save = _deduplicate_columns(df_obs.copy())
             if "ObjectID" not in df_obs_save.columns:
                 df_obs_save = df_obs_save.reset_index()
 
-            df_photo_save = df_photo.copy()
-            if "ObjectID" not in df_photo_save.columns:
+            df_photo_save = _deduplicate_columns(df_photo.copy()) if df_photo is not None else pd.DataFrame()
+            if not df_photo_save.empty and "ObjectID" not in df_photo_save.columns:
                 df_photo_save = df_photo_save.reset_index()
 
             with conn:
@@ -634,7 +742,8 @@ class SQLiteRepository:
         parent_dir = os.path.dirname(os.path.abspath(excel_path))
         if parent_dir:
             os.makedirs(parent_dir, exist_ok=True)
-        tmp_path = excel_path + ".tmp.xlsx"
+        temp_id = uuid.uuid4().hex[:8]
+        tmp_path = f"{excel_path}.{temp_id}.tmp.xlsx"
         try:
             with pd.ExcelWriter(tmp_path, engine="openpyxl", mode="w") as writer:
                 for i, (df, sheet, label) in enumerate(steps, 1):
@@ -671,19 +780,34 @@ class SQLiteRepository:
                 except Exception as style_err:
                     debug_error("export_to_excel styling", str(style_err))
 
-            # Atomic rename: destination is replaced only after a full, valid write
-            os.replace(tmp_path, excel_path)
-        except PermissionError as perm_err:
+            # Atomic rename with retry loop for transient locks (OneDrive, Dropbox, antivirus)
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    os.replace(tmp_path, excel_path)
+                    break
+                except (PermissionError, OSError) as e:
+                    if attempt == max_retries - 1:
+                        try:
+                            if os.path.exists(tmp_path):
+                                os.remove(tmp_path)
+                        except OSError:
+                            pass
+                        raise PermissionError(
+                            f"Cannot save to '{excel_path}'. The file is open in Microsoft Excel or locked by OneDrive/Dropbox. Please close it or wait for sync to complete and retry."
+                        ) from e
+                    time.sleep(0.15 * (2 ** attempt))
+        except PermissionError:
             try:
-                os.remove(tmp_path)
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
             except OSError:
                 pass
-            raise PermissionError(
-                f"Cannot save to '{excel_path}'. The file is open in Microsoft Excel or another program. Please close it and retry."
-            ) from perm_err
+            raise
         except Exception:
             try:
-                os.remove(tmp_path)
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
             except OSError:
                 pass
             raise
