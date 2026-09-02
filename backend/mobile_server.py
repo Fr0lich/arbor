@@ -111,14 +111,25 @@ def compute_status_flags(reg_dict, obs_dict, history_set, oid, prob_cols=None, p
 
     if prob_cols:
         for p_col in prob_cols:
+            obs_val = False
             val = ""
             if obs_dict is not None and p_col in obs_dict:
                 val = sanitize_value(obs_dict.get(p_col)).lower()
             elif reg_dict is not None and p_col in reg_dict:
                 val = sanitize_value(reg_dict.get(p_col)).lower()
             if val in ("true", "1", "yes", "t", "x"):
+                obs_val = True
+
+            auto_val = False
+            target_field = problem_to_field.get(p_col)
+            if target_field and reg_dict is not None and target_field in reg_dict:
+                raw_val = reg_dict.get(target_field)
+                is_missing = (pd.isna(raw_val) or (isinstance(raw_val, str) and raw_val.strip() == ""))
+                is_unk = is_unknown(raw_val)
+                auto_val = is_missing and not is_unk
+
+            if obs_val or auto_val:
                 has_flags = True
-                target_field = problem_to_field.get(p_col)
                 if target_field:
                     active_problem_fields.add(target_field)
                 elif p_col.endswith("_Problem"):
@@ -133,9 +144,17 @@ def compute_status_flags(reg_dict, obs_dict, history_set, oid, prob_cols=None, p
             merged.update(obs_dict)
         for k, v in merged.items():
             if k.endswith("_Problem") or k in ("Images_Problem", "Images_Missing", "MissingLabel"):
-                if sanitize_value(v).lower() in ("true", "1", "yes", "t", "x"):
+                obs_val = sanitize_value(v).lower() in ("true", "1", "yes", "t", "x")
+                auto_val = False
+                target_field = problem_to_field.get(k)
+                if target_field and reg_dict is not None and target_field in reg_dict:
+                    raw_val = reg_dict.get(target_field)
+                    is_missing = (pd.isna(raw_val) or (isinstance(raw_val, str) and raw_val.strip() == ""))
+                    is_unk = is_unknown(raw_val)
+                    auto_val = is_missing and not is_unk
+
+                if obs_val or auto_val:
                     has_flags = True
-                    target_field = problem_to_field.get(k)
                     if target_field:
                         active_problem_fields.add(target_field)
                     elif k.endswith("_Problem"):
