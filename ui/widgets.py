@@ -1935,11 +1935,15 @@ class ArborTextField(tk.Frame):
 
     def _sync_var_to_text(self, *args):
         if self.multiline and self.winfo_exists():
+            current_text = self.text_widget.get("1.0", "end-1c")
+            new_text = self.variable.get() or ""
+            if current_text == new_text:
+                return
             state = self.text_widget.cget("state")
             if state == "disabled":
                 self.text_widget.configure(state="normal")
             self.text_widget.delete("1.0", tk.END)
-            self.text_widget.insert("1.0", self.variable.get())
+            self.text_widget.insert("1.0", new_text)
             if state == "disabled":
                 self.text_widget.configure(state="disabled")
 

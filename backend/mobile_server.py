@@ -307,8 +307,25 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
         stacks = app_state.undo_stacks.get(str(oid), [])
         if stacks:
             last_edit_time = stacks[-1].get("timestamp")
-            if last_edit_time and client_timestamp < last_edit_time:
-                return None, f"Conflict: Host has newer changes for {oid}"
+            if last_edit_time:
+                try:
+                    c_dt = pd.to_datetime(client_timestamp)
+                    if c_dt.tzinfo is None or c_dt.tz is None:
+                        c_dt = c_dt.tz_localize("local").tz_convert("UTC")
+                    else:
+                        c_dt = c_dt.tz_convert("UTC")
+
+                    h_dt = pd.to_datetime(last_edit_time)
+                    if h_dt.tzinfo is None or h_dt.tz is None:
+                        h_dt = h_dt.tz_localize("local").tz_convert("UTC")
+                    else:
+                        h_dt = h_dt.tz_convert("UTC")
+
+                    if c_dt < h_dt:
+                        return None, f"Conflict: Host has newer changes for {oid}"
+                except Exception:
+                    if str(client_timestamp) < str(last_edit_time):
+                        return None, f"Conflict: Host has newer changes for {oid}"
 
     # 1. Snapshot for Undo Stack
     old_reg = app_state.df_reg.loc[resolved_reg_oid].to_dict()
@@ -754,20 +771,18 @@ self.addEventListener('fetch', (event) => {
     // Stale-While-Revalidate strategy
     event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
-            const fetchPromise = fetch(event.request).then((networkResponse) => {
-                if (networkResponse && networkResponse.ok && !networkResponse.redirected) {
-                    const clonedResponse = networkResponse.clone();
-                    event.waitUntil(
+            if (cachedResponse) {
+                fetch(event.request).then((networkResponse) => {
+                    if (networkResponse && networkResponse.ok && !networkResponse.redirected) {
+                        const clonedResponse = networkResponse.clone();
                         caches.open(CACHE_NAME).then((cache) => {
                             cache.put(event.request, clonedResponse);
-                        })
-                    );
-                }
-                return networkResponse;
-            }).catch(() => {
-                // Ignore fetch errors if offline
-            });
-            return cachedResponse || fetchPromise;
+                        });
+                    }
+                }).catch(() => {});
+                return cachedResponse;
+            }
+            return fetch(event.request);
         })
     );
 });
@@ -1362,14 +1377,15 @@ self.addEventListener('fetch', (event) => {
 
         @app.route('/api/object/<oid>/history', methods=['GET'])
         def get_object_history(oid):
-            if not getattr(self.app_state, 'historical_dbs', None):
-                return jsonify({"historical_data": {}})
-
             oid = str(oid).strip()
             suggestions = {}
 
             with self.app_state.df_lock:
-                for db in self.app_state.historical_dbs:
+                historical_dbs = getattr(self.app_state, 'historical_dbs', None)
+                if not historical_dbs:
+                    return jsonify({"historical_data": {}})
+
+                for db in historical_dbs:
                     db_name = db.get("name", "Unknown DB")
                     reg_by_id = db.get("reg_by_id")
 

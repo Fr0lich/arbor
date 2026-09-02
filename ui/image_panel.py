@@ -81,7 +81,7 @@ class ImagePanel(ttk.Frame):
 
         # Subscribe to app_bus events
         if self.app_bus:
-            self.app_bus.subscribe("OBJECT_LOADED", self._on_bus_object_loaded)
+            self.app_bus.subscribe_managed(self, "OBJECT_LOADED", self._on_bus_object_loaded)
 
         # Register keybindings if manager provided
         if self.keybindings and hasattr(self.keybindings, "bind_image_shortcuts"):

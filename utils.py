@@ -34,17 +34,24 @@ def sanitize_df_for_excel(df: pd.DataFrame) -> pd.DataFrame:
     ILLEGAL_CHARACTERS_RE = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
 
     for col in df_safe.columns:
-        if df_safe[col].dtype.name == 'category':
-            df_safe[col] = df_safe[col].astype('object')
+        s = df_safe[col]
+        if s.dtype.name == 'category':
+            df_safe[col] = s.astype('object')
+            s = df_safe[col]
 
         # Fast path for timezone aware series
-        if hasattr(df_safe[col].dtype, "tz") and df_safe[col].dtype.tz is not None:
-            df_safe[col] = df_safe[col].dt.tz_localize(None)
+        if hasattr(s.dtype, "tz") and s.dtype.tz is not None:
+            df_safe[col] = s.dt.tz_localize(None)
+            continue
+
+        # Skip numeric and boolean columns (cannot contain injection strings, XML control chars, or timezones)
+        if pd.api.types.is_numeric_dtype(s) or pd.api.types.is_bool_dtype(s):
+            continue
 
         def sanitize_val(x):
-            # 1. Remove timezone from timestamps (if mixed types)
-            if isinstance(x, pd.Timestamp) and x.tz is not None:
-                x = x.tz_localize(None)
+            # 1. Remove timezone from timestamps and datetimes
+            if isinstance(x, (pd.Timestamp, datetime)) and getattr(x, "tzinfo", None) is not None:
+                x = x.tz_localize(None) if isinstance(x, pd.Timestamp) else x.replace(tzinfo=None)
 
             # 2. Sanitize strings
             if isinstance(x, str):

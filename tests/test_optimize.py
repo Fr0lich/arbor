@@ -65,7 +65,7 @@ class TestOptimize(unittest.TestCase):
         df_reg = pd.DataFrame({"ObjectID": ["1", "2"], "Genus": ["Genus1", "Genus2"]})
         df_obs = pd.DataFrame({"ObjectID": ["1", "2"], "Reviewed": [True, False]})
         df_photo = pd.DataFrame({"ObjectID": ["1"]})
-        df_log = pd.DataFrame({"Timestamp": ["2025-02-15"]})
+        df_log = pd.DataFrame({"Action": ["SAVE"]})
 
         data = {
             "df_reg": df_reg,

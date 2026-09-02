@@ -7,14 +7,17 @@ import pandas as pd
 from ui.state import app_bus, DATABASE_UPDATED
 from utils import debug_error
 from backend.task_queue import app_worker
+from contextlib import nullcontext
 from repository import ExcelRepository, REVIEWED_COLUMN
 
 class DatabaseOpsMixin:
     def _write_excel(self, path):
         """Save the current in-memory state to Excel directly."""
-        missing_problem_cols = [col for col in self.problem_columns if col not in self.app.df_obs.columns]
-        if missing_problem_cols:
-            self.app.df_obs[missing_problem_cols] = pd.DataFrame({col: False for col in missing_problem_cols}, index=self.app.df_obs.index)
+        with (getattr(self.app, 'df_lock', None) or nullcontext()):
+            if self.app.df_obs is not None:
+                missing_problem_cols = [col for col in self.problem_columns if col not in self.app.df_obs.columns]
+                if missing_problem_cols:
+                    self.app.df_obs[missing_problem_cols] = pd.DataFrame({col: False for col in missing_problem_cols}, index=self.app.df_obs.index)
 
         from repository import SQLiteRepository
         SQLiteRepository.export_to_excel(
@@ -50,13 +53,14 @@ class DatabaseOpsMixin:
             self.set_status_badge("saving", "💾 Saving…")
 
         try:
-            missing_problem_cols = [col for col in self.problem_columns if col not in self.app.df_obs.columns]
-            if missing_problem_cols:
-                self.app.df_obs[missing_problem_cols] = pd.DataFrame({col: False for col in missing_problem_cols}, index=self.app.df_obs.index)
-
             # P1-B: Hold df_lock for the minimum time needed to snapshot all frames.
             # The RLock allows the main thread to still acquire it recursively.
-            with self.app.df_lock:
+            with (getattr(self.app, 'df_lock', None) or nullcontext()):
+                if self.app.df_obs is not None:
+                    missing_problem_cols = [col for col in self.problem_columns if col not in self.app.df_obs.columns]
+                    if missing_problem_cols:
+                        self.app.df_obs[missing_problem_cols] = pd.DataFrame({col: False for col in missing_problem_cols}, index=self.app.df_obs.index)
+
                 df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
                 df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
                 df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None
@@ -91,6 +95,7 @@ class DatabaseOpsMixin:
         def _on_error(err):
             from utils import debug_error
             debug_error("_write_excel_async worker", str(err))
+            self.set_status_badge("error", "Save Failed")
             _on_done(False, str(err))
 
         app_worker.run_in_background(_do_save, lambda res: _on_done(True, None), error_callback=_on_error)
@@ -259,6 +264,12 @@ class DatabaseOpsMixin:
             self.app.df_photo.set_index("ObjectID", inplace=True)
 
         self.app.initial_df_obs = self.app.df_obs.copy()
+
+        # Clear undo/redo session history to prevent cross-database memory leaks and state pollution
+        if hasattr(self.app, "undo_stacks") and isinstance(self.app.undo_stacks, dict):
+            self.app.undo_stacks.clear()
+        if hasattr(self.app, "redo_stacks") and isinstance(self.app.redo_stacks, dict):
+            self.app.redo_stacks.clear()
 
         self.reg_by_id = self.app.df_reg
         self.obs_by_id = self.app.df_obs
@@ -591,6 +602,7 @@ class DatabaseOpsMixin:
             else:
                 from utils import debug_error
                 debug_error("save_session async", str(err))
+                self.set_status_badge("error", "Save Failed")
                 self.show_traceback_dialog(
                     "Save Error",
                     f"Failed to save to database: {err}",

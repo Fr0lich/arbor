@@ -220,7 +220,11 @@ def _normalise_dataframes(df_reg, df_obs, config):
             for col in ["ProblemDescription", "Comment", "Observation"]:
                 if col in df_reg.columns:
                     has_desc |= (df_reg[col].fillna("").astype(str).str.strip() != "")
-            df_obs["Other_problem"] = other_true_series & has_desc
+            if "ObjectID" in df_reg.columns and "ObjectID" in df_obs.columns:
+                desc_ids = set(df_reg.loc[has_desc, "ObjectID"].dropna().unique())
+                df_obs["Other_problem"] = other_true_series & df_obs["ObjectID"].isin(desc_ids)
+            else:
+                df_obs["Other_problem"] = other_true_series & has_desc
 
     return df_reg, df_obs
 
@@ -627,6 +631,9 @@ class SQLiteRepository:
         # Always write mode via a temp file → atomic rename (never leaves
         # the destination in a partially-written / corrupt state, and avoids
         # openpyxl append-mode which corrupts ZIP structure on overwrite).
+        parent_dir = os.path.dirname(os.path.abspath(excel_path))
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
         tmp_path = excel_path + ".tmp.xlsx"
         try:
             with pd.ExcelWriter(tmp_path, engine="openpyxl", mode="w") as writer:
@@ -640,22 +647,27 @@ class SQLiteRepository:
 
                 # Apply worksheet styling & autosizing
                 try:
+                    from openpyxl.utils import get_column_letter
                     for sheet_name, ws in writer.sheets.items():
                         # Freeze header row
                         ws.freeze_panes = "A2"
                         # Auto-filter
                         if ws.max_row > 1 and ws.max_column > 0:
                             ws.auto_filter.ref = ws.dimensions
-                        # Auto-size columns (sample up to 500 rows for speed)
-                        for col_cells in ws.columns:
-                            col_letter = col_cells[0].column_letter
-                            max_len = 0
-                            for cell in col_cells[:500]:
-                                val_str = str(cell.value or "")
-                                if "\n" in val_str:
-                                    val_str = max(val_str.split("\n"), key=len)
-                                max_len = max(max_len, len(val_str))
-                            ws.column_dimensions[col_letter].width = max(10, min(max_len + 3, 60))
+                        # Auto-size columns (sample up to 500 rows for speed without loading entire columns)
+                        max_sample_rows = min(ws.max_row, 500)
+                        if max_sample_rows > 0 and ws.max_column > 0:
+                            col_max_lens = {c: 0 for c in range(1, ws.max_column + 1)}
+                            for row_cells in ws.iter_rows(min_row=1, max_row=max_sample_rows):
+                                for col_idx, cell in enumerate(row_cells, 1):
+                                    val_str = str(cell.value or "")
+                                    if "\n" in val_str:
+                                        val_str = max(val_str.split("\n"), key=len)
+                                    if len(val_str) > col_max_lens[col_idx]:
+                                        col_max_lens[col_idx] = len(val_str)
+                            for col_idx, max_len in col_max_lens.items():
+                                col_letter = get_column_letter(col_idx)
+                                ws.column_dimensions[col_letter].width = max(10, min(max_len + 3, 60))
                 except Exception as style_err:
                     debug_error("export_to_excel styling", str(style_err))
 

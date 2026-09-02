@@ -1,4 +1,5 @@
 from ui.keybindings import KeybindingManager
+from contextlib import nullcontext
 """
 ui/main_window.py
 
@@ -1528,24 +1529,34 @@ class ObjectProgramUI(
 
     def push_undo_state(self):
         oid = self.app.current_object_id
-        if not oid:
+        if not oid or self.app.df_reg is None or self.app.df_obs is None:
             return
 
-        state = {
-            "reg": self.app.df_reg.loc[oid].copy(),
-            "obs": self.app.df_obs.loc[oid].copy(),
-        }
+        with (getattr(self.app, 'df_lock', None) or nullcontext()):
+            lookup_reg = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_reg.index else oid
+            lookup_obs = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_obs.index else oid
+
+            if lookup_reg not in self.app.df_reg.index or lookup_obs not in self.app.df_obs.index:
+                return
+
+            state = {
+                "reg": self.app.df_reg.loc[lookup_reg].copy(),
+                "obs": self.app.df_obs.loc[lookup_obs].copy(),
+            }
 
         from models import MAX_UNDO_PER_OBJECT  # P1-F: single constant, no scattered literals
         stack = self.app.undo_stacks.setdefault(oid, [])
-
         stack.append(state)
 
-        total = sum(len(v) for v in self.app.undo_stacks.values())
-
-        if total > 500:
-            for k in self.app.undo_stacks:
-                self.app.undo_stacks[k] = self.app.undo_stacks[k][-MAX_UNDO_PER_OBJECT:]
+        # Bound total tracked objects in dictionary to prevent memory leakage
+        MAX_TRACKED_OBJECTS = 100
+        if len(self.app.undo_stacks) > MAX_TRACKED_OBJECTS:
+            excess = len(self.app.undo_stacks) - MAX_TRACKED_OBJECTS
+            oldest_keys = list(self.app.undo_stacks.keys())[:excess]
+            for old_k in oldest_keys:
+                self.app.undo_stacks.pop(old_k, None)
+                if hasattr(self.app, "redo_stacks") and isinstance(self.app.redo_stacks, dict):
+                    self.app.redo_stacks.pop(old_k, None)
 
         if len(stack) > MAX_UNDO_PER_OBJECT:
             del stack[:10]
@@ -4797,18 +4808,32 @@ class ObjectProgramUI(
     def _apply_layout_preset(self, preset):
         # Conditionally call layout methods based on the preset payload
         if preset.get("show_list") is not None and hasattr(self, "toggle_list_panel"):
+            if hasattr(self, "show_list_var"):
+                self.show_list_var.set(bool(preset["show_list"]))
             self.toggle_list_panel()
         if preset.get("show_search") is not None and hasattr(self, "toggle_search_panel"):
+            if hasattr(self, "show_search_var"):
+                self.show_search_var.set(bool(preset["show_search"]))
             self.toggle_search_panel()
         if preset.get("location_in_center") is not None and hasattr(self, "toggle_location_panel"):
+            if hasattr(self, "location_center_var"):
+                self.location_center_var.set(bool(preset["location_in_center"]))
             self.toggle_location_panel()
         if preset.get("show_images") is not None and hasattr(self, "toggle_images_panel"):
+            if hasattr(self, "show_images_var"):
+                self.show_images_var.set(bool(preset["show_images"]))
             self.toggle_images_panel()
         if preset.get("show_reg") is not None and hasattr(self, "toggle_reg_panel"):
+            if hasattr(self, "show_reg_var"):
+                self.show_reg_var.set(bool(preset["show_reg"]))
             self.toggle_reg_panel()
         if preset.get("show_image_tools") is not None and hasattr(self, "toggle_image_tools"):
+            if hasattr(self, "show_image_tools_var"):
+                self.show_image_tools_var.set(bool(preset["show_image_tools"]))
             self.toggle_image_tools()
         if preset.get("show_bulk_edit") is not None and hasattr(self, "toggle_bulk_edit_btn"):
+            if hasattr(self, "show_bulk_edit_var"):
+                self.show_bulk_edit_var.set(bool(preset["show_bulk_edit"]))
             self.toggle_bulk_edit_btn()
 
         if preset.get("focus_mode") is not None or preset.get("focus_visibility") is not None:
@@ -7362,6 +7387,8 @@ class ObjectProgramUI(
             self.object_list._refresh_card_accent(oid)
 
     def mark_current_as_reviewed(self):
+        if getattr(self, "_is_navigating", False):
+            return
         oid = self.app.current_object_id
         if not oid:
             return
@@ -7398,8 +7425,9 @@ class ObjectProgramUI(
         new_val = not current
         
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if new_val else ""
-        self.app.df_obs.at[lookup_key, REVIEWED_COLUMN] = new_val
-        self.app.df_obs.at[lookup_key, REVIEWED_AT_COLUMN] = now
+        with (getattr(self.app, 'df_lock', None) or nullcontext()):
+            self.app.df_obs.at[lookup_key, REVIEWED_COLUMN] = new_val
+            self.app.df_obs.at[lookup_key, REVIEWED_AT_COLUMN] = now
 
         if getattr(self, "_cached_obs_dict", None) is not None and lookup_key in self._cached_obs_dict:
             self._cached_obs_dict[lookup_key][REVIEWED_COLUMN] = new_val

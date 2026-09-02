@@ -187,7 +187,7 @@ class LocationPanel(tk.Frame):
         
         # Subscribe to EventBus
         self.app_bus = app_bus
-        self.app_bus.subscribe("LOCATION_DATA_CHANGED", self._on_bus_data_changed)
+        self.app_bus.subscribe_managed(self, "LOCATION_DATA_CHANGED", self._on_bus_data_changed)
 
         self.configure(bg=self.colors["bg"])
         self.build_ui()
