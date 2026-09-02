@@ -3096,6 +3096,7 @@ INDEX_TEMPLATE = """
     }
 
     let isLeavingApp = false;
+    let hasUnsavedChanges = false;
 
     function openLeaveModal() {
       openModal('leaveConfirmModal');
@@ -3116,6 +3117,14 @@ INDEX_TEMPLATE = """
         window.location.href = '/login';
       }
     }
+
+    window.addEventListener('beforeunload', (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved offline changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    });
 
     window.addEventListener('popstate', async (event) => {
       if (isLeavingApp) return;
@@ -3219,15 +3228,19 @@ INDEX_TEMPLATE = """
       stopPing();
       _missedPings = 0;
       _pingInterval = setInterval(async () => {
-        try {
-          const res = await fetch('/api/ping?token=' + encodeURIComponent(TOKEN));
-          if (res.ok) {
-            _missedPings = 0;
-          } else {
-            _missedPings++;
-          }
-        } catch (e) {
-          _missedPings++;
+        if (!navigator.onLine) {
+           _missedPings = 3; // Force immediate disconnect if browser knows it's offline
+        } else {
+           try {
+             const res = await fetch('/api/ping?token=' + encodeURIComponent(TOKEN));
+             if (res.ok) {
+               _missedPings = 0;
+             } else {
+               _missedPings++;
+             }
+           } catch (e) {
+             _missedPings++;
+           }
         }
 
         if (_missedPings >= 3) {
@@ -3334,6 +3347,7 @@ INDEX_TEMPLATE = """
       const store = tx.objectStore('queued_mutations');
       store.put(payload);
       tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
+      hasUnsavedChanges = true;
     }
 
     function getQueuedMutations() {
@@ -3364,6 +3378,7 @@ INDEX_TEMPLATE = """
       const req = tx.objectStore('queued_mutations').count();
       req.onsuccess = () => {
         const count = req.result;
+        hasUnsavedChanges = count > 0;
         const banner = document.getElementById('footerSyncStatus');
         if (count > 0 && (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline'))) {
           banner.innerHTML = `<span class="font-mono text-ember-dark font-medium">Offline (${count} edits queued)</span>`;
@@ -5201,13 +5216,16 @@ INDEX_TEMPLATE = """
 
     function triggerAutoSave() {
       const syncStatus = document.getElementById('footerSyncStatus');
-      syncStatus.innerHTML = '<span class="font-mono text-ember font-medium animate-pulse">Saving changes...</span>';
+      syncStatus.innerHTML = `<span class='flex items-center gap-1.5 font-mono text-ember font-medium animate-pulse'><svg class="animate-spin h-3 w-3 text-ember" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Saving changes...</span></span>`;
+      const btnRev = document.getElementById('btnMarkReviewed');
+      if (btnRev) btnRev.disabled = true;
       clearTimeout(autoSaveTimer);
       autoSaveTimer = setTimeout(saveCurrentEdits, 800);  // 800ms per guide requirement
     }
 
     async function saveCurrentEdits() {
       if (!currentOid) return;
+      const btnRev = document.getElementById('btnMarkReviewed');
 
       const regPayload = {};
       const obsPayload = {};
@@ -5256,6 +5274,7 @@ INDEX_TEMPLATE = """
 
       if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
         queueMutation(payload);
+        if (btnRev) btnRev.disabled = false;
 
         // Optimistically update UI models to prevent local interruption
         if (currentRecord) {
@@ -5270,6 +5289,7 @@ INDEX_TEMPLATE = """
 
         return;
       }
+      if (btnRev) btnRev.disabled = false;
 
       try {
         const res = await apiFetch('/api/update', {
@@ -5283,6 +5303,7 @@ INDEX_TEMPLATE = """
         }
 
         document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
+        if (btnRev) btnRev.disabled = false;
         const undoBtn = document.getElementById('btnMobileUndo');
         if (undoBtn) undoBtn.classList.remove('hidden');
         if (undoBtn) undoBtn.classList.add('flex');
@@ -5309,6 +5330,7 @@ INDEX_TEMPLATE = """
         }
       } catch (err) {
         queueMutation(payload);
+        if (btnRev) btnRev.disabled = false;
 
         // Optimistically update UI models to prevent local interruption
         if (currentRecord) {
