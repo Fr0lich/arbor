@@ -423,7 +423,7 @@ class MobilePanel:
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
         self.local_url_with_token = (
-            f"http://{local_ip}:{self.port}/?token={self.server.session_token}"
+            f"http://{local_ip}:{self.server.port}/?token={self.server.session_token}"
         )
 
         # Update DB info label
@@ -446,13 +446,13 @@ class MobilePanel:
                 font=("Segoe UI", 9, "italic"),
                 fg="#d97706",
             )
-            self.log(f"Local LAN fallback: http://{local_ip}:{self.port}")
+            self.log(f"Local LAN fallback: http://{local_ip}:{self.server.port}")
 
             # Start tunnel in background based on provider choice
             if getattr(self, 'provider_choice', tk.StringVar(value='cloudflare')).get() == 'cloudflare':
-                self.tunnel = CloudflareTunnel(self.port)
+                self.tunnel = CloudflareTunnel(self.server.port)
             else:
-                self.tunnel = PinggyTunnel(self.port)
+                self.tunnel = PinggyTunnel(self.server.port)
 
             self.tunnel.start(self._on_tunnel_ready, self._on_tunnel_status)
         else:
@@ -462,7 +462,7 @@ class MobilePanel:
             self.status_lbl.config(text="🟢 Local Server Ready", fg="#1b4332")
             self.switch_qr("local")
             self.log(
-                f"Server started in LAN-only mode: http://{local_ip}:{self.port}")
+                f"Server started in LAN-only mode: http://{local_ip}:{self.server.port}")
 
     def _is_alive(self):
         """Check if widget hierarchy is still valid and not destroyed."""
