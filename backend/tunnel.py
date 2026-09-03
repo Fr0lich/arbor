@@ -363,7 +363,8 @@ class CloudflareTunnel:
                     time.sleep(0.05)
                     continue
 
-                match = url_pattern.search(line)
+                clean_line = _ANSI_ESCAPE_RE.sub('', line).strip()
+                match = url_pattern.search(clean_line)
                 if match and not connected:
                     url = match.group(1)
                     self.public_url = url
