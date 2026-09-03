@@ -21,11 +21,15 @@ import pandas as pd
 import config
 from utils import debug_error
 from ui.state import app_bus, DATABASE_UPDATED
-from repository import REVIEWED_COLUMN
+from repository import REVIEWED_COLUMN, _normalise_log_dataframe
 
 def sanitize_value(val):
+    if isinstance(val, pd.Series):
+        val = val.iloc[0] if not val.empty else ""
     if pd.isna(val) or val is None:
         return ""
+    if isinstance(val, float) and val.is_integer():
+        return str(int(val))
     return str(val).strip()
 
 def is_unknown(value):
@@ -199,50 +203,93 @@ def compute_status_flags(reg_dict, obs_dict, history_set, oid, prob_cols=None, p
     }
 
 def coerce_type(val, dtype):
-    if pd.isna(val) or val is None:
-        return ""
+    if isinstance(val, pd.Series):
+        val = val.iloc[0] if not val.empty else ""
+    is_empty_or_na = pd.isna(val) or val is None or str(val).strip() == "" or str(val).strip().lower() in ("nan", "none", "<na>")
+
     if pd.api.types.is_bool_dtype(dtype):
+        if is_empty_or_na:
+            return False
         return str(val).strip().lower() in ("true", "1", "yes", "t")
+
     if pd.api.types.is_integer_dtype(dtype):
+        if is_empty_or_na:
+            return pd.NA if hasattr(pd, "NA") else 0
         try:
             return int(val)
-        except Exception:
-            return 0
+        except (ValueError, TypeError):
+            try:
+                f = float(val)
+                if not pd.isna(f) and f.is_integer():
+                    return int(f)
+                return int(f)
+            except Exception:
+                return 0
+
     if pd.api.types.is_float_dtype(dtype):
+        if is_empty_or_na:
+            return float("nan")
         try:
             return float(val)
         except Exception:
             return 0.0
+
+    if is_empty_or_na:
+        return ""
     return str(val).strip()
 
 def _apply_dataframe_updates(target_df, updates, changed_fields, changed_values, oid, fallback_df=None, allowed_columns=None):
-    if target_df is None or oid not in target_df.index or not updates:
+    if target_df is None or not updates or oid is None:
         return
+    resolved_oid = _resolve_oid_in_df(target_df, oid)
+    if resolved_oid is None and fallback_df is None:
+        return
+
     for k, v in updates.items():
-        if k in target_df.columns:
-            old_v = sanitize_value(target_df.at[oid, k])
-            new_v = sanitize_value(v)
-            if str(old_v) != str(new_v):
-                coerced = coerce_type(new_v, target_df[k].dtype)
-                target_df.at[oid, k] = coerced
-                changed_fields.append(k)
-                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+        df_to_update = None
+        target_key = None
+        if resolved_oid is not None and k in target_df.columns:
+            df_to_update = target_df
+            target_key = resolved_oid
         elif fallback_df is not None and k in fallback_df.columns:
             fallback_oid = _resolve_oid_in_df(fallback_df, oid)
             if fallback_oid is not None:
-                old_v = sanitize_value(fallback_df.at[fallback_oid, k])
-                new_v = sanitize_value(v)
-                if str(old_v) != str(new_v):
-                    coerced = coerce_type(new_v, fallback_df[k].dtype)
-                    fallback_df.at[fallback_oid, k] = coerced
-                    changed_fields.append(k)
-                    changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
-        elif allowed_columns is not None and k in allowed_columns:
+                df_to_update = fallback_df
+                target_key = fallback_oid
+
+        if df_to_update is not None and target_key is not None:
+            old_raw = df_to_update.at[target_key, k]
+            col_dtype = df_to_update[k].dtype
+            coerced = coerce_type(v, col_dtype)
+
+            old_is_na = pd.isna(old_raw) or old_raw is None or str(old_raw).strip().lower() in ("nan", "none", "<na>")
+            new_is_na = pd.isna(coerced) or coerced is None or str(coerced).strip().lower() in ("nan", "none", "<na>")
+
+            if old_is_na and new_is_na:
+                is_diff = False
+            elif old_is_na != new_is_na:
+                is_diff = True
+            elif pd.api.types.is_bool_dtype(col_dtype):
+                is_diff = bool(old_raw) != bool(coerced)
+            elif pd.api.types.is_numeric_dtype(col_dtype):
+                is_diff = (old_raw != coerced)
+            else:
+                is_diff = str(old_raw).strip() != str(coerced).strip()
+
+            if is_diff:
+                old_v = sanitize_value(old_raw)
+                new_v = sanitize_value(coerced)
+                df_to_update.at[target_key, k] = coerced
+                changed_fields.append(k)
+                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+        elif allowed_columns is not None and k in allowed_columns and resolved_oid is not None:
             new_v = sanitize_value(v)
             if new_v:
-                # Initialize new column across all rows with empty string to avoid NaN corruption
-                target_df[k] = ""
-                target_df.at[oid, k] = new_v
+                # Initialize new column across all rows safely with dtype awareness
+                is_bool_col = any(term in k.lower() for term in ("reviewed", "missing", "problem", "exist"))
+                target_df[k] = False if is_bool_col else ""
+                coerced = coerce_type(new_v, target_df[k].dtype)
+                target_df.at[resolved_oid, k] = coerced
                 changed_fields.append(k)
                 changed_values.append(f'{k}: "" -> "{new_v}"')
 
@@ -250,9 +297,17 @@ def _resolve_oid_in_df(df, oid):
     """Safely find matching index key in DataFrame supporting int, str, and float index dtypes."""
     if df is None or oid is None:
         return None
+    if isinstance(oid, pd.Series):
+        oid = oid.iloc[0] if not oid.empty else None
+        if oid is None:
+            return None
+    if pd.isna(oid):
+        return None
+    s_oid = str(oid).strip()
+    if not s_oid or s_oid.lower() in ("nan", "none", "<na>"):
+        return None
     if oid in df.index:
         return oid
-    s_oid = str(oid).strip()
     if s_oid in df.index:
         return s_oid
     if s_oid.isdigit():
@@ -264,14 +319,15 @@ def _resolve_oid_in_df(df, oid):
             pass
     try:
         f_oid = float(s_oid)
-        if f_oid.is_integer():
-            i_oid = int(f_oid)
-            if i_oid in df.index:
-                return i_oid
-            if str(i_oid) in df.index:
-                return str(i_oid)
-        if f_oid in df.index:
-            return f_oid
+        if not pd.isna(f_oid):
+            if f_oid.is_integer():
+                i_oid = int(f_oid)
+                if i_oid in df.index:
+                    return i_oid
+                if str(i_oid) in df.index:
+                    return str(i_oid)
+            if f_oid in df.index:
+                return f_oid
     except Exception:
         pass
     return None
@@ -314,11 +370,13 @@ def _apply_unvalidated_updates(app_state, oid, unvalidated_sources, changed_fiel
 
     if isinstance(unvalidated_sources, list):
         new_rows = []
+        seen_new_fields = set()
         for item in unvalidated_sources:
             if isinstance(item, dict):
                 f_name = str(item.get("field", "") or item.get("Field_Name", "")).strip()
                 comment = str(item.get("comment", "") or item.get("Unvalidated_Comment", "")).strip()
                 if f_name:
+                    seen_new_fields.add(f_name)
                     new_rows.append({"ObjectID": oid_str, "Field_Name": f_name, "Unvalidated_Comment": comment})
                     old_c = old_rows.get(f_name, "")
                     if old_c != comment:
@@ -326,6 +384,15 @@ def _apply_unvalidated_updates(app_state, oid, unvalidated_sources, changed_fiel
                             changed_fields.append(f"Unvalidated_{f_name}")
                         if changed_values is not None:
                             changed_values.append(f'Unvalidated_{f_name}: "{old_c}" -> "{comment}"')
+
+        # Detect deleted unvalidated comments
+        for old_f, old_c in old_rows.items():
+            if old_f not in seen_new_fields and old_c:
+                if changed_fields is not None:
+                    changed_fields.append(f"Unvalidated_{old_f}")
+                if changed_values is not None:
+                    changed_values.append(f'Unvalidated_{old_f}: "{old_c}" -> ""')
+
         if new_rows:
             new_df = pd.DataFrame(new_rows)
             app_state.df_unvalidated = pd.concat([app_state.df_unvalidated, new_df], ignore_index=True)
@@ -347,6 +414,10 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     if resolved_reg_oid is None:
         return None, f"Object {oid} not found in active database"
 
+
+    effective_reg_updates = reg_updates
+    effective_obs_updates = obs_updates
+    effective_reviewed = reviewed
 
     # Conflict check
     if client_timestamp and hasattr(app_state, 'undo_stacks'):
@@ -393,7 +464,7 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
                                     break
 
                     if base_snapshot is None:
-                        base_snapshot = stacks[-1]
+                        base_snapshot = stacks[0]
 
                     curr_reg = app_state.df_reg.loc[resolved_reg_oid].to_dict()
                     resolved_obs_oid_check = _resolve_oid_in_df(app_state.df_obs, oid)
@@ -402,25 +473,60 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
                     base_reg = base_snapshot.get("reg", {})
                     base_obs = base_snapshot.get("obs", {})
 
+                    # Fields modified on the host between baseline and current state
                     host_mod_reg = {k for k, v in curr_reg.items() if str(v) != str(base_reg.get(k, ""))}
                     host_mod_obs = {k for k, v in curr_obs.items() if str(v) != str(base_obs.get(k, ""))}
 
-                    # Only check incoming fields where the value actually mutated from current state
-                    incoming_reg = {k for k, v in reg_updates.items() if str(v) != str(curr_reg.get(k, ""))} if reg_updates else set()
-                    incoming_obs = {k for k, v in obs_updates.items() if str(v) != str(curr_obs.get(k, ""))} if obs_updates else set()
-                    if reviewed is not None:
-                        curr_rev_raw = curr_obs.get("Reviewed", False)
-                        curr_rev_bool = (
-                            str(curr_rev_raw).strip().lower() in ("true", "1", "yes", "t")
-                            if isinstance(curr_rev_raw, (str, int, bool))
-                            else bool(curr_rev_raw)
-                        )
-                        if bool(reviewed) != curr_rev_bool:
-                            incoming_obs.add(REVIEWED_COLUMN)
+                    # Client deltas: fields actually mutated by client relative to its baseline
+                    client_delta_reg = {}
+                    if reg_updates:
+                        for k, v in reg_updates.items():
+                            base_v = base_reg.get(k, curr_reg.get(k, ""))
+                            if str(v) != str(base_v):
+                                client_delta_reg[k] = v
 
-                    # If mutated incoming fields overlap with modified fields on the host, reject as conflict
-                    if (incoming_reg & host_mod_reg) or (incoming_obs & host_mod_obs):
+                    client_delta_obs = {}
+                    if obs_updates:
+                        for k, v in obs_updates.items():
+                            base_v = base_obs.get(k, curr_obs.get(k, ""))
+                            if str(v) != str(base_v):
+                                client_delta_obs[k] = v
+
+                    client_mod_reg = set(client_delta_reg.keys())
+                    client_mod_obs = set(client_delta_obs.keys())
+
+                    if reviewed is not None:
+                        base_rev_raw = base_obs.get("Reviewed", curr_obs.get("Reviewed", False))
+                        base_rev_bool = (
+                            str(base_rev_raw).strip().lower() in ("true", "1", "yes", "t")
+                            if isinstance(base_rev_raw, (str, int, bool))
+                            else bool(base_rev_raw)
+                        )
+                        if bool(reviewed) != base_rev_bool:
+                            client_mod_obs.add(REVIEWED_COLUMN)
+                        else:
+                            effective_reviewed = None
+
+                    # A true conflict occurs if both sides modified the same field to DIFFERENT values
+                    conflict_reg = set()
+                    for k in (client_mod_reg & host_mod_reg):
+                        if str(reg_updates.get(k, "")) != str(curr_reg.get(k, "")):
+                            conflict_reg.add(k)
+
+                    conflict_obs = set()
+                    for k in (client_mod_obs & host_mod_obs):
+                        if k == REVIEWED_COLUMN:
+                            curr_rev_bool = str(curr_obs.get("Reviewed", False)).strip().lower() in ("true", "1", "yes", "t")
+                            if bool(reviewed) != curr_rev_bool:
+                                conflict_obs.add(k)
+                        elif str(obs_updates.get(k, "")) != str(curr_obs.get(k, "")):
+                            conflict_obs.add(k)
+
+                    if conflict_reg or conflict_obs:
                         return None, f"Conflict: Host has newer changes for {oid}"
+
+                    effective_reg_updates = client_delta_reg
+                    effective_obs_updates = client_delta_obs
 
     # 1. Snapshot for Undo Stack
     old_reg = app_state.df_reg.loc[resolved_reg_oid].to_dict()
@@ -441,7 +547,7 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     changed_values = []
 
     # 2. Apply registration updates
-    _apply_dataframe_updates(app_state.df_reg, reg_updates, changed_fields, changed_values, resolved_reg_oid, allowed_columns=allowed_reg_cols if allowed_reg_cols else None)
+    _apply_dataframe_updates(app_state.df_reg, effective_reg_updates, changed_fields, changed_values, resolved_reg_oid, allowed_columns=allowed_reg_cols if allowed_reg_cols else None)
 
     # 3. Ensure df_obs has a matching row and apply observation updates
     if app_state.df_obs is not None:
@@ -456,7 +562,7 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
             app_state.df_obs = pd.concat([app_state.df_obs, new_obs_row])
             resolved_obs_oid = target_obs_oid
 
-        _apply_dataframe_updates(app_state.df_obs, obs_updates, changed_fields, changed_values, resolved_obs_oid, fallback_df=app_state.df_reg, allowed_columns=allowed_obs_cols if allowed_obs_cols else None)
+        _apply_dataframe_updates(app_state.df_obs, effective_obs_updates, changed_fields, changed_values, resolved_obs_oid, fallback_df=app_state.df_reg, allowed_columns=allowed_obs_cols if allowed_obs_cols else None)
 
     # 3b. Apply Unvalidated Sources Updates
     if unvalidated_updates is not None:
@@ -472,8 +578,8 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     )
     current_reviewed_bool = old_reviewed_bool
 
-    if reviewed is not None:
-        is_reviewed_bool = bool(reviewed)
+    if effective_reviewed is not None:
+        is_reviewed_bool = bool(effective_reviewed)
         current_reviewed_bool = is_reviewed_bool
         if is_reviewed_bool != old_reviewed_bool:
             if app_state.df_obs is not None and resolved_obs_oid is not None and resolved_obs_oid in app_state.df_obs.index:
@@ -518,24 +624,31 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     return edit_summary, None
 
 def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fields, changed_values):
-    # Lazy-build and cache the name sets — invalidate if active config identity changes
+    # Lazy-build and cache the name sets — invalidate if active config or dataset changes
     curr_cfg = getattr(app_state, "config", None)
-    cfg_id = id(curr_cfg) if curr_cfg else None
-    if getattr(app_state, '_audit_set_cache_cfg_id', None) != cfg_id or not getattr(app_state, '_audit_set_cache', None):
+    excel_path = getattr(app_state, "excel_path", None)
+    ui_sec = curr_cfg.get("ui_sections", {}) if curr_cfg and isinstance(curr_cfg, dict) else {}
+    cfg_sig = (
+        id(curr_cfg) if curr_cfg else None,
+        excel_path,
+        len(ui_sec.get("location", [])) if isinstance(ui_sec, dict) and isinstance(ui_sec.get("location"), list) else 0,
+        len(ui_sec.get("problems", [])) if isinstance(ui_sec, dict) and isinstance(ui_sec.get("problems"), list) else 0
+    )
+    if getattr(app_state, '_audit_set_cache_sig', None) != cfg_sig or not getattr(app_state, '_audit_set_cache', None):
         _loc = {"building", "room", "cabinet", "shelf", "drawer", "box", "location", "aisle", "unittray", "tray", "barcode"}
         _prob = set()
         if curr_cfg and isinstance(curr_cfg, dict) and "ui_sections" in curr_cfg:
-            ui_sec = curr_cfg["ui_sections"]
-            if "location" in ui_sec and isinstance(ui_sec["location"], list):
-                for l_item in ui_sec["location"]:
+            ui_sec_data = curr_cfg["ui_sections"]
+            if "location" in ui_sec_data and isinstance(ui_sec_data["location"], list):
+                for l_item in ui_sec_data["location"]:
                     if isinstance(l_item, dict) and "name" in l_item:
                         _loc.add(l_item["name"].lower())
-            if "problems" in ui_sec and isinstance(ui_sec["problems"], list):
-                for p_item in ui_sec["problems"]:
+            if "problems" in ui_sec_data and isinstance(ui_sec_data["problems"], list):
+                for p_item in ui_sec_data["problems"]:
                     if isinstance(p_item, dict) and "name" in p_item:
                         _prob.add(p_item["name"].lower())
         app_state._audit_set_cache = (_loc, _prob)
-        app_state._audit_set_cache_cfg_id = cfg_id
+        app_state._audit_set_cache_sig = cfg_sig
     location_names, problem_names = app_state._audit_set_cache
 
     loc_fields = []
@@ -1566,11 +1679,27 @@ self.addEventListener('fetch', (event) => {
                     if obs_oid is not None:
                         obs_row = self.app_state.df_obs.loc[[obs_oid]].copy()
 
-                photo_row = None
-                if self.app_state.df_photo is not None:
-                    photo_oid = _resolve_oid_in_df(self.app_state.df_photo, oid)
-                    if photo_oid is not None:
-                        photo_row = self.app_state.df_photo.loc[[photo_oid]].copy()
+                local_endpoints = []
+                if self.app_state.df_photo is not None and not self.app_state.df_photo.empty:
+                    df_p = self.app_state.df_photo
+                    p_oid = _resolve_oid_in_df(df_p, oid)
+                    if p_oid is not None and p_oid in df_p.index:
+                        p_rows = df_p.loc[[p_oid]]
+                        for _, pr in p_rows.iterrows():
+                            fn = str(pr.get("FileName", "")).strip()
+                            if fn and f"/api/photo/{fn}" not in local_endpoints:
+                                local_endpoints.append(f"/api/photo/{fn}")
+
+                unvalidated_sources = []
+                if getattr(self.app_state, "df_unvalidated", None) is not None and not self.app_state.df_unvalidated.empty:
+                    df_u = self.app_state.df_unvalidated
+                    if "ObjectID" in df_u.columns:
+                        u_matches = df_u[df_u["ObjectID"].astype(str).str.strip() == str(oid).strip()]
+                        for _, u_row in u_matches.iterrows():
+                            f_name = str(u_row.get("Field_Name", "")).strip()
+                            comm = str(u_row.get("Unvalidated_Comment", "")).strip()
+                            if f_name:
+                                unvalidated_sources.append({"field": f_name, "comment": comm})
 
             reg_dict = {}
             for col in reg_row.columns:
@@ -1645,16 +1774,6 @@ self.addEventListener('fetch', (event) => {
                 prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
             problem_to_field = get_problem_to_field_map(self.app_state.config)
             flags = compute_status_flags(reg_dict, obs_dict, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
-            unvalidated_sources = []
-            if getattr(self.app_state, "df_unvalidated", None) is not None and not self.app_state.df_unvalidated.empty:
-                df_u = self.app_state.df_unvalidated
-                if "ObjectID" in df_u.columns:
-                    u_matches = df_u[df_u["ObjectID"].astype(str).str.strip() == str(oid).strip()]
-                    for _, u_row in u_matches.iterrows():
-                        f_name = str(u_row.get("Field_Name", "")).strip()
-                        comm = str(u_row.get("Unvalidated_Comment", "")).strip()
-                        if f_name:
-                            unvalidated_sources.append({"field": f_name, "comment": comm})
 
             return jsonify({
                 "id": str(oid),
@@ -1670,10 +1789,10 @@ self.addEventListener('fetch', (event) => {
                 "flagged_issues": flagged_issues,
                 "unvalidated_sources": unvalidated_sources,
                 "images": {
-                    "preferred_source": "online",
+                    "preferred_source": "local" if local_endpoints else "online",
                     "online_urls": online_urls,
-                    "local_endpoints": [],
-                    "photo_count": len(online_urls)
+                    "local_endpoints": local_endpoints,
+                    "photo_count": len(local_endpoints) + len(online_urls)
                 }
             })
 
@@ -1739,10 +1858,10 @@ self.addEventListener('fetch', (event) => {
                     for i in range(len(self.app_state._log_records) - 1, -1, -1):
                         rec = self.app_state._log_records[i]
                         # Only pop if it was created in the current active session
-                        if str(rec.get("ObjectID", "")) == str(oid) and rec.get("Action") in ["MOBILE_EDIT", "REVIEWED"] and rec.get("_session_id") == self.session_id:
+                        if str(rec.get("ObjectID", "")) == str(oid) and rec.get("Action") in ["MOBILE_EDIT", "REVIEWED", "NOT_REVIEWED"] and rec.get("_session_id") == self.session_id:
                             self.app_state._log_records.pop(i)
                             break
-                    self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+                    self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
 
                 self.app_state.dirty = True
 
@@ -1798,7 +1917,9 @@ self.addEventListener('fetch', (event) => {
             reviewed = data.get('reviewed')
             updates = data.get('observation') or data.get('updates') or {}
             reg_updates = data.get('registration') or {}
-            unval_updates = data.get('unvalidated_sources') or data.get('unvalidated')
+            unval_updates = data.get('unvalidated_sources')
+            if unval_updates is None:
+                unval_updates = data.get('unvalidated')
 
             client_timestamp = data.get('timestamp')
             with self.app_state.df_lock:
@@ -1815,7 +1936,7 @@ self.addEventListener('fetch', (event) => {
                     code = 409 if "Conflict" in err else 404
                     return jsonify({"error": err}), code
 
-                self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+                self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
                 self.app_state.dirty = True
                 self.app_state._mobile_last_edited_oid = oid
 
@@ -1879,10 +2000,18 @@ self.addEventListener('fetch', (event) => {
             photos_dir = os.path.join(db_folder, "photos")
             file_path = os.path.join(photos_dir, safe_filename_clean)
 
-            if not os.path.exists(file_path):
+            try:
+                canonical_photos_dir = os.path.abspath(photos_dir)
+                canonical_file_path = os.path.abspath(file_path)
+                # Ensure path stays within photos directory and is a regular file
+                if not canonical_file_path.startswith(canonical_photos_dir + os.sep) and canonical_file_path != canonical_photos_dir:
+                    return jsonify({"error": "Invalid filename"}), 400
+                if not os.path.isfile(canonical_file_path):
+                    return jsonify({"error": "Photo not found"}), 404
+                return send_file(canonical_file_path)
+            except Exception as e:
+                debug_error("Photo serving error", str(e))
                 return jsonify({"error": "Photo not found"}), 404
-
-            return send_file(file_path)
 
         @app.route('/api/object/<oid>/photo', methods=['POST'])
         def attach_photo(oid):
@@ -2009,7 +2138,7 @@ self.addEventListener('fetch', (event) => {
                 if getattr(self.app_state, "_mobile_session_id", None):
                     log_entry["_session_id"] = self.app_state._mobile_session_id
                 self.app_state._log_records.append(log_entry)
-                self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+                self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
                 self.app_state.dirty = True
 
             if self.root_tk:
@@ -2049,7 +2178,9 @@ self.addEventListener('fetch', (event) => {
                     obs_updates = update.get('observation') or {}
                     reg_updates = update.get('registration') or {}
                     client_timestamp = update.get('timestamp')
-                    unval_updates = update.get('unvalidated_sources') or update.get('unvalidated')
+                    unval_updates = update.get('unvalidated_sources')
+                    if unval_updates is None:
+                        unval_updates = update.get('unvalidated')
 
                     _, err = _execute_record_update(
                         self.app_state, oid, reg_updates, obs_updates, reviewed,
@@ -2066,7 +2197,7 @@ self.addEventListener('fetch', (event) => {
                     self.broadcast_event("record_updated", {"id": oid})
 
                 if updated_ids:
-                    self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+                    self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
                     self.app_state.dirty = True
                     self.app_state._mobile_last_edited_oid = updated_ids[-1]
 
@@ -3063,6 +3194,8 @@ INDEX_TEMPLATE = """
     let searchQuery = '';
     let searchDebounceTimer = null;
     let autoSaveTimer = null;
+    let isSaving = false;
+    let hasPendingSave = false;
     let dirtyFields = new Set();
     let currentUnvalidatedMap = {};
     let wakeLockSentinel = null;
@@ -5652,127 +5785,143 @@ INDEX_TEMPLATE = """
         autoSaveTimer = null;
       }
       if (!currentOid) return;
-      const btnRev = document.getElementById('btnMarkReviewed');
 
-      const regPayload = {};
-      const obsPayload = {};
+      if (isSaving) {
+        hasPendingSave = true;
+        return;
+      }
+      isSaving = true;
+      hasPendingSave = false;
 
-      // Collect all dynamic inputs
-      document.querySelectorAll('[data-section="registration"]').forEach(input => {
-        const f = input.getAttribute('data-field');
-        if (dirtyFields.has(f)) {
-          regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
-        }
-      });
+      try {
+        const btnRev = document.getElementById('btnMarkReviewed');
 
-      document.querySelectorAll('[data-section="observation"]').forEach(input => {
-        const f = input.getAttribute('data-field');
-        if (dirtyFields.has(f)) {
-          if (input.type === 'checkbox') {
-            obsPayload[f] = input.checked;
-          } else {
-            obsPayload[f] = input.value;
+        const regPayload = {};
+        const obsPayload = {};
+
+        // Collect all dynamic inputs
+        document.querySelectorAll('[data-section="registration"]').forEach(input => {
+          const f = input.getAttribute('data-field');
+          if (dirtyFields.has(f)) {
+            regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
           }
-        }
-      });
+        });
 
-      // Merge problem flags
-      if (currentRecord && currentRecord.observation) {
-        Object.keys(currentRecord.observation).forEach(k => {
-          if (k.endsWith('_Problem') || k.startsWith('Unknown_')) {
-            if (dirtyFields.has(k)) {
-              obsPayload[k] = currentRecord.observation[k];
+        document.querySelectorAll('[data-section="observation"]').forEach(input => {
+          const f = input.getAttribute('data-field');
+          if (dirtyFields.has(f)) {
+            if (input.type === 'checkbox') {
+              obsPayload[f] = input.checked;
+            } else {
+              obsPayload[f] = input.value;
             }
           }
         });
-      }
 
-      // If nothing was dirtied, and review status wasn't checked, we technically don't need to save,
-      // but the server handles empty updates gracefully.
-      dirtyFields.clear();
-
-      const unvalSourcesList = Object.entries(currentUnvalidatedMap || {}).map(([field, comment]) => ({ field, comment }));
-
-      const payload = {
-        id: currentOid,
-        reviewed: isReviewed,
-        registration: regPayload,
-        observation: obsPayload,
-        unvalidated_sources: unvalSourcesList,
-        timestamp: new Date().toISOString()
-      };
-
-      if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
-        queueMutation(payload);
-        if (btnRev) btnRev.disabled = false;
-
-        // Optimistically update UI models to prevent local interruption
-        if (currentRecord) {
-          currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-          currentRecord.unvalidated_sources = unvalSourcesList;
-          updateReviewButtonUI();
+        // Merge problem flags
+        if (currentRecord && currentRecord.observation) {
+          Object.keys(currentRecord.observation).forEach(k => {
+            if (k.endsWith('_Problem') || k.startsWith('Unknown_')) {
+              if (dirtyFields.has(k)) {
+                obsPayload[k] = currentRecord.observation[k];
+              }
+            }
+          });
         }
 
-        const listItem = objectList.find(o => String(o.id) === String(currentOid));
-        if (listItem) {
-          listItem.review_status = isReviewed ? 'reviewed' : 'pending';
-          listItem.has_unvalidated = (unvalSourcesList.length > 0);
-        }
+        // If nothing was dirtied, and review status wasn't checked, we technically don't need to save,
+        // but the server handles empty updates gracefully.
+        dirtyFields.clear();
 
-        return;
-      }
-      if (btnRev) btnRev.disabled = false;
+        const unvalSourcesList = Object.entries(currentUnvalidatedMap || {}).map(([field, comment]) => ({ field, comment }));
 
-      try {
-        const res = await apiFetch('/api/update', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
+        const payload = {
+          id: currentOid,
+          reviewed: isReviewed,
+          registration: regPayload,
+          observation: obsPayload,
+          unvalidated_sources: unvalSourcesList,
+          timestamp: new Date().toISOString()
+        };
 
-        // Handle case where fetch returns a network error or empty object instead of throwing
-        if (!res || res.error === 'Failed to fetch' || (Object.keys(res).length === 0)) {
-           throw new Error('Network failure');
-        }
+        if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
+          queueMutation(payload);
+          if (btnRev) btnRev.disabled = false;
 
-        document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
-        if (btnRev) btnRev.disabled = false;
-        const undoBtn = document.getElementById('btnMobileUndo');
-        if (undoBtn) undoBtn.classList.remove('hidden');
-        if (undoBtn) undoBtn.classList.add('flex');
-
-        if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
-          if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
-          if (res.has_history !== undefined) currentRecord.has_history = res.has_history;
-          if (res.has_unknown !== undefined) currentRecord.has_unknown = res.has_unknown;
-          if (res.review_status !== undefined) currentRecord.review_status = res.review_status;
-          updateReviewButtonUI();
+          // Optimistically update UI models to prevent local interruption
+          if (currentRecord) {
+            currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+            currentRecord.unvalidated_sources = unvalSourcesList;
+            updateReviewButtonUI();
+          }
 
           const listItem = objectList.find(o => String(o.id) === String(currentOid));
           if (listItem) {
-            if (res.has_flags !== undefined) listItem.has_flags = res.has_flags;
-            if (res.has_history !== undefined) listItem.has_history = res.has_history;
-            if (res.has_unknown !== undefined) listItem.has_unknown = res.has_unknown;
-            if (res.review_status !== undefined) listItem.review_status = res.review_status;
+            listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+            listItem.has_unvalidated = (unvalSourcesList.length > 0);
           }
-        }
 
-        // Hide 'Edit saved' message if we determine we're actually disconnected
-        if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
-            document.getElementById('footerSyncStatusText').classList.add('hidden');
+          return;
         }
-      } catch (err) {
-        queueMutation(payload);
         if (btnRev) btnRev.disabled = false;
 
-        // Optimistically update UI models to prevent local interruption
-        if (currentRecord) {
-          currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-          updateReviewButtonUI();
-        }
+        try {
+          const res = await apiFetch('/api/update', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
 
-        const listItem = objectList.find(o => String(o.id) === String(currentOid));
-        if (listItem) {
-          listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+          // Handle case where fetch returns a network error or empty object instead of throwing
+          if (!res || res.error === 'Failed to fetch' || (Object.keys(res).length === 0)) {
+             throw new Error('Network failure');
+          }
+
+          document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
+          if (btnRev) btnRev.disabled = false;
+          const undoBtn = document.getElementById('btnMobileUndo');
+          if (undoBtn) undoBtn.classList.remove('hidden');
+          if (undoBtn) undoBtn.classList.add('flex');
+
+          if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
+            if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
+            if (res.has_history !== undefined) currentRecord.has_history = res.has_history;
+            if (res.has_unknown !== undefined) currentRecord.has_unknown = res.has_unknown;
+            if (res.review_status !== undefined) currentRecord.review_status = res.review_status;
+            updateReviewButtonUI();
+
+            const listItem = objectList.find(o => String(o.id) === String(currentOid));
+            if (listItem) {
+              if (res.has_flags !== undefined) listItem.has_flags = res.has_flags;
+              if (res.has_history !== undefined) listItem.has_history = res.has_history;
+              if (res.has_unknown !== undefined) listItem.has_unknown = res.has_unknown;
+              if (res.review_status !== undefined) listItem.review_status = res.review_status;
+            }
+          }
+
+          // Hide 'Edit saved' message if we determine we're actually disconnected
+          if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
+              document.getElementById('footerSyncStatusText').classList.add('hidden');
+          }
+        } catch (err) {
+          queueMutation(payload);
+          if (btnRev) btnRev.disabled = false;
+
+          // Optimistically update UI models to prevent local interruption
+          if (currentRecord) {
+            currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+            updateReviewButtonUI();
+          }
+
+          const listItem = objectList.find(o => String(o.id) === String(currentOid));
+          if (listItem) {
+            listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+          }
+        }
+      } finally {
+        isSaving = false;
+        if (hasPendingSave) {
+          hasPendingSave = false;
+          saveCurrentEdits();
         }
       }
     }

@@ -520,49 +520,74 @@ class RecentActivityDialog(tk.Toplevel):
         q = self.search_query.get().strip().lower()
         act_f = self.action_filter.get()
 
-        # Clear existing
-        self.tree_v.delete(*self.tree_v.get_children())
-        self.tree_e.delete(*self.tree_e.get_children())
+        def _oid_sort_key(oid_val):
+            s = str(oid_val).strip()
+            if s.isdigit():
+                return (0, int(s), s)
+            try:
+                f = float(s)
+                if f.is_integer():
+                    return (0, int(f), s)
+                return (1, f, s)
+            except ValueError:
+                return (2, 0, s.lower())
 
-        # Filter visited
-        filtered_visited = []
-        for oid, spec in getattr(self, "_raw_visited_data", []):
-            if not q or (q in oid.lower() or q in spec.lower()):
-                filtered_visited.append((oid, spec))
+        if self.active_tab_name == "visited":
+            # Clear existing visited
+            self.tree_v.delete(*self.tree_v.get_children())
 
-        # Sort visited
-        col_v = self.sort_state_visited["col"]
-        dir_v = self.sort_state_visited["direction"]
-        idx_v = 0 if col_v == "ObjectID" else 1
-        filtered_visited.sort(key=lambda r: r[idx_v], reverse=(dir_v == "desc"))
+            # Filter visited
+            filtered_visited = []
+            for oid, spec in getattr(self, "_raw_visited_data", []):
+                if not q or (q in oid.lower() or q in spec.lower()):
+                    filtered_visited.append((oid, spec))
 
-        # Render top 500 visited records
-        for i, (oid, spec) in enumerate(filtered_visited[:500]):
-            tag = "even" if i % 2 == 0 else "odd"
-            self.tree_v.insert("", "end", values=(oid, spec), tags=(tag,))
+            # Sort visited
+            col_v = self.sort_state_visited["col"]
+            dir_v = self.sort_state_visited["direction"]
+            if col_v == "ObjectID":
+                filtered_visited.sort(key=lambda r: _oid_sort_key(r[0]), reverse=(dir_v == "desc"))
+            else:
+                filtered_visited.sort(key=lambda r: r[1].lower(), reverse=(dir_v == "desc"))
 
-        # Filter edits
-        filtered_edits = []
-        for oid, tstamp, act, changes in getattr(self, "_raw_edits_data", []):
-            match_q = (not q) or (q in oid.lower() or q in tstamp.lower() or q in act.lower() or q in changes.lower())
-            match_act = (act_f == "All") or (act == act_f)
-            if match_q and match_act:
-                filtered_edits.append((oid, tstamp, act, changes))
+            # Render top 500 visited records
+            for i, (oid, spec) in enumerate(filtered_visited[:500]):
+                tag = "even" if i % 2 == 0 else "odd"
+                self.tree_v.insert("", "end", values=(oid, spec), tags=(tag,))
 
-        # Sort edits
-        col_e = self.sort_state_edits["col"]
-        dir_e = self.sort_state_edits["direction"]
-        col_map_e = {"ObjectID": 0, "Time": 1, "Action": 2, "Changes": 3}
-        idx_e = col_map_e.get(col_e, 1)
-        filtered_edits.sort(key=lambda r: r[idx_e], reverse=(dir_e == "desc"))
+            total_count = len(filtered_visited)
+        else:
+            # Clear existing edits
+            self.tree_e.delete(*self.tree_e.get_children())
 
-        # Render top 500 edit records
-        for i, (oid, tstamp, act, changes) in enumerate(filtered_edits[:500]):
-            tag = "even" if i % 2 == 0 else "odd"
-            self.tree_e.insert("", "end", values=(oid, tstamp, act, changes), tags=(tag,))
+            # Filter edits
+            filtered_edits = []
+            for oid, tstamp, act, changes in getattr(self, "_raw_edits_data", []):
+                match_q = (not q) or (q in oid.lower() or q in tstamp.lower() or q in act.lower() or q in changes.lower())
+                match_act = (act_f == "All") or (act == act_f)
+                if match_q and match_act:
+                    filtered_edits.append((oid, tstamp, act, changes))
+
+            # Sort edits
+            col_e = self.sort_state_edits["col"]
+            dir_e = self.sort_state_edits["direction"]
+            if col_e == "ObjectID":
+                filtered_edits.sort(key=lambda r: _oid_sort_key(r[0]), reverse=(dir_e == "desc"))
+            elif col_e == "Time":
+                filtered_edits.sort(key=lambda r: r[1], reverse=(dir_e == "desc"))
+            elif col_e == "Action":
+                filtered_edits.sort(key=lambda r: r[2].lower(), reverse=(dir_e == "desc"))
+            else:
+                filtered_edits.sort(key=lambda r: r[3].lower(), reverse=(dir_e == "desc"))
+
+            # Render top 500 edit records
+            for i, (oid, tstamp, act, changes) in enumerate(filtered_edits[:500]):
+                tag = "even" if i % 2 == 0 else "odd"
+                self.tree_e.insert("", "end", values=(oid, tstamp, act, changes), tags=(tag,))
+
+            total_count = len(filtered_edits)
 
         # Update counter with display cap notice if needed
-        total_count = len(filtered_visited) if self.active_tab_name == "visited" else len(filtered_edits)
         if total_count > 500:
             self.lbl_count.config(text=f"Showing top 500 of {total_count} records")
         else:

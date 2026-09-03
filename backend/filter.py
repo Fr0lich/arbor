@@ -48,7 +48,15 @@ class FilterManager:
                 lcv_match = df_log["LocationChangedValues"].fillna("").astype(str).str.lower().str.contains(q_lower, regex=False) if "LocationChangedValues" in df_log.columns else pd.Series(False, index=df_log.index)
                 matched_df = df_log.loc[action_mask & (cv_match | cf_match | pcv_match | lcv_match)]
                 if "ObjectID" in matched_df.columns:
-                    old_tax_matched_set = set(matched_df["ObjectID"].dropna().astype(str).str.strip().unique())
+                    raw_matched = matched_df["ObjectID"].dropna().astype(str).str.strip().unique()
+                    for m in raw_matched:
+                        old_tax_matched_set.add(m)
+                        try:
+                            f = float(m)
+                            if f.is_integer():
+                                old_tax_matched_set.add(str(int(f)))
+                        except Exception:
+                            pass
 
         fast_problem_cache = {}
         include_image_problems = (image_mode == "folder")

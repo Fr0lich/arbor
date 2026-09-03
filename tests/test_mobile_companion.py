@@ -1027,5 +1027,89 @@ def test_conflict_delta_filtering(mock_app_state):
     assert mock_app_state.df_obs.at["1024", "Cabinet"] == "C-99"
 
 
+def test_coerce_type_and_dtype_safety():
+    from backend.mobile_server import coerce_type
+    import numpy as np
+
+    int_series = pd.Series([1, 2, 3], dtype="int64")
+    float_series = pd.Series([1.5, 2.5], dtype="float64")
+    bool_series = pd.Series([True, False], dtype="bool")
+    str_series = pd.Series(["a", "b"], dtype="object")
+
+    # 1. Stringified floats coerced to integers without becoming 0
+    assert coerce_type("1024.0", int_series.dtype) == 1024
+    assert coerce_type("1024.00", int_series.dtype) == 1024
+    assert coerce_type(1024.0, int_series.dtype) == 1024
+    assert coerce_type("1024", int_series.dtype) == 1024
+
+    # 2. Empty values do not pollute float or bool columns
+    empty_float = coerce_type("", float_series.dtype)
+    assert np.isnan(empty_float)
+    empty_bool = coerce_type("", bool_series.dtype)
+    assert empty_bool is False
+
+    # 3. String values preserve clean stripping
+    assert coerce_type("  Pinus  ", str_series.dtype) == "Pinus"
+
+
+def test_sanitize_value_duplicate_index_series():
+    from backend.mobile_server import sanitize_value
+
+    # Simulate duplicate index returning a Series
+    df_dup = pd.DataFrame({"Species": ["sylvestris", "sylvestris"]}, index=[100, 100])
+    series_val = df_dup.at[100, "Species"]
+    assert isinstance(series_val, pd.Series)
+
+    # Must not raise "ValueError: The truth value of a Series is ambiguous"
+    clean_val = sanitize_value(series_val)
+    assert clean_val == "sylvestris"
+
+
+def test_offline_full_form_different_field_edit_preserves_host(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Host edits Genus to 'Abies' at t1
+    client.post('/api/update', json={"id": "1024", "registration": {"Genus": "Abies"}}, headers=headers)
+    assert mock_app_state.df_reg.at["1024", "Genus"] == "Abies"
+
+    # Mobile offline queue submits full form with stale 'Pinus' for Genus, but real edit on Cabinet
+    offline_payload = {
+        "id": "1024",
+        "timestamp": "2020-01-01T00:00:00Z",
+        "registration": {
+            "Genus": "Pinus",  # Stale baseline value from before host edit
+            "Species": "sylvestris"
+        },
+        "observation": {
+            "Cabinet": "Cabinet-Delta-9"  # Real mobile edit
+        }
+    }
+    res = client.post('/api/update', json=offline_payload, headers=headers)
+    assert res.status_code == 200, "Full-form offline payload on different field must not conflict"
+    # Mobile edit is applied
+    assert mock_app_state.df_obs.at["1024", "Cabinet"] == "Cabinet-Delta-9"
+    # Host edit on Genus is PRESERVED, not overwritten with stale 'Pinus'
+    assert mock_app_state.df_reg.at["1024", "Genus"] == "Abies"
+
+
+def test_photo_route_directory_safety(mock_app_state, tmp_path):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Create an internal directory in photos
+    photos_dir = os.path.join(os.path.dirname(mock_app_state.excel_path), "photos")
+    subdir = os.path.join(photos_dir, "subfolder")
+    os.makedirs(subdir, exist_ok=True)
+
+    # Requesting directory name must return clean 404 without 500 error
+    res = client.get('/api/photo/subfolder', headers=headers)
+    assert res.status_code == 404
+    assert res.json.get("error") == "Photo not found"
+
+
+
 
 

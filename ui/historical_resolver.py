@@ -378,6 +378,14 @@ class HistoricalConflictResolverWindow:
         def _apply(f=field, rv=res_var, cv=current_val, c=card, h=header):
             new_val = rv.get().strip()
             if new_val and new_val != cv:
+                if hasattr(self.main_app, "push_undo_state"):
+                    try:
+                        self.main_app.push_undo_state(self.oid)
+                        if hasattr(self.main_app, "app") and hasattr(self.main_app.app, "redo_stacks") and isinstance(self.main_app.app.redo_stacks, dict):
+                            self.main_app.app.redo_stacks.setdefault(self.oid, []).clear()
+                    except Exception:
+                        pass
+
                 reg_changed_fields = [f]
                 reg_changed_values = [f'{f}: "{cv}"  "{new_val}"']
                 prob_changed_fields = []
@@ -475,6 +483,8 @@ class HistoricalConflictResolverWindow:
         prob_changed_fields = []
         prob_changed_values = []
 
+        undo_pushed = False
+
         # We simulate clicking apply on all fields that have a value different from current
         for field in self.fields:
             reg_dict = self.main_app._get_reg_dict() if hasattr(self.main_app, "_get_reg_dict") else {}
@@ -484,6 +494,15 @@ class HistoricalConflictResolverWindow:
             
             new_val = self.res_vars[field].get().strip()
             if new_val and new_val != current_val:
+                if not undo_pushed and hasattr(self.main_app, "push_undo_state"):
+                    try:
+                        self.main_app.push_undo_state(self.oid)
+                        if hasattr(self.main_app, "app") and hasattr(self.main_app.app, "redo_stacks") and isinstance(self.main_app.app.redo_stacks, dict):
+                            self.main_app.app.redo_stacks.setdefault(self.oid, []).clear()
+                        undo_pushed = True
+                    except Exception:
+                        pass
+
                 self.main_app.app.df_reg.loc[self.oid, field] = new_val
                 if field in self.main_app.reg_vars:
                     self.main_app.reg_vars[field].set(new_val)
@@ -510,9 +529,6 @@ class HistoricalConflictResolverWindow:
                             self.main_app._cached_obs_dict[self.oid][pc] = False
                         if hasattr(self.main_app, "loaded_problem_states"):
                             self.main_app.loaded_problem_states[pc] = False
-
-                self.main_app._row_cache_dirty = True
-                self.main_app.commit_current_object(skip_logging=True)
                         
                 # Update card visually
                 if field in self.card_frames:
@@ -524,6 +540,8 @@ class HistoricalConflictResolverWindow:
                         w.configure(bg=COLORS["success"])
                         
         if reg_changed_fields or prob_changed_fields:
+            self.main_app._row_cache_dirty = True
+            self.main_app.commit_current_object(skip_logging=True)
             self.main_app.log_action(
                 "RESOLVE_HISTORICAL_CONFLICT",
                 changed_fields=reg_changed_fields,

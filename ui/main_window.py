@@ -1635,8 +1635,8 @@ class ObjectProgramUI(
 #------
 
 
-    def push_undo_state(self):
-        oid = self.app.current_object_id
+    def push_undo_state(self, target_oid=None):
+        oid = target_oid if target_oid is not None else self.app.current_object_id
         if not oid or self.app.df_reg is None or self.app.df_obs is None:
             return
 
@@ -4715,7 +4715,20 @@ class ObjectProgramUI(
 
         prev = self.app.current_object_id
 
-        if prev is not None and str(prev).strip() != str(oid).strip():
+        def _norm_id(x):
+            if x is None:
+                return ""
+            s = str(x).strip()
+            try:
+                f = float(s)
+                if f.is_integer():
+                    return str(int(f))
+            except Exception:
+                pass
+            return s
+
+        skip_commit = payload.get("skip_commit", False)
+        if not skip_commit and prev is not None and _norm_id(prev) != _norm_id(oid):
             self.commit_current_object()
             self.last_object_id = prev
 
@@ -4860,9 +4873,10 @@ class ObjectProgramUI(
             if not is_in_search and not is_in_listbox:
                 self.reg_entry_list[0].focus_set()
 
-    def load_object(self, oid, is_history_nav=False):
+    def load_object(self, oid, is_history_nav=False, skip_commit=False):
         payload = self._extract_object_payload(oid)
         payload["is_history_nav"] = is_history_nav
+        payload["skip_commit"] = skip_commit
         self._render_object_payload(payload)
         
 
@@ -5162,9 +5176,20 @@ class ObjectProgramUI(
                     self.invalidate_history_cache(oid)
 
                 # Only reload UI if we are looking at the edited object
-                s_oid = str(oid)
-                if self.app.current_object_id in (oid, s_oid):
-                    self.load_object(oid)
+                def _norm(x):
+                    if x is None:
+                        return ""
+                    s = str(x).strip()
+                    try:
+                        f = float(s)
+                        if f.is_integer():
+                            return str(int(f))
+                    except Exception:
+                        pass
+                    return s
+
+                if self.app.current_object_id is not None and _norm(self.app.current_object_id) == _norm(oid):
+                    self.load_object(self.app.current_object_id, skip_commit=True)
             else:
                 self._invalidate_row_cache()
                 self.invalidate_search_index()

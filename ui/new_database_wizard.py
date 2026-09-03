@@ -1933,6 +1933,7 @@ class NewDatabaseWizard:
                 self.app.df_photo = df_photo
                 self.app.df_log = df_log
                 self.app._log_records = df_log.to_dict(orient="records") if df_log is not None and not df_log.empty else []
+                self.app.df_unvalidated = pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
                 self.app.initial_df_obs = df_obs.copy()
 
             if self.on_complete:

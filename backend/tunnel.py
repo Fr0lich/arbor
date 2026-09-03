@@ -422,7 +422,8 @@ def get_local_ip():
             s.connect(target)
             ip = s.getsockname()[0]
             s.close()
-            if ip and not ip.startswith('127.'):
+            # Ignore loopback, VirtualBox host-only, and APIPA autoconfig addresses
+            if ip and not ip.startswith('127.') and not ip.startswith('192.168.56.') and not ip.startswith('169.254.'):
                 return ip
         except Exception:
             pass
@@ -430,7 +431,7 @@ def get_local_ip():
     # 2. Enumerate host IP list prioritizing physical private LAN / Wi-Fi ranges
     try:
         host_ips = socket.gethostbyname_ex(socket.gethostname())[2]
-        
+
         # Priority 2a: Standard home/office Wi-Fi (192.168.x.x excluding VirtualBox 192.168.56.x)
         for ip in host_ips:
             if ip.startswith('192.168.') and not ip.startswith('192.168.56.') and not ip.startswith('127.'):
@@ -441,7 +442,11 @@ def get_local_ip():
             if ip.startswith('10.') and not ip.startswith('127.'):
                 return ip
 
-        # Priority 2c: 172.16 - 172.31 private LAN
+        # Priority 2c: 172.16 - 172.31 private LAN (deprioritizing default Docker bridge 172.17.x.x)
+        for ip in host_ips:
+            if ip.startswith('172.') and not ip.startswith('172.17.') and not ip.startswith('127.'):
+                return ip
+
         for ip in host_ips:
             if ip.startswith('172.') and not ip.startswith('127.'):
                 return ip
@@ -451,9 +456,9 @@ def get_local_ip():
             if ip.startswith('192.168.') and not ip.startswith('127.'):
                 return ip
 
-        # Priority 2e: Any non-loopback IP
+        # Priority 2e: Any non-loopback, non-APIPA IP
         for ip in host_ips:
-            if not ip.startswith('127.'):
+            if not ip.startswith('127.') and not ip.startswith('169.254.'):
                 return ip
     except Exception:
         pass

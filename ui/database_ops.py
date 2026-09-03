@@ -830,19 +830,19 @@ class DatabaseOpsMixin:
             return
         __import__("config").set_last_dir("last_db_dir", excel_path)
 
-        if is_sqlite:
-            # Force-save current in-memory state first (fast, sync)
-            from repository import SQLiteRepository
-            SQLiteRepository.save_sqlite(
-                source_path,
-                self.app.df_reg, self.app.df_obs,
-                self.app.df_photo, self.app.df_log,
-                getattr(self.app, 'df_unvalidated', None)
-            )
-
         self._show_progress("Preparing export...", 4)
 
         with self.app.df_lock:
+            if is_sqlite:
+                # Force-save current in-memory state first (fast, sync) under df_lock
+                from repository import SQLiteRepository
+                SQLiteRepository.save_sqlite(
+                    source_path,
+                    self.app.df_reg, self.app.df_obs,
+                    self.app.df_photo, self.app.df_log,
+                    getattr(self.app, 'df_unvalidated', None)
+                )
+
             df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
             df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
             df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None

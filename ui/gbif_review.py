@@ -282,6 +282,11 @@ def rollback_gbif_updates(app_state, main_window=None):
             else:
                 app_state._log_records = []
 
+        def _norm_ts(ts):
+            if not ts:
+                return ""
+            return str(ts).strip().replace(" ", "T").split(".")[0]
+
         # Identify batches that were already rolled back
         rolled_back_ts = set()
         for e in app_state._log_records:
@@ -289,11 +294,11 @@ def rollback_gbif_updates(app_state, main_window=None):
                 cf = str(e.get("ChangedFields", ""))
                 if "from GBIF update at " in cf:
                     ts_part = cf.split("from GBIF update at ", 1)[1].strip()
-                    rolled_back_ts.add(ts_part)
+                    rolled_back_ts.add(_norm_ts(ts_part))
 
         gbif_entries = [
             e for e in app_state._log_records
-            if e.get("Action") == "GBIF_UPDATE" and str(e.get("Timestamp", "")).strip() not in rolled_back_ts
+            if e.get("Action") == "GBIF_UPDATE" and _norm_ts(e.get("Timestamp", "")) not in rolled_back_ts
         ]
         if not gbif_entries:
             if main_window:
@@ -301,7 +306,8 @@ def rollback_gbif_updates(app_state, main_window=None):
             return False, "No GBIF updates found in log"
 
         latest_ts = gbif_entries[-1].get("Timestamp")
-        target_entries = [e for e in gbif_entries if e.get("Timestamp") == latest_ts]
+        norm_latest = _norm_ts(latest_ts)
+        target_entries = [e for e in gbif_entries if _norm_ts(e.get("Timestamp")) == norm_latest]
 
         reverted_count = 0
         for entry in target_entries:
@@ -347,11 +353,16 @@ def rollback_gbif_updates(app_state, main_window=None):
             "SourceFile": os.path.basename(app_state.excel_path or ""),
             "OutputFile": os.path.basename(app_state.output_path or app_state.excel_path or "")
         }
+        from repository import _normalise_log_dataframe
         app_state._log_records.append(rollback_log)
-        app_state.df_log = pd.DataFrame(app_state._log_records)
+        app_state.df_log = _normalise_log_dataframe(pd.DataFrame(app_state._log_records))
         app_state.dirty = True
 
     if main_window:
+        if hasattr(main_window, "_invalidate_row_cache"):
+            main_window._invalidate_row_cache()
+        if hasattr(main_window, "invalidate_search_index"):
+            main_window.invalidate_search_index()
         if hasattr(main_window, "display_object") and getattr(app_state, "current_object_id", None):
             main_window.display_object(app_state.current_object_id)
         if hasattr(main_window, "object_list") and hasattr(main_window.object_list, "refresh_all_cards"):

@@ -351,7 +351,8 @@ def _normalise_log_dataframe(df_log):
     """Ensure the log dataframe has all required columns.
 
     This adds backwards compatibility for older databases that may not have
-    the new section-specific logging columns.
+    the new section-specific logging columns, strips any internal session
+    tracking columns, and guarantees canonical column ordering.
     """
     required_cols = [
         "Timestamp", "Action", "Reviewed", "ObjectID",
@@ -364,12 +365,13 @@ def _normalise_log_dataframe(df_log):
     if df_log is None or df_log.empty:
         return pd.DataFrame(columns=required_cols)
         
-    missing_cols = [col for col in required_cols if col not in df_log.columns]
+    df_clean = df_log.copy()
+    missing_cols = [col for col in required_cols if col not in df_clean.columns]
     if missing_cols:
-        new_cols_df = pd.DataFrame({col: "" for col in missing_cols}, index=df_log.index)
-        df_log = pd.concat([df_log, new_cols_df], axis=1)
+        new_cols_df = pd.DataFrame({col: "" for col in missing_cols}, index=df_clean.index)
+        df_clean = pd.concat([df_clean, new_cols_df], axis=1)
             
-    return df_log
+    return df_clean[required_cols].copy()
 
 
 class ExcelRepository:
@@ -636,12 +638,13 @@ class SQLiteRepository:
                         df_photo_save.to_sql("Photo", conn, if_exists="replace", index=False)
 
                 if df_log is not None and not df_log.empty:
+                    df_log_save = _normalise_log_dataframe(df_log)
                     if "Log" in existing_tables:
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM Log;")
-                        df_log.to_sql("Log", conn, if_exists="append", index=False)
+                        df_log_save.to_sql("Log", conn, if_exists="append", index=False)
                     else:
-                        df_log.to_sql("Log", conn, if_exists="replace", index=False)
+                        df_log_save.to_sql("Log", conn, if_exists="replace", index=False)
 
                 if df_unvalidated is not None and not df_unvalidated.empty:
                     df_unval_save = _deduplicate_columns(_normalise_unvalidated_dataframe(df_unvalidated))
