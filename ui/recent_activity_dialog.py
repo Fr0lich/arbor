@@ -250,7 +250,7 @@ class RecentActivityDialog(tk.Toplevel):
         ).pack(side="left", padx=(0, sc(8)))
 
         self.chip_buttons = {}
-        action_options = ["All", "Manual Edit", "Conflict Resolver", "Created Object"]
+        action_options = ["All", "Manual Edit", "Mobile Edit", "Conflict Resolver", "Created Object"]
         for opt in action_options:
             btn = tk.Button(
                 chips_frame, text=opt, font=self.FONT_LABEL,
@@ -453,6 +453,8 @@ class RecentActivityDialog(tk.Toplevel):
                 display_act = raw_act
                 if raw_act == "EDIT":
                     display_act = "Manual Edit"
+                elif raw_act == "MOBILE_EDIT":
+                    display_act = "Mobile Edit"
                 elif raw_act == "RESOLVE_HISTORICAL_CONFLICT":
                     display_act = "Conflict Resolver"
                 elif raw_act == "CREATE_OBJECT_FAST":

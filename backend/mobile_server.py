@@ -305,7 +305,7 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
 
     # Conflict check
     if client_timestamp and hasattr(app_state, 'undo_stacks'):
-        stacks = app_state.undo_stacks.get(str(oid), [])
+        stacks = app_state.undo_stacks.get(resolved_reg_oid, []) or app_state.undo_stacks.get(str(oid), [])
         if stacks:
             last_edit_time = stacks[-1].get("timestamp")
             if last_edit_time:
@@ -380,9 +380,9 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
         "obs": old_obs.copy(),
         "timestamp": datetime.now().isoformat()
     }
-    app_state.undo_stacks.setdefault(str(oid), []).append(undo_snapshot)
-    if len(app_state.undo_stacks[str(oid)]) > 20:
-        app_state.undo_stacks[str(oid)].pop(0)
+    app_state.undo_stacks.setdefault(resolved_reg_oid, []).append(undo_snapshot)
+    if len(app_state.undo_stacks[resolved_reg_oid]) > 20:
+        app_state.undo_stacks[resolved_reg_oid].pop(0)
 
     changed_fields = []
     changed_values = []
@@ -406,12 +406,11 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
         _apply_dataframe_updates(app_state.df_obs, obs_updates, changed_fields, changed_values, resolved_obs_oid, fallback_df=app_state.df_reg, allowed_columns=allowed_obs_cols if allowed_obs_cols else None)
 
     # 4. Handle Reviewed Status
-    action_name = "EDIT"
+    action_name = "MOBILE_EDIT"
     is_rev_str = ""
     if reviewed is not None:
         is_reviewed_bool = bool(reviewed)
         is_rev_str = "Yes" if is_reviewed_bool else "No"
-        action_name = "REVIEWED" if is_reviewed_bool else "NOT_REVIEWED"
         if app_state.df_obs is not None and resolved_obs_oid is not None and resolved_obs_oid in app_state.df_obs.index:
             if "Reviewed" in app_state.df_obs.columns:
                 app_state.df_obs.at[resolved_obs_oid, "Reviewed"] = is_reviewed_bool
@@ -419,6 +418,9 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
                 app_state.df_obs.at[resolved_obs_oid, "ReviewedAt"] = datetime.now().isoformat(timespec="seconds")
             changed_fields.append("Reviewed")
             changed_values.append(f'Reviewed: "{old_obs.get("Reviewed", "")}" -> "{is_reviewed_bool}"')
+
+        if changed_fields == ["Reviewed"]:
+            action_name = "REVIEWED" if is_reviewed_bool else "NOT_REVIEWED"
 
     # 5. Append Audit Log Record
     if not hasattr(app_state, "_log_records") or app_state._log_records is None:
@@ -1621,14 +1623,15 @@ self.addEventListener('fetch', (event) => {
                 return jsonify({"error": "No recent edits to undo"}), 400
 
             with self.app_state.df_lock:
-                if not hasattr(self.app_state, 'undo_stacks') or str(oid) not in self.app_state.undo_stacks or not self.app_state.undo_stacks[str(oid)]:
+                resolved_reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
+                resolved_obs_oid = _resolve_oid_in_df(self.app_state.df_obs, oid)
+
+                target_key = resolved_reg_oid if (hasattr(self.app_state, 'undo_stacks') and resolved_reg_oid in self.app_state.undo_stacks) else str(oid)
+                if not hasattr(self.app_state, 'undo_stacks') or target_key not in self.app_state.undo_stacks or not self.app_state.undo_stacks[target_key]:
                     return jsonify({"error": f"No undo history for {oid}"}), 404
 
                 # Pop the latest snapshot (the state *before* the most recent edit)
-                snapshot = self.app_state.undo_stacks[str(oid)].pop()
-
-                resolved_reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
-                resolved_obs_oid = _resolve_oid_in_df(self.app_state.df_obs, oid)
+                snapshot = self.app_state.undo_stacks[target_key].pop()
 
                 if resolved_reg_oid is not None:
                     # Update row cell-by-cell to avoid pandas ValueError
@@ -1648,9 +1651,10 @@ self.addEventListener('fetch', (event) => {
                         break
 
                 if hasattr(self.app_state, "_log_records") and self.app_state._log_records:
-                    # Find and remove the latest log record for this oid
+                    # Find and remove the latest mobile log record for this oid
                     for i in range(len(self.app_state._log_records) - 1, -1, -1):
-                        if str(self.app_state._log_records[i].get("ObjectID", "")) == str(oid):
+                        rec = self.app_state._log_records[i]
+                        if str(rec.get("ObjectID", "")) == str(oid) and rec.get("Action") in ["MOBILE_EDIT", "REVIEWED"]:
                             self.app_state._log_records.pop(i)
                             break
                     self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
@@ -3066,6 +3070,7 @@ INDEX_TEMPLATE = """
         } else {
              input.value = value;
         }
+        markDirty(field);
 
         // Micro-interaction: Flash the updated input with fern border to confirm receipt
         input.classList.add('ring-2', 'ring-fern', 'border-fern');
@@ -3083,6 +3088,7 @@ INDEX_TEMPLATE = """
                  currentRecord.observation[exactProb] = false;
                  const probToggle = document.getElementById(`prob_${exactProb}`);
                  if (probToggle) probToggle.checked = false;
+                 markDirty(exactProb);
             }
         }
 
@@ -3120,11 +3126,20 @@ INDEX_TEMPLATE = """
                  input.value = originalValue;
             }
         }
+        markDirty(field);
 
         if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
              currentRecord.registration[field] = originalValue;
         } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
              currentRecord.observation[field] = originalValue;
+        }
+
+        const exactProb = `${field}_Problem`;
+        if (currentRecord.observation && currentRecord.observation.hasOwnProperty(exactProb)) {
+             currentRecord.observation[exactProb] = true;
+             const probToggle = document.getElementById(`prob_${exactProb}`);
+             if (probToggle) probToggle.checked = true;
+             markDirty(exactProb);
         }
 
         delete revertState[field];

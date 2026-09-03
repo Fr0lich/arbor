@@ -40,6 +40,17 @@ def mock_data():
             "ProblemsChangedValues": "True  False",
             "LocationChanged": "",
             "LocationChangedValues": ""
+        },
+        {
+            "Timestamp": "2026-08-17T11:00:00.000",
+            "Action": "MOBILE_EDIT",
+            "ObjectID": "1003",
+            "ChangedFields": "Family",
+            "ChangedValues": "Pinaceae  Betulaceae",
+            "ProblemsChanged": "",
+            "ProblemsChangedValues": "",
+            "LocationChanged": "",
+            "LocationChangedValues": ""
         }
     ])
     return mock_history, mock_df_log
@@ -65,7 +76,7 @@ def test_recent_activity_dialog_tab_switch(tk_root, mock_data):
     assert dialog.active_tab_name == "edits"
 
     items = dialog.tree_e.get_children()
-    assert len(items) == 2
+    assert len(items) == 3
 
     dialog.destroy()
 
@@ -102,10 +113,11 @@ def test_edits_header_sorting(tk_root, mock_data):
     # Sort by Action column
     dialog._sort_edits("Action")
     items = dialog.tree_e.get_children()
-    assert len(items) == 2
+    assert len(items) == 3
     act0 = dialog.tree_e.item(items[0])["values"][2]
     act1 = dialog.tree_e.item(items[1])["values"][2]
-    assert act0 <= act1
+    act2 = dialog.tree_e.item(items[2])["values"][2]
+    assert act0 <= act1 <= act2
 
     dialog.destroy()
 
@@ -123,13 +135,20 @@ def test_search_and_action_filtering(tk_root, mock_data):
     # Reset search query
     dialog.search_query.set("")
     items = dialog.tree_e.get_children()
-    assert len(items) == 2
+    assert len(items) == 3
 
-    # Test Action Filter Chip
+    # Test Action Filter Chip: Manual Edit
     dialog._set_action_filter("Manual Edit")
     items = dialog.tree_e.get_children()
     assert len(items) == 1
     assert dialog.tree_e.item(items[0])["values"][2] == "Manual Edit"
+
+    # Test Action Filter Chip: Mobile Edit
+    dialog._set_action_filter("Mobile Edit")
+    items = dialog.tree_e.get_children()
+    assert len(items) == 1
+    assert dialog.tree_e.item(items[0])["values"][2] == "Mobile Edit"
+    assert str(dialog.tree_e.item(items[0])["values"][0]) == "1003"
 
     dialog.destroy()
 

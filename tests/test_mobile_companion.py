@@ -141,7 +141,7 @@ def test_mobile_server_api_flow(mock_app_state):
     assert len(mock_app_state._log_records) == 1
     log_entry = mock_app_state._log_records[0]
     assert log_entry["ObjectID"] == "1024"
-    assert log_entry["Action"] == "REVIEWED"
+    assert log_entry["Action"] == "MOBILE_EDIT"
     assert "Species" in log_entry["ChangedFields"]
     assert "Cabinet" in log_entry["LocationChanged"]
     assert "sylvestris" in log_entry["ChangedValues"] and "mugo" in log_entry["ChangedValues"]
@@ -668,3 +668,116 @@ def test_mobile_back_button_navigation_template():
     assert "history.pushState" in INDEX_TEMPLATE
     assert "window.addEventListener('popstate'" in INDEX_TEMPLATE
     assert "showListView(false)" in INDEX_TEMPLATE
+
+
+def test_mobile_action_name_reviewed_when_only_reviewed_changes(mock_app_state):
+    server = MobileServer(mock_app_state, port=5104)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Only mark reviewed without editing any other fields
+    payload = {
+        "id": "1024",
+        "reviewed": True
+    }
+    res = client.post('/api/update', json=payload, headers=headers)
+    assert res.status_code == 200
+    assert res.json["success"] is True
+
+    assert len(mock_app_state._log_records) == 1
+    log_entry = mock_app_state._log_records[-1]
+    assert log_entry["Action"] == "REVIEWED"
+    assert log_entry["ChangedFields"] == "Reviewed"
+
+    # Only mark unreviewed
+    payload_unrev = {
+        "id": "1024",
+        "reviewed": False
+    }
+    res_unrev = client.post('/api/update', json=payload_unrev, headers=headers)
+    assert res_unrev.status_code == 200
+    assert res_unrev.json["success"] is True
+
+    log_entry_unrev = mock_app_state._log_records[-1]
+    assert log_entry_unrev["Action"] == "NOT_REVIEWED"
+
+
+def test_mobile_undo_with_integer_index_and_desktop_log_protection():
+    app = AppState()
+    app.config = {
+        "ui_sections": {
+            "registration": [{"name": "Genus"}, {"name": "Species"}],
+            "location": [{"name": "Cabinet"}],
+            "problems": [{"name": "MissingLabel"}]
+        }
+    }
+    app.df_reg = pd.DataFrame({
+        "Genus": ["Pinus", "Betula"],
+        "Species": ["sylvestris", "pendula"]
+    }, index=pd.Index([1001, 1002], name="ObjectID"))  # int64 index
+
+    app.df_obs = pd.DataFrame({
+        "Reviewed": [False, False],
+        "Cabinet": ["Cab 1", "Cab 2"]
+    }, index=pd.Index([1001, 1002], name="ObjectID"))
+
+    # Simulate existing desktop EDIT log entry for 1001
+    app._log_records = [
+        {
+            "Timestamp": "2026-09-01T12:00:00",
+            "Action": "EDIT",
+            "ObjectID": "1001",
+            "ChangedFields": "Genus",
+            "ChangedValues": 'Genus: "Abies" -> "Pinus"',
+            "ProblemsChanged": "",
+            "ProblemsChangedValues": "",
+            "LocationChanged": "",
+            "LocationChangedValues": "",
+            "User": "Desktop-User"
+        }
+    ]
+
+    server = MobileServer(app, port=5105)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # 1. Perform mobile edit using string ID "1001"
+    res_upd = client.post('/api/update', headers=headers, json={
+        "id": "1001",
+        "registration": {"Species": "mugo"}
+    })
+    assert res_upd.status_code == 200
+    assert app.df_reg.at[1001, "Species"] == "mugo"
+
+    # Check that undo_stacks uses resolved int key 1001
+    assert 1001 in app.undo_stacks
+    assert len(app._log_records) == 2
+    assert app._log_records[-1]["Action"] == "MOBILE_EDIT"
+
+    # 2. Perform mobile undo using string ID "1001"
+    res_undo = client.post('/api/undo', headers=headers, json={"oid": "1001"})
+    assert res_undo.status_code == 200
+    assert res_undo.json["success"] is True
+
+    # Check that data was reverted
+    assert app.df_reg.at[1001, "Species"] == "sylvestris"
+
+    # Check that desktop EDIT log entry was preserved and only mobile log was popped
+    assert len(app._log_records) == 1
+    assert app._log_records[0]["Action"] == "EDIT"
+    assert app._log_records[0]["User"] == "Desktop-User"
+
+
+def test_historical_value_dirty_tracking_in_template():
+    from backend.mobile_server import INDEX_TEMPLATE
+
+    # Verify applyHistoricalValue marks field and problem dirty
+    assert "function applyHistoricalValue(field, value)" in INDEX_TEMPLATE
+    assert "markDirty(field);" in INDEX_TEMPLATE
+    assert "markDirty(exactProb);" in INDEX_TEMPLATE
+
+    # Verify undoHistoricalValue marks field dirty and restores problem flag
+    assert "function undoHistoricalValue(field, originalValue)" in INDEX_TEMPLATE
+    assert "currentRecord.observation[exactProb] = true;" in INDEX_TEMPLATE
+    assert "document.getElementById(`prob_${exactProb}`)" in INDEX_TEMPLATE
+
