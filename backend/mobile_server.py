@@ -463,7 +463,10 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
 
     # 5. Append Audit Log Record
     if not hasattr(app_state, "_log_records") or app_state._log_records is None:
-        app_state._log_records = []
+        if getattr(app_state, "df_log", None) is not None and not app_state.df_log.empty:
+            app_state._log_records = app_state.df_log.to_dict(orient="records")
+        else:
+            app_state._log_records = []
 
     log_entry = _build_audit_log_entry(app_state, str(oid), action_name, is_rev_str, changed_fields, changed_values)
     app_state._log_records.append(log_entry)
@@ -1934,7 +1937,10 @@ self.addEventListener('fetch', (event) => {
                 self.app_state.df_photo = pd.concat([self.app_state.df_photo, new_df])
 
                 if not hasattr(self.app_state, "_log_records") or self.app_state._log_records is None:
-                    self.app_state._log_records = []
+                    if getattr(self.app_state, "df_log", None) is not None and not self.app_state.df_log.empty:
+                        self.app_state._log_records = self.app_state.df_log.to_dict(orient="records")
+                    else:
+                        self.app_state._log_records = []
 
                 now_ts = datetime.now().isoformat(timespec="seconds")
                 log_entry = {
