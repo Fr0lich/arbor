@@ -4,82 +4,90 @@ import pandas as pd
 from collections import OrderedDict
 
 class HistoricalSuggestionsMixin:
+    def _get_history_lock(self):
+        if not hasattr(self, "_history_lock") or self._history_lock is None:
+            self._history_lock = threading.Lock()
+        return self._history_lock
+
     def _get_db_dict_cache(self, db, oid=None):
-        if "dict_cache" not in db:
-            db["dict_cache"] = {}
+        with self._get_history_lock():
+            if "dict_cache" not in db:
+                db["dict_cache"] = {}
 
-        cache = db["dict_cache"]
+            cache = db["dict_cache"]
 
-        if oid is None:
-            return cache
+            if oid is None:
+                return cache
 
-        if oid not in cache:
-            oid_cache = {}
-            reg_by_id = db.get("reg_by_id")
+            if oid not in cache:
+                oid_cache = {}
+                reg_by_id = db.get("reg_by_id")
 
-            if reg_by_id is not None and oid in reg_by_id.index:
-                rows = reg_by_id.loc[oid]
+                if reg_by_id is not None and oid in reg_by_id.index:
+                    rows = reg_by_id.loc[oid]
 
-                if isinstance(rows, pd.DataFrame):
-                    # Handle duplicate rows with same ObjectID by gathering all unique column values across rows
-                    for row in rows.itertuples(index=False, name=None):
-                        for col, val in zip(rows.columns, row):
-                            if pd.notna(val):
+                    if isinstance(rows, pd.DataFrame):
+                        # Handle duplicate rows with same ObjectID by gathering all unique column values across rows
+                        for row in rows.itertuples(index=False, name=None):
+                            for col, val in zip(rows.columns, row):
+                                if pd.notna(val):
+                                    val_str = str(val).strip()
+                                    if val_str and val_str != "nan":
+                                        if col not in oid_cache:
+                                            oid_cache[col] = []
+                                        if val_str not in oid_cache[col]:
+                                            oid_cache[col].append(val_str)
+                    elif isinstance(rows, pd.Series):
+                        for col, val in rows.items():
+                             if pd.notna(val):
                                 val_str = str(val).strip()
                                 if val_str and val_str != "nan":
                                     if col not in oid_cache:
                                         oid_cache[col] = []
                                     if val_str not in oid_cache[col]:
                                         oid_cache[col].append(val_str)
-                elif isinstance(rows, pd.Series):
-                    for col, val in rows.items():
-                         if pd.notna(val):
-                            val_str = str(val).strip()
-                            if val_str and val_str != "nan":
-                                if col not in oid_cache:
-                                    oid_cache[col] = []
-                                if val_str not in oid_cache[col]:
-                                    oid_cache[col].append(val_str)
-                else:
-                    # Single value or fallback
-                    pass
-            cache[oid] = oid_cache
+                    else:
+                        # Single value or fallback
+                        pass
+                cache[oid] = oid_cache
 
-        return cache
+            return cache
 
     def invalidate_history_cache(self, oid=None):
-        if not hasattr(self, "_history_cache") or self._history_cache is None:
-            return
-        if oid is None:
-            self._history_cache.clear()
-        else:
-            self._history_cache.pop((oid, True), None)
-            self._history_cache.pop((oid, False), None)
-            s_oid = str(oid)
-            self._history_cache.pop((s_oid, True), None)
-            self._history_cache.pop((s_oid, False), None)
-            if s_oid.isdigit():
-                self._history_cache.pop((int(s_oid), True), None)
-                self._history_cache.pop((int(s_oid), False), None)
+        with self._get_history_lock():
+            if not hasattr(self, "_history_cache") or self._history_cache is None:
+                return
+            if oid is None:
+                self._history_cache.clear()
+            else:
+                self._history_cache.pop((oid, True), None)
+                self._history_cache.pop((oid, False), None)
+                s_oid = str(oid)
+                self._history_cache.pop((s_oid, True), None)
+                self._history_cache.pop((s_oid, False), None)
+                if s_oid.isdigit():
+                    self._history_cache.pop((int(s_oid), True), None)
+                    self._history_cache.pop((int(s_oid), False), None)
 
     def collect_historical_suggestions(self, oid, show_all_override=None):
 
 
         if show_all_override is None:
-            show_all = self.show_all_history_var.get()
+            show_all = self.show_all_history_var.get() if hasattr(self, "show_all_history_var") else False
         else:
             show_all = show_all_override
 
 
         cache_key = (oid, show_all)
 
-        if hasattr(self, "_history_cache"):
-            cached = self._history_cache.get(cache_key)
-            if cached is not None:
-                self._history_cache.move_to_end(cache_key)
-                return cached
-        else:
-            self._history_cache = OrderedDict()
+        with self._get_history_lock():
+            if hasattr(self, "_history_cache") and self._history_cache is not None:
+                cached = self._history_cache.get(cache_key)
+                if cached is not None:
+                    self._history_cache.move_to_end(cache_key)
+                    return cached
+            else:
+                self._history_cache = OrderedDict()
 
         suggestions = {}
 
@@ -152,9 +160,10 @@ class HistoricalSuggestionsMixin:
                     "(No data found)": []
                 }
 
-        self._history_cache[cache_key] = suggestions
-        if len(self._history_cache) > 50:
-            self._history_cache.popitem(last=False)
+        with self._get_history_lock():
+            self._history_cache[cache_key] = suggestions
+            if len(self._history_cache) > 50:
+                self._history_cache.popitem(last=False)
         return suggestions
 
 

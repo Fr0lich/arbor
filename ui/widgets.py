@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import utils
+from repository import REVIEWED_COLUMN
 
 def create_toggle_row(parent, label_text, var, command=None, ui_ref=None, info_text=None):
     from config import sc
@@ -907,6 +908,9 @@ class TreeviewListboxWrapper(ttk.Frame):
             reviewed = bool(self.main_window._cached_reviewed_dict.get(oid, self.item_data[oid].get("reviewed", False)))
         elif getattr(self.main_window, "_cached_obs_dict", None) is not None and oid in self.main_window._cached_obs_dict:
             reviewed = bool(self.main_window._cached_obs_dict[oid].get(REVIEWED_COLUMN, False))
+        elif hasattr(self.main_window, "_get_obs_dict"):
+            obs_dict = self.main_window._get_obs_dict() or {}
+            reviewed = bool(obs_dict.get(oid, {}).get(REVIEWED_COLUMN, self.item_data[oid].get("reviewed", False)))
         else:
             reviewed = self.item_data[oid].get("reviewed", False)
         self.item_data[oid]["reviewed"] = reviewed
@@ -958,9 +962,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         self._apply_tags_to_card(oid)
 
         # Update Loaned badge dynamically
-        obs_dict = getattr(self.main_window, "_cached_obs_dict", None)
-        if obs_dict is None and hasattr(self.main_window, "_get_obs_dict"):
-            obs_dict = self.main_window._get_obs_dict()
+        obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else getattr(self.main_window, "_cached_obs_dict", None)
         obs_row = obs_dict.get(oid) if obs_dict else {}
         if obs_row is None:
             try:

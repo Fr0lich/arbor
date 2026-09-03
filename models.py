@@ -56,7 +56,8 @@ class AppState:
         self.df_lock: threading.RLock = threading.RLock()
 
 
-# P1-F: Single source of truth for per-object undo stack depth.
+# P1-F: Single source of truth for per-object undo/redo stack depth.
 # Keeping 20 states per object × 3000 objects worst-case = ~60k entries
 # which is negligible memory; the global 500-entry total guard is retained.
 MAX_UNDO_PER_OBJECT: int = 20
+MAX_REDO_PER_OBJECT: int = 20

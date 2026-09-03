@@ -347,6 +347,7 @@ class CloudflareTunnel:
 
             url_pattern = re.compile(r'(https://[a-zA-Z0-9-]+\.trycloudflare\.com)')
             connected = False
+            url_deadline = time.time() + 15  # 15s deadline for tunnel handshake
 
             while not self._stop_event.is_set():
                 if self.process.poll() is not None:
@@ -354,6 +355,11 @@ class CloudflareTunnel:
 
                 line = self.process.stderr.readline()
                 if not line:
+                    if not connected and time.time() > url_deadline:
+                        logging.warning("Cloudflare tunnel: no URL received within 15s")
+                        if status_callback:
+                            status_callback("🟡 Cloudflare tunnel timeout")
+                        break
                     time.sleep(0.05)
                     continue
 
@@ -364,6 +370,12 @@ class CloudflareTunnel:
                     connected = True
                     if url_callback:
                         url_callback(url)
+
+                if not connected and time.time() > url_deadline:
+                    logging.warning("Cloudflare tunnel: no URL received within 15s")
+                    if status_callback:
+                        status_callback("🟡 Cloudflare tunnel timeout")
+                    break
 
             if self._stop_event.is_set() and self.process:
                 try:

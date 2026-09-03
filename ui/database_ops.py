@@ -222,7 +222,17 @@ class DatabaseOpsMixin:
             import traceback
             tb = traceback.format_exc()
             err_msg = str(e)
-            self.root.after(0, lambda msg=err_msg, t=tb: self.show_traceback_dialog("Excel Load Error", f"An error occurred while loading the Excel/DB file: {msg}", t))
+            def _handle_load_error(msg=err_msg, t=tb):
+                if hasattr(self, "_loading_window") and self._loading_window:
+                    try:
+                        if hasattr(self._loading_window, "win") and self._loading_window.win.winfo_exists():
+                            self._loading_window.win.grab_release()
+                            self._loading_window.win.destroy()
+                    except Exception:
+                        pass
+                    self._loading_window = None
+                self.show_traceback_dialog("Excel Load Error", f"An error occurred while loading the Excel/DB file: {msg}", t)
+            self.root.after(0, _handle_load_error)
 
 
     def _finish_open_excel(self, path, output_path, df_reg, df_obs, df_photo, df_log, df_unvalidated=None):

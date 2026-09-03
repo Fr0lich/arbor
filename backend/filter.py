@@ -38,14 +38,13 @@ class FilterManager:
         old_tax_matched_set = set()
         if old_taxonomy_query and df_log is not None and not df_log.empty:
             q_lower = str(old_taxonomy_query).strip().lower()
-            if q_lower:
-                for _, log_r in df_log.iterrows():
-                    action = str(log_r.get("Action", ""))
-                    if action in ("GBIF_UPDATE", "EDIT", "GBIF_ROLLBACK"):
-                        cv = str(log_r.get("ChangedValues", "")).lower()
-                        cf = str(log_r.get("ChangedFields", "")).lower()
-                        if q_lower in cv or q_lower in cf:
-                            old_tax_matched_set.add(str(log_r.get("ObjectID", "")).strip())
+            if q_lower and "Action" in df_log.columns:
+                action_mask = df_log["Action"].astype(str).isin(["GBIF_UPDATE", "EDIT", "GBIF_ROLLBACK"])
+                cv_match = df_log["ChangedValues"].fillna("").astype(str).str.lower().str.contains(q_lower, regex=False) if "ChangedValues" in df_log.columns else pd.Series(False, index=df_log.index)
+                cf_match = df_log["ChangedFields"].fillna("").astype(str).str.lower().str.contains(q_lower, regex=False) if "ChangedFields" in df_log.columns else pd.Series(False, index=df_log.index)
+                matched_df = df_log.loc[action_mask & (cv_match | cf_match)]
+                if "ObjectID" in matched_df.columns:
+                    old_tax_matched_set = set(matched_df["ObjectID"].dropna().astype(str).str.strip().unique())
 
         fast_problem_cache = {}
         include_image_problems = (image_mode == "folder")

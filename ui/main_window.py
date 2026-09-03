@@ -2096,9 +2096,11 @@ class ObjectProgramUI(
         import config
         advanced_prefs = config.load_prefs().get("advanced", {})
         if advanced_prefs.get("enable_focus_mode_toggle", False):
-            self.focus_quick_frame.pack(side="right", padx=(0, 4))
+            if self.focus_quick_frame.winfo_manager() != "pack":
+                self.focus_quick_frame.pack(side="right", padx=(0, 4))
         else:
-            self.focus_quick_frame.pack_forget()
+            if self.focus_quick_frame.winfo_manager() == "pack":
+                self.focus_quick_frame.pack_forget()
 
     def refresh_image_rendering(self):
         if hasattr(self, "image_render_cache"):
@@ -2362,23 +2364,23 @@ class ObjectProgramUI(
         if not stack:
             return
 
+        with (getattr(self.app, 'df_lock', None) or nullcontext()):
+            current = {
+                "reg": self.app.df_reg.loc[oid].copy(),
+                "obs": self.app.df_obs.loc[oid].copy(),
+            }
+            from models import MAX_REDO_PER_OBJECT
+            rstack = self.app.redo_stacks.setdefault(oid, [])
 
-        current = {
-            "reg": self.app.df_reg.loc[oid].copy(),
-            "obs": self.app.df_obs.loc[oid].copy(),
-        }
-        MAX_REDO = 30
-        rstack = self.app.redo_stacks.setdefault(oid, [])
+            rstack.append(current)
 
-        rstack.append(current)
+            if len(rstack) > MAX_REDO_PER_OBJECT:
+                del rstack[:10]
 
-        if len(rstack) > MAX_REDO:
-            del rstack[:10]
+            state = stack.pop()
 
-        state = stack.pop()
-
-        self.app.df_reg.loc[oid] = state["reg"]
-        self.app.df_obs.loc[oid] = state["obs"]
+            self.app.df_reg.loc[oid] = state["reg"]
+            self.app.df_obs.loc[oid] = state["obs"]
     
         self._invalidate_row_cache(oid=oid)
         self.invalidate_search_index()
@@ -2460,24 +2462,23 @@ class ObjectProgramUI(
         if len(stack) == 0:
             return
 
+        with (getattr(self.app, 'df_lock', None) or nullcontext()):
+            current = {
+                "reg": self.app.df_reg.loc[oid].copy(),
+                "obs": self.app.df_obs.loc[oid].copy(),
+            }
+            from models import MAX_UNDO_PER_OBJECT  # P1-F
+            ustack = self.app.undo_stacks.setdefault(oid, [])
 
+            ustack.append(current)
 
-        current = {
-            "reg": self.app.df_reg.loc[oid].copy(),
-            "obs": self.app.df_obs.loc[oid].copy(),
-        }
-        from models import MAX_UNDO_PER_OBJECT  # P1-F
-        ustack = self.app.undo_stacks.setdefault(oid, [])
+            if len(ustack) > MAX_UNDO_PER_OBJECT:
+                del ustack[:10]
 
-        ustack.append(current)
+            state = stack.pop()
 
-        if len(ustack) > MAX_UNDO_PER_OBJECT:
-            del ustack[:10]
-
-        state = stack.pop()
-
-        self.app.df_reg.loc[oid] = state["reg"]
-        self.app.df_obs.loc[oid] = state["obs"]
+            self.app.df_reg.loc[oid] = state["reg"]
+            self.app.df_obs.loc[oid] = state["obs"]
 
         self._invalidate_row_cache(oid=oid)
         self.invalidate_search_index()
@@ -4139,12 +4140,16 @@ class ObjectProgramUI(
         if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_obs_dict", None) is None:
             obs_df = self.app.df_obs
             self._cached_obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
+            if getattr(self, "_cached_reg_dict", None) is not None:
+                self._row_cache_dirty = False
         return self._cached_obs_dict
 
     def _get_reg_dict(self):
         if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_reg_dict", None) is None:
             reg_df = self.app.df_reg
             self._cached_reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
+            if getattr(self, "_cached_obs_dict", None) is not None:
+                self._row_cache_dirty = False
         return self._cached_reg_dict
 
 
@@ -5093,15 +5098,20 @@ class ObjectProgramUI(
             if getattr(self.app, '_mobile_last_edited_oid', None):
                 oid = self.app._mobile_last_edited_oid
                 self.app._mobile_last_edited_oid = None
-                self.log_action("EDIT", oid)
                 self._invalidate_row_cache()
-                s_oid = str(oid)
-                self._problem_cache.pop(oid, None)
-                self._problem_cache.pop(s_oid, None)
+                self.invalidate_search_index()
+                if hasattr(self, "invalidate_history_cache"):
+                    self.invalidate_history_cache(oid)
 
                 # Only reload UI if we are looking at the edited object
+                s_oid = str(oid)
                 if self.app.current_object_id in (oid, s_oid):
                     self.load_object(oid)
+            else:
+                self._invalidate_row_cache()
+                self.invalidate_search_index()
+                if hasattr(self, "invalidate_history_cache"):
+                    self.invalidate_history_cache()
 
         # Always update the core dirty UI elements
         self.update_dirty_ui()

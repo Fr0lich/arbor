@@ -392,11 +392,8 @@ class ImageHandlerMixin:
 
 
             if hasattr(self, "no_image_label") and self.no_image_label.winfo_exists():
-                self.no_image_label.pack_forget()
-
-
-
-            self.no_image_label.pack_forget()
+                if self.no_image_label.winfo_manager() == 'pack':
+                    self.no_image_label.pack_forget()
 
             self.images_missing_label.config(
                 text="Offline mode active (images disabled)"
@@ -912,10 +909,11 @@ class ImageHandlerMixin:
         if hasattr(self, "image_toolbar") and self.image_toolbar.winfo_exists():
             if self.image_mode == "folder" and self.image_view_mode == "stack":
                 # Only show top toolbar in local folder mode when using stack view
-                self.image_toolbar.pack_forget()
-                self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2), before=self.image_box)
+                if self.image_toolbar.winfo_manager() != "pack":
+                    self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2), before=self.image_box)
             else:
-                self.image_toolbar.pack_forget()
+                if self.image_toolbar.winfo_manager() == "pack":
+                    self.image_toolbar.pack_forget()
 
         # Manage floating HUD overlay controls
         if self.image_mode == "online":
