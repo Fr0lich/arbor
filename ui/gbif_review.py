@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
 from datetime import datetime
+import os
 import getpass
 from config import sc
 
@@ -242,7 +243,9 @@ class GBIFReviewDialog(tk.Toplevel):
                         "ProblemsChanged": "",
                         "ProblemsChangedValues": "",
                         "LocationChanged": "",
-                        "LocationChangedValues": ""
+                        "LocationChangedValues": "",
+                        "SourceFile": os.path.basename(self.app_state.excel_path or ""),
+                        "OutputFile": os.path.basename(self.app_state.output_path or self.app_state.excel_path or "")
                     }
                     self.app_state._log_records.append(log_entry)
 
@@ -265,7 +268,7 @@ class GBIFReviewDialog(tk.Toplevel):
 
 def rollback_gbif_updates(app_state, main_window=None):
     """
-    Roll back the latest GBIF_UPDATE batch by inspecting df_log.
+    Roll back the latest un-reverted GBIF_UPDATE batch by inspecting df_log.
     """
     with app_state.df_lock:
         if app_state.df_reg is None:
@@ -279,7 +282,19 @@ def rollback_gbif_updates(app_state, main_window=None):
             else:
                 app_state._log_records = []
 
-        gbif_entries = [e for e in app_state._log_records if e.get("Action") == "GBIF_UPDATE"]
+        # Identify batches that were already rolled back
+        rolled_back_ts = set()
+        for e in app_state._log_records:
+            if e.get("Action") == "GBIF_ROLLBACK":
+                cf = str(e.get("ChangedFields", ""))
+                if "from GBIF update at " in cf:
+                    ts_part = cf.split("from GBIF update at ", 1)[1].strip()
+                    rolled_back_ts.add(ts_part)
+
+        gbif_entries = [
+            e for e in app_state._log_records
+            if e.get("Action") == "GBIF_UPDATE" and str(e.get("Timestamp", "")).strip() not in rolled_back_ts
+        ]
         if not gbif_entries:
             if main_window:
                 messagebox.showinfo("No Updates Found", "No GBIF taxonomic updates found in the audit log to roll back.")
@@ -328,7 +343,9 @@ def rollback_gbif_updates(app_state, main_window=None):
             "ProblemsChanged": "",
             "ProblemsChangedValues": "",
             "LocationChanged": "",
-            "LocationChangedValues": ""
+            "LocationChangedValues": "",
+            "SourceFile": os.path.basename(app_state.excel_path or ""),
+            "OutputFile": os.path.basename(app_state.output_path or app_state.excel_path or "")
         }
         app_state._log_records.append(rollback_log)
         app_state.df_log = pd.DataFrame(app_state._log_records)

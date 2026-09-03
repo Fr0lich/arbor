@@ -413,23 +413,45 @@ PinggyTunnel = ResilientSSHTunnel
 
 
 def get_local_ip():
-    # 1. Direct UDP gateway probe
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('10.255.255.255', 1))
-        ip = s.getsockname()[0]
-        s.close()
-        if ip and not ip.startswith('127.'):
-            return ip
-    except Exception:
-        pass
+    """Discover the most suitable local LAN / Wi-Fi IP address for the mobile companion."""
+    # 1. Direct UDP gateway probe using public/local DNS targets
+    for target in [('8.8.8.8', 80), ('1.1.1.1', 80), ('10.255.255.255', 1)]:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0.5)
+            s.connect(target)
+            ip = s.getsockname()[0]
+            s.close()
+            if ip and not ip.startswith('127.'):
+                return ip
+        except Exception:
+            pass
 
-    # 2. Enumerate host IP list prioritizing private LAN / Wi-Fi ranges
+    # 2. Enumerate host IP list prioritizing physical private LAN / Wi-Fi ranges
     try:
         host_ips = socket.gethostbyname_ex(socket.gethostname())[2]
+        
+        # Priority 2a: Standard home/office Wi-Fi (192.168.x.x excluding VirtualBox 192.168.56.x)
         for ip in host_ips:
-            if ip.startswith(('192.168.', '172.', '10.')) and not ip.startswith('127.'):
+            if ip.startswith('192.168.') and not ip.startswith('192.168.56.') and not ip.startswith('127.'):
                 return ip
+
+        # Priority 2b: Standard 10.x private LAN
+        for ip in host_ips:
+            if ip.startswith('10.') and not ip.startswith('127.'):
+                return ip
+
+        # Priority 2c: 172.16 - 172.31 private LAN
+        for ip in host_ips:
+            if ip.startswith('172.') and not ip.startswith('127.'):
+                return ip
+
+        # Priority 2d: Any remaining 192.168.x.x (including host-only if nothing else)
+        for ip in host_ips:
+            if ip.startswith('192.168.') and not ip.startswith('127.'):
+                return ip
+
+        # Priority 2e: Any non-loopback IP
         for ip in host_ips:
             if not ip.startswith('127.'):
                 return ip

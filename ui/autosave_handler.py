@@ -27,6 +27,7 @@ class AutosaveMixin:
                 df_obs_copy   = self.app.df_obs.copy()   if self.app.df_obs   is not None else None
                 df_photo_copy = self.app.df_photo.copy() if self.app.df_photo is not None else None
                 df_log_copy   = self.app.df_log.copy()   if getattr(self.app, 'df_log', None) is not None else None
+                df_unval_copy = self.app.df_unvalidated.copy() if getattr(self.app, 'df_unvalidated', None) is not None else None
         except Exception as e:
             self._save_in_progress = False
             self.set_status_badge("autosaved", "Save Error")
@@ -41,7 +42,8 @@ class AutosaveMixin:
                     "df_reg": df_reg_copy,
                     "df_obs": df_obs_copy,
                     "df_photo": df_photo_copy,
-                    "df_log": df_log_copy
+                    "df_log": df_log_copy,
+                    "df_unvalidated": df_unval_copy
                 }
                 json_data = {
                     k: v.to_dict(orient="split") if v is not None else None

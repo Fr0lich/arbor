@@ -39,10 +39,14 @@ class FilterManager:
         if old_taxonomy_query and df_log is not None and not df_log.empty:
             q_lower = str(old_taxonomy_query).strip().lower()
             if q_lower and "Action" in df_log.columns:
-                action_mask = df_log["Action"].astype(str).isin(["GBIF_UPDATE", "EDIT", "GBIF_ROLLBACK"])
+                action_mask = df_log["Action"].astype(str).isin([
+                    "GBIF_UPDATE", "EDIT", "GBIF_ROLLBACK", "RESOLVE_HISTORICAL_CONFLICT", "MOBILE_EDIT"
+                ])
                 cv_match = df_log["ChangedValues"].fillna("").astype(str).str.lower().str.contains(q_lower, regex=False) if "ChangedValues" in df_log.columns else pd.Series(False, index=df_log.index)
                 cf_match = df_log["ChangedFields"].fillna("").astype(str).str.lower().str.contains(q_lower, regex=False) if "ChangedFields" in df_log.columns else pd.Series(False, index=df_log.index)
-                matched_df = df_log.loc[action_mask & (cv_match | cf_match)]
+                pcv_match = df_log["ProblemsChangedValues"].fillna("").astype(str).str.lower().str.contains(q_lower, regex=False) if "ProblemsChangedValues" in df_log.columns else pd.Series(False, index=df_log.index)
+                lcv_match = df_log["LocationChangedValues"].fillna("").astype(str).str.lower().str.contains(q_lower, regex=False) if "LocationChangedValues" in df_log.columns else pd.Series(False, index=df_log.index)
+                matched_df = df_log.loc[action_mask & (cv_match | cf_match | pcv_match | lcv_match)]
                 if "ObjectID" in matched_df.columns:
                     old_tax_matched_set = set(matched_df["ObjectID"].dropna().astype(str).str.strip().unique())
 

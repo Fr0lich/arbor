@@ -3818,93 +3818,135 @@ class ObjectProgramUI(
         def jf(arr): return ", ".join(arr) if isinstance(arr, list) else (arr or "")
         def jv(arr): return " | ".join(arr) if isinstance(arr, list) else (arr or "")
 
+        def _merge_diff_strings(existing_str, new_str):
+            if not existing_str:
+                return new_str or ""
+            if not new_str:
+                return existing_str or ""
+            
+            field_order = []
+            field_diffs = {}
+            
+            for s in (existing_str, new_str):
+                parts = [p.strip() for p in s.split(" | ") if p.strip()]
+                for p in parts:
+                    if ":" in p and (' -> ' in p or '  ' in p):
+                        col = p.split(":", 1)[0].strip()
+                        val_part = p.split(":", 1)[1].strip()
+                        sep = " -> " if " -> " in val_part else "  "
+                        v_split = val_part.split(sep, 1)
+                        old_v = v_split[0].strip()
+                        new_v = v_split[1].strip() if len(v_split) > 1 else ""
+                        if col not in field_diffs:
+                            field_order.append(col)
+                            field_diffs[col] = (old_v, new_v, sep)
+                        else:
+                            orig_old, _, _ = field_diffs[col]
+                            field_diffs[col] = (orig_old, new_v, sep)
+                    else:
+                        if p not in field_diffs:
+                            field_order.append(p)
+                            field_diffs[p] = None
+            
+            result_parts = []
+            for k in field_order:
+                val = field_diffs[k]
+                if val is None:
+                    result_parts.append(k)
+                else:
+                    old_v, new_v, sep = val
+                    result_parts.append(f"{k}: {old_v}{sep}{new_v}")
+            return " | ".join(result_parts)
+
         has_any = bool(changed_fields or prob_fields or loc_fields)
         if not has_any and action != "SAVE":
             cf_text = "(no changes)"
         else:
             cf_text = jf(changed_fields)
 
-        if not hasattr(self.app, "_log_records") or not self.app._log_records:
-            if self.app.df_log is not None and not self.app.df_log.empty:
-                self.app._log_records = self.app.df_log.to_dict(orient="records")
-            else:
-                self.app._log_records = []
+        with (getattr(self.app, 'df_lock', None) or nullcontext()):
+            if not hasattr(self.app, "_log_records") or not self.app._log_records:
+                if self.app.df_log is not None and not self.app.df_log.empty:
+                    self.app._log_records = self.app.df_log.to_dict(orient="records")
+                else:
+                    self.app._log_records = []
 
-        is_reviewed = "Yes" if action == "REVIEWED" else "No" if action == "NOT_REVIEWED" else ""
+            is_reviewed = "Yes" if action == "REVIEWED" else "No" if action == "NOT_REVIEWED" else ""
 
-        # Merge contiguous edits for the same object
-        if action in ("EDIT", "REVIEWED", "NOT_REVIEWED") and self.app._log_records:
-            last_entry = self.app._log_records[-1]
-            if last_entry.get("Action") in ("EDIT", "REVIEWED", "NOT_REVIEWED") and last_entry.get("ObjectID") == target_oid:
-                # Update timestamp and action
-                last_entry["Timestamp"] = datetime.now().isoformat(timespec="seconds")
+            # Merge contiguous edits for the same object
+            if action in ("EDIT", "REVIEWED", "NOT_REVIEWED") and self.app._log_records:
+                last_entry = self.app._log_records[-1]
+                if last_entry.get("Action") in ("EDIT", "REVIEWED", "NOT_REVIEWED") and last_entry.get("ObjectID") == target_oid:
+                    # Update timestamp and action
+                    last_entry["Timestamp"] = datetime.now().isoformat(timespec="seconds")
 
-                if action == "EDIT":
-                    last_entry["Action"] = "EDIT"
-                elif action in ("REVIEWED", "NOT_REVIEWED"):
-                    last_entry["Reviewed"] = is_reviewed
-                    if last_entry.get("Action") != "EDIT":
-                        last_entry["Action"] = action
+                    if action == "EDIT":
+                        last_entry["Action"] = "EDIT"
+                    elif action in ("REVIEWED", "NOT_REVIEWED"):
+                        last_entry["Reviewed"] = is_reviewed
+                        if last_entry.get("Action") != "EDIT":
+                            last_entry["Action"] = action
 
-                # Merge ChangedFields
-                existing_cf = set(x.strip() for x in last_entry.get("ChangedFields", "").split(",") if x.strip() and x.strip() != "(no changes)")
-                new_cf = set(x.strip() for x in (cf_text or "").split(",") if x.strip() and x.strip() != "(no changes)")
-                merged_cf = existing_cf.union(new_cf)
-                last_entry["ChangedFields"] = ", ".join(sorted(merged_cf)) if merged_cf else "(no changes)"
+                    # Merge ChangedFields
+                    existing_cf = set(x.strip() for x in last_entry.get("ChangedFields", "").split(",") if x.strip() and x.strip() != "(no changes)")
+                    new_cf = set(x.strip() for x in (cf_text or "").split(",") if x.strip() and x.strip() != "(no changes)")
+                    merged_cf = existing_cf.union(new_cf)
+                    last_entry["ChangedFields"] = ", ".join(sorted(merged_cf)) if merged_cf else "(no changes)"
 
-                # Merge ChangedValues
-                existing_cv = last_entry.get("ChangedValues", "")
-                new_cv = jv(changed_values)
-                if new_cv:
-                    last_entry["ChangedValues"] = f"{existing_cv} | {new_cv}" if existing_cv else new_cv
+                    # Merge ChangedValues with per-field consolidation
+                    existing_cv = last_entry.get("ChangedValues", "")
+                    new_cv = jv(changed_values)
+                    if new_cv:
+                        last_entry["ChangedValues"] = _merge_diff_strings(existing_cv, new_cv)
 
-                # Merge ProblemsChanged
-                existing_pc = set(x.strip() for x in last_entry.get("ProblemsChanged", "").split(",") if x.strip())
-                new_pc = set(x.strip() for x in jf(prob_fields).split(",") if x.strip())
-                merged_pc = existing_pc.union(new_pc)
-                last_entry["ProblemsChanged"] = ", ".join(sorted(merged_pc)) if merged_pc else ""
+                    # Merge ProblemsChanged
+                    existing_pc = set(x.strip() for x in last_entry.get("ProblemsChanged", "").split(",") if x.strip())
+                    new_pc = set(x.strip() for x in jf(prob_fields).split(",") if x.strip())
+                    merged_pc = existing_pc.union(new_pc)
+                    last_entry["ProblemsChanged"] = ", ".join(sorted(merged_pc)) if merged_pc else ""
 
-                # Merge ProblemsChangedValues
-                existing_pcv = last_entry.get("ProblemsChangedValues", "")
-                new_pcv = jv(prob_values)
-                if new_pcv:
-                    last_entry["ProblemsChangedValues"] = f"{existing_pcv} | {new_pcv}" if existing_pcv else new_pcv
+                    # Merge ProblemsChangedValues
+                    existing_pcv = last_entry.get("ProblemsChangedValues", "")
+                    new_pcv = jv(prob_values)
+                    if new_pcv:
+                        last_entry["ProblemsChangedValues"] = _merge_diff_strings(existing_pcv, new_pcv)
 
-                # Merge LocationChanged
-                existing_lc = set(x.strip() for x in last_entry.get("LocationChanged", "").split(",") if x.strip())
-                new_lc = set(x.strip() for x in jf(loc_fields).split(",") if x.strip())
-                merged_lc = existing_lc.union(new_lc)
-                last_entry["LocationChanged"] = ", ".join(sorted(merged_lc)) if merged_lc else ""
+                    # Merge LocationChanged
+                    existing_lc = set(x.strip() for x in last_entry.get("LocationChanged", "").split(",") if x.strip())
+                    new_lc = set(x.strip() for x in jf(loc_fields).split(",") if x.strip())
+                    merged_lc = existing_lc.union(new_lc)
+                    last_entry["LocationChanged"] = ", ".join(sorted(merged_lc)) if merged_lc else ""
 
-                # Replace LocationChangedValues entirely with the newest unified string
-                new_lcv = jv(loc_values)
-                if new_lcv:
-                    last_entry["LocationChangedValues"] = new_lcv
+                    # Merge LocationChangedValues
+                    existing_lcv = last_entry.get("LocationChangedValues", "")
+                    new_lcv = jv(loc_values)
+                    if new_lcv:
+                        last_entry["LocationChangedValues"] = _merge_diff_strings(existing_lcv, new_lcv)
 
-                self.app.df_log = pd.DataFrame(self.app._log_records)
-                return
+                    self.app.df_log = pd.DataFrame(self.app._log_records)
+                    return
 
-        entry = {
-            "Timestamp": datetime.now().isoformat(timespec="seconds"),
-            "Action": action,
-            "Reviewed": is_reviewed,
-            "ObjectID": target_oid,
-            "ChangedFields": cf_text or ("(no changes)" if not has_any else ""),
-            "ChangedValues": jv(changed_values),
-            "ProblemsChanged": jf(prob_fields),
-            "ProblemsChangedValues": jv(prob_values),
-            "LocationChanged": jf(loc_fields),
-            "LocationChangedValues": jv(loc_values),
-            "User": getpass.getuser(),
-            "SourceFile": os.path.basename(self.app.excel_path) if self.app.excel_path else "",
-            "OutputFile": os.path.basename(self.app.output_path) if self.app.output_path else "",
-        }
+            entry = {
+                "Timestamp": datetime.now().isoformat(timespec="seconds"),
+                "Action": action,
+                "Reviewed": is_reviewed,
+                "ObjectID": target_oid,
+                "ChangedFields": cf_text or ("(no changes)" if not has_any else ""),
+                "ChangedValues": jv(changed_values),
+                "ProblemsChanged": jf(prob_fields),
+                "ProblemsChangedValues": jv(prob_values),
+                "LocationChanged": jf(loc_fields),
+                "LocationChangedValues": jv(loc_values),
+                "User": getpass.getuser(),
+                "SourceFile": os.path.basename(self.app.excel_path) if self.app.excel_path else "",
+                "OutputFile": os.path.basename(self.app.output_path) if self.app.output_path else "",
+            }
 
-        self.app._log_records.append(entry)
-        self.app.df_log = pd.DataFrame(self.app._log_records)
+            self.app._log_records.append(entry)
+            self.app.df_log = pd.DataFrame(self.app._log_records)
 
     # ---------- Commit ----------
-    def commit_current_object(self, skip_heavy=None):
+    def commit_current_object(self, skip_heavy=None, skip_logging=False):
 
         if skip_heavy is None:
             skip_heavy = self._is_navigating
@@ -4069,7 +4111,7 @@ class ObjectProgramUI(
             self.update_dirty_ui()
             self._list_dirty = True
             
-            if has_changes:
+            if has_changes and not skip_logging:
                 # Log the edit immediately so it's captured in the continuous session
                 self.log_action("EDIT",
                                 reg_changed_fields, reg_changed_values,
@@ -4673,7 +4715,7 @@ class ObjectProgramUI(
 
         prev = self.app.current_object_id
 
-        if prev and prev != oid:
+        if prev is not None and str(prev).strip() != str(oid).strip():
             self.commit_current_object()
             self.last_object_id = prev
 

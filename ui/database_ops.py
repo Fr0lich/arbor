@@ -712,13 +712,15 @@ class DatabaseOpsMixin:
                     df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
                     df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None
                     df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
+                    df_unvalidated_copy = self.app.df_unvalidated.copy() if getattr(self.app, 'df_unvalidated', None) is not None else None
 
                 def _do_export():
                     from repository import SQLiteRepository
                     SQLiteRepository.export_to_excel(
                         sqlite_path, path,
                         self.app.config,
-                        df_reg=df_reg_copy, df_obs=df_obs_copy, df_log=df_log_copy, df_photo=df_photo_copy
+                        df_reg=df_reg_copy, df_obs=df_obs_copy, df_log=df_log_copy, df_photo=df_photo_copy,
+                        df_unvalidated=df_unvalidated_copy
                     )
                     return True
 
@@ -769,7 +771,7 @@ class DatabaseOpsMixin:
         try:
             self._show_progress("Importing to SQLite...", 100)
             from repository import SQLiteRepository
-            df_reg, df_obs, df_photo, df_log = SQLiteRepository.import_from_excel(excel_path, sqlite_path, self.app.config)
+            df_reg, df_obs, df_photo, df_log, df_unvalidated = SQLiteRepository.import_from_excel(excel_path, sqlite_path, self.app.config)
 
             self.app.excel_path = sqlite_path
             self.app.output_path = sqlite_path
@@ -777,6 +779,8 @@ class DatabaseOpsMixin:
             self.app.df_obs = df_obs
             self.app.df_photo = df_photo
             self.app.df_log = df_log
+            self.app._log_records = df_log.to_dict(orient="records") if df_log is not None and not df_log.empty else []
+            self.app.df_unvalidated = df_unvalidated if df_unvalidated is not None else pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
 
             if "ObjectID" in self.app.df_reg.columns:
                 self.app.df_reg.set_index("ObjectID", inplace=True)

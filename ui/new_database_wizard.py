@@ -1886,16 +1886,28 @@ class NewDatabaseWizard:
                 df_obs[p] = False
             df_obs["Reviewed"] = False
             df_obs["Images_Missing"] = False
-
             df_photo = pd.DataFrame(columns=["ObjectID", "ImagePath", "ImageNote"])
             df_photo.set_index("ObjectID", inplace=True)
 
-            df_log = pd.DataFrame([{
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            from repository import _normalise_log_dataframe
+            import getpass
+
+            raw_log = pd.DataFrame([{
+                "Timestamp": datetime.now().isoformat(timespec="seconds"),
                 "Action": "DATABASE_CREATED",
-                "Columns": f"Created with {len(reg_cols)} columns",
-                "Values": f"Initial records count: {row_count}"
+                "Reviewed": "",
+                "ObjectID": "ALL",
+                "ChangedFields": f"Created with {len(reg_cols)} columns",
+                "ChangedValues": f"Initial records count: {row_count}",
+                "ProblemsChanged": "",
+                "ProblemsChangedValues": "",
+                "LocationChanged": "",
+                "LocationChangedValues": "",
+                "User": getpass.getuser(),
+                "SourceFile": "",
+                "OutputFile": os.path.basename(file_path)
             }])
+            df_log = _normalise_log_dataframe(raw_log)
 
             os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
             with pd.ExcelWriter(file_path) as writer:
@@ -1920,6 +1932,7 @@ class NewDatabaseWizard:
                 self.app.df_obs = df_obs
                 self.app.df_photo = df_photo
                 self.app.df_log = df_log
+                self.app._log_records = df_log.to_dict(orient="records") if df_log is not None and not df_log.empty else []
                 self.app.initial_df_obs = df_obs.copy()
 
             if self.on_complete:

@@ -2,6 +2,7 @@ import pytest
 import pandas as pd
 import json
 import os
+import io
 import threading
 from models import AppState
 from backend.mobile_server import MobileServer
@@ -911,6 +912,120 @@ def test_index_route_rendering_and_cache_headers(mock_app_state):
     assert "Arbor Companion" in res.get_data(as_text=True)
     assert res.headers.get("Cache-Control") == "no-cache, no-store, must-revalidate, max-age=0"
     assert res.headers.get("Pragma") == "no-cache"
+
+
+def test_fallback_df_index_mismatch_safety(mock_app_state):
+    from backend.mobile_server import _apply_dataframe_updates
+    # df_reg has string index, df_obs has integer index
+    df_reg = pd.DataFrame({"Genus": ["Pinus"], "Species": ["sylvestris"]}, index=["1024"])
+    df_obs = pd.DataFrame({"Reviewed": [False]}, index=[1024])
+
+    changed_fields = []
+    changed_values = []
+    # Update a field present in df_reg (fallback) while passing target_df=df_obs with integer oid
+    _apply_dataframe_updates(df_obs, {"Species": "mugo"}, changed_fields, changed_values, 1024, fallback_df=df_reg)
+
+    assert "Species" in changed_fields
+    assert df_reg.at["1024", "Species"] == "mugo"
+
+
+def test_resolve_oid_stringified_floats():
+    from backend.mobile_server import _resolve_oid_in_df
+    df_int = pd.DataFrame({"A": [1, 2]}, index=[1024, 1025])
+    df_str = pd.DataFrame({"A": [1, 2]}, index=["1024", "1025"])
+
+    # Test float strings like "1024.0" and "1024.00"
+    assert _resolve_oid_in_df(df_int, "1024.0") == 1024
+    assert _resolve_oid_in_df(df_str, "1024.0") == "1024"
+    assert _resolve_oid_in_df(df_int, 1024.0) == 1024
+    assert _resolve_oid_in_df(df_str, 1024.0) == "1024"
+
+
+def test_photo_serving_route(mock_app_state, tmp_path):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # 1. Upload a test photo
+    data = {
+        'image': (io.BytesIO(b"fake-jpeg-binary-data"), 'test_specimen.jpg'),
+        'caption': 'Herbarium sheet overview'
+    }
+    upload_res = client.post('/api/object/1024/photo', data=data, headers=headers, content_type='multipart/form-data')
+    assert upload_res.status_code == 201
+    photo_filename = upload_res.json["filename"]
+    photo_url = upload_res.json["url"]
+
+    # 2. Fetch the uploaded photo via GET /api/photo/<filename>
+    photo_res = client.get(photo_url, headers=headers)
+    assert photo_res.status_code == 200
+    assert photo_res.data == b"fake-jpeg-binary-data"
+
+    # 3. Non-existent photo should return 404
+    missing_res = client.get('/api/photo/non_existent.jpg', headers=headers)
+    assert missing_res.status_code == 404
+
+
+def test_undo_and_photo_desktop_eventbus_dispatch(mock_app_state):
+    import io
+    events_dispatched = []
+
+    class MockTk:
+        def after(self, delay, func):
+            events_dispatched.append(func)
+            func()
+
+    mock_tk = MockTk()
+    server = MobileServer(mock_app_state, root_tk=mock_tk, port=5099)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # 1. Update object
+    client.post('/api/update', json={"id": "1024", "registration": {"Species": "mugo"}}, headers=headers)
+    assert len(events_dispatched) >= 1
+    events_dispatched.clear()
+
+    # 2. Undo edit
+    undo_res = client.post('/api/undo', json={"oid": "1024"}, headers=headers)
+    assert undo_res.status_code == 200
+    assert len(events_dispatched) == 1, "Undo must marshal DATABASE_UPDATED to root_tk"
+    events_dispatched.clear()
+
+    # 3. Photo upload
+    data = {
+        'image': (io.BytesIO(b"fake-image-bytes"), 'photo.jpg'),
+        'caption': 'Test'
+    }
+    photo_res = client.post('/api/object/1024/photo', data=data, headers=headers, content_type='multipart/form-data')
+    assert photo_res.status_code == 201
+    assert len(events_dispatched) == 1, "Photo upload must marshal DATABASE_UPDATED to root_tk"
+
+
+def test_conflict_delta_filtering(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Host makes an edit at t1 on Genus
+    client.post('/api/update', json={"id": "1024", "registration": {"Genus": "Abies"}}, headers=headers)
+
+    # Client was offline since t0 (older timestamp), now submits an update ONLY on Cabinet
+    # but passes full unmodified registration fields alongside it
+    offline_payload = {
+        "id": "1024",
+        "timestamp": "2020-01-01T00:00:00Z",
+        "registration": {
+            "Genus": "Abies",  # Matches current host value, not a real mutation
+            "Species": "sylvestris"
+        },
+        "observation": {
+            "Cabinet": "C-99"  # Real mutation on non-conflicting field
+        }
+    }
+    res = client.post('/api/update', json=offline_payload, headers=headers)
+    assert res.status_code == 200, "Non-conflicting field update with full form payload must not be rejected as conflict"
+    assert mock_app_state.df_obs.at["1024", "Cabinet"] == "C-99"
+
 
 
 

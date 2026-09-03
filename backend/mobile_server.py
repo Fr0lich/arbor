@@ -2,10 +2,12 @@ import threading
 import logging
 import random
 import string
+import uuid
 import json
 import base64
 import os
 import io
+import re
 import mimetypes
 import socket
 import subprocess
@@ -226,13 +228,15 @@ def _apply_dataframe_updates(target_df, updates, changed_fields, changed_values,
                 changed_fields.append(k)
                 changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
         elif fallback_df is not None and k in fallback_df.columns:
-            old_v = sanitize_value(fallback_df.at[oid, k])
-            new_v = sanitize_value(v)
-            if str(old_v) != str(new_v):
-                coerced = coerce_type(new_v, fallback_df[k].dtype)
-                fallback_df.at[oid, k] = coerced
-                changed_fields.append(k)
-                changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
+            fallback_oid = _resolve_oid_in_df(fallback_df, oid)
+            if fallback_oid is not None:
+                old_v = sanitize_value(fallback_df.at[fallback_oid, k])
+                new_v = sanitize_value(v)
+                if str(old_v) != str(new_v):
+                    coerced = coerce_type(new_v, fallback_df[k].dtype)
+                    fallback_df.at[fallback_oid, k] = coerced
+                    changed_fields.append(k)
+                    changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
         elif allowed_columns is not None and k in allowed_columns:
             new_v = sanitize_value(v)
             if new_v:
@@ -260,6 +264,12 @@ def _resolve_oid_in_df(df, oid):
             pass
     try:
         f_oid = float(s_oid)
+        if f_oid.is_integer():
+            i_oid = int(f_oid)
+            if i_oid in df.index:
+                return i_oid
+            if str(i_oid) in df.index:
+                return str(i_oid)
         if f_oid in df.index:
             return f_oid
     except Exception:
@@ -286,7 +296,7 @@ def _get_allowed_columns(config):
                 allowed_obs_cols.add(item["name"])
     return allowed_reg_cols, allowed_obs_cols
 
-def _apply_unvalidated_updates(app_state, oid, unvalidated_sources):
+def _apply_unvalidated_updates(app_state, oid, unvalidated_sources, changed_fields=None, changed_values=None):
     """Apply updates to df_unvalidated for an object."""
     if unvalidated_sources is None:
         return
@@ -295,7 +305,11 @@ def _apply_unvalidated_updates(app_state, oid, unvalidated_sources):
         app_state.df_unvalidated = pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
 
     df_u = app_state.df_unvalidated
+    old_rows = {}
     if not df_u.empty and "ObjectID" in df_u.columns:
+        matching = df_u[df_u["ObjectID"].astype(str).str.strip() == oid_str]
+        for _, r in matching.iterrows():
+            old_rows[str(r.get("Field_Name", "")).strip()] = str(r.get("Unvalidated_Comment", "")).strip()
         app_state.df_unvalidated = df_u[df_u["ObjectID"].astype(str).str.strip() != oid_str].copy()
 
     if isinstance(unvalidated_sources, list):
@@ -306,6 +320,12 @@ def _apply_unvalidated_updates(app_state, oid, unvalidated_sources):
                 comment = str(item.get("comment", "") or item.get("Unvalidated_Comment", "")).strip()
                 if f_name:
                     new_rows.append({"ObjectID": oid_str, "Field_Name": f_name, "Unvalidated_Comment": comment})
+                    old_c = old_rows.get(f_name, "")
+                    if old_c != comment:
+                        if changed_fields is not None:
+                            changed_fields.append(f"Unvalidated_{f_name}")
+                        if changed_values is not None:
+                            changed_values.append(f'Unvalidated_{f_name}: "{old_c}" -> "{comment}"')
         if new_rows:
             new_df = pd.DataFrame(new_rows)
             app_state.df_unvalidated = pd.concat([app_state.df_unvalidated, new_df], ignore_index=True)
@@ -385,12 +405,20 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
                     host_mod_reg = {k for k, v in curr_reg.items() if str(v) != str(base_reg.get(k, ""))}
                     host_mod_obs = {k for k, v in curr_obs.items() if str(v) != str(base_obs.get(k, ""))}
 
-                    incoming_reg = set(reg_updates.keys()) if reg_updates else set()
-                    incoming_obs = set(obs_updates.keys()) if obs_updates else set()
+                    # Only check incoming fields where the value actually mutated from current state
+                    incoming_reg = {k for k, v in reg_updates.items() if str(v) != str(curr_reg.get(k, ""))} if reg_updates else set()
+                    incoming_obs = {k for k, v in obs_updates.items() if str(v) != str(curr_obs.get(k, ""))} if obs_updates else set()
                     if reviewed is not None:
-                        incoming_obs.add(REVIEWED_COLUMN)
+                        curr_rev_raw = curr_obs.get("Reviewed", False)
+                        curr_rev_bool = (
+                            str(curr_rev_raw).strip().lower() in ("true", "1", "yes", "t")
+                            if isinstance(curr_rev_raw, (str, int, bool))
+                            else bool(curr_rev_raw)
+                        )
+                        if bool(reviewed) != curr_rev_bool:
+                            incoming_obs.add(REVIEWED_COLUMN)
 
-                    # If incoming fields overlap with modified fields on the host, reject as conflict
+                    # If mutated incoming fields overlap with modified fields on the host, reject as conflict
                     if (incoming_reg & host_mod_reg) or (incoming_obs & host_mod_obs):
                         return None, f"Conflict: Host has newer changes for {oid}"
 
@@ -432,7 +460,7 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
 
     # 3b. Apply Unvalidated Sources Updates
     if unvalidated_updates is not None:
-        _apply_unvalidated_updates(app_state, oid, unvalidated_updates)
+        _apply_unvalidated_updates(app_state, oid, unvalidated_updates, changed_fields=changed_fields, changed_values=changed_values)
 
     # 4. Handle Reviewed Status
     action_name = "MOBILE_EDIT"
@@ -459,6 +487,12 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
             if changed_fields == ["Reviewed"]:
                 action_name = "REVIEWED" if is_reviewed_bool else "NOT_REVIEWED"
 
+    edit_summary = f"#{oid}: {', '.join(changed_fields)}" if changed_fields else f"#{oid} updated"
+
+    # Zero-mutation guard: If no actual fields were mutated, do not create a phantom log entry or record a recent edit
+    if not changed_fields:
+        return edit_summary, None
+
     is_rev_str = "Yes" if current_reviewed_bool else "No"
 
     # 5. Append Audit Log Record
@@ -472,7 +506,6 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     app_state._log_records.append(log_entry)
 
     # 6. Record Recent Edit in Server
-    edit_summary = f"#{oid}: {', '.join(changed_fields)}" if changed_fields else f"#{oid} updated"
     if recent_edits is not None:
         recent_edits.insert(0, {
             "oid": str(oid),
@@ -485,13 +518,14 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     return edit_summary, None
 
 def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fields, changed_values):
-    # Lazy-build and cache the name sets — config is immutable per session so this is safe.
-    # Avoids rebuilding the sets from config on every single audit log write.
-    if not getattr(app_state, '_audit_set_cache', None):
+    # Lazy-build and cache the name sets — invalidate if active config identity changes
+    curr_cfg = getattr(app_state, "config", None)
+    cfg_id = id(curr_cfg) if curr_cfg else None
+    if getattr(app_state, '_audit_set_cache_cfg_id', None) != cfg_id or not getattr(app_state, '_audit_set_cache', None):
         _loc = {"building", "room", "cabinet", "shelf", "drawer", "box", "location", "aisle", "unittray", "tray", "barcode"}
         _prob = set()
-        if getattr(app_state, "config", None) and isinstance(app_state.config, dict) and "ui_sections" in app_state.config:
-            ui_sec = app_state.config["ui_sections"]
+        if curr_cfg and isinstance(curr_cfg, dict) and "ui_sections" in curr_cfg:
+            ui_sec = curr_cfg["ui_sections"]
             if "location" in ui_sec and isinstance(ui_sec["location"], list):
                 for l_item in ui_sec["location"]:
                     if isinstance(l_item, dict) and "name" in l_item:
@@ -501,6 +535,7 @@ def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fiel
                     if isinstance(p_item, dict) and "name" in p_item:
                         _prob.add(p_item["name"].lower())
         app_state._audit_set_cache = (_loc, _prob)
+        app_state._audit_set_cache_cfg_id = cfg_id
     location_names, problem_names = app_state._audit_set_cache
 
     loc_fields = []
@@ -523,7 +558,7 @@ def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fiel
             gen_values.append(v)
 
     now_ts = datetime.now().isoformat(timespec="seconds")
-    return {
+    entry = {
         "Timestamp": now_ts,
         "Action": action_name,
         "Reviewed": is_rev_str,
@@ -538,6 +573,10 @@ def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fiel
         "SourceFile": os.path.basename(app_state.excel_path or ""),
         "OutputFile": os.path.basename(app_state.output_path or app_state.excel_path or "")
     }
+    session_id = getattr(app_state, "_mobile_session_id", None)
+    if session_id:
+        entry["_session_id"] = session_id
+    return entry
 
 # Reduce Flask logging spam
 log = logging.getLogger('werkzeug')
@@ -545,30 +584,8 @@ log.setLevel(logging.ERROR)
 
 
 def get_local_ip():
-    # 1. Direct UDP gateway probe
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('10.255.255.255', 1))
-        ip = s.getsockname()[0]
-        s.close()
-        if ip and not ip.startswith('127.'):
-            return ip
-    except Exception:
-        pass
-
-    # 2. Enumerate host IP list prioritizing private LAN / Wi-Fi ranges
-    try:
-        host_ips = socket.gethostbyname_ex(socket.gethostname())[2]
-        for ip in host_ips:
-            if ip.startswith(('192.168.', '172.', '10.')) and not ip.startswith('127.'):
-                return ip
-        for ip in host_ips:
-            if not ip.startswith('127.'):
-                return ip
-    except Exception:
-        pass
-
-    return '127.0.0.1'
+    from backend.tunnel import get_local_ip as _tunnel_get_local_ip
+    return _tunnel_get_local_ip()
 
 
 class MobileServer:
@@ -577,6 +594,9 @@ class MobileServer:
         self.root_tk = root_tk
         self.port = port
         self.on_edit_callback = on_edit_callback
+        self.session_id = uuid.uuid4().hex[:12]
+        if self.app_state:
+            self.app_state._mobile_session_id = self.session_id
         self.flask_app = Flask(__name__)
         self.flask_app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
         self.session_token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
@@ -1715,10 +1735,11 @@ self.addEventListener('fetch', (event) => {
                         break
 
                 if hasattr(self.app_state, "_log_records") and self.app_state._log_records:
-                    # Find and remove the latest mobile log record for this oid
+                    # Find and remove the latest mobile log record created in this active session for this oid
                     for i in range(len(self.app_state._log_records) - 1, -1, -1):
                         rec = self.app_state._log_records[i]
-                        if str(rec.get("ObjectID", "")) == str(oid) and rec.get("Action") in ["MOBILE_EDIT", "REVIEWED"]:
+                        # Only pop if it was created in the current active session
+                        if str(rec.get("ObjectID", "")) == str(oid) and rec.get("Action") in ["MOBILE_EDIT", "REVIEWED"] and rec.get("_session_id") == self.session_id:
                             self.app_state._log_records.pop(i)
                             break
                     self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
@@ -1746,6 +1767,12 @@ self.addEventListener('fetch', (event) => {
             if self.on_edit_callback:
                 try:
                     self.on_edit_callback(oid, f"Undid last edit on {oid}")
+                except Exception:
+                    pass
+
+            if self.root_tk:
+                try:
+                    self.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED, mobile_edit=True))
                 except Exception:
                     pass
 
@@ -1835,6 +1862,27 @@ self.addEventListener('fetch', (event) => {
                 "has_unknown": flags["has_unknown"],
                 "synced_at": datetime.now().isoformat()
             })
+
+        @app.route('/api/photo/<path:filename>', methods=['GET'])
+        def get_photo(filename):
+            if not self._check_auth():
+                return jsonify({"error": "Unauthorized"}), 401
+
+            safe_filename_clean = secure_filename(os.path.basename(filename))
+            if not safe_filename_clean:
+                return jsonify({"error": "Invalid filename"}), 400
+
+            if self.app_state.excel_path:
+                db_folder = os.path.dirname(self.app_state.excel_path)
+            else:
+                db_folder = os.getcwd()
+            photos_dir = os.path.join(db_folder, "photos")
+            file_path = os.path.join(photos_dir, safe_filename_clean)
+
+            if not os.path.exists(file_path):
+                return jsonify({"error": "Photo not found"}), 404
+
+            return send_file(file_path)
 
         @app.route('/api/object/<oid>/photo', methods=['POST'])
         def attach_photo(oid):
@@ -1958,14 +2006,15 @@ self.addEventListener('fetch', (event) => {
                     "SourceFile": os.path.basename(self.app_state.excel_path or ""),
                     "OutputFile": os.path.basename(self.app_state.output_path or self.app_state.excel_path or "")
                 }
+                if getattr(self.app_state, "_mobile_session_id", None):
+                    log_entry["_session_id"] = self.app_state._mobile_session_id
                 self.app_state._log_records.append(log_entry)
                 self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
                 self.app_state.dirty = True
 
-            if hasattr(self.app_state, 'root_tk') and self.app_state.root_tk:
+            if self.root_tk:
                 try:
-                    from ui.state import app_bus, DATABASE_UPDATED
-                    self.app_state.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
+                    self.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED, mobile_edit=True))
                 except Exception:
                     pass
 
@@ -5598,6 +5647,10 @@ INDEX_TEMPLATE = """
     }
 
     async function saveCurrentEdits() {
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = null;
+      }
       if (!currentOid) return;
       const btnRev = document.getElementById('btnMarkReviewed');
 

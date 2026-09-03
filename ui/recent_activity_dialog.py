@@ -250,7 +250,7 @@ class RecentActivityDialog(tk.Toplevel):
         ).pack(side="left", padx=(0, sc(8)))
 
         self.chip_buttons = {}
-        action_options = ["All", "Manual Edit", "Mobile Edit", "Conflict Resolver", "Created Object"]
+        action_options = ["All", "Manual Edit", "Mobile Edit", "Conflict Resolver", "GBIF Update", "Reviewed", "Created Object"]
         for opt in action_options:
             btn = tk.Button(
                 chips_frame, text=opt, font=self.FONT_LABEL,
@@ -430,6 +430,21 @@ class RecentActivityDialog(tk.Toplevel):
         self._raw_visited_data = []
         self._raw_edits_data = []
 
+        action_display_map = {
+            "EDIT": "Manual Edit",
+            "MOBILE_EDIT": "Mobile Edit",
+            "RESOLVE_HISTORICAL_CONFLICT": "Conflict Resolver",
+            "CREATE_OBJECT_FAST": "Created Object",
+            "DATABASE_CREATED": "Database Created",
+            "GBIF_UPDATE": "GBIF Update",
+            "GBIF_ROLLBACK": "GBIF Rollback",
+            "REVIEWED": "Reviewed",
+            "NOT_REVIEWED": "Not Reviewed",
+            "PHOTO_ADDED": "Photo Added",
+            "UNVALIDATED_UPDATE": "Unvalidated Update",
+            "SAVE": "Session Save",
+        }
+
         # Parse history stack
         if self.history_stack:
             seen = set()
@@ -440,33 +455,33 @@ class RecentActivityDialog(tk.Toplevel):
                     title = self.get_object_title_fn(oid)
                     self._raw_visited_data.append((oid, title))
 
-        # Parse df_log
+        # Parse df_log vectorized for high speed on large databases
         if self.df_log is not None and not self.df_log.empty:
-            cols = list(self.df_log.columns)
-            for row in self.df_log.iloc[::-1].itertuples(index=False, name=None):
-                row_dict = dict(zip(cols, row))
-                tstamp = str(row_dict.get("Timestamp", ""))
+            df = self.df_log.iloc[::-1]
+            t_col = df["Timestamp"].fillna("").astype(str).tolist() if "Timestamp" in df.columns else [""] * len(df)
+            a_col = df["Action"].fillna("").astype(str).tolist() if "Action" in df.columns else [""] * len(df)
+            o_col = df["ObjectID"].fillna("").astype(str).tolist() if "ObjectID" in df.columns else [""] * len(df)
+            cf_col = df["ChangedFields"].fillna("").astype(str).tolist() if "ChangedFields" in df.columns else [""] * len(df)
+            cv_col = df["ChangedValues"].fillna("").astype(str).tolist() if "ChangedValues" in df.columns else [""] * len(df)
+            pf_col = df["ProblemsChanged"].fillna("").astype(str).tolist() if "ProblemsChanged" in df.columns else [""] * len(df)
+            pv_col = df["ProblemsChangedValues"].fillna("").astype(str).tolist() if "ProblemsChangedValues" in df.columns else [""] * len(df)
+            lf_col = df["LocationChanged"].fillna("").astype(str).tolist() if "LocationChanged" in df.columns else [""] * len(df)
+            lv_col = df["LocationChangedValues"].fillna("").astype(str).tolist() if "LocationChangedValues" in df.columns else [""] * len(df)
+
+            for i in range(len(df)):
+                tstamp = t_col[i]
                 if "T" in tstamp:
                     tstamp = tstamp.split('.')[0].replace("T", " ")
 
-                raw_act = str(row_dict.get("Action", ""))
-                display_act = raw_act
-                if raw_act == "EDIT":
-                    display_act = "Manual Edit"
-                elif raw_act == "MOBILE_EDIT":
-                    display_act = "Mobile Edit"
-                elif raw_act == "RESOLVE_HISTORICAL_CONFLICT":
-                    display_act = "Conflict Resolver"
-                elif raw_act == "CREATE_OBJECT_FAST":
-                    display_act = "Created Object"
-
-                obj_id = str(row_dict.get("ObjectID", ""))
-                c_fields = str(row_dict.get("ChangedFields", ""))
-                c_vals = str(row_dict.get("ChangedValues", ""))
-                p_fields = str(row_dict.get("ProblemsChanged", ""))
-                p_vals = str(row_dict.get("ProblemsChangedValues", ""))
-                l_fields = str(row_dict.get("LocationChanged", ""))
-                l_vals = str(row_dict.get("LocationChangedValues", ""))
+                raw_act = a_col[i]
+                display_act = action_display_map.get(raw_act, raw_act)
+                obj_id = o_col[i]
+                c_fields = cf_col[i]
+                c_vals = cv_col[i]
+                p_fields = pf_col[i]
+                p_vals = pv_col[i]
+                l_fields = lf_col[i]
+                l_vals = lv_col[i]
 
                 changes_parts = []
                 if c_fields and c_fields.strip() and c_fields != "(no changes)":
@@ -521,7 +536,8 @@ class RecentActivityDialog(tk.Toplevel):
         idx_v = 0 if col_v == "ObjectID" else 1
         filtered_visited.sort(key=lambda r: r[idx_v], reverse=(dir_v == "desc"))
 
-        for i, (oid, spec) in enumerate(filtered_visited):
+        # Render top 500 visited records
+        for i, (oid, spec) in enumerate(filtered_visited[:500]):
             tag = "even" if i % 2 == 0 else "odd"
             self.tree_v.insert("", "end", values=(oid, spec), tags=(tag,))
 
@@ -540,13 +556,17 @@ class RecentActivityDialog(tk.Toplevel):
         idx_e = col_map_e.get(col_e, 1)
         filtered_edits.sort(key=lambda r: r[idx_e], reverse=(dir_e == "desc"))
 
-        for i, (oid, tstamp, act, changes) in enumerate(filtered_edits):
+        # Render top 500 edit records
+        for i, (oid, tstamp, act, changes) in enumerate(filtered_edits[:500]):
             tag = "even" if i % 2 == 0 else "odd"
             self.tree_e.insert("", "end", values=(oid, tstamp, act, changes), tags=(tag,))
 
-        # Update counter
-        count = len(filtered_visited) if self.active_tab_name == "visited" else len(filtered_edits)
-        self.lbl_count.config(text=f"{count} records found")
+        # Update counter with display cap notice if needed
+        total_count = len(filtered_visited) if self.active_tab_name == "visited" else len(filtered_edits)
+        if total_count > 500:
+            self.lbl_count.config(text=f"Showing top 500 of {total_count} records")
+        else:
+            self.lbl_count.config(text=f"{total_count} records found")
 
         self._update_heading_labels()
 

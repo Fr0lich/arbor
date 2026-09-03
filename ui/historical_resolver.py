@@ -408,7 +408,7 @@ class HistoricalConflictResolverWindow:
                             self.main_app.loaded_problem_states[pc] = False
                 
                 self.main_app._row_cache_dirty = True
-                self.main_app.commit_current_object()
+                self.main_app.commit_current_object(skip_logging=True)
  
                 self.main_app.log_action(
                     "RESOLVE_HISTORICAL_CONFLICT",
@@ -512,7 +512,7 @@ class HistoricalConflictResolverWindow:
                             self.main_app.loaded_problem_states[pc] = False
 
                 self.main_app._row_cache_dirty = True
-                self.main_app.commit_current_object()
+                self.main_app.commit_current_object(skip_logging=True)
                         
                 # Update card visually
                 if field in self.card_frames:
