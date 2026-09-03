@@ -436,20 +436,30 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
 
     # 4. Handle Reviewed Status
     action_name = "MOBILE_EDIT"
-    is_rev_str = ""
+    old_reviewed_raw = old_obs.get("Reviewed", False)
+    old_reviewed_bool = (
+        str(old_reviewed_raw).strip().lower() in ("true", "1", "yes", "t")
+        if isinstance(old_reviewed_raw, (str, int, bool))
+        else bool(old_reviewed_raw)
+    )
+    current_reviewed_bool = old_reviewed_bool
+
     if reviewed is not None:
         is_reviewed_bool = bool(reviewed)
-        is_rev_str = "Yes" if is_reviewed_bool else "No"
-        if app_state.df_obs is not None and resolved_obs_oid is not None and resolved_obs_oid in app_state.df_obs.index:
-            if "Reviewed" in app_state.df_obs.columns:
-                app_state.df_obs.at[resolved_obs_oid, "Reviewed"] = is_reviewed_bool
-            if "ReviewedAt" in app_state.df_obs.columns:
-                app_state.df_obs.at[resolved_obs_oid, "ReviewedAt"] = datetime.now().isoformat(timespec="seconds")
-            changed_fields.append("Reviewed")
-            changed_values.append(f'Reviewed: "{old_obs.get("Reviewed", "")}" -> "{is_reviewed_bool}"')
+        current_reviewed_bool = is_reviewed_bool
+        if is_reviewed_bool != old_reviewed_bool:
+            if app_state.df_obs is not None and resolved_obs_oid is not None and resolved_obs_oid in app_state.df_obs.index:
+                if "Reviewed" in app_state.df_obs.columns:
+                    app_state.df_obs.at[resolved_obs_oid, "Reviewed"] = is_reviewed_bool
+                if "ReviewedAt" in app_state.df_obs.columns:
+                    app_state.df_obs.at[resolved_obs_oid, "ReviewedAt"] = datetime.now().isoformat(timespec="seconds") if is_reviewed_bool else ""
+                changed_fields.append("Reviewed")
+                changed_values.append(f'Reviewed: "{old_reviewed_bool}" -> "{is_reviewed_bool}"')
 
-        if changed_fields == ["Reviewed"]:
-            action_name = "REVIEWED" if is_reviewed_bool else "NOT_REVIEWED"
+            if changed_fields == ["Reviewed"]:
+                action_name = "REVIEWED" if is_reviewed_bool else "NOT_REVIEWED"
+
+    is_rev_str = "Yes" if current_reviewed_bool else "No"
 
     # 5. Append Audit Log Record
     if not hasattr(app_state, "_log_records") or app_state._log_records is None:

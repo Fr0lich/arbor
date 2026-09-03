@@ -706,6 +706,22 @@ def test_mobile_action_name_reviewed_when_only_reviewed_changes(mock_app_state):
     log_entry_unrev = mock_app_state._log_records[-1]
     assert log_entry_unrev["Action"] == "NOT_REVIEWED"
 
+    # Edit a field (e.g. Species) while sending unchanged reviewed: False
+    payload_edit_unrev = {
+        "id": "1024",
+        "registration": {"Species": "mugo_var_pumilio"},
+        "reviewed": False
+    }
+    res_edit = client.post('/api/update', json=payload_edit_unrev, headers=headers)
+    assert res_edit.status_code == 200
+    assert res_edit.json["success"] is True
+
+    log_entry_edit = mock_app_state._log_records[-1]
+    assert log_entry_edit["Action"] == "MOBILE_EDIT"
+    assert log_entry_edit["ChangedFields"] == "Species"
+    assert "Reviewed" not in log_entry_edit["ChangedFields"]
+    assert "Reviewed:" not in log_entry_edit["ChangedValues"]
+
 
 def test_mobile_undo_with_integer_index_and_desktop_log_protection():
     app = AppState()
