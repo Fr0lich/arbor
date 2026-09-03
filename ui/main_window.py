@@ -4136,21 +4136,37 @@ class ObjectProgramUI(
             if hasattr(self, "invalidate_history_cache"):
                 self.invalidate_history_cache(oid)
 
+    def _ensure_row_caches(self):
+        obs_df = self.app.df_obs
+        reg_df = self.app.df_reg
+        self._cached_reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
+        self._cached_obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
+        self._cached_reviewed_dict = (
+            obs_df[REVIEWED_COLUMN].to_dict()
+            if obs_df is not None and REVIEWED_COLUMN in obs_df.columns
+            else {}
+        )
+        self._cached_genus_dict = (
+            reg_df["Genus"].to_dict()
+            if reg_df is not None and "Genus" in reg_df.columns
+            else {}
+        )
+        self._cached_species_dict = (
+            reg_df["Species"].to_dict()
+            if reg_df is not None and "Species" in reg_df.columns
+            else {}
+        )
+        self._row_cache_dirty = False
+
     def _get_obs_dict(self):
         if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_obs_dict", None) is None:
-            obs_df = self.app.df_obs
-            self._cached_obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
-            if getattr(self, "_cached_reg_dict", None) is not None:
-                self._row_cache_dirty = False
-        return self._cached_obs_dict
+            self._ensure_row_caches()
+        return self._cached_obs_dict or {}
 
     def _get_reg_dict(self):
         if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_reg_dict", None) is None:
-            reg_df = self.app.df_reg
-            self._cached_reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
-            if getattr(self, "_cached_obs_dict", None) is not None:
-                self._row_cache_dirty = False
-        return self._cached_reg_dict
+            self._ensure_row_caches()
+        return self._cached_reg_dict or {}
 
 
     def update_location_summary(self, oid):
@@ -6611,33 +6627,23 @@ class ObjectProgramUI(
         obs_df = self.app.df_obs
         reg_df = self.app.df_reg
 
-        # Use cached dicts; rebuild only when data has changed (_row_cache_dirty).
+        # Use cached dicts; rebuild only when data has changed (_row_cache_dirty) or if uninitialized.
         # This avoids expensive full-DF to_dict() on every filter/search/review.
-        if getattr(self, "_row_cache_dirty", True) or self._cached_reg_dict is None:
-            self._cached_reg_dict = reg_df.to_dict(orient="index") if reg_df is not None else {}
-            self._cached_obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
-            self._cached_reviewed_dict = (
-                obs_df[REVIEWED_COLUMN].to_dict()
-                if obs_df is not None and REVIEWED_COLUMN in obs_df.columns
-                else {}
-            )
-            self._cached_genus_dict = (
-                reg_df["Genus"].to_dict()
-                if reg_df is not None and "Genus" in reg_df.columns
-                else {}
-            )
-            self._cached_species_dict = (
-                reg_df["Species"].to_dict()
-                if reg_df is not None and "Species" in reg_df.columns
-                else {}
-            )
-            self._row_cache_dirty = False
+        if (
+            getattr(self, "_row_cache_dirty", True)
+            or getattr(self, "_cached_reg_dict", None) is None
+            or getattr(self, "_cached_obs_dict", None) is None
+            or getattr(self, "_cached_genus_dict", None) is None
+            or getattr(self, "_cached_species_dict", None) is None
+            or getattr(self, "_cached_reviewed_dict", None) is None
+        ):
+            self._ensure_row_caches()
 
-        reviewed_dict = self._cached_reviewed_dict
-        genus_dict    = self._cached_genus_dict
-        species_dict  = self._cached_species_dict
-        reg_dict      = self._cached_reg_dict
-        obs_dict      = self._cached_obs_dict
+        reviewed_dict = self._cached_reviewed_dict or {}
+        genus_dict    = self._cached_genus_dict or {}
+        species_dict  = self._cached_species_dict or {}
+        reg_dict      = self._cached_reg_dict or {}
+        obs_dict      = self._cached_obs_dict or {}
 
 
 
