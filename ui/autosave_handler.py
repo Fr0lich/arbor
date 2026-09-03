@@ -220,14 +220,16 @@ class AutosaveMixin:
                 df_obs = load_df("df_obs")
                 df_photo = load_df("df_photo")
                 df_log = load_df("df_log")
+                df_unvalidated = load_df("df_unvalidated")
             else:
                 from repository import ExcelRepository
-                df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(autosave_path, self.app.config)
+                df_reg, df_obs, df_photo, df_log, df_unvalidated = ExcelRepository.load_excel(autosave_path, self.app.config)
 
             self.app.df_reg = df_reg
             self.app.df_obs = df_obs
             self.app.df_photo = df_photo
             self.app.df_log = df_log
+            self.app.df_unvalidated = df_unvalidated if df_unvalidated is not None else pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
 
             if "ObjectID" in self.app.df_reg.columns:
                 self.app.df_reg.set_index("ObjectID", inplace=True)

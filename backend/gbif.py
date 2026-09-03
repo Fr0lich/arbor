@@ -92,3 +92,86 @@ def get_accepted_name(usage_key: int):
     except Exception as e:
         print(f"Error checking GBIF accepted name: {e}")
         return None
+
+
+def batch_gbif_match(items, progress_callback=None, cancel_event=None):
+    """
+    Query GBIF for a list of items and return proposed taxonomic changes.
+    """
+    results = []
+    total = len(items)
+
+    for i, item in enumerate(items):
+        if cancel_event and cancel_event.is_set():
+            break
+
+        oid = str(item.get("oid", ""))
+        genus = str(item.get("genus", "") or "").strip()
+        species = str(item.get("species", "") or "").strip()
+        author = str(item.get("author", "") or "").strip()
+        family = str(item.get("family", "") or "").strip()
+        higher = str(item.get("higher_classification", "") or item.get("Higher Classification", "") or "").strip()
+
+        if progress_callback:
+            try:
+                progress_callback(i + 1, total, oid)
+            except Exception:
+                pass
+
+        if not genus and not species:
+            continue
+
+        gbif_data = check_gbif(genus, species)
+        if not gbif_data:
+            continue
+
+        # If synonym, optionally fetch accepted name
+        if gbif_data.get("synonym") and gbif_data.get("acceptedUsageKey"):
+            acc_data = get_accepted_name(gbif_data["acceptedUsageKey"])
+            if acc_data:
+                gbif_data["genus"] = acc_data.get("genus") or gbif_data.get("genus")
+                gbif_data["species"] = acc_data.get("species") or gbif_data.get("species")
+                gbif_data["author"] = acc_data.get("author") or gbif_data.get("author")
+                gbif_data["family"] = acc_data.get("family") or gbif_data.get("family")
+                gbif_data["higherClassification"] = acc_data.get("higherClassification") or gbif_data.get("higherClassification")
+
+        prop_genus = gbif_data.get("genus") or ""
+        prop_species = gbif_data.get("species") or ""
+        prop_author = gbif_data.get("author") or ""
+        prop_family = gbif_data.get("family") or ""
+        prop_higher = gbif_data.get("higherClassification") or ""
+
+        current_map = {
+            "Genus": genus,
+            "Species": species,
+            "Author": author,
+            "Family": family,
+            "Higher Classification": higher
+        }
+        proposed_map = {
+            "Genus": prop_genus,
+            "Species": prop_species,
+            "Author": prop_author,
+            "Family": prop_family,
+            "Higher Classification": prop_higher
+        }
+
+        changes = []
+        for k in ["Genus", "Species", "Author", "Family", "Higher Classification"]:
+            c_val = current_map[k]
+            p_val = proposed_map[k]
+            if p_val and p_val != c_val:
+                changes.append({"field": k, "old": c_val, "new": p_val})
+
+        if changes:
+            results.append({
+                "oid": oid,
+                "current": current_map,
+                "proposed": proposed_map,
+                "changes": changes,
+                "match_type": gbif_data.get("matchType") or "MATCH",
+                "status": gbif_data.get("status") or "ACCEPTED",
+                "rank": gbif_data.get("rank") or "SPECIES"
+            })
+
+    return results

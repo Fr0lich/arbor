@@ -188,7 +188,7 @@ def test_mobile_excel_roundtrip_persistence(mock_app_state, tmp_path):
     assert os.path.exists(save_path)
 
     # Re-read back from Excel
-    loaded_reg, loaded_obs, loaded_photo, loaded_log = ExcelRepository.load_excel(
+    loaded_reg, loaded_obs, loaded_photo, loaded_log, loaded_unval = ExcelRepository.load_excel(
         save_path,
         mock_app_state.config
     )
@@ -472,19 +472,20 @@ def test_status_flags_and_six_tier_badge_parity():
     # 6: UNREV (Clean default unreviewed)
     # 7: ERR (Species_Problem = True -> maps to Species, Historical DB has Genus but NO Species)
     # 8: ERR+HIS (Species_Problem = True -> maps to Species, Historical DB HAS Species)
+    # 9: REV+ERR (Reviewed = True and MissingLabel = True)
     app.df_reg = pd.DataFrame({
-        "Genus": ["Pinus", "Betula", "Quercus", "?", "?", "Fagus", "Acer", "Ulmus"],
-        "Species": ["sylvestris", "pendula", "robur", "alba", "incana", "sylvatica", "platanoides", "glabra"],
-        "Author": ["L.", "Roth", "L.", "L.", "L.", "L.", "L.", "Huds."],
-        "Cabinet": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
-    }, index=pd.Index(["1", "2", "3", "4", "5", "6", "7", "8"], name="ObjectID"))
+        "Genus": ["Pinus", "Betula", "Quercus", "?", "?", "Fagus", "Acer", "Ulmus", "Fraxinus"],
+        "Species": ["sylvestris", "pendula", "robur", "alba", "incana", "sylvatica", "platanoides", "glabra", "excelsior"],
+        "Author": ["L.", "Roth", "L.", "L.", "L.", "L.", "L.", "Huds.", "L."],
+        "Cabinet": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9"]
+    }, index=pd.Index(["1", "2", "3", "4", "5", "6", "7", "8", "9"], name="ObjectID"))
 
     app.df_obs = pd.DataFrame({
-        "Reviewed": [True, False, False, False, False, False, False, False],
-        "MissingLabel": [False, True, True, False, False, False, False, False],
-        "Species_Problem": [False, False, False, False, False, False, True, True],
-        "Cabinet": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
-    }, index=pd.Index(["1", "2", "3", "4", "5", "6", "7", "8"], name="ObjectID"))
+        "Reviewed": [True, False, False, False, False, False, False, False, True],
+        "MissingLabel": [False, True, True, False, False, False, False, False, True],
+        "Species_Problem": [False, False, False, False, False, False, True, True, False],
+        "Cabinet": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9"]
+    }, index=pd.Index(["1", "2", "3", "4", "5", "6", "7", "8", "9"], name="ObjectID"))
 
     # Historical DBs:
     # Obj 2: Has Genus = 'Betula' (resolves MissingLabel)
@@ -515,7 +516,7 @@ def test_status_flags_and_six_tier_badge_parity():
     res = client.get('/api/objects', headers=headers)
     assert res.status_code == 200
     data = res.json
-    assert data["total_matching"] == 8
+    assert data["total_matching"] == 9
 
     # Verify serialized object flags
     by_id = {o["id"]: o for o in data["objects"]}
@@ -526,6 +527,10 @@ def test_status_flags_and_six_tier_badge_parity():
     assert by_id["1"]["has_history"] is False
     assert by_id["1"]["problems_have_history"] is False
     assert by_id["1"]["has_unknown"] is False
+
+    # Obj 9: REV+ERR
+    assert by_id["9"]["review_status"] == "reviewed"
+    assert by_id["9"]["has_flags"] is True
 
     # Obj 2: ERR+HIS (MissingLabel has historical Genus)
     assert by_id["2"]["review_status"] == "pending"
@@ -573,10 +578,10 @@ def test_status_flags_and_six_tier_badge_parity():
 
     # 4. Test status filter query parameters
     res_reviewed = client.get('/api/objects?status=reviewed', headers=headers)
-    assert [o["id"] for o in res_reviewed.json["objects"]] == ["1"]
+    assert set(o["id"] for o in res_reviewed.json["objects"]) == {"1", "9"}
 
     res_flagged = client.get('/api/objects?status=flagged', headers=headers)
-    assert set(o["id"] for o in res_flagged.json["objects"]) == {"2", "3", "7", "8"}
+    assert set(o["id"] for o in res_flagged.json["objects"]) == {"2", "3", "7", "8", "9"}
 
     res_unknown = client.get('/api/objects?status=unknown', headers=headers)
     assert set(o["id"] for o in res_unknown.json["objects"]) == {"4", "5"}
@@ -780,4 +785,103 @@ def test_historical_value_dirty_tracking_in_template():
     assert "function undoHistoricalValue(field, originalValue)" in INDEX_TEMPLATE
     assert "currentRecord.observation[exactProb] = true;" in INDEX_TEMPLATE
     assert "document.getElementById(`prob_${exactProb}`)" in INDEX_TEMPLATE
+
+
+def test_mobile_ui_ux_improvements():
+    from backend.mobile_server import INDEX_TEMPLATE
+
+    # 1. Toast position at bottom-24
+    assert 'id="toast"' in INDEX_TEMPLATE
+    assert 'fixed bottom-24 left-4 right-4' in INDEX_TEMPLATE
+    assert 'function showToast' in INDEX_TEMPLATE
+
+    # 2. Persistent search box in top header
+    assert 'id="searchBox"' in INDEX_TEMPLATE
+    assert 'id="searchClearBtn"' in INDEX_TEMPLATE
+    assert 'id="btnFilterModalTrigger"' in INDEX_TEMPLATE
+
+    # 3. Offline syncing feedback in flushQueuedMutations
+    assert 'function flushQueuedMutations()' in INDEX_TEMPLATE
+    assert 'Syncing queued edits' in INDEX_TEMPLATE or 'Syncing' in INDEX_TEMPLATE
+    assert 'animate-spin' in INDEX_TEMPLATE
+
+    # 4. Advanced filters clear button and active indicator
+    assert 'id="filterActiveBadge"' in INDEX_TEMPLATE
+    assert 'function clearAdvancedFilters()' in INDEX_TEMPLATE
+    assert 'function updateFilterIndicator()' in INDEX_TEMPLATE
+    assert 'Clear All' in INDEX_TEMPLATE
+
+    # 5. Prominent Walk Mode active state
+    assert 'function toggleWakeLock()' in INDEX_TEMPLATE
+    assert 'bg-amber-400' in INDEX_TEMPLATE
+
+
+def test_unvalidated_sources_sync_and_endpoints(mock_app_state):
+    import pandas as pd
+    mock_app_state.df_unvalidated = pd.DataFrame([
+        {"ObjectID": "1024", "Field_Name": "Species", "Unvalidated_Comment": "Old label faded"},
+        {"ObjectID": "1024", "Field_Name": "Family", "Unvalidated_Comment": "Needs confirmation"}
+    ])
+
+    server = MobileServer(mock_app_state, port=5104)
+    client = server.flask_app.test_client()
+
+    client.post('/api/auth', json={"pin": server.pin})
+    token = server.session_token
+    headers = {"X-Session-Token": token}
+
+    # 1. /api/objects should report has_unvalidated=True for 1024 and False for 1025
+    res = client.get('/api/objects', headers=headers)
+    assert res.status_code == 200
+    objs = res.json["objects"]
+    obj_1024 = next(o for o in objs if o["id"] == "1024")
+    obj_1025 = next(o for o in objs if o["id"] == "1025")
+    assert obj_1024["has_unvalidated"] is True
+    assert obj_1025["has_unvalidated"] is False
+
+    # 2. /api/object/1024 should return unvalidated_sources list
+    res_det = client.get('/api/object/1024', headers=headers)
+    assert res_det.status_code == 200
+    sources = res_det.json["unvalidated_sources"]
+    assert len(sources) == 2
+    assert {"field": "Species", "comment": "Old label faded"} in sources
+    assert {"field": "Family", "comment": "Needs confirmation"} in sources
+
+    # 3. Update via /api/update with modified unvalidated sources
+    upd_payload = {
+        "id": "1024",
+        "unvalidated_sources": [
+            {"field": "Genus", "comment": "Handwritten note"}
+        ]
+    }
+    upd_res = client.post('/api/update', json=upd_payload, headers=headers)
+    assert upd_res.status_code == 200
+
+    # Verify mock_app_state.df_unvalidated updated
+    df_u = mock_app_state.df_unvalidated
+    matches = df_u[df_u["ObjectID"] == "1024"]
+    assert len(matches) == 1
+    assert matches.iloc[0]["Field_Name"] == "Genus"
+    assert matches.iloc[0]["Unvalidated_Comment"] == "Handwritten note"
+
+    # 4. Batch update unvalidated sources for another object
+    batch_payload = {
+        "updates": [
+            {
+                "id": "1025",
+                "unvalidated_sources": [
+                    {"field": "Author", "comment": "Illegible"}
+                ]
+            }
+        ]
+    }
+    batch_res = client.post('/api/batch_update', json=batch_payload, headers=headers)
+    assert batch_res.status_code == 200
+
+    matches_1025 = mock_app_state.df_unvalidated[mock_app_state.df_unvalidated["ObjectID"] == "1025"]
+    assert len(matches_1025) == 1
+    assert matches_1025.iloc[0]["Field_Name"] == "Author"
+    assert matches_1025.iloc[0]["Unvalidated_Comment"] == "Illegible"
+
+
 

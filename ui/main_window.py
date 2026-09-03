@@ -850,6 +850,9 @@ class ObjectProgramUI(
         self.filter_vars["Reviewed_With_Problem"] = tk.BooleanVar(value=False)
         self.filter_vars["Problem_With_History"]  = tk.BooleanVar(value=False)
         self.filter_vars["Has_History"]           = tk.BooleanVar(value=False)
+        self.filter_vars["Has_Unvalidated"]       = tk.BooleanVar(value=False)
+        self.filter_vars["Search_Old_Taxonomy"]   = tk.BooleanVar(value=False)
+        self.search_old_taxonomy_var              = tk.StringVar(value="")
 
 
 
@@ -1224,6 +1227,107 @@ class ObjectProgramUI(
             self.hide_banner()
             self.show_banner("Taxonomy updated from GBIF.", "success")
 
+    def batch_gbif_update_action(self):
+        if self.app.df_reg is None or self.app.df_reg.empty:
+            messagebox.showinfo("No Database", "Please load a database before querying GBIF.")
+            return
+
+        target_ids = list(self.app.active_object_ids) if self.app.active_object_ids else list(self.app.df_reg.index)
+        if not target_ids:
+            messagebox.showinfo("No Records", "No records found in active filter.")
+            return
+
+        items = []
+        for oid in target_ids:
+            reg_oid = oid
+            if reg_oid not in self.app.df_reg.index:
+                if str(oid).isdigit() and int(oid) in self.app.df_reg.index:
+                    reg_oid = int(oid)
+                else:
+                    matches = [idx for idx in self.app.df_reg.index if str(idx).strip() == str(oid).strip()]
+                    if matches:
+                        reg_oid = matches[0]
+                    else:
+                        continue
+            row = self.app.df_reg.loc[reg_oid]
+            genus = str(row.get("Genus", "") if pd.notna(row.get("Genus")) else "")
+            species = str(row.get("Species", "") if pd.notna(row.get("Species")) else "")
+            author = str(row.get("Author", "") if pd.notna(row.get("Author")) else "")
+            family = str(row.get("Family", "") if pd.notna(row.get("Family")) else "")
+            higher = str(row.get("Higher Classification", "") if pd.notna(row.get("Higher Classification")) else "")
+            if genus or species:
+                items.append({
+                    "oid": str(oid),
+                    "genus": genus,
+                    "species": species,
+                    "author": author,
+                    "family": family,
+                    "higher_classification": higher
+                })
+
+        if not items:
+            messagebox.showinfo("No Taxa", "No objects with Genus or Species found to check against GBIF.")
+            return
+
+        prog_win = tk.Toplevel(self.root)
+        prog_win.title("Querying GBIF API...")
+        prog_win.geometry(f"{sc(380)}x{sc(150)}")
+        prog_win.resizable(False, False)
+        prog_win.transient(self.root)
+        prog_win.grab_set()
+
+        lbl_text = tk.StringVar(value=f"Querying GBIF for 0 of {len(items)} objects...")
+        ttk.Label(prog_win, textvariable=lbl_text, font=("Segoe UI", sc(9))).pack(pady=(sc(15), sc(8)))
+        pbar = ttk.Progressbar(prog_win, maximum=len(items), mode="determinate")
+        pbar.pack(fill="x", padx=sc(20), pady=(0, sc(15)))
+
+        import threading
+        cancel_event = threading.Event()
+
+        def on_cancel():
+            cancel_event.set()
+            prog_win.destroy()
+
+        ttk.Button(prog_win, text="Cancel", command=on_cancel).pack()
+
+        def update_prog(cur, total, cur_oid):
+            if prog_win.winfo_exists():
+                lbl_text.set(f"Checking #{cur_oid} ({cur} / {total})...")
+                pbar["value"] = cur
+
+        def worker():
+            import backend.gbif
+            diff_results = backend.gbif.batch_gbif_match(
+                items,
+                progress_callback=lambda cur, tot, oid: self.root.after(0, lambda: update_prog(cur, tot, oid)),
+                cancel_event=cancel_event
+            )
+            if not cancel_event.is_set():
+                self.root.after(0, lambda: self._on_gbif_batch_completed(prog_win, diff_results))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_gbif_batch_completed(self, prog_win, diff_results):
+        if prog_win.winfo_exists():
+            prog_win.destroy()
+
+        if not diff_results:
+            messagebox.showinfo("GBIF Review", "All checked taxonomy records are up to date with GBIF (no changes detected).")
+            return
+
+        from ui.gbif_review import GBIFReviewDialog
+        GBIFReviewDialog(self.root, self.app, diff_results, on_applied_callback=self._on_gbif_batch_applied)
+
+    def _on_gbif_batch_applied(self, applied_count, objects_count):
+        if getattr(self.app, "current_object_id", None):
+            self.display_object(self.app.current_object_id)
+        if hasattr(self, "object_list") and hasattr(self.object_list, "refresh_all_cards"):
+            self.object_list.refresh_all_cards()
+        self.set_status_badge("unsaved", "Unsaved Changes")
+
+    def rollback_gbif_action(self):
+        from ui.gbif_review import rollback_gbif_updates
+        rollback_gbif_updates(self.app, main_window=self)
 
     def build_sections(self):
         RegistryPanel.build_sections(self)
@@ -2038,6 +2142,9 @@ class ObjectProgramUI(
         popup = tk.Menu(self.root, tearoff=0)
         popup.add_command(label="Load Books", command=self.load_books_file)
         popup.add_command(label="Load earlier databases", command=self.load_historical_databases)
+        popup.add_separator()
+        popup.add_command(label="🌿 Batch Update Taxonomy (GBIF)...", command=self.batch_gbif_update_action)
+        popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
     def show_images_dropdown(self):
@@ -4646,6 +4753,8 @@ class ObjectProgramUI(
             else:
                 self.reviewed_time_label.config(text="")
 
+            self._load_unvalidated_for_object(oid)
+
         finally:
             self.loading_object = False
 
@@ -4707,11 +4816,109 @@ class ObjectProgramUI(
             return not bool(val.iloc[0])
         return not bool(val)
 
+    def has_unvalidated_sources(self, oid):
+        if getattr(self.app, "df_unvalidated", None) is None or self.app.df_unvalidated.empty:
+            return False
+        df_u = self.app.df_unvalidated
+        if "ObjectID" not in df_u.columns:
+            return False
+        return (df_u["ObjectID"].astype(str).str.strip() == str(oid).strip()).any()
 
+    def _load_unvalidated_for_object(self, oid):
+        if not hasattr(self, "unval_btns") or not self.unval_btns:
+            return
+        is_dark = getattr(self, "dark_mode_active", False)
+        unval_map = {}
+        if getattr(self.app, "df_unvalidated", None) is not None and not self.app.df_unvalidated.empty:
+            df_u = self.app.df_unvalidated
+            oid_str = str(oid).strip()
+            if "ObjectID" in df_u.columns:
+                matches = df_u[df_u["ObjectID"].astype(str).str.strip() == oid_str]
+                for _, r in matches.iterrows():
+                    f = str(r.get("Field_Name", "")).strip()
+                    c = str(r.get("Unvalidated_Comment", "")).strip()
+                    if f:
+                        unval_map[f] = c
 
+        for name, btn in self.unval_btns.items():
+            c_frame = self.unval_comment_frames.get(name)
+            c_var = self.unval_comment_vars.get(name)
+            if name in unval_map:
+                if c_var:
+                    c_var.set(unval_map[name])
+                if btn and btn.winfo_exists():
+                    btn.config(text="❓", fg="#f59e0b" if is_dark else "#d97706")
+                if c_frame and c_frame.winfo_exists():
+                    c_frame.grid(row=1, column=1, columnspan=3, sticky="ew", pady=(2, 4))
+            else:
+                if c_var:
+                    c_var.set("")
+                if btn and btn.winfo_exists():
+                    btn.config(text="?", fg="#888888")
+                if c_frame and c_frame.winfo_exists():
+                    c_frame.grid_forget()
 
+    def _toggle_unvalidated_source(self, field_name):
+        oid = self.app.current_object_id
+        if not oid:
+            return
+        oid_str = str(oid).strip()
+        is_dark = getattr(self, "dark_mode_active", False)
 
+        if getattr(self.app, "df_unvalidated", None) is None:
+            self.app.df_unvalidated = pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
 
+        df_u = self.app.df_unvalidated
+        is_active = False
+        if not df_u.empty and "ObjectID" in df_u.columns:
+            mask = (df_u["ObjectID"].astype(str).str.strip() == oid_str) & (df_u["Field_Name"].astype(str).str.strip() == str(field_name).strip())
+            if mask.any():
+                is_active = True
+                self.app.df_unvalidated = df_u[~mask].copy()
+
+        c_frame = self.unval_comment_frames.get(field_name)
+        c_var = self.unval_comment_vars.get(field_name)
+        btn = self.unval_btns.get(field_name)
+
+        if is_active:
+            if c_var:
+                c_var.set("")
+            if btn and btn.winfo_exists():
+                btn.config(text="?", fg="#888888")
+            if c_frame and c_frame.winfo_exists():
+                c_frame.grid_forget()
+        else:
+            new_entry = pd.DataFrame([{"ObjectID": oid_str, "Field_Name": field_name, "Unvalidated_Comment": ""}])
+            self.app.df_unvalidated = pd.concat([self.app.df_unvalidated, new_entry], ignore_index=True)
+            if btn and btn.winfo_exists():
+                btn.config(text="❓", fg="#f59e0b" if is_dark else "#d97706")
+            if c_frame and c_frame.winfo_exists():
+                c_frame.grid(row=1, column=1, columnspan=3, sticky="ew", pady=(2, 4))
+                for child in c_frame.winfo_children():
+                    if isinstance(child, tk.Entry):
+                        child.focus_set()
+                        break
+
+        self.app.dirty = True
+        self.set_status_badge("unsaved", "Unsaved Changes")
+        if hasattr(self, "object_list") and hasattr(self.object_list, "refresh_object_card"):
+            self.object_list.refresh_object_card(oid)
+
+    def _on_unval_comment_change(self, field_name):
+        oid = self.app.current_object_id
+        if not oid:
+            return
+        oid_str = str(oid).strip()
+        c_var = self.unval_comment_vars.get(field_name)
+        new_comment = c_var.get().strip() if c_var else ""
+
+        if getattr(self.app, "df_unvalidated", None) is not None and not self.app.df_unvalidated.empty:
+            df_u = self.app.df_unvalidated
+            mask = (df_u["ObjectID"].astype(str).str.strip() == oid_str) & (df_u["Field_Name"].astype(str).str.strip() == str(field_name).strip())
+            if mask.any():
+                self.app.df_unvalidated.loc[mask, "Unvalidated_Comment"] = new_comment
+                self.app.dirty = True
+                self.set_status_badge("unsaved", "Unsaved Changes")
 
     def load_object_from_entry(self, _=None):
         self.commit_current_object()
@@ -5960,7 +6167,8 @@ class ObjectProgramUI(
                     groups["Problems"].append(key)
 
             elif key in ["Reviewed", "Not_Reviewed",
-                         "Reviewed_With_Problem", "Problem_With_History", "Has_History"]:
+                         "Reviewed_With_Problem", "Problem_With_History", "Has_History",
+                         "Has_Unvalidated", "Search_Old_Taxonomy"]:
                 groups["Status"].append(key)
 
             elif key in ["Comment_Empty", "Comment_Not_Empty", "Extra_Empty", "Extra_Not_Empty"]:
@@ -6002,6 +6210,8 @@ class ObjectProgramUI(
         floor_filter = floor_var.get() if floor_var else ""
         cabinet_filter = cabinet_var.get().strip().lower() if cabinet_var else ""
 
+        old_tax_query = self.search_old_taxonomy_var.get().strip() if hasattr(self, "search_old_taxonomy_var") else ""
+
         matched = self.filter_manager.apply_filter(
             df_reg=self.app.df_reg,
             reg_dict=reg_dict,
@@ -6014,7 +6224,10 @@ class ObjectProgramUI(
             problem_columns=self.problem_columns,
             problem_to_field=self.problem_to_field,
             unknown_fields=self.unknown_fields,
-            image_mode=self.image_mode
+            image_mode=self.image_mode,
+            df_unvalidated=getattr(self.app, "df_unvalidated", None),
+            df_log=getattr(self.app, "df_log", None),
+            old_taxonomy_query=old_tax_query
         )
 
         if not matched:
@@ -7391,7 +7604,9 @@ class ObjectProgramUI(
         has_history = self._problems_have_history(oid)
         
         color = None
-        if reviewed:
+        if reviewed and has_problem:
+            color = "#ffb366" if self.dark_mode_active else "#f0ad4e"
+        elif reviewed:
             color = "#4CAF50" if self.dark_mode_active else "#2E7D32"
         elif has_problem and has_history:
             color = "#BB86FC" if self.dark_mode_active else "#7B1FA2"

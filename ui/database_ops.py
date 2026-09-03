@@ -8,7 +8,7 @@ from ui.state import app_bus, DATABASE_UPDATED
 from utils import debug_error
 from backend.task_queue import app_worker
 from contextlib import nullcontext
-from repository import ExcelRepository, REVIEWED_COLUMN
+from repository import ExcelRepository, REVIEWED_COLUMN, _normalise_unvalidated_dataframe
 
 class DatabaseOpsMixin:
     def _write_excel(self, path):
@@ -27,7 +27,8 @@ class DatabaseOpsMixin:
             df_reg=self.app.df_reg,
             df_obs=self.app.df_obs,
             df_log=self.app.df_log,
-            df_photo=self.app.df_photo
+            df_photo=self.app.df_photo,
+            df_unvalidated=getattr(self.app, 'df_unvalidated', None)
         )
 
 
@@ -65,6 +66,7 @@ class DatabaseOpsMixin:
                 df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
                 df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None
                 df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
+                df_unvalidated_copy = self.app.df_unvalidated.copy() if getattr(self.app, 'df_unvalidated', None) is not None else None
         except Exception as e:
             self._save_in_progress = False
             self.set_status_badge("error", "Save Error")
@@ -88,7 +90,8 @@ class DatabaseOpsMixin:
                 df_reg=df_reg_copy,
                 df_obs=df_obs_copy,
                 df_log=df_log_copy,
-                df_photo=df_photo_copy
+                df_photo=df_photo_copy,
+                df_unvalidated=df_unvalidated_copy
             )
             return True
 
@@ -177,8 +180,11 @@ class DatabaseOpsMixin:
                 df_obs = load_df("df_obs")
                 df_photo = load_df("df_photo")
                 df_log = load_df("df_log")
+                df_unvalidated = load_df("df_unvalidated")
+                if df_unvalidated is None:
+                    df_unvalidated = _normalise_unvalidated_dataframe(pd.DataFrame())
             else:
-                df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(path, self.app.config)
+                df_reg, df_obs, df_photo, df_log, df_unvalidated = ExcelRepository.load_excel(path, self.app.config)
 
             self.root.after(0, lambda: self.image_scan_progress.configure(value=60))
 
@@ -201,9 +207,9 @@ class DatabaseOpsMixin:
             self.root.after(0, lambda: self.image_scan_progress.configure(value=82))
 
             def _safe_finish(p=path, op=output_path,
-                             r=df_reg, o=df_obs, ph=df_photo, l=df_log):
+                             r=df_reg, o=df_obs, ph=df_photo, l=df_log, u=df_unvalidated):
                 try:
-                    self._finish_open_excel(p, op, r, o, ph, l)
+                    self._finish_open_excel(p, op, r, o, ph, l, u)
                 except Exception as exc:
                     debug_error("_finish_open_excel", str(exc))
                     messagebox.showerror(
@@ -219,7 +225,7 @@ class DatabaseOpsMixin:
             self.root.after(0, lambda msg=err_msg, t=tb: self.show_traceback_dialog("Excel Load Error", f"An error occurred while loading the Excel/DB file: {msg}", t))
 
 
-    def _finish_open_excel(self, path, output_path, df_reg, df_obs, df_photo, df_log):
+    def _finish_open_excel(self, path, output_path, df_reg, df_obs, df_photo, df_log, df_unvalidated=None):
         self._history_presence_set = set()
         self._has_suggestions_set = set()
 
@@ -255,6 +261,7 @@ class DatabaseOpsMixin:
         self.app.df_obs = df_obs
         self.app.df_photo = df_photo
         self.app.df_log = df_log
+        self.app.df_unvalidated = df_unvalidated if df_unvalidated is not None else pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
 
         if "ObjectID" in self.app.df_reg.columns:
             self.app.df_reg.set_index("ObjectID", inplace=True)
@@ -814,7 +821,8 @@ class DatabaseOpsMixin:
             SQLiteRepository.save_sqlite(
                 source_path,
                 self.app.df_reg, self.app.df_obs,
-                self.app.df_photo, self.app.df_log
+                self.app.df_photo, self.app.df_log,
+                getattr(self.app, 'df_unvalidated', None)
             )
 
         self._show_progress("Preparing export...", 4)
@@ -824,6 +832,7 @@ class DatabaseOpsMixin:
             df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
             df_photo_copy = self.app.df_photo.copy() if getattr(self.app, 'df_photo', None) is not None else None
             df_log_copy = self.app.df_log.copy() if getattr(self.app, 'df_log', None) is not None else None
+            df_unvalidated_copy = self.app.df_unvalidated.copy() if getattr(self.app, 'df_unvalidated', None) is not None else None
 
         def _on_progress(step, total, label):
             self.root.after(0, lambda s=step, t=total, l=label: (
@@ -840,7 +849,8 @@ class DatabaseOpsMixin:
                 df_reg=df_reg_copy,
                 df_obs=df_obs_copy,
                 df_log=df_log_copy,
-                df_photo=df_photo_copy
+                df_photo=df_photo_copy,
+                df_unvalidated=df_unvalidated_copy
             )
             return True
 

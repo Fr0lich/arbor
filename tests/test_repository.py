@@ -44,17 +44,20 @@ class TestRepository:
         df_obs = pd.DataFrame({"ObjectID": ["1", "2"], "Images_Missing": [True, False], "Images_Problem": [False, False], "Reviewed": [False, False], "ReviewedAt": ["", ""], "Online_Images_Exist": [False, False]})
         df_photo = pd.DataFrame({"ObjectID": ["1"]})
         df_log = _normalise_log_dataframe(pd.DataFrame())
+        df_unval = pd.DataFrame({"ObjectID": ["1"], "Field_Name": ["Genus"], "Unvalidated_Comment": ["Check spelling"]})
 
-        SQLiteRepository.save_sqlite(str(db_path), df_reg, df_obs, df_photo, df_log)
+        SQLiteRepository.save_sqlite(str(db_path), df_reg, df_obs, df_photo, df_log, df_unval)
 
         assert os.path.exists(db_path)
 
         config = {"ui_sections": {}}
-        df_reg_read, df_obs_read, df_photo_read, df_log_read = SQLiteRepository.load_sqlite(str(db_path), config)
+        df_reg_read, df_obs_read, df_photo_read, df_log_read, df_unval_read = SQLiteRepository.load_sqlite(str(db_path), config)
 
         assert list(df_reg_read["ObjectID"]) == ["1", "2"]
         assert list(df_obs_read["ObjectID"]) == ["1", "2"]
         assert list(df_photo_read["ObjectID"]) == ["1"]
+        assert list(df_unval_read["Field_Name"]) == ["Genus"]
+        assert list(df_unval_read["Unvalidated_Comment"]) == ["Check spelling"]
 
     @mock.patch("repository.ExcelRepository.load_excel")
     @mock.patch("repository.SQLiteRepository.save_sqlite")
@@ -71,17 +74,18 @@ class TestRepository:
         mock_df_obs = pd.DataFrame({"ObjectID": ["1"]})
         mock_df_photo = pd.DataFrame({"ObjectID": ["1"]})
         mock_df_log = pd.DataFrame({"ObjectID": ["1"]})
-        mock_load_excel.return_value = (mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log)
+        mock_df_unval = pd.DataFrame({"ObjectID": ["1"], "Field_Name": ["Species"], "Unvalidated_Comment": ["Note"]})
+        mock_load_excel.return_value = (mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log, mock_df_unval)
 
         # Execute the method under test
         result = SQLiteRepository.import_from_excel(str(excel_path), str(sqlite_path), config)
 
         # Assert correct methods were called
         mock_load_excel.assert_called_once_with(str(excel_path), config)
-        mock_save_sqlite.assert_called_once_with(str(sqlite_path), mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log)
+        mock_save_sqlite.assert_called_once_with(str(sqlite_path), mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log, mock_df_unval)
 
         # Assert return values
-        assert result == (mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log)
+        assert result == (mock_df_reg, mock_df_obs, mock_df_photo, mock_df_log, mock_df_unval)
 
         # Assert backup was created correctly
         backup_dir = tmp_path / "backups"

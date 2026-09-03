@@ -138,7 +138,7 @@ class TestExcelArchitecture:
         assert ws_reg.column_dimensions["A"].width >= 10
 
         # Load back with ExcelRepository and verify data integrity
-        df_reg_in, df_obs_in, df_photo_in, df_log_in = ExcelRepository.load_excel(excel_path, config)
+        df_reg_in, df_obs_in, df_photo_in, df_log_in, df_unval_in = ExcelRepository.load_excel(excel_path, config)
         assert list(df_reg_in["ObjectID"]) == ["1", "2"]
         assert list(df_obs_in["ObjectID"]) == ["1", "2"]
         assert list(df_photo_in["ObjectID"]) == ["1", "1", "2"]

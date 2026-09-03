@@ -286,7 +286,32 @@ def _get_allowed_columns(config):
                 allowed_obs_cols.add(item["name"])
     return allowed_reg_cols, allowed_obs_cols
 
-def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, allowed_reg_cols=None, allowed_obs_cols=None, recent_edits=None, client_timestamp=None):
+def _apply_unvalidated_updates(app_state, oid, unvalidated_sources):
+    """Apply updates to df_unvalidated for an object."""
+    if unvalidated_sources is None:
+        return
+    oid_str = str(oid).strip()
+    if getattr(app_state, "df_unvalidated", None) is None:
+        app_state.df_unvalidated = pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
+
+    df_u = app_state.df_unvalidated
+    if not df_u.empty and "ObjectID" in df_u.columns:
+        app_state.df_unvalidated = df_u[df_u["ObjectID"].astype(str).str.strip() != oid_str].copy()
+
+    if isinstance(unvalidated_sources, list):
+        new_rows = []
+        for item in unvalidated_sources:
+            if isinstance(item, dict):
+                f_name = str(item.get("field", "") or item.get("Field_Name", "")).strip()
+                comment = str(item.get("comment", "") or item.get("Unvalidated_Comment", "")).strip()
+                if f_name:
+                    new_rows.append({"ObjectID": oid_str, "Field_Name": f_name, "Unvalidated_Comment": comment})
+        if new_rows:
+            new_df = pd.DataFrame(new_rows)
+            app_state.df_unvalidated = pd.concat([app_state.df_unvalidated, new_df], ignore_index=True)
+
+
+def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, allowed_reg_cols=None, allowed_obs_cols=None, recent_edits=None, client_timestamp=None, unvalidated_updates=None):
     """
     Execute single record update core with dtype safety, undo snapshots, audit logging, and change tracking.
 
@@ -404,6 +429,10 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
             resolved_obs_oid = target_obs_oid
 
         _apply_dataframe_updates(app_state.df_obs, obs_updates, changed_fields, changed_values, resolved_obs_oid, fallback_df=app_state.df_reg, allowed_columns=allowed_obs_cols if allowed_obs_cols else None)
+
+    # 3b. Apply Unvalidated Sources Updates
+    if unvalidated_updates is not None:
+        _apply_unvalidated_updates(app_state, oid, unvalidated_updates)
 
     # 4. Handle Reviewed Status
     action_name = "MOBILE_EDIT"
@@ -1370,6 +1399,12 @@ self.addEventListener('fetch', (event) => {
 
                 loc_keys = {lcol: lcol.lower().replace(" ", "_") for lcol in location_fields}
 
+                unval_set = set()
+                if getattr(self.app_state, "df_unvalidated", None) is not None and not self.app_state.df_unvalidated.empty:
+                    df_u = self.app_state.df_unvalidated
+                    if "ObjectID" in df_u.columns:
+                        unval_set = set(df_u["ObjectID"].astype(str).str.strip().unique())
+
                 for oid in paged_indices_list:
                     reg_row = paged_reg_dict.get(oid, {})
                     obs_row = paged_obs_dict.get(oid, {})
@@ -1408,7 +1443,8 @@ self.addEventListener('fetch', (event) => {
                         "has_flags": flags["has_flags"],
                         "has_history": flags["has_history"],
                         "problems_have_history": flags["problems_have_history"],
-                        "has_unknown": flags["has_unknown"]
+                        "has_unknown": flags["has_unknown"],
+                        "has_unvalidated": (str(oid) in unval_set)
                     })
 
             return jsonify({
@@ -1572,6 +1608,16 @@ self.addEventListener('fetch', (event) => {
                 prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
             problem_to_field = get_problem_to_field_map(self.app_state.config)
             flags = compute_status_flags(reg_dict, obs_dict, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
+            unvalidated_sources = []
+            if getattr(self.app_state, "df_unvalidated", None) is not None and not self.app_state.df_unvalidated.empty:
+                df_u = self.app_state.df_unvalidated
+                if "ObjectID" in df_u.columns:
+                    u_matches = df_u[df_u["ObjectID"].astype(str).str.strip() == str(oid).strip()]
+                    for _, u_row in u_matches.iterrows():
+                        f_name = str(u_row.get("Field_Name", "")).strip()
+                        comm = str(u_row.get("Unvalidated_Comment", "")).strip()
+                        if f_name:
+                            unvalidated_sources.append({"field": f_name, "comment": comm})
 
             return jsonify({
                 "id": str(oid),
@@ -1585,6 +1631,7 @@ self.addEventListener('fetch', (event) => {
                 "problems_have_history": flags["problems_have_history"],
                 "has_unknown": flags["has_unknown"],
                 "flagged_issues": flagged_issues,
+                "unvalidated_sources": unvalidated_sources,
                 "images": {
                     "preferred_source": "online",
                     "online_urls": online_urls,
@@ -1707,6 +1754,7 @@ self.addEventListener('fetch', (event) => {
             reviewed = data.get('reviewed')
             updates = data.get('observation') or data.get('updates') or {}
             reg_updates = data.get('registration') or {}
+            unval_updates = data.get('unvalidated_sources') or data.get('unvalidated')
 
             client_timestamp = data.get('timestamp')
             with self.app_state.df_lock:
@@ -1716,7 +1764,8 @@ self.addEventListener('fetch', (event) => {
                     allowed_reg_cols=allowed_reg_cols,
                     allowed_obs_cols=allowed_obs_cols,
                     recent_edits=self.recent_edits,
-                    client_timestamp=client_timestamp
+                    client_timestamp=client_timestamp,
+                    unvalidated_updates=unval_updates
                 )
                 if err:
                     code = 409 if "Conflict" in err else 404
@@ -1931,13 +1980,15 @@ self.addEventListener('fetch', (event) => {
                     obs_updates = update.get('observation') or {}
                     reg_updates = update.get('registration') or {}
                     client_timestamp = update.get('timestamp')
+                    unval_updates = update.get('unvalidated_sources') or update.get('unvalidated')
 
                     _, err = _execute_record_update(
                         self.app_state, oid, reg_updates, obs_updates, reviewed,
                         allowed_reg_cols=allowed_reg_cols,
                         allowed_obs_cols=allowed_obs_cols,
                         recent_edits=self.recent_edits,
-                        client_timestamp=client_timestamp
+                        client_timestamp=client_timestamp,
+                        unvalidated_updates=unval_updates
                     )
                     if err:
                         continue
@@ -2081,12 +2132,13 @@ INDEX_TEMPLATE = """
 
     <!-- Persistent Offline / Disconnected Warning Banner -->
     <div id="offlineBanner" class="hidden bg-ember-light border-b border-ember-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-ember-dark shrink-0 transition-all shadow-xs" role="alert" aria-live="assertive">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2" id="offlineBannerContent">
         <span class="text-sm">⚠</span>
         <span>Connection to host lost. Reconnecting...</span>
       </div>
       <button
         type="button"
+        id="btnOfflineRetry"
         onclick="setupEventSource()"
         class="min-h-[32px] px-2.5 py-1 bg-ember text-white rounded-[2px] font-bold text-[11px] touch-press shrink-0"
       >
@@ -2094,113 +2146,118 @@ INDEX_TEMPLATE = """
       </button>
     </div>
 
+    <!-- Persistent App Header & Search Bar -->
+    <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 pt-3 pb-2.5 shadow-xs shrink-0">
+      <div class="flex items-center justify-between mb-2.5">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-[2px] bg-fern text-white flex items-center justify-center font-serif font-bold text-sm">
+            A
+          </div>
+          <div>
+            <h1 class="font-serif font-bold text-base text-ink leading-tight">
+              Arbor Companion
+            </h1>
+            <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
+              Connecting to database...
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <!-- Settings Modal Trigger -->
+          <button
+            type="button"
+            onclick="openSettingsModal()"
+            class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+            title="Settings"
+          >
+            <span class="text-ink text-sm font-mono">⚙️</span>
+          </button>
+
+          <!-- Recent Changes Drawer Trigger -->
+          <button
+            type="button"
+            onclick="openRecentEditsModal()"
+            class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+            title="Recent Changes"
+          >
+            <span class="text-ink text-sm font-mono">↩</span>
+          </button>
+
+          <!-- Screen Wake Lock / Walk Mode Toggle -->
+          <button
+            type="button"
+            id="btnWakeLock"
+            onclick="toggleWakeLock()"
+            class="p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center"
+            title="Toggle Walk Mode (Prevent Screen Sleep)"
+          >
+            <span id="wakeLockIcon" class="text-sm leading-none">🌙</span>
+          </button>
+
+          <!-- Desktop Connection Pill Button -->
+          <button
+            type="button"
+            onclick="openModal('connectionModal')"
+            id="connStatusBtn"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
+            title="Desktop Connection Status"
+            aria-live="polite"
+          >
+            <span class="relative flex h-2 w-2">
+              <span id="connPingDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember"></span>
+              <span id="connPingDot" class="relative inline-flex rounded-full h-2 w-2 bg-ember"></span>
+            </span>
+            <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
+              Connecting...
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Persistent Search Input Box -->
+      <div class="relative flex items-center gap-2">
+        <div class="relative flex-1 flex items-center bg-tonal1 border border-bordercol rounded-[2px] transition-all search-active">
+          <span class="text-ink-faint ml-2.5 shrink-0 text-xs">🔍</span>
+          <input
+            type="text"
+            id="searchBox"
+            oninput="debounceSearch()"
+            placeholder="Search taxonomy, accession, collector, cabinet..."
+            class="w-full bg-transparent px-2.5 py-2 font-sans text-xs text-ink placeholder:text-ink-faint outline-none"
+          />
+          <button
+            type="button"
+            id="searchClearBtn"
+            onclick="clearSearch()"
+            class="hidden p-1 mr-1.5 text-ink-faint hover:text-ink text-xs font-bold"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Advanced Filter Modal Trigger -->
+        <button
+          type="button"
+          id="btnFilterModalTrigger"
+          onclick="openFilterModal()"
+          class="relative p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+          title="Advanced Filter"
+        >
+          <span class="text-ink text-sm font-mono">⚙</span>
+          <span id="filterActiveBadge" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-fern rounded-full ring-2 ring-surface"></span>
+        </button>
+      </div>
+    </header>
+
     <!-- ========================================== -->
     <!-- VIEW: SPECIMEN LIST                        -->
     <!-- ========================================== -->
     <div id="listView" class="flex-1 flex flex-col h-full bg-canvas overflow-hidden">
-      <!-- Sticky Header -->
-      <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 pt-3 pb-2.5 shadow-xs shrink-0">
-        <div class="flex items-center justify-between mb-2.5">
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 rounded-[2px] bg-fern text-white flex items-center justify-center font-serif font-bold text-sm">
-              A
-            </div>
-            <div>
-              <h1 class="font-serif font-bold text-base text-ink leading-tight">
-                Arbor Companion
-              </h1>
-              <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
-                Connecting to database...
-              </div>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-1.5">
-            <!-- Settings Modal Trigger -->
-            <button
-              type="button"
-              onclick="openSettingsModal()"
-              class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-              title="Settings"
-            >
-              <span class="text-ink text-sm font-mono">⚙️</span>
-            </button>
-
-            <!-- Recent Changes Drawer Trigger -->
-            <button
-              type="button"
-              onclick="openRecentEditsModal()"
-              class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-              title="Recent Changes"
-            >
-              <span class="text-ink text-sm font-mono">↩</span>
-            </button>
-
-            <!-- Screen Wake Lock / Walk Mode Toggle -->
-            <button
-              type="button"
-              id="btnWakeLock"
-              onclick="toggleWakeLock()"
-              class="p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center"
-              title="Toggle Walk Mode (Prevent Screen Sleep)"
-            >
-              <span id="wakeLockIcon" class="text-sm leading-none">🌙</span>
-            </button>
-
-            <!-- Desktop Connection Pill Button -->
-            <button
-              type="button"
-              onclick="openModal('connectionModal')"
-              id="connStatusBtn"
-              class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
-              title="Desktop Connection Status"
-              aria-live="polite"
-            >
-              <span class="relative flex h-2 w-2">
-                <span id="connPingDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember"></span>
-                <span id="connPingDot" class="relative inline-flex rounded-full h-2 w-2 bg-ember"></span>
-              </span>
-              <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
-                Connecting...
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Search Input Box -->
-        <div class="relative flex items-center gap-2">
-          <div class="relative flex-1 flex items-center bg-tonal1 border border-bordercol rounded-[2px] transition-all search-active">
-            <span class="text-ink-faint ml-2.5 shrink-0 text-xs">🔍</span>
-            <input
-              type="text"
-              id="searchBox"
-              oninput="debounceSearch()"
-              placeholder="Search taxonomy, accession, collector, cabinet..."
-              class="w-full bg-transparent px-2.5 py-2 font-sans text-xs text-ink placeholder:text-ink-faint outline-none"
-            />
-            <button
-              type="button"
-              id="searchClearBtn"
-              onclick="clearSearch()"
-              class="hidden p-1 mr-1.5 text-ink-faint hover:text-ink text-xs font-bold"
-            >
-              ✕
-            </button>
-          </div>
-
-          <!-- Advanced Filter Modal Trigger -->
-          <button
-            type="button"
-            onclick="openFilterModal()"
-            class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-            title="Advanced Filter"
-          >
-            <span class="text-ink text-sm font-mono">⚙</span>
-          </button>
-        </div>
-
+      <!-- List View Filter & Sort Controls -->
+      <div class="bg-surface border-b border-bordercol px-4 pt-1.5 pb-2 shadow-xs shrink-0">
         <!-- Filter Pill Tabs -->
-        <div class="flex items-center gap-2 mt-2.5 overflow-x-auto no-scrollbar pb-1" id="filterPills">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1" id="filterPills">
           <button
             type="button"
             onclick="setStatusFilter('all')"
@@ -2293,7 +2350,7 @@ INDEX_TEMPLATE = """
             </select>
           </div>
         </div>
-      </header>
+      </div>
 
       <!-- Scrollable List -->
       <main id="specimenListContainer" class="flex-1 overflow-y-auto p-3 space-y-2.5 pb-24">
@@ -2913,7 +2970,7 @@ INDEX_TEMPLATE = """
     </div>
 
     <!-- Floating Toast Notification -->
-    <div id="toast" class="hidden fixed top-4 left-4 right-4 max-w-sm mx-auto bg-fern-dark text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity">
+    <div id="toast" class="hidden fixed bottom-24 left-4 right-4 max-w-sm mx-auto bg-fern-dark text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity">
       Edits saved & synchronized
     </div>
 
@@ -2937,6 +2994,7 @@ INDEX_TEMPLATE = """
     let searchDebounceTimer = null;
     let autoSaveTimer = null;
     let dirtyFields = new Set();
+    let currentUnvalidatedMap = {};
     let wakeLockSentinel = null;
 
     let locationPresets = {};
@@ -3191,7 +3249,7 @@ INDEX_TEMPLATE = """
     function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
       toast.textContent = msg;
-      toast.className = `fixed top-4 left-4 right-4 max-w-sm mx-auto ${isError ? 'bg-ember-dark' : 'bg-fern-dark'} text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity`;
+      toast.className = `fixed bottom-24 left-4 right-4 max-w-sm mx-auto ${isError ? 'bg-ember-dark' : 'bg-fern-dark'} text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity`;
       toast.classList.remove('hidden');
       setTimeout(() => toast.classList.add('hidden'), 2200);
     }
@@ -3319,6 +3377,9 @@ INDEX_TEMPLATE = """
 
         // 5. Populate Discrepancy Field Select Options
         populateDiscrepancyFields();
+
+        // 6. Update Advanced Filter Indicator
+        updateFilterIndicator();
       } catch (err) {
         console.error("Initialization error:", err);
         document.getElementById('headerDbName').textContent = 'Active Database';
@@ -3501,6 +3562,28 @@ INDEX_TEMPLATE = """
       // Sort by timestamp just in case
       mutations.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
+      const offlineBanner = document.getElementById('offlineBanner');
+      const bannerContent = document.getElementById('offlineBannerContent');
+      const retryBtn = document.getElementById('btnOfflineRetry');
+      const footerStatus = document.getElementById('footerSyncStatus');
+
+      // Prominent syncing visual feedback
+      if (offlineBanner && bannerContent) {
+        offlineBanner.className = 'bg-fern-light border-b border-fern-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-fern-dark shrink-0 transition-all shadow-xs';
+        offlineBanner.classList.remove('hidden');
+        bannerContent.innerHTML = `
+          <svg class="animate-spin h-3.5 w-3.5 text-fern shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="font-bold">Syncing ${mutations.length} queued edit${mutations.length > 1 ? 's' : ''} to host...</span>
+        `;
+        if (retryBtn) retryBtn.classList.add('hidden');
+      }
+      if (footerStatus) {
+        footerStatus.innerHTML = `<span class="flex items-center gap-1.5 font-mono text-fern-dark font-medium animate-pulse"><span>Syncing queued edits (${mutations.length})...</span></span>`;
+      }
+
       try {
         const res = await apiFetch('/api/batch_update', {
           method: 'POST',
@@ -3509,11 +3592,17 @@ INDEX_TEMPLATE = """
         if (res && (res.success || res.updated_count !== undefined)) {
           clearQueuedMutations(mutations.map(m => m.timestamp));
           showToast(`✓ Reconnected: ${mutations.length} queued edits synced to host`);
-          const banner = document.getElementById('footerSyncStatus');
-          banner.innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ All synced</span>';
+          if (footerStatus) {
+            footerStatus.innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ All synced</span>';
+          }
         }
       } catch (err) {
         console.error('Failed to flush queued mutations', err);
+        showToast('Sync failed; will retry when connected', true);
+      } finally {
+        if (offlineBanner && navigator.onLine) {
+          offlineBanner.classList.add('hidden');
+        }
       }
     }
 
@@ -3525,6 +3614,8 @@ INDEX_TEMPLATE = """
       const dotFooter = document.getElementById('footerConnDot');
       const dotFooterAnim = document.getElementById('footerConnDotAnimate');
       const offlineBanner = document.getElementById('offlineBanner');
+      const bannerContent = document.getElementById('offlineBannerContent');
+      const retryBtn = document.getElementById('btnOfflineRetry');
       const syncStatusText = document.getElementById('footerSyncStatusText');
 
       if (state === 'connected') {
@@ -3541,7 +3632,14 @@ INDEX_TEMPLATE = """
       } else {
         if (badge) badge.textContent = 'Offline';
         if (footerHost) footerHost.textContent = 'Host Disconnected';
-        if (offlineBanner) offlineBanner.classList.remove('hidden');
+        if (offlineBanner) {
+          offlineBanner.className = 'bg-ember-light border-b border-ember-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-ember-dark shrink-0 transition-all shadow-xs';
+          offlineBanner.classList.remove('hidden');
+        }
+        if (bannerContent) {
+          bannerContent.innerHTML = `<span class="text-sm">⚠</span><span>Connection to host lost. Reconnecting...</span>`;
+        }
+        if (retryBtn) retryBtn.classList.remove('hidden');
         [dotHeader, dotFooter].forEach(d => { if (d) d.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember-dark'; });
         [dotHeaderAnim, dotFooterAnim].forEach(d => { if (d) d.className = 'hidden'; });
         if (syncStatusText) syncStatusText.classList.add('hidden');
@@ -3749,7 +3847,7 @@ INDEX_TEMPLATE = """
       } else if ('wakeLock' in navigator) {
         try {
           wakeLockSentinel = await navigator.wakeLock.request('screen');
-          btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-surface text-ink-muted border-bordercol hover:bg-tonal1 flex items-center justify-center';
+          btn.className = 'p-2 rounded-[2px] border transition-all touch-target-min bg-amber-400 text-black border-amber-600 ring-2 ring-amber-300 shadow-xs font-bold flex items-center justify-center';
           icon.innerText = '☀️';
           icon.classList.add('animate-spin-slow');
           showToast('Walk Mode Active (Screen Sleep Prevented)');
@@ -3776,6 +3874,10 @@ INDEX_TEMPLATE = """
       const clearBtn = document.getElementById('searchClearBtn');
       if (searchQuery) clearBtn.classList.remove('hidden');
       else clearBtn.classList.add('hidden');
+      const detailView = document.getElementById('detailView');
+      if (detailView && !detailView.classList.contains('hidden')) {
+        showListView(false);
+      }
       searchDebounceTimer = setTimeout(fetchList, 350);
     }
 
@@ -3783,6 +3885,10 @@ INDEX_TEMPLATE = """
       document.getElementById('searchBox').value = '';
       document.getElementById('searchClearBtn').classList.add('hidden');
       searchQuery = '';
+      const detailView = document.getElementById('detailView');
+      if (detailView && !detailView.classList.contains('hidden')) {
+        showListView(false);
+      }
       fetchList();
     }
 
@@ -3794,7 +3900,13 @@ INDEX_TEMPLATE = """
       const hasUnknown = Boolean(item.has_unknown);
 
       let label, bg, fg, border, icon;
-      if (isRev) {
+      if (isRev && hasFlags) {
+        label = 'REV+ERR';
+        bg = '#F57C00';
+        fg = '#ffffff';
+        border = '#F57C00';
+        icon = '⚠';
+      } else if (isRev) {
         label = 'OK';
         bg = '#2E7D32';
         fg = '#ffffff';
@@ -3957,6 +4069,26 @@ INDEX_TEMPLATE = """
       closeModal('filterModal');
     }
 
+    function updateFilterIndicator() {
+      const badge = document.getElementById('filterActiveBadge');
+      const btn = document.getElementById('btnFilterModalTrigger');
+      if (!badge) return;
+      const hasLocs = activeAdvancedFilters.locations && Object.values(activeAdvancedFilters.locations).some(v => Boolean(v && String(v).trim()));
+      const hasProbs = activeAdvancedFilters.problems && activeAdvancedFilters.problems.length > 0;
+      const isActive = hasLocs || hasProbs;
+      if (isActive) {
+        badge.classList.remove('hidden');
+        if (btn) {
+          btn.classList.add('border-fern', 'bg-fern-light/40', 'text-fern-dark');
+        }
+      } else {
+        badge.classList.add('hidden');
+        if (btn) {
+          btn.classList.remove('border-fern', 'bg-fern-light/40', 'text-fern-dark');
+        }
+      }
+    }
+
     function applyAdvancedFilters() {
       // Gather Locations
       activeAdvancedFilters.locations = {};
@@ -3979,12 +4111,23 @@ INDEX_TEMPLATE = """
         }
       });
 
+      updateFilterIndicator();
       closeFilterModal();
       fetchList();
     }
 
     function clearAdvancedFilters() {
       activeAdvancedFilters = { locations: {}, problems: [] };
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
+        activeSchema.ui_sections.location.forEach(field => {
+          const el = document.getElementById(`filter_loc_${field.name}`);
+          if (el) el.value = '';
+        });
+      }
+      const probCheckboxes = document.querySelectorAll('#filterModalProblems input[type="checkbox"]');
+      probCheckboxes.forEach(cb => { cb.checked = false; });
+
+      updateFilterIndicator();
       closeFilterModal();
       fetchList();
     }
@@ -4108,7 +4251,10 @@ INDEX_TEMPLATE = """
                 </span>
                 ${s.family ? `<span class="font-sans text-[10px] text-ink-faint bg-tonal1 px-1.5 py-0.2 rounded-[1px] border border-tonal3">${highlightMatch(s.family, searchQuery)}</span>` : ''}
               </div>
-              ${statusBadge}
+              <div class="flex items-center gap-1">
+                ${statusBadge}
+                ${s.has_unvalidated ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded-[2px] text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40">UNVAL</span>` : ''}
+              </div>
             </div>
 
             <h2 class="font-serif italic font-bold text-base text-ink leading-snug">
@@ -4311,6 +4457,12 @@ INDEX_TEMPLATE = """
         }
 
         // Render Dynamic Forms Driven by config.py
+        currentUnvalidatedMap = {};
+        if (data.unvalidated_sources && Array.isArray(data.unvalidated_sources)) {
+          data.unvalidated_sources.forEach(u => {
+            if (u.field) currentUnvalidatedMap[u.field] = u.comment || '';
+          });
+        }
         renderDynamicForm(activeSchema, data);
 
         // Update Problem Summary Banner
@@ -4668,6 +4820,40 @@ INDEX_TEMPLATE = """
             <span>Flag</span>
           </button>`;
 
+      const isUnval = (currentUnvalidatedMap && currentUnvalidatedMap[fName] !== undefined);
+      const unvalComment = (currentUnvalidatedMap && currentUnvalidatedMap[fName]) || '';
+      const fKey = fName.replace(/[ ]+/g, '_');
+      const unvalBtnId = `unval_btn_${section}_${fKey}`;
+      const unvalContainerId = `unval_container_${section}_${fKey}`;
+      const unvalInputId = `unval_input_${section}_${fKey}`;
+
+      const unvalBtn = `
+        <button
+          type="button"
+          id="${unvalBtnId}"
+          onclick="toggleUnvalidatedField('${section}', '${fName}')"
+          class="min-h-[44px] px-2 py-1 text-xs font-bold rounded-[2px] touch-target-min touch-press ml-1 flex items-center justify-center transition-all ${isUnval ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40' : 'text-ink-faint hover:bg-tonal2 border border-bordercol'}"
+          title="Toggle Unvalidated Source for ${fName}"
+        >
+          <span>${isUnval ? '❓' : '?'}</span>
+        </button>
+      `;
+
+      const unvalContainerHtml = `
+        <div id="${unvalContainerId}" class="${isUnval ? '' : 'hidden'} mt-1.5 p-2 bg-amber-500/10 border border-amber-500/30 rounded-[2px]">
+          <label for="${unvalInputId}" class="block text-[10px] font-bold text-amber-600 dark:text-amber-400 mb-1">Unvalidated Note:</label>
+          <input
+            type="text"
+            id="${unvalInputId}"
+            value="${unvalComment}"
+            placeholder="Explain why source is unvalidated..."
+            oninput="markDirty('${fName}'); onUnvalCommentChange('${fName}', this.value); triggerAutoSave()"
+            onblur="saveCurrentEdits()"
+            class="w-full bg-surface border border-amber-500/30 rounded-[2px] px-2.5 py-1.5 text-xs outline-none text-ink"
+          />
+        </div>
+      `;
+
       const historyControls = `
         <button
           type="button"
@@ -4680,6 +4866,7 @@ INDEX_TEMPLATE = """
           <span>History</span>
         </button>
         ${!isReadOnly ? flagBtn : ''}
+        ${!isReadOnly ? unvalBtn : ''}
       `;
 
       const historyContainerHtml = `
@@ -4713,6 +4900,7 @@ INDEX_TEMPLATE = """
               ${optionsHtml}
             </select>
             ${historyContainerHtml}
+            ${unvalContainerHtml}
           </div>
         `;
       }
@@ -4743,6 +4931,7 @@ INDEX_TEMPLATE = """
               </div>
             </div>
             ${historyContainerHtml}
+            ${unvalContainerHtml}
           </div>
         `;
       }
@@ -4767,6 +4956,7 @@ INDEX_TEMPLATE = """
               class="w-full border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}"
             >${value || ''}</textarea>
             ${historyContainerHtml}
+            ${unvalContainerHtml}
           </div>
         `;
       }
@@ -4797,8 +4987,43 @@ INDEX_TEMPLATE = """
           </datalist>
           ` : ''}
           ${historyContainerHtml}
+          ${unvalContainerHtml}
         </div>
       `;
+    }
+
+    function toggleUnvalidatedField(section, fName) {
+      if (!currentUnvalidatedMap) currentUnvalidatedMap = {};
+      const fKey = fName.replace(/[ ]+/g, '_');
+      const container = document.getElementById(`unval_container_${section}_${fKey}`);
+      const btn = document.getElementById(`unval_btn_${section}_${fKey}`);
+      const input = document.getElementById(`unval_input_${section}_${fKey}`);
+
+      if (currentUnvalidatedMap[fName] !== undefined) {
+        delete currentUnvalidatedMap[fName];
+        if (container) container.classList.add('hidden');
+        if (btn) {
+          btn.innerHTML = '<span>?</span>';
+          btn.className = 'min-h-[44px] px-2 py-1 text-xs font-bold rounded-[2px] touch-target-min touch-press ml-1 flex items-center justify-center transition-all text-ink-faint hover:bg-tonal2 border border-bordercol';
+        }
+      } else {
+        currentUnvalidatedMap[fName] = (input ? input.value : '') || '';
+        if (container) container.classList.remove('hidden');
+        if (btn) {
+          btn.innerHTML = '<span>❓</span>';
+          btn.className = 'min-h-[44px] px-2 py-1 text-xs font-bold rounded-[2px] touch-target-min touch-press ml-1 flex items-center justify-center transition-all bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40';
+        }
+        if (input) input.focus();
+      }
+      markDirty(fName);
+      triggerAutoSave();
+    }
+
+    function onUnvalCommentChange(fName, val) {
+      if (!currentUnvalidatedMap) currentUnvalidatedMap = {};
+      currentUnvalidatedMap[fName] = val;
+      markDirty(fName);
+    }
     }
 
     function toggleAccordion(btn) {
@@ -5379,11 +5604,14 @@ INDEX_TEMPLATE = """
       // but the server handles empty updates gracefully.
       dirtyFields.clear();
 
+      const unvalSourcesList = Object.entries(currentUnvalidatedMap || {}).map(([field, comment]) => ({ field, comment }));
+
       const payload = {
         id: currentOid,
         reviewed: isReviewed,
         registration: regPayload,
         observation: obsPayload,
+        unvalidated_sources: unvalSourcesList,
         timestamp: new Date().toISOString()
       };
 
@@ -5394,12 +5622,14 @@ INDEX_TEMPLATE = """
         // Optimistically update UI models to prevent local interruption
         if (currentRecord) {
           currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+          currentRecord.unvalidated_sources = unvalSourcesList;
           updateReviewButtonUI();
         }
 
         const listItem = objectList.find(o => String(o.id) === String(currentOid));
         if (listItem) {
           listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+          listItem.has_unvalidated = (unvalSourcesList.length > 0);
         }
 
         return;

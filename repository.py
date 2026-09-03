@@ -322,6 +322,31 @@ def _normalise_dataframes(df_reg, df_obs, config):
 
     return df_reg, df_obs
 
+def _normalise_unvalidated_dataframe(df_unval):
+    """Ensure the unvalidated source dataframe has the required columns: ObjectID, Field_Name, Unvalidated_Comment."""
+    required_cols = ["ObjectID", "Field_Name", "Unvalidated_Comment"]
+    if df_unval is None or (isinstance(df_unval, pd.DataFrame) and df_unval.empty):
+        return pd.DataFrame(columns=required_cols)
+
+    df = df_unval.copy()
+    if "ObjectID" not in df.columns and getattr(df.index, "name", None) == "ObjectID":
+        df = df.reset_index()
+
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        for c in missing:
+            df[c] = ""
+
+    df = df[required_cols]
+    df["ObjectID"] = _normalize_object_id_series(df["ObjectID"])
+    df["Field_Name"] = df["Field_Name"].fillna("").astype(str).str.strip()
+    df["Unvalidated_Comment"] = df["Unvalidated_Comment"].fillna("").astype(str).str.strip()
+    # Filter out completely blank rows
+    mask_nonblank = (df["ObjectID"] != "") | (df["Field_Name"] != "") | (df["Unvalidated_Comment"] != "")
+    df = df[mask_nonblank]
+    return df
+
+
 def _normalise_log_dataframe(df_log):
     """Ensure the log dataframe has all required columns.
 
@@ -352,8 +377,8 @@ class ExcelRepository:
     def load_excel(path, config):
         """Load a database from an Excel (.xlsx) file.
 
-        Reads the Registration, Observation, Photo, and Log sheets.
-        The Photo and Log sheets are optional — empty dataframes with the
+        Reads the Registration, Observation, Photo, Log, and Unvalidated_source sheets.
+        The Photo, Log, and Unvalidated_source sheets are optional — empty dataframes with the
         correct columns are returned if the sheets are missing.
         All dataframes are normalised via _normalise_dataframes before being
         returned, so callers always receive data in a consistent shape.
@@ -363,7 +388,7 @@ class ExcelRepository:
             config: Database config dict (from config.DATABASE_CONFIGS).
 
         Returns:
-            (df_reg, df_obs, df_photo, df_log) — four pandas DataFrames.
+            (df_reg, df_obs, df_photo, df_log, df_unvalidated) — five pandas DataFrames.
         """
         sheets = config["sheets"]
         sections = config["ui_sections"]
@@ -426,10 +451,27 @@ class ExcelRepository:
                 df_log = pd.DataFrame()
             if not df_log.empty:
                 df_log = _clean_trailing_and_blank_columns(_deduplicate_columns(df_log))
+
+            # Read Unvalidated_source sheet (optional)
+            target_unval = sheets.get("unvalidated", "Unvalidated_source")
+            matched_unval = _find_sheet_name(sheet_names, target_unval)
+            if matched_unval:
+                df_unvalidated = pd.read_excel(xls, sheet_name=matched_unval)
+            else:
+                df_unvalidated = pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
+            if not df_unvalidated.empty:
+                df_unvalidated = _clean_trailing_and_blank_columns(_deduplicate_columns(df_unvalidated))
+            df_unvalidated = _normalise_unvalidated_dataframe(df_unvalidated)
             
         df_log = _normalise_log_dataframe(df_log)
 
-        return df_reg, df_obs, df_photo, df_log
+        return df_reg, df_obs, df_photo, df_log, df_unvalidated
+
+    @staticmethod
+    def save_excel(path, config, df_reg=None, df_obs=None, df_log=None, df_photo=None, df_unvalidated=None, progress_callback=None):
+        return SQLiteRepository.export_to_excel(None, path, config, progress_callback=progress_callback,
+                                                df_reg=df_reg, df_obs=df_obs, df_log=df_log, df_photo=df_photo,
+                                                df_unvalidated=df_unvalidated)
 
 
 class SQLiteRepository:
@@ -437,7 +479,7 @@ class SQLiteRepository:
     def load_sqlite(path, config):
         """Load a database from a SQLite (.db) file.
 
-        Reads the Registration, Observation, Photo, and Log tables.
+        Reads the Registration, Observation, Photo, Log, and Unvalidated_source tables.
         All tables are optional — empty dataframes with correct columns are
         returned for any missing table.
         All dataframes are normalised via _normalise_dataframes before being
@@ -448,7 +490,7 @@ class SQLiteRepository:
             config: Database config dict (from config.DATABASE_CONFIGS).
 
         Returns:
-            (df_reg, df_obs, df_photo, df_log) — four pandas DataFrames.
+            (df_reg, df_obs, df_photo, df_log, df_unvalidated) — five pandas DataFrames.
         """
         conn = sqlite3.connect(path, timeout=30.0)
         try:
@@ -478,6 +520,9 @@ class SQLiteRepository:
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Log'")
             log_exists = cursor.fetchone() is not None
 
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name='Unvalidated_source' OR name='unvalidated_source')")
+            unval_row = cursor.fetchone()
+
             if photo_exists:
                 try:
                     df_photo = pd.read_sql("SELECT * FROM Photo", conn)
@@ -495,8 +540,18 @@ class SQLiteRepository:
                     df_log = pd.DataFrame()
             else:
                 df_log = pd.DataFrame()
+
+            if unval_row:
+                try:
+                    df_unvalidated = pd.read_sql(f'SELECT * FROM "{unval_row[0]}"', conn)
+                except Exception as e:
+                    debug_error("load_sqlite: Unvalidated_source table unreadable", str(e))
+                    df_unvalidated = pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
+            else:
+                df_unvalidated = pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
                 
             df_log = _normalise_log_dataframe(df_log)
+            df_unvalidated = _normalise_unvalidated_dataframe(df_unvalidated)
         finally:
             conn.close()
 
@@ -506,22 +561,22 @@ class SQLiteRepository:
         if "ObjectID" in df_photo.columns:
             df_photo["ObjectID"] = df_photo["ObjectID"].astype(str).str.strip()
 
-        return df_reg, df_obs, df_photo, df_log
+        return df_reg, df_obs, df_photo, df_log, df_unvalidated
 
     @staticmethod
-    def save_sqlite(path, df_reg, df_obs, df_photo, df_log):
+    def save_sqlite(path, df_reg, df_obs, df_photo, df_log, df_unvalidated=None):
         """Write all dataframes to a SQLite database file.
 
-        Replaces the Registration, Observation, Photo, and Log tables entirely.
-        The Photo table is only written if it is non-empty.
-        The Log table is only written if it is non-empty.
+        Replaces the Registration, Observation, Photo, Log, and Unvalidated_source tables entirely.
+        The Photo, Log, and Unvalidated_source tables are only written if they are non-empty.
 
         Args:
-            path:     Absolute path to the .db file (created if it does not exist).
-            df_reg:   Registration dataframe.
-            df_obs:   Observation dataframe.
-            df_photo: Photo dataframe.
-            df_log:   Log dataframe.
+            path:           Absolute path to the .db file (created if it does not exist).
+            df_reg:         Registration dataframe.
+            df_obs:         Observation dataframe.
+            df_photo:       Photo dataframe.
+            df_log:         Log dataframe.
+            df_unvalidated: Unvalidated source dataframe (optional).
         """
         conn = sqlite3.connect(path, timeout=30.0)
         try:
@@ -587,6 +642,22 @@ class SQLiteRepository:
                         df_log.to_sql("Log", conn, if_exists="append", index=False)
                     else:
                         df_log.to_sql("Log", conn, if_exists="replace", index=False)
+
+                if df_unvalidated is not None and not df_unvalidated.empty:
+                    df_unval_save = _deduplicate_columns(_normalise_unvalidated_dataframe(df_unvalidated))
+                    if "ObjectID" not in df_unval_save.columns and getattr(df_unval_save.index, "name", None) == "ObjectID":
+                        df_unval_save = df_unval_save.reset_index()
+                    if "Unvalidated_source" in existing_tables or "unvalidated_source" in existing_tables:
+                        tname = "Unvalidated_source" if "Unvalidated_source" in existing_tables else "unvalidated_source"
+                        cursor = conn.cursor()
+                        cursor.execute(f'DELETE FROM "{tname}";')
+                        df_unval_save.to_sql(tname, conn, if_exists="append", index=False)
+                    else:
+                        df_unval_save.to_sql("Unvalidated_source", conn, if_exists="replace", index=False)
+                elif "Unvalidated_source" in existing_tables or "unvalidated_source" in existing_tables:
+                    tname = "Unvalidated_source" if "Unvalidated_source" in existing_tables else "unvalidated_source"
+                    cursor = conn.cursor()
+                    cursor.execute(f'DELETE FROM "{tname}";')
         finally:
             conn.close()
 
@@ -604,7 +675,7 @@ class SQLiteRepository:
             config:      Database config dict.
 
         Returns:
-            (df_reg, df_obs, df_photo, df_log) — the data that was imported.
+            (df_reg, df_obs, df_photo, df_log, df_unvalidated) — the data that was imported.
         """
         import config as _app_cfg
         prefs = _app_cfg.load_prefs() or {}
@@ -622,9 +693,9 @@ class SQLiteRepository:
             shutil.copy2(excel_path, backup_path)
             print(f"Backed up {excel_path} to {backup_path}")
 
-        df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(excel_path, config)
-        SQLiteRepository.save_sqlite(sqlite_path, df_reg, df_obs, df_photo, df_log)
-        return df_reg, df_obs, df_photo, df_log
+        df_reg, df_obs, df_photo, df_log, df_unvalidated = ExcelRepository.load_excel(excel_path, config)
+        SQLiteRepository.save_sqlite(sqlite_path, df_reg, df_obs, df_photo, df_log, df_unvalidated)
+        return df_reg, df_obs, df_photo, df_log, df_unvalidated
 
     @staticmethod
     def generate_empty_dataframes(config):
@@ -637,7 +708,7 @@ class SQLiteRepository:
             config: Database config dict.
 
         Returns:
-            (df_reg, df_obs, df_log) — three empty DataFrames with correct columns.
+            (df_reg, df_obs, df_log, df_unvalidated) — four empty DataFrames with correct columns.
         """
         sections = config.get("ui_sections", {})
 
@@ -667,18 +738,19 @@ class SQLiteRepository:
         df_reg = pd.DataFrame(columns=reg_columns)
         df_obs = pd.DataFrame(columns=obs_columns)
         df_log = _normalise_log_dataframe(pd.DataFrame())
-        return df_reg, df_obs, df_log
+        df_unvalidated = _normalise_unvalidated_dataframe(pd.DataFrame())
+        return df_reg, df_obs, df_log, df_unvalidated
 
     @staticmethod
     def export_to_excel(sqlite_path, excel_path, config, progress_callback=None,
-                        df_reg=None, df_obs=None, df_log=None, df_photo=None):
+                        df_reg=None, df_obs=None, df_log=None, df_photo=None, df_unvalidated=None):
         """Export data to an Excel (.xlsx) file.
 
         If df_reg / df_obs are not provided, the data is read from sqlite_path.
         If sqlite_path also does not exist, empty dataframes are used (allowing
         creation of a blank template file).
 
-        The Registration, Observation, Photo (if present), and Log sheets are written.
+        The Registration, Observation, Photo (if present), Log, and Unvalidated_source (if present) sheets are written.
 
         Args:
             sqlite_path:       Path to the source .db file (may be None).
@@ -690,19 +762,27 @@ class SQLiteRepository:
             df_obs:            Pre-loaded Observation dataframe (optional).
             df_log:            Pre-loaded Log dataframe (optional).
             df_photo:          Pre-loaded Photo dataframe (optional).
+            df_unvalidated:    Pre-loaded Unvalidated source dataframe (optional).
         """
         if df_reg is None or df_obs is None:
             if sqlite_path and os.path.exists(sqlite_path):
-                df_reg, df_obs, df_photo_loaded, df_log = SQLiteRepository.load_sqlite(sqlite_path, config)
+                df_reg, df_obs, df_photo_loaded, df_log, df_unvalidated_loaded = SQLiteRepository.load_sqlite(sqlite_path, config)
                 if df_photo is None:
                     df_photo = df_photo_loaded
+                if df_unvalidated is None:
+                    df_unvalidated = df_unvalidated_loaded
             else:
-                df_reg, df_obs, df_log = SQLiteRepository.generate_empty_dataframes(config)
+                df_reg, df_obs, df_log, df_unvalidated = SQLiteRepository.generate_empty_dataframes(config)
 
         if df_log is None or df_log.empty:
             df_log = _normalise_log_dataframe(pd.DataFrame())
         else:
             df_log = _normalise_log_dataframe(df_log)
+
+        if df_unvalidated is None or df_unvalidated.empty:
+            df_unvalidated = _normalise_unvalidated_dataframe(pd.DataFrame())
+        else:
+            df_unvalidated = _normalise_unvalidated_dataframe(df_unvalidated)
 
         from utils import sanitize_df_for_excel
 
@@ -715,15 +795,19 @@ class SQLiteRepository:
         if df_photo is not None and not df_photo.empty and "ObjectID" not in df_photo.columns:
             df_photo = df_photo.reset_index()
 
+        if df_unvalidated is not None and not df_unvalidated.empty and "ObjectID" not in df_unvalidated.columns:
+            df_unvalidated = df_unvalidated.reset_index()
+
         # Sanitize dataframes to prevent CSV/Excel formula injection
         df_reg_safe = sanitize_df_for_excel(df_reg)
         df_obs_safe = sanitize_df_for_excel(df_obs)
         df_photo_safe = sanitize_df_for_excel(df_photo)
         df_log_safe = sanitize_df_for_excel(df_log)
+        df_unval_safe = sanitize_df_for_excel(df_unvalidated) if df_unvalidated is not None and not df_unvalidated.empty else None
 
         sheets = config.get("sheets", {
             "reg": "Registration", "obs": "Observation",
-            "photo": "Photo", "log": "Log"
+            "photo": "Photo", "log": "Log", "unvalidated": "Unvalidated_source"
         })
 
         steps = [
@@ -733,6 +817,8 @@ class SQLiteRepository:
         if df_photo_safe is not None and not df_photo_safe.empty:
             steps.append((df_photo_safe, sheets.get("photo", "Photo"), "Photo"))
         steps.append((df_log_safe, sheets.get("log", "Log"), "Log"))
+        if df_unval_safe is not None and not df_unval_safe.empty:
+            steps.append((df_unval_safe, sheets.get("unvalidated", "Unvalidated_source"), "Unvalidated_source"))
 
         total = len(steps)
 

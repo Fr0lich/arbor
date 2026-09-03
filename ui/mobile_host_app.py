@@ -90,11 +90,11 @@ class MobileHostApp:
 
         try:
             if file_path.endswith((".db", ".sqlite", ".sqlite3")):
-                df_reg, df_obs, df_photo, df_log = SQLiteRepository.load_sqlite(
+                df_reg, df_obs, df_photo, df_log, df_unvalidated = SQLiteRepository.load_sqlite(
                     self.app.excel_path, self.app.config
                 )
             else:
-                df_reg, df_obs, df_photo, df_log = ExcelRepository.load_excel(
+                df_reg, df_obs, df_photo, df_log, df_unvalidated = ExcelRepository.load_excel(
                     self.app.excel_path, self.app.config
                 )
 
@@ -107,6 +107,7 @@ class MobileHostApp:
             self.app.df_obs = df_obs
             self.app.df_photo = df_photo
             self.app.df_log = df_log
+            self.app.df_unvalidated = df_unvalidated if df_unvalidated is not None else pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
             self.app._log_records = (
                 df_log.to_dict(orient="records")
                 if (df_log is not None and not df_log.empty)
@@ -161,6 +162,7 @@ class MobileHostApp:
                         df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
                         df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
                         df_photo_copy = self.app.df_photo.copy() if self.app.df_photo is not None else None
+                        df_unval_copy = self.app.df_unvalidated.copy() if getattr(self.app, 'df_unvalidated', None) is not None else None
                         df_log_copy = (
                             pd.DataFrame(self.app._log_records)
                             if (hasattr(self.app, "_log_records") and self.app._log_records)
@@ -178,7 +180,7 @@ class MobileHostApp:
                             if excel_path.endswith((".db", ".sqlite", ".sqlite3")):
                                 backup_path = excel_path + ".autosave.db"
                                 SQLiteRepository.save_sqlite(
-                                    backup_path, df_reg_copy, df_obs_copy, df_photo_copy, df_log_copy
+                                    backup_path, df_reg_copy, df_obs_copy, df_photo_copy, df_log_copy, df_unval_copy
                                 )
                             else:
                                 backup_path = excel_path + ".autosave"
@@ -190,39 +192,42 @@ class MobileHostApp:
                                     df_obs=df_obs_copy,
                                     df_log=df_log_copy,
                                     df_photo=df_photo_copy,
+                                    df_unvalidated=df_unval_copy
                                 )
                             if self.panel:
                                 self.panel.log("Background autosave completed")
-                            if self.panel and self.panel.server:
-                                ts = datetime.now().isoformat()
-                                self.panel.server.broadcast_event(
-                                    "autosave_completed", {"timestamp": ts}
-                                )
                         except Exception as e:
-                            debug_error("MobileHost autosave worker", str(e))
+                            debug_error("MobileHost Autosave Error", str(e))
 
                     threading.Thread(target=write_backup, daemon=True).start()
                 except Exception as e:
-                    debug_error("MobileHost autosave", str(e))
+                    debug_error("MobileHost Autosave Dispatch Error", str(e))
 
-            self.autosave_job = self.root.after(60000, tick)
+            if self.panel:
+                self.root.after(30000, tick)
 
-        self.autosave_job = self.root.after(60000, tick)
+        self.root.after(30000, tick)
 
     # ------------------------------------------------------------------
-    # Session end
+    # Shutdown / Save Logic
     # ------------------------------------------------------------------
 
     def _end_session(self):
         """Called by MobilePanel when the user clicks 'End Mobile Session'."""
-        self._save_to_disk()
+        self._save_and_exit()
 
-    def _save_to_disk(self):
+    def _save_and_exit(self):
+        """Save changes to the active database file and terminate the application."""
+        if not self.app.excel_path:
+            self.root.destroy()
+            sys.exit(0)
+
         try:
             with self.app.df_lock:
                 df_reg_copy = self.app.df_reg.copy() if self.app.df_reg is not None else None
                 df_obs_copy = self.app.df_obs.copy() if self.app.df_obs is not None else None
                 df_photo_copy = self.app.df_photo.copy() if self.app.df_photo is not None else None
+                df_unval_copy = self.app.df_unvalidated.copy() if getattr(self.app, 'df_unvalidated', None) is not None else None
                 df_log_copy = (
                     pd.DataFrame(self.app._log_records)
                     if (hasattr(self.app, "_log_records") and self.app._log_records)
@@ -237,7 +242,7 @@ class MobileHostApp:
 
             if excel_path.endswith((".db", ".sqlite", ".sqlite3")):
                 SQLiteRepository.save_sqlite(
-                    excel_path, df_reg_copy, df_obs_copy, df_photo_copy, df_log_copy
+                    excel_path, df_reg_copy, df_obs_copy, df_photo_copy, df_log_copy, df_unval_copy
                 )
             else:
                 SQLiteRepository.export_to_excel(
@@ -248,6 +253,7 @@ class MobileHostApp:
                     df_obs=df_obs_copy,
                     df_log=df_log_copy,
                     df_photo=df_photo_copy,
+                    df_unvalidated=df_unval_copy
                 )
             messagebox.showinfo("Saved", "All changes have been successfully saved to database.")
         except Exception as e:

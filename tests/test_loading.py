@@ -22,7 +22,7 @@ class TestLoading:
             }
         }
 
-        df_reg_out, df_obs_out, df_photo_out, df_log_out = ExcelRepository.load_excel(excel_path, config)
+        df_reg_out, df_obs_out, df_photo_out, df_log_out, df_unval_out = ExcelRepository.load_excel(excel_path, config)
 
         assert not df_reg_out.empty
         assert not df_obs_out.empty
@@ -46,7 +46,7 @@ class TestLoading:
             }
         }
 
-        df_reg_out, df_obs_out, df_photo_out, df_log_out = ExcelRepository.load_excel(excel_path, config)
+        df_reg_out, df_obs_out, df_photo_out, df_log_out, df_unval_out = ExcelRepository.load_excel(excel_path, config)
 
         assert not df_reg_out.empty
         assert not df_obs_out.empty

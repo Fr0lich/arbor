@@ -182,9 +182,11 @@ class FilterDialogController:
         p_status = create_group(status_left, "Processing Status")
         make_chk(p_status, "Reviewed", ui.filter_vars["Reviewed"], COLORS["secondary"])
         make_chk(p_status, "Not Reviewed (Pending)", ui.filter_vars["Not_Reviewed"], COLORS["surface_tint"])
-        make_chk(p_status, "Reviewed + Has Problem", ui.filter_vars["Reviewed_With_Problem"], COLORS["error"])
+        make_chk(p_status, "Reviewed + Has Problem (REV+ERR)", ui.filter_vars["Reviewed_With_Problem"], COLORS["error"])
         make_chk(p_status, "Problem + Has History", ui.filter_vars["Problem_With_History"], COLORS["error"])
         make_chk(p_status, "Has Suggestions from Books", ui.filter_vars["Has_History"], COLORS["outline_variant"])
+        if "Has_Unvalidated" in ui.filter_vars:
+            make_chk(p_status, "Has Unvalidated Source", ui.filter_vars["Has_Unvalidated"], COLORS["outline_variant"])
 
         m_pres = create_group(status_right, "Metadata Presence")
         tk.Label(m_pres, text="Comments", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w")
@@ -196,6 +198,14 @@ class FilterDialogController:
         tk.Frame(m_pres, bg=COLORS["outline"], height=1).pack(fill="x", pady=sc(4))
         make_chk(m_pres, "No Location Comment", ui.filter_vars["Extra_Empty"])
         make_chk(m_pres, "Has Location Comment", ui.filter_vars["Extra_Not_Empty"])
+
+        if "Search_Old_Taxonomy" in ui.filter_vars:
+            t_hist = create_group(status_right, "Taxonomy Audit Log Search")
+            make_chk(t_hist, "Search Old Taxonomy", ui.filter_vars["Search_Old_Taxonomy"], COLORS["surface_tint"])
+            if hasattr(ui, "search_old_taxonomy_var"):
+                ent_old_tax = ttk.Entry(t_hist, textvariable=ui.search_old_taxonomy_var)
+                ent_old_tax.pack(fill="x", pady=(sc(4), 0))
+                all_widgets.append(("old taxonomy", ent_old_tax, COLORS["surface"]))
 
         # TAB 2: PROBLEMS
         tab_probs = tk.Frame(tab_content_area, bg=COLORS["surface"])

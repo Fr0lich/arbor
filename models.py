@@ -26,6 +26,7 @@ class AppState:
         self.df_obs: pd.DataFrame | None = None
         self.df_photo: pd.DataFrame | None = None
         self.df_log: pd.DataFrame | None = None
+        self.df_unvalidated: pd.DataFrame | None = None
 
         # Snapshot of df_obs at load time, used to detect changes
         self.initial_df_obs: pd.DataFrame | None = None

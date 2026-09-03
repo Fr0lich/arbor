@@ -355,7 +355,7 @@ def test_database_file_generation_with_modules(tk_root, dummy_app):
         assert "Condition Status" in df_obs.columns
 
         # Verify load_excel compatibility
-        loaded_reg, loaded_obs, loaded_photo, loaded_log = ExcelRepository.load_excel(test_file, dummy_app.config)
+        loaded_reg, loaded_obs, loaded_photo, loaded_log, loaded_unval = ExcelRepository.load_excel(test_file, dummy_app.config)
         assert len(loaded_reg) == 3
         assert "V-0010" in list(loaded_reg["ObjectID"])
 

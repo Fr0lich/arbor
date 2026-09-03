@@ -41,6 +41,9 @@ class RegistryPanel:
         ui.reg_entries.clear()
         ui.reg_row_frames.clear()
         ui.reg_entry_list = []
+        ui.unval_btns = {}
+        ui.unval_comment_frames = {}
+        ui.unval_comment_vars = {}
 
         ui.no_problems_msg_label = ttk.Label(
             ui.reg_data_frame,
@@ -350,6 +353,32 @@ class RegistryPanel:
                 else:
                     entry_container.grid(row=0, column=2, sticky="ew")
 
+                # Unvalidated Source Flag toggle button
+                unval_btn = tk.Label(
+                    frame, text="?", font=("Segoe UI", sc(9), "bold"),
+                    bg=card_bg, fg="#888888", cursor="hand2", padx=sc(4), pady=sc(1)
+                )
+                unval_btn.grid(row=0, column=3, padx=(sc(4), sc(2)), sticky="e")
+                unval_btn.bind("<Button-1>", lambda e, n=name: ui._toggle_unvalidated_source(n))
+                ui.unval_btns[name] = unval_btn
+                ui.add_tooltip(unval_btn, f"Flag as Unvalidated Source ({name})")
+
+                # Unvalidated comment container (hidden by default)
+                unval_comment_frame = tk.Frame(frame, bg=card_bg)
+                lbl_unval = tk.Label(unval_comment_frame, text="Unval Note:", font=("Segoe UI", sc(8), "italic"), bg=card_bg, fg="#f59e0b" if is_dark else "#d97706")
+                lbl_unval.pack(side="left", padx=(0, sc(4)))
+                unval_var = tk.StringVar()
+                ui.unval_comment_vars[name] = unval_var
+                unval_entry = tk.Entry(
+                    unval_comment_frame, textvariable=unval_var, font=("Segoe UI", sc(9)),
+                    bg="#2b2d30" if is_dark else "#fffbeb", fg=fg_color, relief="flat",
+                    highlightthickness=1, highlightbackground="#f59e0b" if is_dark else "#d97706", insertbackground=fg_color
+                )
+                unval_entry.pack(side="left", fill="x", expand=True, ipady=sc(2))
+                unval_entry.bind("<FocusOut>", lambda e, n=name: ui._on_unval_comment_change(n))
+                unval_entry.bind("<Return>", lambda e, n=name: (ui._on_unval_comment_change(n), ui.root.focus_set()))
+                ui.unval_comment_frames[name] = unval_comment_frame
+
                 widget.bind("<Shift-Up>", ui._reg_nav_up)
                 widget.bind("<Shift-Down>", ui._reg_nav_down)
                 widget.bind("<Control-Up>", ui._reg_nav_up)
@@ -360,6 +389,7 @@ class RegistryPanel:
                 frame.columnconfigure(0, minsize=sc(28), weight=0)
                 frame.columnconfigure(1, minsize=sc(120), weight=0)
                 frame.columnconfigure(2, weight=1)
+                frame.columnconfigure(3, weight=0)
 
                 frame.grid(row=current_row, column=0, sticky="ew", pady=4)
                 current_row += 1

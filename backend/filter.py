@@ -18,7 +18,7 @@ class FilterManager:
     def __init__(self):
         pass
 
-    def apply_filter(self, df_reg, reg_dict, obs_dict, history_set, groups, global_mode, not_reviewed_only, location_filters, problem_columns, problem_to_field, unknown_fields, image_mode):
+    def apply_filter(self, df_reg, reg_dict, obs_dict, history_set, groups, global_mode, not_reviewed_only, location_filters, problem_columns, problem_to_field, unknown_fields, image_mode, df_unvalidated=None, df_log=None, old_taxonomy_query=""):
         filtered_ids = []
         if df_reg is None:
             return filtered_ids
@@ -30,6 +30,22 @@ class FilterManager:
 
         if no_filters and not not_reviewed_only:
             return list(df_reg.index)
+
+        unval_set = set()
+        if df_unvalidated is not None and not df_unvalidated.empty and "ObjectID" in df_unvalidated.columns:
+            unval_set = set(df_unvalidated["ObjectID"].astype(str).str.strip().unique())
+
+        old_tax_matched_set = set()
+        if old_taxonomy_query and df_log is not None and not df_log.empty:
+            q_lower = str(old_taxonomy_query).strip().lower()
+            if q_lower:
+                for _, log_r in df_log.iterrows():
+                    action = str(log_r.get("Action", ""))
+                    if action in ("GBIF_UPDATE", "EDIT", "GBIF_ROLLBACK"):
+                        cv = str(log_r.get("ChangedValues", "")).lower()
+                        cf = str(log_r.get("ChangedFields", "")).lower()
+                        if q_lower in cv or q_lower in cf:
+                            old_tax_matched_set.add(str(log_r.get("ObjectID", "")).strip())
 
         fast_problem_cache = {}
         include_image_problems = (image_mode == "folder")
@@ -162,6 +178,10 @@ class FilterManager:
                 return lambda oid, obs, reg: (bool(obs.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs, reg))
             elif p == "Problem_With_History" or p == "Has_History":
                 return lambda oid, obs, reg: fast_has_history(oid)
+            elif p == "Has_Unvalidated":
+                return lambda oid, obs, reg: (str(oid) in unval_set or (str(oid).isdigit() and str(int(str(oid))) in unval_set))
+            elif p == "Search_Old_Taxonomy":
+                return lambda oid, obs, reg: (str(oid) in old_tax_matched_set or (str(oid).isdigit() and str(int(str(oid))) in old_tax_matched_set))
             else:
                 return lambda oid, obs, reg: fast_is_problem_active(oid, p, obs, reg)
 

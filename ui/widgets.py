@@ -919,7 +919,10 @@ class TreeviewListboxWrapper(ttk.Frame):
                     has_unknown = True
                     break
 
-        if reviewed:
+        if reviewed and has_problem:
+            new_color = "#ffb366" if is_dark else "#f0ad4e"
+            badge_label, badge_bg, badge_fg = "REV+ERR", "#F57C00", "#ffffff"
+        elif reviewed:
             new_color = "#4CAF50" if is_dark else "#2E7D32"
             badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
         elif has_problem and problems_have_history:
@@ -988,6 +991,32 @@ class TreeviewListboxWrapper(ttk.Frame):
             if loaned_badge.winfo_exists():
                 loaned_badge.destroy()
             self.item_data[oid]["loaned_badge"] = None
+
+        has_unval = self.main_window.has_unvalidated_sources(oid) if hasattr(self.main_window, "has_unvalidated_sources") else False
+        unval_badge = self.item_data[oid].get("unval_badge")
+
+        if has_unval and not unval_badge and row1 and row1.winfo_exists():
+            from config import sc
+            u_bg = "#3e2723" if is_dark else "#fff3e0"
+            u_fg = "#ffb74d" if is_dark else "#e65100"
+            u_bd = "#ffb74d" if is_dark else "#ffe0b2"
+
+            u_badge = self._create_badge(row1, "UNVAL", u_bg, u_fg, u_bd)
+            u_badge.pack(side="right", padx=(sc(2), sc(2)))
+
+            tags = u_badge.bindtags()
+            if "VirtualCard" not in tags:
+                u_badge.bindtags((tags[0], "VirtualCard") + tags[1:])
+            card_body = self.item_data[oid].get("card_body")
+            u_badge._card_oid = oid
+            u_badge._card_body = card_body
+
+            self.item_data[oid]["unval_badge"] = u_badge
+
+        elif not has_unval and unval_badge:
+            if unval_badge.winfo_exists():
+                unval_badge.destroy()
+            self.item_data[oid]["unval_badge"] = None
 
     def _create_badge(self, parent, text, bg, fg, border_color):
         from config import sc
