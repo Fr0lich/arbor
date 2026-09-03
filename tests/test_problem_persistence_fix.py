@@ -347,3 +347,42 @@ def test_is_problem_active_safe_lookup_nonexistent_ids():
     assert mw.is_problem_active(99999, "Genus_Problem") is False
 
     root.destroy()
+
+
+def test_rev_err_card_badge_and_color():
+    """Verifies that an object with Reviewed=True and active problems gets REV+ERR badge and amber color."""
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except Exception:
+        pytest.skip("Tkinter display not available")
+
+    df_reg = pd.DataFrame({
+        "ObjectID": ["OBJ1"],
+        "Genus": ["Pinus"],
+        "Species": ["sylvestris"]
+    }).set_index("ObjectID")
+
+    df_obs = pd.DataFrame({
+        "ObjectID": ["OBJ1"],
+        "Genus_Problem": [True],
+        "Species_Problem": [False],
+        "Reviewed": [True]
+    }).set_index("ObjectID")
+
+    app = MockApp(df_reg, df_obs)
+    mw = create_mock_ui(root, app)
+    mw.load_object("OBJ1")
+    mw.update_list_item_color("OBJ1")
+
+    # Check list item tags
+    tags = mw.object_list.item("OBJ1", "tags")
+    assert any("f0ad4e" in t or "ffb366" in t for t in tags)
+
+    # Check card populate badge
+    widgets = mw.object_list._build_empty_card_widget(mw.object_list.canvas)
+    mw.object_list._populate_card_widget(widgets, "OBJ1")
+    assert widgets["status_badge"].cget("text") == "REV+ERR"
+    assert widgets["status_badge"].cget("bg") == "#F57C00"
+
+    root.destroy()

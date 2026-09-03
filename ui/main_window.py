@@ -7590,13 +7590,28 @@ class ObjectProgramUI(
         if not self.app.active_object_ids or oid not in self.app.active_object_ids:
             return
             
-        if getattr(self, "_cached_reviewed_dict", None) is not None:
-            reviewed = bool(self._cached_reviewed_dict.get(oid, False))
-        elif getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
-            reviewed = bool(self._cached_obs_dict[oid].get(REVIEWED_COLUMN, False))
-        else:
+        reviewed = False
+        rev_dict = getattr(self, "_cached_reviewed_dict", None)
+        obs_dict = getattr(self, "_cached_obs_dict", None)
+
+        if oid == getattr(self.app, 'current_object_id', None) and hasattr(self, 'reviewed_var'):
+            reviewed = bool(self.reviewed_var.get())
+        elif rev_dict and oid in rev_dict:
+            reviewed = bool(rev_dict[oid])
+        elif rev_dict and str(oid) in rev_dict:
+            reviewed = bool(rev_dict[str(oid)])
+        elif rev_dict and str(oid).isdigit() and int(oid) in rev_dict:
+            reviewed = bool(rev_dict[int(oid)])
+        elif obs_dict and oid in obs_dict:
+            reviewed = bool(obs_dict[oid].get(REVIEWED_COLUMN, False))
+        elif obs_dict and str(oid) in obs_dict:
+            reviewed = bool(obs_dict[str(oid)].get(REVIEWED_COLUMN, False))
+        elif obs_dict and str(oid).isdigit() and int(oid) in obs_dict:
+            reviewed = bool(obs_dict[int(oid)].get(REVIEWED_COLUMN, False))
+        elif self.app.df_obs is not None:
             try:
-                reviewed = bool(self.app.df_obs.loc[oid, REVIEWED_COLUMN])
+                lookup_key = int(oid) if str(oid).isdigit() and int(oid) in self.app.df_obs.index else oid
+                reviewed = bool(self.app.df_obs.loc[lookup_key, REVIEWED_COLUMN])
             except Exception:
                 reviewed = False
             

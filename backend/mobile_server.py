@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file, Response
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file, Response, make_response
 import queue
 from werkzeug.utils import secure_filename
 import pandas as pd
@@ -803,14 +803,18 @@ class MobileServer:
             token_param = request.args.get('token')
             if token_param == self.session_token:
                 session['authenticated'] = True
-            return render_template_string(INDEX_TEMPLATE, token=self.session_token)
+            rendered = render_template_string(INDEX_TEMPLATE, token=self.session_token)
+            resp = make_response(rendered)
+            resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+            resp.headers['Pragma'] = 'no-cache'
+            resp.headers['Expires'] = '0'
+            return resp
 
         @app.route('/service-worker.js')
         def service_worker():
             sw_script = """
-const CACHE_NAME = 'arbor-companion-v1';
+const CACHE_NAME = 'arbor-companion-v2';
 const ASSETS = [
-    '/',
     '/login',
     'https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js',
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap'
@@ -839,10 +843,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
-    if (url.pathname.startsWith('/api/') || event.request.method !== 'GET') {
+    if (url.pathname === '/' || url.pathname.startsWith('/api/') || event.request.method !== 'GET') {
         return;
     }
-    // Stale-While-Revalidate strategy
+    // Stale-While-Revalidate strategy for static assets
     event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
             if (cachedResponse) {
@@ -2980,7 +2984,8 @@ INDEX_TEMPLATE = """
   <!-- CLIENT APPLICATION SCRIPT                  -->
   <!-- ========================================== -->
   <script>
-    const TOKEN = "{{ token }}";
+    const _urlParams = new URLSearchParams(window.location.search);
+    const TOKEN = _urlParams.get('token') || "{{ token }}";
     let activeSchema = null;
     let objectList = [];
     let currentOid = null;
@@ -3646,6 +3651,20 @@ INDEX_TEMPLATE = """
       }
     }
 
+    async function fetchStatus() {
+      try {
+        const res = await apiFetch('/api/status');
+        if (res && res.database_name) {
+          const dbEl = document.getElementById('headerDbName');
+          if (dbEl) dbEl.textContent = res.database_name;
+          const modalDb = document.getElementById('connModalDbName');
+          if (modalDb) modalDb.textContent = res.database_name;
+        }
+      } catch (e) {
+        console.warn('fetchStatus error', e);
+      }
+    }
+
     function setupEventSource() {
       try {
         if (_reconnectTimer) clearTimeout(_reconnectTimer);
@@ -3660,7 +3679,7 @@ INDEX_TEMPLATE = """
           flushQueuedMutations();
           fetchStatus();
           if (currentOid && dirtyFields.size === 0) {
-            loadRecord(currentOid, true);
+            loadSpecimen(currentOid, true);
           } else if (!currentOid) {
             fetchList();
           }
@@ -5023,7 +5042,6 @@ INDEX_TEMPLATE = """
       if (!currentUnvalidatedMap) currentUnvalidatedMap = {};
       currentUnvalidatedMap[fName] = val;
       markDirty(fName);
-    }
     }
 
     function toggleAccordion(btn) {

@@ -884,4 +884,17 @@ def test_unvalidated_sources_sync_and_endpoints(mock_app_state):
     assert matches_1025.iloc[0]["Unvalidated_Comment"] == "Illegible"
 
 
+def test_index_route_rendering_and_cache_headers(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+
+    # Hit GET / with token param
+    res = client.get(f'/?token={server.session_token}')
+    assert res.status_code == 200
+    assert "text/html" in res.content_type
+    assert "Arbor Companion" in res.get_data(as_text=True)
+    assert res.headers.get("Cache-Control") == "no-cache, no-store, must-revalidate, max-age=0"
+    assert res.headers.get("Pragma") == "no-cache"
+
+
 

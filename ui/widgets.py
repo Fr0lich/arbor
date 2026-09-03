@@ -903,7 +903,14 @@ class TreeviewListboxWrapper(ttk.Frame):
         is_dark = getattr(self.main_window, "dark_mode_active", False)
         canvas_bg = "#181c19" if is_dark else "#fbfaf8"
 
-        reviewed = self.item_data[oid].get("reviewed", False)
+        if getattr(self.main_window, "_cached_reviewed_dict", None) is not None:
+            reviewed = bool(self.main_window._cached_reviewed_dict.get(oid, self.item_data[oid].get("reviewed", False)))
+        elif getattr(self.main_window, "_cached_obs_dict", None) is not None and oid in self.main_window._cached_obs_dict:
+            reviewed = bool(self.main_window._cached_obs_dict[oid].get(REVIEWED_COLUMN, False))
+        else:
+            reviewed = self.item_data[oid].get("reviewed", False)
+        self.item_data[oid]["reviewed"] = reviewed
+
         if hasattr(self.main_window, "_get_cached_problem"):
             has_problem = self.main_window._get_cached_problem(oid)
         else:
@@ -1319,7 +1326,14 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         has_problem = self.main_window._get_cached_problem(oid) if hasattr(self.main_window, "_get_cached_problem") else (self.main_window._problem_cache.get(oid, False) if hasattr(self.main_window, "_problem_cache") else False)
         problems_have_history = self.main_window._problems_have_history(oid) if hasattr(self.main_window, "_problems_have_history") else False
-        reviewed = data.get("reviewed", False)
+        
+        if getattr(self.main_window, "_cached_reviewed_dict", None) is not None:
+            reviewed = bool(self.main_window._cached_reviewed_dict.get(oid, data.get("reviewed", False)))
+        elif getattr(self.main_window, "_cached_obs_dict", None) is not None and oid in self.main_window._cached_obs_dict:
+            reviewed = bool(self.main_window._cached_obs_dict[oid].get(REVIEWED_COLUMN, False))
+        else:
+            reviewed = bool(obs_row.get(REVIEWED_COLUMN, data.get("reviewed", False)))
+        data["reviewed"] = reviewed
 
         loaned_raw = obs_row.get("Loaned out", False)
         loaned = utils.parse_bool(loaned_raw)
@@ -1331,7 +1345,10 @@ class TreeviewListboxWrapper(ttk.Frame):
                     has_unknown = True
                     break
 
-        if reviewed:
+        if reviewed and has_problem:
+            accent_color = "#ffb366" if is_dark else "#f0ad4e"
+            badge_label, badge_bg, badge_fg = "REV+ERR", "#F57C00", "#ffffff"
+        elif reviewed:
             accent_color = "#4CAF50" if is_dark else "#2E7D32"  # green
             badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
         elif has_problem and problems_have_history:
@@ -1771,6 +1788,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             if vals:
                 self.item_data[oid]["reviewed"] = (vals[0] == "☑")
                 self._update_card_checkbox(oid)
+                self._refresh_card_accent(oid)
 
         if self.active_view == "compact" and getattr(self, "_tree_dirty", False):
             self._ensure_tree_synced()
