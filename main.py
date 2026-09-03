@@ -1,3 +1,6 @@
+import multiprocessing
+multiprocessing.freeze_support()
+
 import tkinter as tk
 import sys
 import os
