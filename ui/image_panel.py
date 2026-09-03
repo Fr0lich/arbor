@@ -32,6 +32,7 @@ class ImagePanel(ttk.Frame):
         self,
         parent,
         app=None,
+        main_ui=None,
         app_bus=None,
         keybindings=None,
         dark_mode=False,
@@ -40,6 +41,7 @@ class ImagePanel(ttk.Frame):
         super().__init__(parent, **kwargs)
         self.parent = parent
         self.app = app
+        self.main_ui = main_ui
         self.app_bus = app_bus
         self.keybindings = keybindings
         self.dark_mode = dark_mode
@@ -92,8 +94,8 @@ class ImagePanel(ttk.Frame):
     @property
     def root(self):
         """Helper property to retrieve Tk root window safely."""
-        if self.app and hasattr(self.app, "root"):
-            return self.app.root
+        if self.main_ui and hasattr(self.main_ui, "root"):
+            return self.main_ui.root
         return self.winfo_toplevel()
 
     def set_dark_mode(self, is_dark):
@@ -184,9 +186,9 @@ class ImagePanel(ttk.Frame):
                 "rotate_ccw": lambda: self.rotate_image(-90),
                 "reset": self.reset_image_view,
                 "fit": self.fit_image_view,
-                "design_toggle": lambda mode: getattr(self.app, "save_user_pref", lambda k, v: None)("image_button_style", mode)
+                "design_toggle": lambda mode: getattr(self.main_ui, "save_user_pref", lambda k, v: None)("image_button_style", mode)
             },
-            design_mode=getattr(self.app, "image_button_style", "standard") if self.app else "standard",
+            design_mode=getattr(self.main_ui, "image_button_style", "standard") if self.main_ui else "standard",
             dark_mode=self.dark_mode,
             zoom_level=self.image_zoom_factor,
             rotation_angle=self.image_rotation_angle
@@ -537,8 +539,8 @@ class ImagePanel(ttk.Frame):
         self.update_image_view_button()
         self.image_index = {}
 
-        if self.app and hasattr(self.app, "system_status"):
-            self.app.system_status.config(text="Online image mode enabled")
+        if self.main_ui and hasattr(self.main_ui, "system_status"):
+            self.main_ui.system_status.config(text="Online image mode enabled")
 
         curr_oid = getattr(self.app, "current_object_id", None) if self.app else None
         if curr_oid:
@@ -563,15 +565,15 @@ class ImagePanel(ttk.Frame):
         self.image_mode = "folder"
         self.update_image_view_button()
 
-        if self.app and hasattr(self.app, "reg_entry_list") and self.app.reg_entry_list:
-            self.app.reg_entry_list[0].focus_set()
+        if self.main_ui and hasattr(self.main_ui, "reg_entry_list") and self.main_ui.reg_entry_list:
+            self.main_ui.reg_entry_list[0].focus_set()
 
     def enable_offline_mode(self):
         self.image_mode = "offline"
         self.update_image_view_button()
         self.image_cache.clear()
-        if self.app and hasattr(self.app, "system_status"):
-            self.app.system_status.config(text="Offline image mode enabled")
+        if self.main_ui and hasattr(self.main_ui, "system_status"):
+            self.main_ui.system_status.config(text="Offline image mode enabled")
 
         curr_oid = getattr(self.app, "current_object_id", None) if self.app else None
         if curr_oid:
@@ -652,8 +654,8 @@ class ImagePanel(ttk.Frame):
                 files.append(os.path.join(root_dir, fname))
 
         total = len(files)
-        if self.app and hasattr(self.app, "_show_progress"):
-            self.root.after(0, lambda: self.app._show_progress("Indexing images...", total))
+        if self.main_ui and hasattr(self.main_ui, "_show_progress"):
+            self.root.after(0, lambda: self.main_ui._show_progress("Indexing images...", total))
 
         found_object_ids = set()
         for i, path in enumerate(files):
@@ -673,10 +675,10 @@ class ImagePanel(ttk.Frame):
             img_no = int(m.group(1)) if m else 1
             self.image_index.setdefault(oid, []).append((img_no, path))
 
-            if i % 50 == 0 and self.app and hasattr(self.app, "image_scan_progress"):
+            if i % 50 == 0 and self.main_ui and hasattr(self.main_ui, "image_scan_progress"):
                 self.root.after(
                     0,
-                    self.app.image_scan_progress.configure,
+                    self.main_ui.image_scan_progress.configure,
                     {"value": i, "maximum": total}
                 )
 
@@ -690,15 +692,15 @@ class ImagePanel(ttk.Frame):
             self.app.dirty = True
 
         def _notify_ui():
-            if self.app:
-                if hasattr(self.app, "_invalidate_row_cache"):
-                    self.app._invalidate_row_cache()
-                if hasattr(self.app, "_problem_cache"):
-                    self.app._problem_cache.clear()
-                if hasattr(self.app, "refresh_list"):
-                    self.app.refresh_list()
-                if hasattr(self.app, "_on_startup_ready"):
-                    self.app._on_startup_ready()
+            if self.main_ui:
+                if hasattr(self.main_ui, "_invalidate_row_cache"):
+                    self.main_ui._invalidate_row_cache()
+                if hasattr(self.main_ui, "_problem_cache"):
+                    self.main_ui._problem_cache.clear()
+                if hasattr(self.main_ui, "refresh_list"):
+                    self.main_ui.refresh_list()
+                if hasattr(self.main_ui, "_on_startup_ready"):
+                    self.main_ui._on_startup_ready()
 
         self.root.after(0, _notify_ui)
 
