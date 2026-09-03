@@ -194,6 +194,8 @@ class ImagePanel(ttk.Frame):
             rotation_angle=self.image_rotation_angle
         )
         self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2))
+        if not self.show_image_tools_var.get():
+            self.image_toolbar.pack_forget()
 
         # Main Canvas Box
         image_box = ttk.Frame(self, relief="flat", padding=0, style="MiddlePane.TFrame")
@@ -294,13 +296,30 @@ class ImagePanel(ttk.Frame):
                 except Exception:
                     pass
 
+    def toggle_image_tools(self):
+        if not hasattr(self, "image_toolbar") or not self.image_toolbar.winfo_exists():
+            return
+        if self.show_image_tools_var.get():
+            if self.image_toolbar.winfo_manager() != "pack":
+                if hasattr(self, "image_box") and self.image_box.winfo_exists():
+                    self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2), before=self.image_box)
+                else:
+                    self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2))
+        else:
+            if self.image_toolbar.winfo_manager() == "pack":
+                self.image_toolbar.pack_forget()
+
     def _update_image_controls_visibility(self):
         if hasattr(self, "image_toolbar") and self.image_toolbar.winfo_exists():
-            if self.image_mode == "folder" and self.image_view_mode == "stack":
-                self.image_toolbar.pack_forget()
-                self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2), before=self.image_box)
+            if self.show_image_tools_var.get() and self.image_mode == "folder" and self.image_view_mode == "stack":
+                if self.image_toolbar.winfo_manager() != "pack":
+                    if hasattr(self, "image_box") and self.image_box.winfo_exists():
+                        self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2), before=self.image_box)
+                    else:
+                        self.image_toolbar.pack(fill="x", padx=6, pady=(0, 2))
             else:
-                self.image_toolbar.pack_forget()
+                if self.image_toolbar.winfo_manager() == "pack":
+                    self.image_toolbar.pack_forget()
 
         if self.image_mode == "online":
             if not hasattr(self, "image_hud") or not self.image_hud.winfo_exists():

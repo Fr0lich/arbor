@@ -378,6 +378,10 @@ class ObjectProgramUI(
         return getattr(self.image_panel, "image_container", None) if hasattr(self, "image_panel") else None
 
     @property
+    def image_box(self):
+        return getattr(self.image_panel, "image_box", None) if hasattr(self, "image_panel") else None
+
+    @property
     def image_canvas(self):
         return getattr(self.image_panel, "image_canvas", None) if hasattr(self, "image_panel") else None
 
@@ -2942,11 +2946,17 @@ class ObjectProgramUI(
         self._sync_middle_panes()
             
     def toggle_image_tools(self):
-        if self.show_image_tools_var.get():
-            if self.image_toolbar.winfo_manager() != "pack":
-                self.image_toolbar.pack(before=self.image_box, fill="x", pady=(2, 4))
+        if hasattr(self, "image_panel") and hasattr(self.image_panel, "toggle_image_tools"):
+            self.image_panel.toggle_image_tools()
+            return
+        if hasattr(self, "show_image_tools_var") and self.show_image_tools_var and self.show_image_tools_var.get():
+            if self.image_toolbar and self.image_toolbar.winfo_exists() and self.image_toolbar.winfo_manager() != "pack":
+                if self.image_box and self.image_box.winfo_exists():
+                    self.image_toolbar.pack(before=self.image_box, fill="x", pady=(2, 4))
+                else:
+                    self.image_toolbar.pack(side="top", fill="x", pady=(2, 4))
         else:
-            if self.image_toolbar.winfo_manager() == "pack":
+            if self.image_toolbar and self.image_toolbar.winfo_exists() and self.image_toolbar.winfo_manager() == "pack":
                 self.image_toolbar.pack_forget()
 
     def toggle_bulk_edit_btn(self):

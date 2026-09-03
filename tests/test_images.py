@@ -141,6 +141,50 @@ class TestImagePanel(unittest.TestCase):
         urls = panel.build_online_image_urls("99")
         self.assertEqual(urls[0], "https://example.com/img/99.jpg")
 
+    def test_toggle_image_tools(self):
+        import tkinter as tk
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            panel = ImagePanel(root)
+            panel.show_image_tools_var.set(True)
+            panel.toggle_image_tools()
+            self.assertEqual(panel.image_toolbar.winfo_manager(), "pack")
+
+            panel.show_image_tools_var.set(False)
+            panel.toggle_image_tools()
+            self.assertEqual(panel.image_toolbar.winfo_manager(), "")
+        finally:
+            root.destroy()
+
+
+class TestMainWindowImageDelegation(unittest.TestCase):
+    def test_main_window_image_box_and_toggle_tools(self):
+        import tkinter as tk
+        from ui.main_window import ObjectProgramUI
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            panel = ImagePanel(root)
+            mw = ObjectProgramUI.__new__(ObjectProgramUI)
+            mw.image_panel = panel
+            
+            # Verify image_box property delegation
+            self.assertIsNotNone(mw.image_box)
+            self.assertEqual(mw.image_box, panel.image_box)
+
+            # Verify toggle_image_tools delegation without AttributeError
+            mw.show_image_tools_var.set(True)
+            mw.toggle_image_tools()
+            self.assertEqual(panel.image_toolbar.winfo_manager(), "pack")
+
+            mw.show_image_tools_var.set(False)
+            mw.toggle_image_tools()
+            self.assertEqual(panel.image_toolbar.winfo_manager(), "")
+        finally:
+            root.destroy()
+
+
 if __name__ == "__main__":
     unittest.main()
 
