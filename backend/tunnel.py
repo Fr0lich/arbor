@@ -1,5 +1,6 @@
 import subprocess
 import threading
+import queue
 import re
 import socket
 import logging
@@ -134,14 +135,24 @@ class ResilientSSHTunnel:
                     connected = False
                     url_deadline = time.time() + 12  # 12s per provider attempt
 
+
+                    q = queue.Queue()
+                    def _reader():
+                        while True:
+                            l = self.process.stdout.readline()
+                            if not l:
+                                break
+                            q.put(l)
+                    t = threading.Thread(target=_reader, daemon=True)
+                    t.start()
+
                     while not self._stop_event.is_set():
-                        if self.process.poll() is not None:
+                        if self.process.poll() is not None and q.empty():
                             break
 
-                        line = self.process.stdout.readline()
-                        if not line:
-                            if self.process.poll() is not None:
-                                break
+                        try:
+                            line = q.get(timeout=0.1)
+                        except queue.Empty:
                             if not connected and time.time() > url_deadline:
                                 logging.warning(f"Tunnel {target_host}: no URL received within 12s")
                                 if status_callback and attempt >= len(providers):
@@ -155,7 +166,6 @@ class ResilientSSHTunnel:
                                     except Exception:
                                         pass
                                 break
-                            time.sleep(0.05)
                             continue
 
                         clean_line = _ANSI_ESCAPE_RE.sub('', line).strip()
@@ -349,18 +359,29 @@ class CloudflareTunnel:
             connected = False
             url_deadline = time.time() + 15  # 15s deadline for tunnel handshake
 
+
+            q = queue.Queue()
+            def _cf_reader():
+                while True:
+                    l = self.process.stderr.readline()
+                    if not l:
+                        break
+                    q.put(l)
+            t = threading.Thread(target=_cf_reader, daemon=True)
+            t.start()
+
             while not self._stop_event.is_set():
-                if self.process.poll() is not None:
+                if self.process.poll() is not None and q.empty():
                     break
 
-                line = self.process.stderr.readline()
-                if not line:
+                try:
+                    line = q.get(timeout=0.1)
+                except queue.Empty:
                     if not connected and time.time() > url_deadline:
                         logging.warning("Cloudflare tunnel: no URL received within 15s")
                         if status_callback:
                             status_callback("🟡 Cloudflare tunnel timeout")
                         break
-                    time.sleep(0.05)
                     continue
 
                 clean_line = _ANSI_ESCAPE_RE.sub('', line).strip()
