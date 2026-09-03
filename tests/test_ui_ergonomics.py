@@ -151,3 +151,68 @@ def test_location_persisted_even_with_skip_heavy(tk_root):
     # Location edit MUST be persisted in df_obs even when skip_heavy=True
     assert app.df_obs.at["101", "Cabinet"] == "Cab-B"
     assert app.dirty is True
+
+
+def test_virtual_card_badge_toggle_and_refresh(tk_root):
+    mock_main = MagicMock()
+    mock_main.dark_mode_active = False
+    mock_main.focus_mode_var = tk.BooleanVar(value=True)
+    mock_main.app = MagicMock()
+    mock_main.app.df_photo = None
+    mock_main.has_unvalidated_sources.return_value = False
+    mock_main._cached_reviewed_dict = None
+    mock_main._get_cached_problem.return_value = False
+    mock_main._problems_have_history.return_value = False
+    mock_main.is_unknown.return_value = False
+
+    obs_data = {"101": {"Loaned out": False, "Reviewed": False}}
+    reg_data = {"101": {"Genus": "Quercus", "Species": "robur"}}
+
+    mock_main._get_obs_dict.return_value = obs_data
+    mock_main._get_reg_dict.return_value = reg_data
+
+    wrapper = TreeviewListboxWrapper(tk_root, mock_main)
+    wrapper.pack()
+
+    wrapper.items_list = ["101"]
+    wrapper.items_set = {"101"}
+    wrapper._oid_to_index = {"101": 0}
+
+    widget_dict = wrapper._build_empty_card_widget(wrapper.canvas)
+    wrapper._active_card_windows[0] = (1, widget_dict)
+
+    # Populate initial card widget
+    wrapper._populate_card_widget(widget_dict, "101")
+    loaned_badge = widget_dict["loaned_badge"]
+    assert loaned_badge.winfo_exists()
+    assert loaned_badge.winfo_manager() != "pack"
+
+    # Refresh accent with loaned=False (should not destroy loaned_badge)
+    wrapper._refresh_card_accent("101")
+    assert loaned_badge.winfo_exists()
+    assert loaned_badge.winfo_manager() != "pack"
+
+    # refresh_object_card should run cleanly without TclError
+    wrapper.refresh_object_card("101")
+    assert loaned_badge.winfo_exists()
+
+    # Now set loaned=True and refresh
+    obs_data["101"]["Loaned out"] = True
+    wrapper._refresh_card_accent("101")
+    assert loaned_badge.winfo_exists()
+    assert loaned_badge.winfo_manager() == "pack"
+
+    wrapper.refresh_object_card("101")
+    assert loaned_badge.winfo_exists()
+    assert loaned_badge.winfo_manager() == "pack"
+
+    # Toggle back to loaned=False
+    obs_data["101"]["Loaned out"] = False
+    wrapper._refresh_card_accent("101")
+    assert loaned_badge.winfo_exists()
+    assert loaned_badge.winfo_manager() != "pack"
+
+    wrapper.refresh_object_card("101")
+    assert loaned_badge.winfo_exists()
+    assert loaned_badge.winfo_manager() != "pack"
+

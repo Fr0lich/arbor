@@ -975,55 +975,26 @@ class TreeviewListboxWrapper(ttk.Frame):
         row1 = self.item_data[oid].get("row1")
         loaned_badge = self.item_data[oid].get("loaned_badge")
 
-        if loaned and not loaned_badge and row1 and row1.winfo_exists():
+        if loaned_badge and loaned_badge.winfo_exists():
             from config import sc
-            l_bg = "#203040" if is_dark else "#e3f2fd"
-            l_fg = "#64b5f6" if is_dark else "#0d47a1"
-            l_bd = "#bbdefb" if is_dark else "#90caf9"
-
-            l_badge = self._create_badge(row1, "Loaned", l_bg, l_fg, l_bd)
-            l_badge.pack(side="right", padx=(sc(2), sc(2)))
-
-            # Reapply tags to new child for hover effects
-            tags = l_badge.bindtags()
-            if "VirtualCard" not in tags:
-                l_badge.bindtags((tags[0], "VirtualCard") + tags[1:])
-            card_body = self.item_data[oid].get("card_body")
-            l_badge._card_oid = oid
-            l_badge._card_body = card_body
-
-            self.item_data[oid]["loaned_badge"] = l_badge
-
-        elif not loaned and loaned_badge:
-            if loaned_badge.winfo_exists():
-                loaned_badge.destroy()
-            self.item_data[oid]["loaned_badge"] = None
+            if loaned:
+                if loaned_badge.winfo_manager() != 'pack':
+                    loaned_badge.pack(side="right", padx=(sc(2), sc(2)))
+            else:
+                if loaned_badge.winfo_manager() == 'pack':
+                    loaned_badge.pack_forget()
 
         has_unval = self.main_window.has_unvalidated_sources(oid) if hasattr(self.main_window, "has_unvalidated_sources") else False
         unval_badge = self.item_data[oid].get("unval_badge")
 
-        if has_unval and not unval_badge and row1 and row1.winfo_exists():
+        if unval_badge and unval_badge.winfo_exists():
             from config import sc
-            u_bg = "#3e2723" if is_dark else "#fff3e0"
-            u_fg = "#ffb74d" if is_dark else "#e65100"
-            u_bd = "#ffb74d" if is_dark else "#ffe0b2"
-
-            u_badge = self._create_badge(row1, "UNVAL", u_bg, u_fg, u_bd)
-            u_badge.pack(side="right", padx=(sc(2), sc(2)))
-
-            tags = u_badge.bindtags()
-            if "VirtualCard" not in tags:
-                u_badge.bindtags((tags[0], "VirtualCard") + tags[1:])
-            card_body = self.item_data[oid].get("card_body")
-            u_badge._card_oid = oid
-            u_badge._card_body = card_body
-
-            self.item_data[oid]["unval_badge"] = u_badge
-
-        elif not has_unval and unval_badge:
-            if unval_badge.winfo_exists():
-                unval_badge.destroy()
-            self.item_data[oid]["unval_badge"] = None
+            if has_unval:
+                if unval_badge.winfo_manager() != 'pack':
+                    unval_badge.pack(side="right", padx=(sc(2), sc(2)))
+            else:
+                if unval_badge.winfo_manager() == 'pack':
+                    unval_badge.pack_forget()
 
     def _create_badge(self, parent, text, bg, fg, border_color):
         from config import sc
@@ -1081,7 +1052,7 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         dummy_card.destroy()
         if oid in self.item_data:
-            for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "id_label", "row1"]:
+            for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "row1"]:
                 if key in self.item_data[oid]:
                     del self.item_data[oid][key]
 
@@ -1095,7 +1066,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         self._active_card_windows.clear()
         for oid in self.item_data:
             if "card_frame" in self.item_data[oid]:
-                for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "id_label", "row1"]:
+                for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "row1"]:
                     if key in self.item_data[oid]:
                         del self.item_data[oid][key]
 
@@ -1147,7 +1118,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             try:
                 oid = self.items_list[idx]
                 if oid in self.item_data and "card_frame" in self.item_data[oid]:
-                    for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "id_label", "row1"]:
+                    for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "row1"]:
                         if key in self.item_data[oid]:
                             del self.item_data[oid][key]
             except IndexError:
@@ -1225,6 +1196,10 @@ class TreeviewListboxWrapper(ttk.Frame):
         loaned_badge.pack(side="right", padx=(sc(2), sc(2)))
         loaned_badge.pack_forget() # Initially hidden
 
+        unval_badge = self._create_badge(row1, "UNVAL", "#3e2723" if is_dark else "#fff3e0", "#ffb74d" if is_dark else "#e65100", "#ffb74d" if is_dark else "#ffe0b2")
+        unval_badge.pack(side="right", padx=(sc(2), sc(2)))
+        unval_badge.pack_forget() # Initially hidden
+
         row2 = tk.Frame(card_body, bg=card_bg)
         row2.pack(fill="x", anchor="w", pady=(sc(3), 0))
 
@@ -1274,6 +1249,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             "tax_lbl": tax_lbl,
             "status_badge": status_badge,
             "loaned_badge": loaned_badge,
+            "unval_badge": unval_badge,
             "row2": row2,
             "fam_lbl": fam_lbl,
             "sep_lbl": sep_lbl,
@@ -1320,7 +1296,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         data["cb_label"] = widgets["cb_lbl"]
         data["tax_label"] = widgets["tax_lbl"]
         data["status_badge"] = widgets["status_badge"]
-        data["loaned_badge"] = widgets["loaned_badge"]
+        data["loaned_badge"] = widgets.get("loaned_badge")
+        data["unval_badge"] = widgets.get("unval_badge")
         data["id_label"] = widgets["id_lbl"]
         data["row1"] = widgets["row1"]
 
@@ -1397,12 +1374,22 @@ class TreeviewListboxWrapper(ttk.Frame):
         badge_frame = widgets["status_badge"]
         badge_frame.configure(text=badge_label, bg=badge_bg, fg=badge_fg, highlightbackground=badge_bg)
 
-        if loaned:
-            if widgets["loaned_badge"].winfo_manager() != 'pack':
-                widgets["loaned_badge"].pack(side="right", padx=(sc(2), sc(2)))
-        else:
-            if widgets["loaned_badge"].winfo_manager() == 'pack':
-                widgets["loaned_badge"].pack_forget()
+        if widgets.get("loaned_badge") and widgets["loaned_badge"].winfo_exists():
+            if loaned:
+                if widgets["loaned_badge"].winfo_manager() != 'pack':
+                    widgets["loaned_badge"].pack(side="right", padx=(sc(2), sc(2)))
+            else:
+                if widgets["loaned_badge"].winfo_manager() == 'pack':
+                    widgets["loaned_badge"].pack_forget()
+
+        has_unval = self.main_window.has_unvalidated_sources(oid) if hasattr(self.main_window, "has_unvalidated_sources") else False
+        if widgets.get("unval_badge") and widgets["unval_badge"].winfo_exists():
+            if has_unval:
+                if widgets["unval_badge"].winfo_manager() != 'pack':
+                    widgets["unval_badge"].pack(side="right", padx=(sc(2), sc(2)))
+            else:
+                if widgets["unval_badge"].winfo_manager() == 'pack':
+                    widgets["unval_badge"].pack_forget()
 
         family = str(reg_row.get("Family", "") or "").strip()
         if family in ("nan", "None"):
