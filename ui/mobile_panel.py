@@ -106,83 +106,132 @@ class MobilePanel:
         self.setup_frame = tk.Frame(main, bg="#ffffff")
         self.setup_frame.pack(fill="both", expand=True, pady=(10, 0))
 
-        tk.Label(
-            self.setup_frame,
-            text="Choose Network Mode:",
-            font=("Segoe UI", 10, "bold"),
-            bg="#ffffff",
+        # Setup Status Pill
+        setup_status_bar = tk.Frame(
+            self.setup_frame, bg="#e8f5e9", bd=1, relief="solid", padx=10, pady=6)
+        setup_status_bar.pack(fill="x", pady=(0, 10))
+
+        setup_status_dot = tk.Label(
+            setup_status_bar, text="●", fg="#2e7d32", bg="#e8f5e9", font=("Segoe UI", 12)
+        )
+        setup_status_dot.pack(side="left", padx=(0, 6))
+
+        setup_status_lbl = tk.Label(
+            setup_status_bar,
+            text="⚙️ Setup — Configure Mobile Connection",
+            bg="#e8f5e9",
             fg="#1b4332",
-        ).pack(anchor="w", pady=(0, 5))
+            font=("Segoe UI", 9, "bold"),
+        )
+        setup_status_lbl.pack(side="left")
+
+        # Setup Card
+        setup_card = tk.Frame(self.setup_frame, bg="#fbfbf9", bd=1,
+                              relief="solid", padx=12, pady=12)
+        setup_card.pack(fill="x", pady=(0, 10))
+
+        # Network Mode Section
+        tk.Label(
+            setup_card,
+            text="Network Mode:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#fbfbf9",
+            fg="#1b4332",
+        ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            setup_card,
+            text="Choose how you want to connect to your mobile device.",
+            font=("Segoe UI", 8),
+            bg="#fbfbf9",
+            fg="#5a655e",
+        ).pack(anchor="w", pady=(0, 6))
 
         self.network_choice = tk.StringVar(value="public")
 
-        tk.Radiobutton(
-            self.setup_frame,
-            text="Public (Internet) - Generates a secure link accessible anywhere.",
-            variable=self.network_choice,
-            value="public",
-            bg="#ffffff",
-            font=("Segoe UI", 9),
-            cursor="hand2"
-        ).pack(anchor="w")
+        network_btn_frame = tk.Frame(setup_card, bg="#ffffff")
+        network_btn_frame.pack(fill="x", pady=(0, 15))
 
-        tk.Radiobutton(
-            self.setup_frame,
-            text="LAN Only - Connect devices on the same Wi-Fi network.",
-            variable=self.network_choice,
-            value="local",
-            bg="#ffffff",
-            font=("Segoe UI", 9),
-            cursor="hand2"
-        ).pack(anchor="w", pady=(0, 15))
+        self.btn_net_public = tk.Button(
+            network_btn_frame,
+            text="🌐 Public (Internet)",
+            font=("Segoe UI", 9, "bold"),
+            bg="#1b4332",
+            fg="white",
+            relief="flat",
+            padx=4,
+            pady=4,
+            command=lambda: self._switch_setup_mode("public"),
+            cursor="hand2",
+        )
+        self.btn_net_public.pack(side="left", expand=True, fill="x", padx=(0, 1))
 
-        # Tunnel Provider choice
-        self.provider_frame = tk.Frame(self.setup_frame, bg="#ffffff")
-        self.provider_frame.pack(anchor="w", pady=(0, 15), padx=20)
+        self.btn_net_local = tk.Button(
+            network_btn_frame,
+            text="📶 LAN only",
+            font=("Segoe UI", 9),
+            bg="#e0e3df",
+            fg="#333",
+            relief="flat",
+            padx=4,
+            pady=4,
+            command=lambda: self._switch_setup_mode("local"),
+            cursor="hand2",
+        )
+        self.btn_net_local.pack(side="right", expand=True, fill="x", padx=(1, 0))
+
+        # Tunnel Provider Section
+        self.provider_frame = tk.Frame(setup_card, bg="#fbfbf9")
+        self.provider_frame.pack(fill="x")
 
         tk.Label(
             self.provider_frame,
             text="Tunnel Provider:",
             font=("Segoe UI", 9, "bold"),
-            bg="#ffffff",
+            bg="#fbfbf9",
             fg="#1b4332",
-        ).pack(anchor="w", pady=(0, 2))
+        ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            self.provider_frame,
+            text="Cloudflare is recommended to bypass firewalls.",
+            font=("Segoe UI", 8),
+            bg="#fbfbf9",
+            fg="#5a655e",
+        ).pack(anchor="w", pady=(0, 6))
 
         self.provider_choice = tk.StringVar(value="cloudflare")
 
-        self.rb_cloudflare = tk.Radiobutton(
-            self.provider_frame,
-            text="Cloudflare (Recommended for Firewalls)",
-            variable=self.provider_choice,
-            value="cloudflare",
-            bg="#ffffff",
-            font=("Segoe UI", 9),
-            cursor="hand2"
+        provider_btn_frame = tk.Frame(self.provider_frame, bg="#ffffff")
+        provider_btn_frame.pack(fill="x", pady=(0, 4))
+
+        self.btn_prov_cf = tk.Button(
+            provider_btn_frame,
+            text="☁️ Cloudflare",
+            font=("Segoe UI", 9, "bold"),
+            bg="#1b4332",
+            fg="white",
+            relief="flat",
+            padx=4,
+            pady=4,
+            command=lambda: self._switch_provider("cloudflare"),
+            cursor="hand2",
         )
-        self.rb_cloudflare.pack(anchor="w")
+        self.btn_prov_cf.pack(side="left", expand=True, fill="x", padx=(0, 1))
 
-        self.rb_pinggy = tk.Radiobutton(
-            self.provider_frame,
-            text="Pinggy / SSH",
-            variable=self.provider_choice,
-            value="pinggy",
-            bg="#ffffff",
+        self.btn_prov_pinggy = tk.Button(
+            provider_btn_frame,
+            text="🏓 Pinggy / SSH",
             font=("Segoe UI", 9),
-            cursor="hand2"
+            bg="#e0e3df",
+            fg="#333",
+            relief="flat",
+            padx=4,
+            pady=4,
+            command=lambda: self._switch_provider("pinggy"),
+            cursor="hand2",
         )
-        self.rb_pinggy.pack(anchor="w")
-
-        def _on_network_choice_changed(*args):
-            if self.network_choice.get() == "local":
-                self.rb_cloudflare.config(state=tk.DISABLED)
-                self.rb_pinggy.config(state=tk.DISABLED)
-                self.provider_frame.pack_forget()
-            else:
-                self.rb_cloudflare.config(state=tk.NORMAL)
-                self.rb_pinggy.config(state=tk.NORMAL)
-                self.provider_frame.pack(anchor="w", pady=(0, 15), padx=20, before=self.start_btn)
-
-        self.network_choice.trace_add("write", _on_network_choice_changed)
+        self.btn_prov_pinggy.pack(side="right", expand=True, fill="x", padx=(1, 0))
 
         self.start_btn = ttk.Button(
             self.setup_frame,
@@ -532,6 +581,44 @@ class MobilePanel:
                 self.qr_label.config(text=f"Scan URL:\n{url_to_encode[:25]}...")
             except Exception:
                 pass
+
+    def _switch_setup_mode(self, mode):
+        if not self._is_alive():
+            return
+        self.network_choice.set(mode)
+        try:
+            if mode == "local":
+                self.btn_net_local.config(
+                    bg="#1b4332", fg="white", font=("Segoe UI", 9, "bold"))
+                self.btn_net_public.config(
+                    bg="#e0e3df", fg="#333", font=("Segoe UI", 9))
+                self.provider_frame.pack_forget()
+            else:
+                self.btn_net_public.config(
+                    bg="#1b4332", fg="white", font=("Segoe UI", 9, "bold"))
+                self.btn_net_local.config(
+                    bg="#e0e3df", fg="#333", font=("Segoe UI", 9))
+                self.provider_frame.pack(fill="x")
+        except Exception:
+            pass
+
+    def _switch_provider(self, mode):
+        if not self._is_alive():
+            return
+        self.provider_choice.set(mode)
+        try:
+            if mode == "cloudflare":
+                self.btn_prov_cf.config(
+                    bg="#1b4332", fg="white", font=("Segoe UI", 9, "bold"))
+                self.btn_prov_pinggy.config(
+                    bg="#e0e3df", fg="#333", font=("Segoe UI", 9))
+            else:
+                self.btn_prov_pinggy.config(
+                    bg="#1b4332", fg="white", font=("Segoe UI", 9, "bold"))
+                self.btn_prov_cf.config(
+                    bg="#e0e3df", fg="#333", font=("Segoe UI", 9))
+        except Exception:
+            pass
 
     def switch_qr(self, mode):
         """Toggle the QR code between local and public URL."""
