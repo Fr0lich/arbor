@@ -1,6 +1,3 @@
-import multiprocessing
-multiprocessing.freeze_support()
-
 import tkinter as tk
 import sys
 import os
@@ -206,6 +203,9 @@ if sys.stderr is None:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     try:
         # Check for lightweight Mobile Mode CLI flag
         if "--mobile" in sys.argv or "-m" in sys.argv:
