@@ -6613,6 +6613,14 @@ class ObjectProgramUI(
         self.search_engine.invalidate_search_index()
 
     def _on_search_bar_enter(self, event=None):
+        if getattr(self, "_inline_search_job", None):
+            try:
+                self.root.after_cancel(self._inline_search_job)
+            except Exception:
+                pass
+            self._inline_search_job = None
+            self._apply_inline_search()
+
         sel = self.object_list.curselection()
         if sel:
             idx = sel[0]
