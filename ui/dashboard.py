@@ -287,12 +287,34 @@ class DashboardMixin:
 
         # Card 5: Per floor
         if "Floor" in self.app.df_obs.columns:
+            def _normalize_floor(val):
+                if pd.isna(val) or val == "":
+                    return pd.NA
+                val_str = str(val).strip()
+                if val_str.startswith("'"):
+                    val_str = val_str[1:]
+                try:
+                    f = float(val_str)
+                    if f.is_integer():
+                        return str(int(f))
+                    return str(f)
+                except ValueError:
+                    return val_str
+
+            def _floor_sort_key(series):
+                def _sort_logic(x):
+                    try:
+                        return (0, float(x))
+                    except ValueError:
+                        return (1, x)
+                return series.map(_sort_logic)
+
             floor_counts = (
                 self.app.df_obs["Floor"]
-                .replace("", float("nan"))
+                .apply(_normalize_floor)
                 .dropna()
                 .value_counts()
-                .sort_index()
+                .sort_index(key=_floor_sort_key)
             )
             no_floor = int((self.app.df_obs["Floor"].astype(str).str.strip() == "").sum())
             if not floor_counts.empty or no_floor > 0:
