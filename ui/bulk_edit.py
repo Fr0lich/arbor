@@ -395,6 +395,24 @@ class BulkEditWindow:
                     if "Reviewed" in obs_updates and getattr(self.main_window, "_cached_reviewed_dict", None) is not None:
                         self.main_window._cached_reviewed_dict[oid] = obs_updates["Reviewed"]
 
+        # Check if online photos were modified
+        online_keys_updated = [k for k in ("Online photo 1", "Online photo 2", "Online photo 3") if k in reg_updates]
+        if online_keys_updated and obs_df is not None and "Online_Images_Exist" in obs_df.columns:
+            for oid in valid_obs_oids:
+                reg_data = self.main_window._cached_reg_dict.get(oid, {}) if getattr(self.main_window, "_cached_reg_dict", None) else {}
+                has_any = any(
+                    bool(str(reg_data.get(f"Online photo {i}", "")).strip() not in ("", "nan", "None", "<NA>"))
+                    for i in (1, 2, 3)
+                )
+                obs_df.at[oid, "Online_Images_Exist"] = has_any
+                if getattr(self.main_window, "_has_online_photos_set", None) is not None:
+                    if has_any:
+                        self.main_window._has_online_photos_set.add(oid)
+                    else:
+                        self.main_window._has_online_photos_set.discard(oid)
+                if getattr(self.main_window, "_cached_obs_dict", None) is not None and oid in self.main_window._cached_obs_dict:
+                    self.main_window._cached_obs_dict[oid]["Online_Images_Exist"] = has_any
+
         for oid in oids:
             if hasattr(self.main_window, "_problem_cache") and self.main_window._problem_cache is not None:
                 self.main_window._problem_cache.pop(oid, None)

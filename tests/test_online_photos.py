@@ -31,16 +31,16 @@ class TestOnlinePhotos(unittest.TestCase):
             self.assertIn(col, reg_groups["Object"], f"Missing {col} in reg_groups['Object']")
 
     def test_02_normalization_and_aliasing(self):
-        """Verify _normalise_dataframes correctly aliases headers and cleans values."""
+        """Verify _normalise_dataframes correctly aliases headers, cleans values, and syncs Online_Images_Exist."""
         df_reg = pd.DataFrame({
-            "ObjectID": [101, 102, 103],
-            "Genus": ["Quercus", "Pinus", "Betula"],
-            "online_photo_1": ['"https://example.com/1.jpg"', "   https://example.com/2.jpg  ", None],
-            "ONLINE PHOTO 2": ["nan", "'https://example.com/clean.jpg'", "<NA>"],
-            "Online Photo 3": ["", "None", "https://example.com/3.jpg"]
+            "ObjectID": [101, 102, 103, 104],
+            "Genus": ["Quercus", "Pinus", "Betula", "Fraxinus"],
+            "online_photo_1": ['"https://example.com/1.jpg"', "   https://example.com/2.jpg  ", None, ""],
+            "ONLINE PHOTO 2": ["nan", "'https://example.com/clean.jpg'", "<NA>", "None"],
+            "Online Photo 3": ["", "None", "https://example.com/3.jpg", "  "]
         })
         df_obs = pd.DataFrame({
-            "ObjectID": [101, 102, 103]
+            "ObjectID": [101, 102, 103, 104]
         })
 
         norm_reg, norm_obs = _normalise_dataframes(df_reg, df_obs, self.cfg)
@@ -64,8 +64,20 @@ class TestOnlinePhotos(unittest.TestCase):
         self.assertEqual(norm_reg.loc[2, "Online photo 2"], "")
         self.assertEqual(norm_reg.loc[2, "Online photo 3"], "https://example.com/3.jpg")
 
+        # Row 3 (ObjectID 104 - no photos):
+        self.assertEqual(norm_reg.loc[3, "Online photo 1"], "")
+        self.assertEqual(norm_reg.loc[3, "Online photo 2"], "")
+        self.assertEqual(norm_reg.loc[3, "Online photo 3"], "")
+
+        # Check Online_Images_Exist in df_obs
+        self.assertIn("Online_Images_Exist", norm_obs.columns)
+        self.assertTrue(norm_obs.loc[0, "Online_Images_Exist"], "101 has photos -> True")
+        self.assertTrue(norm_obs.loc[1, "Online_Images_Exist"], "102 has photos -> True")
+        self.assertTrue(norm_obs.loc[2, "Online_Images_Exist"], "103 has photos -> True")
+        self.assertFalse(norm_obs.loc[3, "Online_Images_Exist"], "104 has NO photos -> False")
+
     def test_03_missing_columns_backfill(self):
-        """Verify that older datasets without online photo columns get empty string backfills."""
+        """Verify that older datasets without online photo columns get empty string backfills and False in obs."""
         df_reg = pd.DataFrame({
             "ObjectID": [201, 202],
             "Genus": ["Rosa", "Salix"]
@@ -74,34 +86,38 @@ class TestOnlinePhotos(unittest.TestCase):
             "ObjectID": [201, 202]
         })
 
-        norm_reg, _ = _normalise_dataframes(df_reg, df_obs, self.cfg)
+        norm_reg, norm_obs = _normalise_dataframes(df_reg, df_obs, self.cfg)
         for col in ("Online photo 1", "Online photo 2", "Online photo 3"):
             self.assertIn(col, norm_reg.columns)
             self.assertEqual(norm_reg.loc[0, col], "")
             self.assertEqual(norm_reg.loc[1, col], "")
+        self.assertIn("Online_Images_Exist", norm_obs.columns)
+        self.assertFalse(norm_obs.loc[0, "Online_Images_Exist"])
+        self.assertFalse(norm_obs.loc[1, "Online_Images_Exist"])
 
     def test_04_excel_export_and_roundtrip(self):
-        """Verify SQLiteRepository.export_to_excel exports online photo columns, freeze panes and autofilter."""
+        """Verify SQLiteRepository.export_to_excel exports online photo columns and syncs Online_Images_Exist in Observation."""
         with tempfile.TemporaryDirectory() as tmpdir:
             excel_path = os.path.join(tmpdir, "test_online.xlsx")
             sqlite_path = os.path.join(tmpdir, "test_online.db")
 
             df_reg = pd.DataFrame({
-                "ObjectID": [301, 302],
-                "Genus": ["Fagus", "Acer"],
-                "UID": ["uid1", "uid2"],
-                "ProblemDescription": ["", ""],
-                "Online photo 1": ["https://images.example.org/fagus1.jpg", ""],
-                "Online photo 2": ["", "https://images.example.org/acer2.jpg"],
-                "Online photo 3": ["", ""]
+                "ObjectID": [301, 302, 303],
+                "Genus": ["Fagus", "Acer", "Ulmus"],
+                "UID": ["uid1", "uid2", "uid3"],
+                "ProblemDescription": ["", "", ""],
+                "Online photo 1": ["https://images.example.org/fagus1.jpg", "", ""],
+                "Online photo 2": ["", "https://images.example.org/acer2.jpg", ""],
+                "Online photo 3": ["", "", ""]
             })
+            # Intentionally pass stale False for all rows in df_obs to test that export_to_excel auto-syncs
             df_obs = pd.DataFrame({
-                "ObjectID": [301, 302],
-                "Images_Missing": [False, False],
-                "Images_Problem": [False, False],
-                "Reviewed": [False, False],
-                "ReviewedAt": ["", ""],
-                "Online_Images_Exist": [False, False]
+                "ObjectID": [301, 302, 303],
+                "Images_Missing": [False, False, True],
+                "Images_Problem": [False, False, False],
+                "Reviewed": [False, False, False],
+                "ReviewedAt": ["", "", ""],
+                "Online_Images_Exist": [False, False, False]
             })
 
             SQLiteRepository.save_sqlite(sqlite_path, df_reg, df_obs, pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
@@ -115,25 +131,43 @@ class TestOnlinePhotos(unittest.TestCase):
             # Inspect with openpyxl
             wb = openpyxl.load_workbook(export_target)
             self.assertIn("Registration", wb.sheetnames)
-            ws = wb["Registration"]
+            self.assertIn("Observation", wb.sheetnames)
+            ws_reg = wb["Registration"]
+            ws_obs = wb["Observation"]
 
-            # Check freeze pane A2
-            self.assertEqual(ws.freeze_panes, "A2", "Freeze pane should be A2")
-            # Check autofilter
-            self.assertIsNotNone(ws.auto_filter.ref, "Auto filter should be set")
+            # Check freeze pane A2 and autofilter
+            self.assertEqual(ws_reg.freeze_panes, "A2", "Freeze pane should be A2")
+            self.assertIsNotNone(ws_reg.auto_filter.ref, "Auto filter should be set")
 
-            # Check header row
-            headers = [cell.value for cell in ws[1]]
+            # Check Registration header row
+            reg_headers = [cell.value for cell in ws_reg[1]]
             for col in ("Online photo 1", "Online photo 2", "Online photo 3"):
-                self.assertIn(col, headers, f"Exported Registration sheet missing {col}")
+                self.assertIn(col, reg_headers, f"Exported Registration sheet missing {col}")
 
-            idx1 = headers.index("Online photo 1") + 1
-            idx2 = headers.index("Online photo 2") + 1
+            idx1 = reg_headers.index("Online photo 1") + 1
+            idx2 = reg_headers.index("Online photo 2") + 1
 
             # Row 2 (ObjectID 301):
-            self.assertEqual(ws.cell(row=2, column=idx1).value, "https://images.example.org/fagus1.jpg")
+            self.assertEqual(ws_reg.cell(row=2, column=idx1).value, "https://images.example.org/fagus1.jpg")
             # Row 3 (ObjectID 302):
-            self.assertEqual(ws.cell(row=3, column=idx2).value, "https://images.example.org/acer2.jpg")
+            self.assertEqual(ws_reg.cell(row=3, column=idx2).value, "https://images.example.org/acer2.jpg")
+
+            # Check Observation sheet for Online_Images_Exist
+            obs_headers = [cell.value for cell in ws_obs[1]]
+            self.assertIn("Online_Images_Exist", obs_headers, "Observation sheet missing Online_Images_Exist")
+            idx_online = obs_headers.index("Online_Images_Exist") + 1
+
+            # Row 2 (ObjectID 301 has photo 1) -> must be True in Excel
+            val_301 = ws_obs.cell(row=2, column=idx_online).value
+            self.assertTrue(bool(val_301), f"Expected True for ObjectID 301 in Excel, got {val_301}")
+
+            # Row 3 (ObjectID 302 has photo 2) -> must be True in Excel
+            val_302 = ws_obs.cell(row=3, column=idx_online).value
+            self.assertTrue(bool(val_302), f"Expected True for ObjectID 302 in Excel, got {val_302}")
+
+            # Row 4 (ObjectID 303 has no photo) -> must be False in Excel
+            val_303 = ws_obs.cell(row=4, column=idx_online).value
+            self.assertFalse(bool(val_303), f"Expected False for ObjectID 303 in Excel, got {val_303}")
 
             # Load back via ExcelRepository.load_excel
             loaded_reg, loaded_obs, _, _, _ = ExcelRepository.load_excel(export_target, self.cfg)
@@ -141,6 +175,14 @@ class TestOnlinePhotos(unittest.TestCase):
             self.assertEqual(row_301["Online photo 1"].iloc[0], "https://images.example.org/fagus1.jpg")
             row_302 = loaded_reg[loaded_reg["ObjectID"].astype(str) == "302"]
             self.assertEqual(row_302["Online photo 2"].iloc[0], "https://images.example.org/acer2.jpg")
+
+            # Check re-imported observation values
+            obs_301 = loaded_obs[loaded_obs["ObjectID"].astype(str) == "301"]
+            self.assertTrue(bool(obs_301["Online_Images_Exist"].iloc[0]))
+            obs_302 = loaded_obs[loaded_obs["ObjectID"].astype(str) == "302"]
+            self.assertTrue(bool(obs_302["Online_Images_Exist"].iloc[0]))
+            obs_303 = loaded_obs[loaded_obs["ObjectID"].astype(str) == "303"]
+            self.assertFalse(bool(obs_303["Online_Images_Exist"].iloc[0]))
 
     def test_05_url_security_validation(self):
         """Verify URL validation rejects unsafe schemes."""
@@ -211,6 +253,57 @@ class TestOnlinePhotos(unittest.TestCase):
         for col in ("Online photo 1", "Online photo 2", "Online photo 3"):
             self.assertIn(col, src, f"Expected {col} to be defined in RegistryPanel.build_sections")
 
+    def test_08_live_commit_sync(self):
+        """Verify that updating online photo fields updates df_obs and cache dictionaries."""
+        from repository import ONLINE_EXISTS_COLUMN
+        oid = "999"
+        df_reg = pd.DataFrame([{
+            "ObjectID": oid,
+            "Online photo 1": "",
+            "Online photo 2": "",
+            "Online photo 3": ""
+        }]).set_index("ObjectID")
+        df_obs = pd.DataFrame([{
+            "ObjectID": oid,
+            ONLINE_EXISTS_COLUMN: False
+        }]).set_index("ObjectID")
+
+        cached_reg_dict = {oid: {"Online photo 1": "", "Online photo 2": "", "Online photo 3": ""}}
+        cached_obs_dict = {oid: {ONLINE_EXISTS_COLUMN: False}}
+        has_online_set = set()
+
+        # Emulate user setting "Online photo 1" in UI and commit_current_object
+        new_val = "https://example.org/photo1.jpg"
+        cached_reg_dict[oid]["Online photo 1"] = new_val
+        has_any = any(
+            bool(str(cached_reg_dict[oid].get(f"Online photo {i}", "")).strip() not in ("", "nan", "None", "<NA>"))
+            for i in (1, 2, 3)
+        )
+        if has_any:
+            has_online_set.add(oid)
+        df_obs.at[oid, ONLINE_EXISTS_COLUMN] = has_any
+        cached_obs_dict[oid][ONLINE_EXISTS_COLUMN] = has_any
+
+        self.assertTrue(df_obs.at[oid, ONLINE_EXISTS_COLUMN])
+        self.assertTrue(cached_obs_dict[oid][ONLINE_EXISTS_COLUMN])
+        self.assertIn(oid, has_online_set)
+
+        # Emulate user clearing "Online photo 1"
+        cached_reg_dict[oid]["Online photo 1"] = ""
+        has_any = any(
+            bool(str(cached_reg_dict[oid].get(f"Online photo {i}", "")).strip() not in ("", "nan", "None", "<NA>"))
+            for i in (1, 2, 3)
+        )
+        if not has_any:
+            has_online_set.discard(oid)
+        df_obs.at[oid, ONLINE_EXISTS_COLUMN] = has_any
+        cached_obs_dict[oid][ONLINE_EXISTS_COLUMN] = has_any
+
+        self.assertFalse(df_obs.at[oid, ONLINE_EXISTS_COLUMN])
+        self.assertFalse(cached_obs_dict[oid][ONLINE_EXISTS_COLUMN])
+        self.assertNotIn(oid, has_online_set)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

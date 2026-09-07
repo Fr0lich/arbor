@@ -551,7 +551,10 @@ class AddObjectsWizard:
             obs_row["Images_Wrong"] = False
             obs_row[REVIEWED_COLUMN] = False
             obs_row["ReviewedAt"] = ""
-            obs_row["Online_Images_Exist"] = False
+            obs_row["Online_Images_Exist"] = any(
+                bool(str(reg_row.get(f"Online photo {i}", "")).strip() not in ("", "nan", "None", "<NA>"))
+                for i in (1, 2, 3)
+            )
             
             for col in location_columns:
                 if col in updates:

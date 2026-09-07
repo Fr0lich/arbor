@@ -312,6 +312,20 @@ def _normalise_dataframes(df_reg, df_obs, config):
         if c in df_reg.columns:
             df_reg[c] = df_reg[c].map(lambda s: str(s).strip().strip("'\"") if str(s).strip() not in ("nan", "None", "<NA>", "") else "")
 
+    # Synchronize Online_Images_Exist in df_obs based on presence of online photos in df_reg
+    online_cols = [c for c in ("Online photo 1", "Online photo 2", "Online photo 3") if c in df_reg.columns]
+    if online_cols and not df_reg.empty and df_obs is not None and not df_obs.empty:
+        has_online_mask = pd.Series(False, index=df_reg.index)
+        for c in online_cols:
+            s = df_reg[c].astype(str).str.strip()
+            has_online_mask |= (s != "")
+        
+        reg_oids = df_reg["ObjectID"].astype(str).str.strip() if "ObjectID" in df_reg.columns else df_reg.index.astype(str).str.strip()
+        oids_with_photos = set(reg_oids[has_online_mask])
+        
+        obs_oids = df_obs["ObjectID"].astype(str).str.strip() if "ObjectID" in df_obs.columns else df_obs.index.astype(str).str.strip()
+        df_obs[ONLINE_EXISTS_COLUMN] = obs_oids.isin(oids_with_photos)
+
     df_reg["ProblemDescription"] = df_reg["ProblemDescription"].astype(object)
 
     # Generate short UIDs for any row that is missing one
@@ -816,6 +830,21 @@ class SQLiteRepository:
 
         if df_unvalidated is not None and not df_unvalidated.empty and "ObjectID" not in df_unvalidated.columns:
             df_unvalidated = df_unvalidated.reset_index()
+
+        # Ensure Online_Images_Exist in df_obs accurately reflects online photos in df_reg
+        if df_reg is not None and df_obs is not None and not df_reg.empty and not df_obs.empty:
+            online_cols = [c for c in ("Online photo 1", "Online photo 2", "Online photo 3") if c in df_reg.columns]
+            if online_cols:
+                has_online_mask = pd.Series(False, index=df_reg.index)
+                for c in online_cols:
+                    s = df_reg[c].fillna("").astype(str).str.strip()
+                    has_online_mask |= (s != "") & (~s.isin(["nan", "None", "<NA>"]))
+                
+                reg_oids = df_reg["ObjectID"].astype(str).str.strip()
+                oids_with_photos = set(reg_oids[has_online_mask])
+                
+                obs_oids = df_obs["ObjectID"].astype(str).str.strip()
+                df_obs[ONLINE_EXISTS_COLUMN] = obs_oids.isin(oids_with_photos)
 
         # Sanitize dataframes to prevent CSV/Excel formula injection
         df_reg_safe = sanitize_df_for_excel(df_reg)

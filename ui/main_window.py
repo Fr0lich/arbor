@@ -52,7 +52,7 @@ import uuid
 from collections import OrderedDict
 import config
 from config import sc
-from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN
+from repository import ExcelRepository, REVIEWED_COLUMN, REVIEWED_AT_COLUMN, ONLINE_EXISTS_COLUMN
 from models import AppState
 from utils import debug_error
 
@@ -4000,17 +4000,21 @@ class ObjectProgramUI(
                     self._cached_species_dict[oid] = new
 
                 if col in ("Online photo 1", "Online photo 2", "Online photo 3"):
+                    reg_row = self._cached_reg_dict.get(oid, {}) if getattr(self, "_cached_reg_dict", None) else {}
+                    has_any = any(
+                        bool(str(reg_row.get(f"Online photo {i}", "")).strip() not in ("", "nan", "None", "<NA>"))
+                        for i in (1, 2, 3)
+                    )
                     if getattr(self, "_has_online_photos_set", None) is not None:
-                        reg_row = self._cached_reg_dict.get(oid, {}) if getattr(self, "_cached_reg_dict", None) else {}
-                        has_any = any(
-                            bool(str(reg_row.get(f"Online photo {i}", "")).strip() not in ("", "nan", "None", "<NA>"))
-                            for i in (1, 2, 3)
-                        )
                         if has_any:
                             self._has_online_photos_set.add(oid)
                         else:
                             self._has_online_photos_set.discard(oid)
                             self._has_online_photos_set.discard(str(oid))
+                    if self.app.df_obs is not None and ONLINE_EXISTS_COLUMN in self.app.df_obs.columns:
+                        self.app.df_obs.at[oid, ONLINE_EXISTS_COLUMN] = has_any
+                    if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                        self._cached_obs_dict[oid][ONLINE_EXISTS_COLUMN] = has_any
                     if hasattr(self, "object_list") and hasattr(self.object_list, "refresh_object_card"):
                         self.object_list.refresh_object_card(oid)
                     if hasattr(self, "image_panel") and hasattr(self.image_panel, "update_online_photos"):
