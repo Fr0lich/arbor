@@ -234,6 +234,18 @@ def _normalise_dataframes(df_reg, df_obs, config):
             missing_df = pd.DataFrame({"ObjectID": missing_obs_ids})
             df_obs = pd.concat([df_obs, missing_df], ignore_index=True)
 
+    # --- Registration: Header Aliasing for Online photo columns (case/underscore/whitespace insensitive) ---
+    online_alias_map = {}
+    for c in df_reg.columns:
+        c_clean = re.sub(r'[\s_]+', ' ', str(c)).strip().lower()
+        m = re.match(r'^online\s*photo\s*([1-3])$', c_clean)
+        if m:
+            canonical_name = f"Online photo {m.group(1)}"
+            if c != canonical_name and canonical_name not in df_reg.columns:
+                online_alias_map[c] = canonical_name
+    if online_alias_map:
+        df_reg.rename(columns=online_alias_map, inplace=True)
+
     # --- Registration: batch-insert missing registration columns (anti-fragmentation) ---
     new_reg = {col: "" for col in registration_columns if col not in df_reg.columns}
     if "UID" not in df_reg.columns and "UID" not in new_reg:
@@ -295,6 +307,10 @@ def _normalise_dataframes(df_reg, df_obs, config):
     cols_to_fill = [col for col in df_reg.columns if col != "ObjectID"]
     if cols_to_fill:
         df_reg[cols_to_fill] = df_reg[cols_to_fill].fillna("").astype(object)
+
+    for c in ("Online photo 1", "Online photo 2", "Online photo 3"):
+        if c in df_reg.columns:
+            df_reg[c] = df_reg[c].map(lambda s: str(s).strip().strip("'\"") if str(s).strip() not in ("nan", "None", "<NA>", "") else "")
 
     df_reg["ProblemDescription"] = df_reg["ProblemDescription"].astype(object)
 

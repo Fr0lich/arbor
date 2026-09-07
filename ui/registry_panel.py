@@ -74,7 +74,7 @@ class RegistryPanel:
                 "id": "collection",
                 "title": "Collection & Specimen Metadata",
                 "icon": "📦",
-                "fields": ["Collector", "Innsammling Nr.", "Collection Date", "Collection Place", "Variant", "(N) Plant Part", "Plant Part", "Box Label", "Conservation Status", "UID"]
+                "fields": ["Collector", "Innsammling Nr.", "Collection Date", "Collection Place", "Variant", "(N) Plant Part", "Plant Part", "Box Label", "Conservation Status", "Online photo 1", "Online photo 2", "Online photo 3", "UID"]
             },
             {
                 "id": "notes",

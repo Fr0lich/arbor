@@ -14,7 +14,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 import config
 from config import sc
-from ui.image_toolbar import create_image_toolbar
+from ui.image_toolbar import create_image_toolbar, Tooltip
 
 MAX_IMAGE_CACHE = 40
 MAX_PIL_CACHE = 15
@@ -102,6 +102,102 @@ class ImagePanel(ttk.Frame):
         self.dark_mode = is_dark
         if hasattr(self, "image_toolbar") and hasattr(self.image_toolbar, "set_dark_mode"):
             self.image_toolbar.set_dark_mode(is_dark)
+        if hasattr(self, "online_images_title") and self.online_images_title.winfo_exists():
+            self.online_images_title.configure(foreground="#a5adcb" if is_dark else "#757d77")
+        if hasattr(self, "online_photo_btns"):
+            for btn in self.online_photo_btns.values():
+                if btn and btn.winfo_exists():
+                    btn.configure(
+                        fg="#89b4fa" if is_dark else "#0284c7",
+                        bg="#1e293b" if is_dark else "#e0f2fe",
+                        highlightbackground="#334155" if is_dark else "#bae6fd"
+                    )
+
+    def _on_online_btn_enter(self, btn):
+        btn.configure(
+            bg="#bae6fd" if not self.dark_mode else "#2563eb",
+            fg="#0369a1" if not self.dark_mode else "#ffffff"
+        )
+
+    def _on_online_btn_leave(self, btn):
+        btn.configure(
+            bg="#e0f2fe" if not self.dark_mode else "#1e293b",
+            fg="#0284c7" if not self.dark_mode else "#89b4fa"
+        )
+
+    def _open_online_photo_url(self, url):
+        if not url:
+            return
+        clean_url = str(url).strip().strip("'\"")
+        if clean_url.startswith("www."):
+            clean_url = "https://" + clean_url
+        if clean_url.startswith(("http://", "https://")):
+            try:
+                webbrowser.open(clean_url)
+            except Exception as e:
+                if self.main_ui and hasattr(self.main_ui, "system_status") and self.main_ui.system_status:
+                    self.main_ui.system_status.config(text=f"Browser error: {e}")
+        else:
+            if self.main_ui and hasattr(self.main_ui, "system_status") and self.main_ui.system_status:
+                self.main_ui.system_status.config(text=f"Invalid URL format: {clean_url[:40]}")
+
+    def update_online_photos(self, oid):
+        """Update clickable online photo links next to SPECIMEN IMAGES header."""
+        if not hasattr(self, "online_images_frame") or not self.online_images_frame.winfo_exists():
+            return
+
+        if not oid:
+            self.online_images_frame.pack_forget()
+            return
+
+        reg_row = None
+        if self.main_ui and hasattr(self.main_ui, "_get_reg_dict"):
+            reg_dict = self.main_ui._get_reg_dict()
+            reg_row = reg_dict.get(oid)
+            if reg_row is None and str(oid).isdigit():
+                reg_row = reg_dict.get(int(oid))
+
+        if reg_row is None and self.app and getattr(self.app, "df_reg", None) is not None:
+            if oid in self.app.df_reg.index:
+                try:
+                    reg_row = self.app.df_reg.loc[oid].to_dict()
+                except Exception:
+                    reg_row = {}
+
+        if not reg_row:
+            self.online_images_frame.pack_forget()
+            return
+
+        photos = {}
+        for i in (1, 2, 3):
+            val = reg_row.get(f"Online photo {i}")
+            if val is None or str(val).strip() in ("", "nan", "None", "<NA>"):
+                val = reg_row.get(f"Online Photo {i}")
+            if val is not None:
+                s = str(val).strip().strip("'\"")
+                if s and s not in ("nan", "None", "<NA>"):
+                    photos[i] = s
+
+        if not photos:
+            self.online_images_frame.pack_forget()
+            return
+
+        # Position online_images_frame right after header_label ("SPECIMEN IMAGES")
+        self.online_images_frame.pack(after=self.header_label, side="left", padx=(sc(8), sc(4)))
+
+        # Update each number button
+        for num in (1, 2, 3):
+            btn = self.online_photo_btns.get(num)
+            if not btn:
+                continue
+            if num in photos:
+                url = photos[num]
+                btn.url = url
+                if hasattr(btn, "tooltip_obj") and btn.tooltip_obj:
+                    btn.tooltip_obj.text = f"Online photo {num}: {url}"
+                btn.pack(side="left", padx=sc(2))
+            else:
+                btn.pack_forget()
 
     def destroy(self):
         """Clean up EventBus subscriptions on destruction."""
@@ -148,6 +244,44 @@ class ImagePanel(ttk.Frame):
             style="MiddlePane.TLabel"
         )
         self.header_label.pack(side="left")
+
+        # Online Images Container Frame (visible when active object has online photos)
+        self.online_images_frame = ttk.Frame(header, style="MiddlePane.TFrame")
+
+        self.online_images_title = ttk.Label(
+            self.online_images_frame,
+            text="Online images:",
+            font=("Segoe UI", sc(9), "bold"),
+            foreground="#757d77" if not self.dark_mode else "#a5adcb",
+            style="MiddlePane.TLabel"
+        )
+        self.online_images_title.pack(side="left", padx=(sc(4), sc(4)))
+
+        self.online_photo_btns = {}
+        for num in (1, 2, 3):
+            btn = tk.Label(
+                self.online_images_frame,
+                text=str(num),
+                font=("JetBrains Mono", sc(9), "bold"),
+                fg="#0284c7" if not self.dark_mode else "#89b4fa",
+                bg="#e0f2fe" if not self.dark_mode else "#1e293b",
+                padx=sc(6),
+                pady=sc(1),
+                relief="flat",
+                bd=0,
+                cursor="hand2",
+                highlightthickness=1,
+                highlightbackground="#bae6fd" if not self.dark_mode else "#334155"
+            )
+            btn.bind("<Button-1>", lambda e, b=btn: self._open_online_photo_url(getattr(b, "url", None)))
+            btn.bind("<Enter>", lambda e, b=btn: self._on_online_btn_enter(b), add="+")
+            btn.bind("<Leave>", lambda e, b=btn: self._on_online_btn_leave(b), add="+")
+            btn.tooltip_obj = Tooltip(
+                btn,
+                f"Online photo {num}",
+                lambda: {"tooltip_bg": "#1e1e2e" if self.dark_mode else "#2c302e", "tooltip_fg": "#ffffff"}
+            )
+            self.online_photo_btns[num] = btn
 
         self.image_count_label = ttk.Label(
             header,
@@ -728,6 +862,7 @@ class ImagePanel(ttk.Frame):
     # -------------------------------------------------------------------------
 
     def load_images(self, oid):
+        self.update_online_photos(oid)
         self._update_image_controls_visibility()
         if not self.show_images_var.get():
             return

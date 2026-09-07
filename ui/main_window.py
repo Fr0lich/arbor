@@ -3999,6 +3999,23 @@ class ObjectProgramUI(
                 elif col == "Species" and getattr(self, "_cached_species_dict", None) is not None:
                     self._cached_species_dict[oid] = new
 
+                if col in ("Online photo 1", "Online photo 2", "Online photo 3"):
+                    if getattr(self, "_has_online_photos_set", None) is not None:
+                        reg_row = self._cached_reg_dict.get(oid, {}) if getattr(self, "_cached_reg_dict", None) else {}
+                        has_any = any(
+                            bool(str(reg_row.get(f"Online photo {i}", "")).strip() not in ("", "nan", "None", "<NA>"))
+                            for i in (1, 2, 3)
+                        )
+                        if has_any:
+                            self._has_online_photos_set.add(oid)
+                        else:
+                            self._has_online_photos_set.discard(oid)
+                            self._has_online_photos_set.discard(str(oid))
+                    if hasattr(self, "object_list") and hasattr(self.object_list, "refresh_object_card"):
+                        self.object_list.refresh_object_card(oid)
+                    if hasattr(self, "image_panel") and hasattr(self.image_panel, "update_online_photos"):
+                        self.image_panel.update_online_photos(oid)
+
                 reg_changed_fields.append(col)
                 reg_changed_values.append(f'{col}: "{old}"  "{new}"')
 
@@ -4162,6 +4179,7 @@ class ObjectProgramUI(
         self._cached_reviewed_dict = None
         self._cached_genus_dict = None
         self._cached_species_dict = None
+        self._has_online_photos_set = None
 
         if oid is None:
             if hasattr(self, "_problem_cache") and self._problem_cache is not None:
@@ -4198,7 +4216,35 @@ class ObjectProgramUI(
             if reg_df is not None and "Species" in reg_df.columns
             else {}
         )
+
+        # Precompute set of oids that have at least one online photo for instant O(1) set membership check
+        online_cols = [c for c in ("Online photo 1", "Online photo 2", "Online photo 3") if reg_df is not None and c in reg_df.columns]
+        if online_cols and reg_df is not None and not reg_df.empty:
+            has_photo_mask = pd.Series(False, index=reg_df.index)
+            for c in online_cols:
+                s = reg_df[c].fillna("").astype(str).str.strip()
+                has_photo_mask |= (s != "") & (~s.isin(["nan", "None", "<NA>"]))
+            self._has_online_photos_set = set(reg_df.index[has_photo_mask])
+        else:
+            self._has_online_photos_set = set()
+
         self._row_cache_dirty = False
+
+    def has_online_photos(self, oid):
+        """Fast O(1) check if object has any online photos registered."""
+        if getattr(self, "_has_online_photos_set", None) is None:
+            self._ensure_row_caches()
+        s = getattr(self, "_has_online_photos_set", None)
+        if not s:
+            return False
+        if oid in s:
+            return True
+        s_oid = str(oid)
+        if s_oid in s:
+            return True
+        if s_oid.isdigit() and int(s_oid) in s:
+            return True
+        return False
 
     def _get_obs_dict(self):
         if getattr(self, "_row_cache_dirty", True) or getattr(self, "_cached_obs_dict", None) is None:
@@ -4822,6 +4868,9 @@ class ObjectProgramUI(
 
             if not skip_heavy:
                 self.load_images(oid)
+            else:
+                if hasattr(self, "image_panel") and hasattr(self.image_panel, "update_online_photos"):
+                    self.image_panel.update_online_photos(oid)
 
             reviewed_at = str(obs.get(REVIEWED_AT_COLUMN, ""))
             if reviewed_at:
@@ -6802,7 +6851,8 @@ class ObjectProgramUI(
                 color = "#d9534f"
 
             # PERFORMANCE OPTIMIZATION (Bolt): Pass pre-calculated color directly to bypass itemconfig Tcl queries entirely.
-            self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed, color=color, bulk=True)
+            has_online = self.has_online_photos(oid)
+            self.object_list.insert(tk.END, title, genus=genus, species=species, reviewed=reviewed, color=color, has_online_photo=has_online, bulk=True)
 
         # Trigger lazy deferred card building if in detailed view mode
         if getattr(self.object_list, "active_view", None) == "detailed":

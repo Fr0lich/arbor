@@ -1054,7 +1054,7 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         dummy_card.destroy()
         if oid in self.item_data:
-            for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "row1"]:
+            for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "globe_label", "row1"]:
                 if key in self.item_data[oid]:
                     del self.item_data[oid][key]
 
@@ -1068,7 +1068,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         self._active_card_windows.clear()
         for oid in self.item_data:
             if "card_frame" in self.item_data[oid]:
-                for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "row1"]:
+                for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "globe_label", "row1"]:
                     if key in self.item_data[oid]:
                         del self.item_data[oid][key]
 
@@ -1120,7 +1120,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             try:
                 oid = self.items_list[idx]
                 if oid in self.item_data and "card_frame" in self.item_data[oid]:
-                    for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "row1"]:
+                    for key in ["card_frame", "accent_strip", "card_body", "cb_label", "tax_label", "status_badge", "loaned_badge", "unval_badge", "id_label", "globe_label", "row1"]:
                         if key in self.item_data[oid]:
                             del self.item_data[oid][key]
             except IndexError:
@@ -1219,6 +1219,12 @@ class TreeviewListboxWrapper(ttk.Frame):
                           font=("Consolas", sc(8)))
         id_lbl.pack(side="left", padx=(sc(18), 0))
 
+        globe_lbl = tk.Label(row2, text="🌐", bg=card_bg,
+                             fg="#0284c7" if not is_dark else "#89b4fa",
+                             font=("Segoe UI", sc(8)))
+        globe_lbl.pack(side="left", padx=(sc(3), 0))
+        globe_lbl.pack_forget()
+
         photo_lbl = tk.Label(row2, text="📷 0", bg=card_bg, fg=text_secondary,
                              font=("Segoe UI", sc(8)))
         photo_lbl.pack(side="right", padx=(sc(4), 0))
@@ -1256,6 +1262,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             "fam_lbl": fam_lbl,
             "sep_lbl": sep_lbl,
             "id_lbl": id_lbl,
+            "globe_lbl": globe_lbl,
             "photo_lbl": photo_lbl,
             "row3": row3,
             "loc_lbl": loc_lbl
@@ -1301,6 +1308,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         data["loaned_badge"] = widgets.get("loaned_badge")
         data["unval_badge"] = widgets.get("unval_badge")
         data["id_label"] = widgets["id_lbl"]
+        data["globe_label"] = widgets.get("globe_lbl")
         data["row1"] = widgets["row1"]
 
         has_problem = self.main_window._get_cached_problem(oid) if hasattr(self.main_window, "_get_cached_problem") else (self.main_window._problem_cache.get(oid, False) if hasattr(self.main_window, "_problem_cache") else False)
@@ -1356,6 +1364,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         widgets["fam_lbl"].configure(bg=card_bg)
         widgets["sep_lbl"].configure(bg=card_bg)
         widgets["id_lbl"].configure(bg=card_bg)
+        if widgets.get("globe_lbl"):
+            widgets["globe_lbl"].configure(bg=card_bg)
         widgets["photo_lbl"].configure(bg=card_bg)
         widgets["loc_lbl"].configure(bg=card_bg)
         widgets["accent_strip"].configure(bg=accent_color)
@@ -1410,6 +1420,26 @@ class TreeviewListboxWrapper(ttk.Frame):
                 widgets["id_lbl"].pack_configure(padx=(sc(18), 0))
 
         widgets["id_lbl"].configure(text=oid)
+
+        globe_widget = widgets.get("globe_lbl")
+        if globe_widget and globe_widget.winfo_exists():
+            has_online = False
+            if hasattr(self.main_window, "has_online_photos"):
+                has_online = self.main_window.has_online_photos(oid)
+            elif getattr(self.main_window, "_has_online_photos_set", None) is not None:
+                has_online = oid in self.main_window._has_online_photos_set
+            else:
+                has_online = any(
+                    bool(str(reg_row.get(f"Online photo {i}", "")).strip() not in ("", "nan", "None", "<NA>"))
+                    for i in (1, 2, 3)
+                )
+
+            if has_online:
+                if globe_widget.winfo_manager() != 'pack':
+                    globe_widget.pack(after=widgets["id_lbl"], side="left", padx=(sc(3), 0))
+            else:
+                if globe_widget.winfo_manager() == 'pack':
+                    globe_widget.pack_forget()
 
         photo_count = 0
         if self.main_window.app.df_photo is not None:
@@ -1654,7 +1684,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.item_data.clear()
         self._schedule_viewport_update()
 
-    def insert(self, index, title, genus=None, species=None, reviewed=None, color=None, bulk=False):
+    def insert(self, index, title, genus=None, species=None, reviewed=None, color=None, has_online_photo=False, bulk=False):
         oid = title.split(" ")[0].strip()
         if not bulk:
             if oid in self.items_set:
@@ -1697,6 +1727,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             "genus": genus or "",
             "species": species or "",
             "reviewed": bool(reviewed),
+            "has_online_photo": bool(has_online_photo),
             "tags": row_tags,
             "values": [rev_char, oid, genus or "", species or ""]
         }

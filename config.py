@@ -227,13 +227,17 @@ DATABASE_CONFIGS = {
                 # ✅ låst felt
                 {"name": "UID", "type": "text", "readonly": True},
 
-                {"name": "ProblemDescription", "type": "multiline"}
+                {"name": "ProblemDescription", "type": "multiline"},
+
+                {"name": "Online photo 1", "type": "text"},
+                {"name": "Online photo 2", "type": "text"},
+                {"name": "Online photo 3", "type": "text"}
             ],
 
             "reg_groups": [
                 { "name": "Taxonomy", "fields": ["Genus", "Species", "Author", "Family", "Higher Classification"] },
                 { "name": "Collection", "fields": ["Collector", "Innsammling Nr.", "Collection Date", "Collection Place"] },
-                { "name": "Object", "fields": ["Variant", "(N) Plant Part", "Plant Part", "Box Label", "Conservation Status"] },
+                { "name": "Object", "fields": ["Variant", "(N) Plant Part", "Plant Part", "Box Label", "Conservation Status", "Online photo 1", "Online photo 2", "Online photo 3"] },
                 { "name": "Notes", "fields": ["Observation", "Comment", "ProblemDescription"] },
                 { "name": "Admin", "fields": ["UID"] }
             ],
