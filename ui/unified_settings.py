@@ -352,6 +352,7 @@ class UnifiedSettingsWindow:
         self.var_enable_focus_toggle = tk.BooleanVar(value=p.get("enable_focus_mode_toggle", False))
         self.var_auto_resolve = tk.BooleanVar(value=p.get("auto_resolve_conflicts", False))
         self.var_strict_validation = tk.BooleanVar(value=p.get("strict_input_validation", False))
+        self.var_enable_gbif = tk.BooleanVar(value=p.get("enable_gbif", False))
 
         # Toolbar draft vars
         self.draft_toolbar_vars = {}
@@ -1144,6 +1145,12 @@ class UnifiedSettingsWindow:
                  font=self.FONT_SUBTITLE, fg=self.COLORS["search_orange"],
                  bg=self.COLORS["card_bg"]).pack(anchor="w", pady=(sc(4), 0))
 
+        # Card 3: Taxonomy & Validation
+        card3 = self._create_card(c, "Taxonomy & Validation")
+        create_toggle_row(card3, "Enable GBIF Validation", self.var_enable_gbif,
+                          command=lambda: self._notify_live("enable_gbif", self.var_enable_gbif.get()),
+                          ui_ref=self.app or self, info_text="Shows the 'Check GBIF' button to validate Genus and Species against GBIF.")
+
     # ── TAB 7: TOOLS ─────────────────────────────────────────────────────────
     def _build_tab_tools(self):
         c = self._create_scrollable_tab("tools")
@@ -1367,6 +1374,7 @@ class UnifiedSettingsWindow:
         p["enable_focus_mode_toggle"] = new_focus_toggle
         p["auto_resolve_conflicts"] = self.var_auto_resolve.get()
         p["strict_input_validation"] = self.var_strict_validation.get()
+        p["enable_gbif"] = self.var_enable_gbif.get()
 
         # ── Write prefs["advanced"] sub-key for backward compatibility ────────
         # (apply_theme() and AdvancedSettingsWindow read from prefs["advanced"])
@@ -1377,6 +1385,7 @@ class UnifiedSettingsWindow:
         adv["image_url_pattern_override"] = p["image_url_pattern_override"]
         adv["enable_bulk_editor"] = p["enable_bulk_editor"]
         adv["enable_focus_mode_toggle"] = p["enable_focus_mode_toggle"]
+        adv["enable_gbif"] = p["enable_gbif"]
         adv["enable_excel_import_backup"] = p["enable_excel_import_backup"]
         adv["autosave_archive_limit"] = str(p.get("autosave_archive_limit", 10))
         adv["log_verbosity"] = p["log_verbosity"]

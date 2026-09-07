@@ -1040,11 +1040,11 @@ class ObjectProgramUI(
 
 
 
-    def refresh_gbif_button(self):
+    def refresh_gbif_button(self, enable_gbif_override=None):
         if not hasattr(self, "gbif_btn"): return
         import config
         prefs = config.load_prefs()
-        show_gbif = prefs.get("enable_gbif", False)
+        show_gbif = enable_gbif_override if enable_gbif_override is not None else prefs.get("enable_gbif", False)
         if show_gbif:
             if self.gbif_btn.winfo_manager() != "pack":
                 self.gbif_btn.pack(side="right", padx=6)
@@ -2196,6 +2196,7 @@ class ObjectProgramUI(
                 "image_stack":             lambda v: self._live_image_stack(v),
                 "focus_mode":              lambda v: (self.focus_mode_var.set(v), self.update_reg_fields_visibility()),
                 "focus_fallback":          lambda v: (self.focus_fallback_var.set(v), self.update_reg_fields_visibility()),
+                "enable_gbif":             lambda v: self.refresh_gbif_button(enable_gbif_override=v),
             }
         )
         # Ensure the ref is cleared when the window is closed
