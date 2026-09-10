@@ -1,7 +1,10 @@
+import sys
 import tkinter as tk
 from tkinter import ttk
 import utils
 from repository import REVIEWED_COLUMN
+from ui.context_menu import ContextMenuManager
+
 
 def create_toggle_row(parent, label_text, var, command=None, ui_ref=None, info_text=None):
     from config import sc
@@ -798,7 +801,13 @@ class TreeviewListboxWrapper(ttk.Frame):
         # Handle Shift and Ctrl/Cmd modifiers
         state = event.state if event else 0
         shift_pressed = bool(state & 0x0001)
-        ctrl_pressed = bool((state & 0x0004) or (state & 0x20000) or (state & 0x0008)) # Control or Command/Meta
+        # 0x0004 is Ctrl on all platforms.
+        # 0x20000 / 0x0008 (Mod1) represents Command only on macOS.
+        # On Windows/Linux, 0x0008 is NumLock.
+        if sys.platform == "darwin":
+            ctrl_pressed = bool((state & 0x0004) or (state & 0x20000) or (state & 0x0008))
+        else:
+            ctrl_pressed = bool(state & 0x0004)
 
         if shift_pressed and self._selection_anchor_iid:
             anchor_idx = self._oid_to_index.get(self._selection_anchor_iid)
@@ -1572,27 +1581,35 @@ class TreeviewListboxWrapper(ttk.Frame):
             if oid is not None:
                 self._on_card_double_click(oid, event)
 
-        def _on_card_right_click(event):
+        def _on_card_context_callback(event):
             _, oid, _ = _get_target(event)
-            if oid is not None:
-                self._on_card_click(oid, event)
-                if hasattr(self.main_window, "_show_context_menu"):
-                    self.main_window._show_context_menu(event)
+            if oid is None:
+                return []
+            if oid not in self.selected_iids:
+                self.selected_iids = [oid]
+                self.focused_iid = oid
+                self._selection_anchor_iid = oid
+                self.redraw_cards_highlights()
+                if hasattr(self.main_window, "load_object"):
+                    self.main_window.load_object(oid)
+            if hasattr(self.main_window, "_get_main_context_menu_items"):
+                return self.main_window._get_main_context_menu_items(event)
+            return []
 
         self.bind_class(card_tag, "<Enter>",           _on_enter)
         self.bind_class(card_tag, "<Leave>",           _on_leave)
         self.bind_class(card_tag, "<Button-1>",        _on_card_click)
         self.bind_class(card_tag, "<Double-Button-1>", _on_card_double_click)
-        self.bind_class(card_tag, "<Button-3>",        _on_card_right_click)
+        ContextMenuManager.bind(card_tag, _on_card_context_callback, is_tag=True, root=self)
 
         self.bind_class(card_tag, "<MouseWheel>", self._on_mousewheel)
         self.bind_class(card_tag, "<Button-4>", self._on_mousewheel)
         self.bind_class(card_tag, "<Button-5>", self._on_mousewheel)
 
-        _skip = {"<Button-1>", "<Button-2>", "<Button-3>",
+        _skip = {"<Button-1>", "<Button-3>",
                  "<Button-4>", "<Button-5>",
                  "<Double-Button-1>", "<Double-Button-2>", "<Double-Button-3>",
-                 "<Control-Button-1>", "<Control-Button-3>",
+                 "<Control-Button-3>",
                  "<MouseWheel>"}
         for seq, func, add in self.custom_bindings:
             if "Select" in seq or seq.startswith("<<"):

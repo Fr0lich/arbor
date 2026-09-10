@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import config
+from ui.context_menu import ContextMenuManager
 
 def sc(n):
     return config.sc(n)
@@ -87,8 +88,7 @@ class GroupEditorWindow:
         )
         self.tabs_listbox.pack(fill="both", expand=True, pady=(0, sc(8)))
         self.tabs_listbox.bind("<<ListboxSelect>>", self.on_tab_select)
-        self.tabs_listbox.bind("<Button-3>", self.show_tabs_context_menu)
-        self.tabs_listbox.bind("<Button-2>", self.show_tabs_context_menu)
+        ContextMenuManager.bind(self.tabs_listbox, self.show_tabs_context_menu, root=self.win)
 
         btn_tab_row = tk.Frame(left_content, bg="#ffffff")
         btn_tab_row.pack(fill="x")
@@ -123,8 +123,7 @@ class GroupEditorWindow:
             bg="#ffffff", fg="#2c302e", relief="solid", bd=1, highlightthickness=0
         )
         self.fields_listbox.pack(fill="both", expand=True, pady=(0, sc(8)))
-        self.fields_listbox.bind("<Button-3>", self.show_fields_context_menu)
-        self.fields_listbox.bind("<Button-2>", self.show_fields_context_menu)
+        ContextMenuManager.bind(self.fields_listbox, self.show_fields_context_menu, root=self.win)
 
         btn_field_row = tk.Frame(right_content, bg="#ffffff")
         btn_field_row.pack(fill="x")
@@ -521,53 +520,55 @@ class GroupEditorWindow:
 
     def show_tabs_context_menu(self, event):
         idx = self.tabs_listbox.nearest(event.y)
-        if idx >= 0:
+        if idx >= 0 and self.tabs_listbox.size() > 0:
             self.tabs_listbox.selection_clear(0, tk.END)
             self.tabs_listbox.selection_set(idx)
             self.on_tab_select(None)
             
-            menu = tk.Menu(self.win, tearoff=0)
-            menu.add_command(label="Add Tab", command=self.add_tab)
-            menu.add_command(label="Rename Tab", command=self.rename_tab)
-            menu.add_command(label="Delete Tab", command=self.delete_tab)
-            menu.post(event.x_root, event.y_root)
+            return [
+                {"label": "Add Tab", "command": self.add_tab},
+                {"label": "Rename Tab", "command": self.rename_tab},
+                {"label": "Delete Tab", "command": self.delete_tab},
+            ]
+        return []
             
     def show_fields_context_menu(self, event):
         g_idx = self.get_selected_group_idx()
         if g_idx is None:
-            return
+            return []
             
         f_idx = self.fields_listbox.nearest(event.y)
-        if f_idx >= 0:
+        if f_idx >= 0 and self.fields_listbox.size() > 0:
             self.fields_listbox.selection_clear(0, tk.END)
             self.fields_listbox.selection_set(f_idx)
             
-            menu = tk.Menu(self.win, tearoff=0)
-            menu.add_command(label="Move Up", command=lambda: self.move_field_order(-1))
-            menu.add_command(label="Move Down", command=lambda: self.move_field_order(1))
+            items = [
+                {"label": "Move Up", "command": lambda: self.move_field_order(-1)},
+                {"label": "Move Down", "command": lambda: self.move_field_order(1)},
+            ]
             
             # Cascade for Move to Tab
-            move_submenu = tk.Menu(menu, tearoff=0)
-            
-            # Find other tabs
             choices = [g["name"] for i, g in enumerate(self.groups) if i != g_idx]
             if choices:
                 group_map = {g["name"]: g for g in self.groups}
+                submenu_items = []
                 for dest_name in choices:
                     def do_move(dest=dest_name):
                         field_name = self.groups[g_idx]["fields"].pop(f_idx)
                         group_map[dest].setdefault("fields", []).append(field_name)
                         self.on_tab_select(None)
                         
-                    move_submenu.add_command(label=dest_name, command=do_move)
-                menu.add_cascade(label="Move to Tab", menu=move_submenu)
+                    submenu_items.append({"label": dest_name, "command": do_move})
+                items.append({"label": "Move to Tab", "submenu": submenu_items})
             
-            menu.add_separator()
-            menu.add_command(label="Add Field", command=self.add_field)
-            menu.add_command(label="Rename Field", command=self.rename_field)
-            menu.add_command(label="Delete Field", command=self.delete_field)
-            
-            menu.post(event.x_root, event.y_root)
+            items.extend([
+                {"separator": True},
+                {"label": "Add Field", "command": self.add_field},
+                {"label": "Rename Field", "command": self.rename_field},
+                {"label": "Delete Field", "command": self.delete_field},
+            ])
+            return items
+        return []
 
     def add_field(self):
         g_idx = self.get_selected_group_idx()

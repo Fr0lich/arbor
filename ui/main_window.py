@@ -9,6 +9,7 @@ dynamic database visualizer window using Tkinter.
 """
 
 from ui.widgets import ToggleSwitch, TreeviewListboxWrapper
+from ui.context_menu import ContextMenuManager
 from ui.autosave_handler import AutosaveMixin
 from ui.image_panel import ImagePanel
 from ui.historical_suggestions import HistoricalSuggestionsMixin
@@ -2378,6 +2379,12 @@ class ObjectProgramUI(
         popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
+    def show_gbif_dropdown(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        popup.add_command(label="🌿 Batch Update Taxonomy (GBIF)...", command=self.batch_gbif_update_action)
+        popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
     def show_images_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
         popup.add_command(label="Image Source", command=self.open_image_menu)
@@ -3526,20 +3533,7 @@ class ObjectProgramUI(
             lambda e: self.object_list.yview_scroll(int(-1 * (e.delta / 120)), "units")
         )
         self.object_list.bind("<Button-1>", self._on_list_click_pre, add="+")
-        self.object_list.bind("<Button-3>", self._show_context_menu)
-        self.object_list.bind("<Control-Button-1>", self._show_context_menu)
-
-        # Context menu
-        self.context_menu = tk.Menu(self.root, tearoff=0)
-        self.context_menu.add_command(label="Mark Selected as Reviewed", command=lambda: self._context_set_reviewed(True))
-        self.context_menu.add_command(label="Mark Selected as Not Reviewed", command=lambda: self._context_set_reviewed(False))
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="📱 Push to Phone", command=self.push_current_to_phone)
-        advanced_prefs = config.load_prefs().get("advanced", {})
-        if advanced_prefs.get("enable_bulk_editor", False):
-            self.context_menu.add_command(label="Bulk Edit Selected", command=self.open_bulk_edit_window)
-        self.context_menu.add_command(label="Duplicate Object", command=lambda: self._shortcut_duplicate_object(None))
-        self.context_menu.add_command(label="Delete Object", command=self.delete_current_object)
+        ContextMenuManager.bind(self.object_list, self._get_main_context_menu_items)
 
         self.bulk_edit_btn = ttk.Button(list_container, text="Bulk Edit Selected", state="disabled", command=self.open_bulk_edit_window, cursor="hand2")
         self.toggle_bulk_edit_btn()
@@ -3964,7 +3958,7 @@ class ObjectProgramUI(
         win.configure(background=bg_color)
 
         import utils
-        utils.center_and_fit_toplevel(win, sc(420), sc(280))
+        utils.center_and_fit_toplevel(win, sc(440), sc(370))
 
         win.bind("<Escape>", lambda e: win.destroy())
 
@@ -3977,7 +3971,7 @@ class ObjectProgramUI(
 
         tk.Label(
             hdr_frame,
-            text="DATA OPTIONS",
+            text="DATA & TAXONOMY OPTIONS",
             font=("Segoe UI", sc(11), "bold"),
             fg=fg_color,
             bg=bg_color
@@ -4026,9 +4020,49 @@ class ObjectProgramUI(
             highlightbackground=border_color,
             highlightcolor=border_color
         )
-        hist_btn.pack(fill="x", pady=(0, sc(12)))
+        hist_btn.pack(fill="x", pady=(0, sc(8)))
         hist_btn.bind("<Enter>", lambda e: hist_btn.config(bg=btn_sec_hover))
         hist_btn.bind("<Leave>", lambda e: hist_btn.config(bg=btn_sec_bg))
+
+        gbif_btn = tk.Button(
+            frame,
+            text="🌿 Batch Update Taxonomy (GBIF)...",
+            command=lambda: run_cmd(self.batch_gbif_update_action),
+            font=("Segoe UI", sc(9.5), "bold"),
+            bg=btn_sec_bg,
+            fg=btn_sec_fg,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            padx=sc(12),
+            pady=sc(7),
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color
+        )
+        gbif_btn.pack(fill="x", pady=(0, sc(8)))
+        gbif_btn.bind("<Enter>", lambda e: gbif_btn.config(bg=btn_sec_hover))
+        gbif_btn.bind("<Leave>", lambda e: gbif_btn.config(bg=btn_sec_bg))
+
+        rollback_btn = tk.Button(
+            frame,
+            text="↩️ Revert Latest GBIF Update",
+            command=lambda: run_cmd(self.rollback_gbif_action),
+            font=("Segoe UI", sc(9.5)),
+            bg=btn_sec_bg,
+            fg=btn_sec_fg,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            padx=sc(12),
+            pady=sc(6),
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color
+        )
+        rollback_btn.pack(fill="x", pady=(0, sc(12)))
+        rollback_btn.bind("<Enter>", lambda e: rollback_btn.config(bg=btn_sec_hover))
+        rollback_btn.bind("<Leave>", lambda e: rollback_btn.config(bg=btn_sec_bg))
 
         tk.Frame(frame, bg=border_color, height=1).pack(fill="x", pady=(0, sc(10)))
 
@@ -7069,35 +7103,54 @@ class ObjectProgramUI(
         self._on_list_double_click()
         return "break"
 
-    def _show_context_menu(self, event):
-        iid = self.object_list.identify_row(event.y)
-        if iid:
-            current_selection = self.object_list.selection()
-            if iid not in current_selection:
-                self.object_list.selection_clear(0)
-                self.object_list.selection_set(iid)
-                self.object_list.focus(iid)
-                self.load_object(iid)
+    def _context_copy_accession_id(self):
+        selection = self.object_list.selection()
+        if not selection:
+            return
+        text = "\n".join(str(oid) for oid in selection)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+
+    def _get_main_context_menu_items(self, event=None):
+        if event is not None:
+            target = getattr(event, "widget", None)
+            is_tree = target == getattr(self.object_list, "tree", None) or (
+                hasattr(self.object_list, "active_view") and self.object_list.active_view == "compact"
+            )
+            if is_tree and hasattr(self.object_list, "identify_row"):
+                iid = self.object_list.identify_row(event.y)
+                if not iid:
+                    return []
                 current_selection = self.object_list.selection()
-            
-            # Dynamically update state of "Push to Phone" based on selection and mobile server status
-            push_index = None
-            try:
-                for i in range(self.context_menu.index("end") + 1):
-                    if self.context_menu.entrycget(i, "label") == "📱 Push to Phone":
-                        push_index = i
-                        break
-            except Exception:
-                pass
+                if iid not in current_selection:
+                    self.object_list.selection_clear(0)
+                    self.object_list.selection_set(iid)
+                    self.object_list.focus(iid)
+                    self.load_object(iid)
 
-            if push_index is not None:
-                server = getattr(self.app, '_mobile_server_instance', None)
-                if server and server.is_running and len(current_selection) <= 1:
-                    self.context_menu.entryconfig(push_index, state="normal")
-                else:
-                    self.context_menu.entryconfig(push_index, state="disabled")
+        current_selection = self.object_list.selection()
+        if not current_selection:
+            return []
 
-            self.context_menu.post(event.x_root, event.y_root)
+        server = getattr(self.app, '_mobile_server_instance', None)
+        push_state = "normal" if (server and getattr(server, "is_running", False) and len(current_selection) <= 1) else "disabled"
+
+        items = [
+            {"label": "Mark Selected as Reviewed", "command": lambda: self._context_set_reviewed(True)},
+            {"label": "Mark Selected as Not Reviewed", "command": lambda: self._context_set_reviewed(False)},
+            {"separator": True},
+            {"label": "Copy Accession ID", "command": self._context_copy_accession_id},
+            {"label": "📱 Push to Phone", "command": self.push_current_to_phone, "state": push_state},
+        ]
+
+        advanced_prefs = config.load_prefs().get("advanced", {})
+        if advanced_prefs.get("enable_bulk_editor", False):
+            items.append({"label": "Bulk Edit Selected", "command": self.open_bulk_edit_window})
+
+        items.append({"label": "Duplicate Object", "command": lambda: self._shortcut_duplicate_object(None)})
+        items.append({"label": "Delete Object", "command": self.delete_current_object})
+
+        return items
 
     def _context_set_reviewed(self, value: bool):
         selection = self.object_list.selection()

@@ -78,6 +78,10 @@ class NavigationBar:
         btn_hist = _nav_btn(nav_links_frame, "RECENT",  app.open_recent_popup)
         app.add_tooltip(btn_hist, "View recently visited objects")
 
+        # GBIF — batch update & revert taxonomy
+        btn_gbif = _nav_btn(nav_links_frame, "🌿 GBIF ▾", app.show_gbif_dropdown)
+        app.add_tooltip(btn_gbif, "GBIF batch taxonomy validation & rollback")
+
         # MOBILE — opens mobile companion dialog
         btn_mob = _nav_btn(nav_links_frame, "📱 MOBILE", app.open_mobile_dialog)
         app.add_tooltip(btn_mob, "Connect your phone to review & edit records remotely")

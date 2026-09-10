@@ -351,4 +351,42 @@ def test_classification_equivalence_subsets_and_synonyms():
     assert is_classification_equivalent(None, gbif_standard) is False
 
 
+def test_gbif_toolbar_button_and_dropdown():
+    import tkinter as tk
+    from ui.navigation_bar import NavigationBar
+    from unittest.mock import MagicMock, patch
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        mock_app = MagicMock()
+        mock_app.root = root
+        mock_app.toolbar_buttons = {}
+        mock_app.toolbar_vars = {}
+        mock_app.config = {"ui_sections": {"problems": []}}
+
+        nav_bar = tk.Frame(root)
+        NavigationBar.build_nav_ui(mock_app, nav_bar)
+
+        assert "🌿 GBIF ▾" in mock_app.toolbar_buttons
+        btn = mock_app.toolbar_buttons["🌿 GBIF ▾"]
+        assert btn is not None
+
+        # Test show_gbif_dropdown method
+        from ui.main_window import ObjectProgramUI
+        with patch("tkinter.Menu") as mock_menu_cls:
+            mock_menu_instance = MagicMock()
+            mock_menu_cls.return_value = mock_menu_instance
+            ui_instance = MagicMock()
+            ui_instance.root = root
+            ObjectProgramUI.show_gbif_dropdown(ui_instance)
+
+            # Ensure batch update and rollback were added as commands
+            added_labels = [call.kwargs.get("label") for call in mock_menu_instance.add_command.call_args_list]
+            assert any("Batch Update Taxonomy" in str(l) for l in added_labels)
+            assert any("Revert Latest GBIF" in str(l) for l in added_labels)
+    finally:
+        root.destroy()
+
+
 

@@ -214,5 +214,51 @@ class TestOptimize(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_card_click_modifiers(self):
+        import tkinter as tk
+        from ui.widgets import TreeviewListboxWrapper
+        root = tk.Tk()
+        try:
+            root.withdraw()
+            dummy_mw = type("MW", (), {
+                "dark_mode_active": False,
+                "_toggle_reviewed_for_id": lambda *args, **kwargs: None,
+                "commit_current_object": lambda *args, **kwargs: None,
+                "root": root,
+                "load_object": lambda *args, **kwargs: None,
+            })()
+            wrapper = TreeviewListboxWrapper(root, dummy_mw)
+            for i in range(5):
+                wrapper.insert(tk.END, f"OID_{i} Genus{i} Species{i}", genus=f"Genus{i}", species=f"Species{i}", bulk=True)
+
+            EventMock = type("EventMock", (), {})
+
+            # Clean click (state = 0)
+            ev_clean = EventMock()
+            ev_clean.state = 0
+            wrapper._on_card_click("OID_1", ev_clean)
+            self.assertEqual(wrapper.selected_iids, ["OID_1"])
+
+            # NumLock click on Windows (state = 0x0008) -> Should still be single select on Windows/Linux
+            ev_numlock = EventMock()
+            ev_numlock.state = 0x0008
+            wrapper._on_card_click("OID_2", ev_numlock)
+            import sys
+            if sys.platform != "darwin":
+                self.assertEqual(wrapper.selected_iids, ["OID_2"])
+
+            # Ctrl click (state = 0x0004) -> Adds to selection
+            ev_ctrl = EventMock()
+            ev_ctrl.state = 0x0004
+            wrapper._on_card_click("OID_3", ev_ctrl)
+            self.assertIn("OID_2", wrapper.selected_iids)
+            self.assertIn("OID_3", wrapper.selected_iids)
+
+            # Normal single click resets selection
+            wrapper._on_card_click("OID_0", ev_clean)
+            self.assertEqual(wrapper.selected_iids, ["OID_0"])
+        finally:
+            root.destroy()
+
 if __name__ == "__main__":
     unittest.main()
