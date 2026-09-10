@@ -68,6 +68,8 @@ class HistoricalConflictResolverWindow:
         self.res_vars = {}
         
         self.build_ui()
+        # Ensure initial sorting is correct
+        self.reload_suggestions()
         
     def build_ui(self):
         # Header
@@ -92,17 +94,26 @@ class HistoricalConflictResolverWindow:
         tk.Label(dir_header, text="FIELD_DIRECTORY", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["border"]).pack(side="left", padx=sc(12), pady=sc(12))
         
         # Bottom toggle
-        sidebar_bottom = tk.Frame(sidebar, bg=COLORS["border"], height=sc(48))
+        sidebar_bottom = tk.Frame(sidebar, bg=COLORS["border"], height=sc(80))
         sidebar_bottom.pack(side="bottom", fill="x")
         sidebar_bottom.pack_propagate(False)
+
         self.show_all_var = tk.BooleanVar(value=False)
         chk = tk.Checkbutton(sidebar_bottom, text="Show all fields", variable=self.show_all_var, 
                              font=FONT_UI_BOLD, bg=COLORS["surface"], fg=COLORS["primary"],
                              activebackground=COLORS["surface"], activeforeground=COLORS["primary"],
                              selectcolor=COLORS["surface"], relief="flat", bd=0,
                              command=self.reload_suggestions, cursor="hand2")
-        chk.pack(fill="both", expand=True, padx=sc(1), pady=sc(1)) # 1px border visually
-        
+        chk.pack(fill="x", expand=False, padx=sc(1), pady=(sc(1), 0)) # 1px border visually
+
+        self.sort_alpha_var = tk.BooleanVar(value=False)
+        sort_chk = tk.Checkbutton(sidebar_bottom, text="Sort alphabetically", variable=self.sort_alpha_var,
+                             font=FONT_UI_BOLD, bg=COLORS["surface"], fg=COLORS["primary"],
+                             activebackground=COLORS["surface"], activeforeground=COLORS["primary"],
+                             selectcolor=COLORS["surface"], relief="flat", bd=0,
+                             command=self.reload_suggestions, cursor="hand2")
+        sort_chk.pack(fill="x", expand=False, padx=sc(1), pady=(sc(1), sc(1)))
+
         self.dir_canvas = tk.Canvas(sidebar, bg=COLORS["surface_dim"], highlightthickness=0)
         dir_scrollbar = ttk.Scrollbar(sidebar, orient="vertical", command=self.dir_canvas.yview)
         self.dir_list = tk.Frame(self.dir_canvas, bg=COLORS["surface_dim"])
@@ -207,6 +218,29 @@ class HistoricalConflictResolverWindow:
         self.win.bind("<Control-a>", lambda e: self.apply_all())
         self.update_stats()
         
+    def _get_sorted_fields(self, field_names):
+        if hasattr(self, 'sort_alpha_var') and self.sort_alpha_var.get():
+            return sorted(list(field_names))
+
+        # Default: sort by df_reg column order
+        reg_cols = []
+        if hasattr(self.main_app, 'app') and hasattr(self.main_app.app, 'df_reg') and self.main_app.app.df_reg is not None:
+            reg_cols = list(self.main_app.app.df_reg.columns)
+        elif hasattr(self.main_app, 'reg_by_id') and self.main_app.reg_by_id is not None:
+            if hasattr(self.main_app.reg_by_id, 'columns'):
+                reg_cols = list(self.main_app.reg_by_id.columns)
+            elif isinstance(self.main_app.reg_by_id, dict) and self.main_app.reg_by_id:
+                # If it's a dict of dicts, grab keys from the first row
+                first_row = next(iter(self.main_app.reg_by_id.values()))
+                reg_cols = list(first_row.keys())
+
+        # Create a dict mapping column name to index
+        col_order = {col: i for i, col in enumerate(reg_cols)}
+
+        # Sort fields: those in reg_cols by their index, those missing by infinity (to put at the end)
+        # For fields not in df_reg, we sub-sort alphabetically to keep it consistent
+        return sorted(list(field_names), key=lambda x: (col_order.get(x, float('inf')), x))
+
     def reload_suggestions(self):
         show_all = self.show_all_var.get()
         if not show_all:
@@ -214,7 +248,7 @@ class HistoricalConflictResolverWindow:
         else:
             new_suggestions = self.main_app.collect_historical_suggestions(self.oid, show_all_override=True)
             self.suggestions = new_suggestions
-        self.fields = sorted(list(self.suggestions.keys()))
+        self.fields = self._get_sorted_fields(self.suggestions.keys())
         self.populate_fields()
         self.issue_count_label.config(text=f"RECORD REVIEW: {len(self.fields)} ISSUES")
         self.update_stats()
