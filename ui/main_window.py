@@ -2869,6 +2869,11 @@ class ObjectProgramUI(
     def handle_ctrl_l(self, event=None):
         return self.handle_ctrl_o(event)
 
+    def open_quick_peek(self, event=None):
+        from ui.quick_peek import QuickPeekController
+        QuickPeekController.open_quick_peek_menu(self)
+        return "break"
+
     def handle_ctrl_f(self, event=None):
         if not self.left_pinned.get():
             self.toggle_left_pin()
