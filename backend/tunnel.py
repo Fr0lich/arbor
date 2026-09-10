@@ -51,9 +51,8 @@ class ResilientSSHTunnel:
     Fallback providers (Pinggy, Localhost.run) are tried if Serveo is unreachable.
     """
 
-    def __init__(self, port, preferred_provider=None):
+    def __init__(self, port):
         self.port = port
-        self.preferred_provider = preferred_provider
         self.public_url = None
         self.process = None
         self.thread = None
@@ -93,11 +92,6 @@ class ResilientSSHTunnel:
                 re.compile(r'(https://[a-zA-Z0-9-]+\.lhr\.(?:life|rocks))')
             )
         ]
-
-        if self.preferred_provider == 'pinggy':
-            providers.insert(0, providers.pop(1))
-        elif self.preferred_provider == 'localhost.run':
-            providers.insert(0, providers.pop(2))
 
         flags = subprocess.CREATE_NO_WINDOW if sys.platform.startswith('win') else 0
         known_hosts_null = 'NUL' if sys.platform.startswith('win') else '/dev/null'
@@ -469,13 +463,8 @@ class CloudflareTunnel:
 
 
 # Backwards-compatible aliases — callers import without changes
-class LocalhostRunTunnel(ResilientSSHTunnel):
-    def __init__(self, port):
-        super().__init__(port, preferred_provider='localhost.run')
-
-class PinggyTunnel(ResilientSSHTunnel):
-    def __init__(self, port):
-        super().__init__(port, preferred_provider='pinggy')
+LocalhostRunTunnel = ResilientSSHTunnel
+PinggyTunnel = ResilientSSHTunnel
 
 
 def get_local_ip():
