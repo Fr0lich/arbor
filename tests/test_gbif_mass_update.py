@@ -213,3 +213,29 @@ def test_batch_gbif_match_cancellation():
         res = batch_gbif_match(items, cancel_event=cancel_event, max_workers=2)
         assert len(res) == 0
 
+
+def test_batch_gbif_match_ignores_equivalent_higher_classification():
+    items = [{
+        "oid": "201",
+        "genus": "Quercus",
+        "species": "robur",
+        "author": "L.",
+        "family": "Fagaceae",
+        "higher_classification": "Plantae|Tracheophyta|Magnoliopsida|Fagales"  # no spaces
+    }]
+    gbif_data = {
+        "genus": "Quercus",
+        "species": "robur",
+        "author": "L.",
+        "family": "Fagaceae",
+        "higherClassification": "Plantae | Tracheophyta | Magnoliopsida | Fagales",  # spaces around pipes
+        "status": "ACCEPTED",
+        "synonym": False,
+        "matchType": "EXACT",
+        "rank": "SPECIES"
+    }
+    with patch("backend.gbif.check_gbif", return_value=gbif_data):
+        res = batch_gbif_match(items)
+        assert len(res) == 0  # No changes proposed because they are equivalent!
+
+

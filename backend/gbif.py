@@ -159,8 +159,19 @@ def _process_single_item(item: Dict[str, Any], cancel_event=None) -> Optional[Di
     for k in ["Genus", "Species", "Author", "Family", "Higher Classification"]:
         c_val = current_map[k]
         p_val = proposed_map[k]
-        if p_val and p_val != c_val:
-            changes.append({"field": k, "old": c_val, "new": p_val})
+        if k == "Higher Classification":
+            def _norm(s):
+                if not s: return ""
+                import re
+                return " | ".join([t.strip().lower() for t in re.split(r"[|/;,]+", s) if t.strip()])
+            if p_val and _norm(p_val) != _norm(c_val):
+                changes.append({"field": k, "old": c_val, "new": p_val})
+        elif k == "Family":
+            if p_val and p_val.lower() != c_val.lower():
+                changes.append({"field": k, "old": c_val, "new": p_val})
+        else:
+            if p_val and p_val != c_val:
+                changes.append({"field": k, "old": c_val, "new": p_val})
 
     if changes:
         return {

@@ -1125,9 +1125,27 @@ class ObjectProgramUI(
             mb.showwarning("GBIF Check", "Could not fetch accepted name data.", parent=self.root)
             return
 
-        old_author = self.reg_vars.get("Author", tk.StringVar()).get().strip()
-        old_family = self.reg_vars.get("Family", tk.StringVar()).get().strip()
-        old_higher_classification = self.reg_vars.get("Higher Classification", tk.StringVar()).get().strip()
+        def _get_field_val(*candidates):
+            for name in candidates:
+                if name in self.reg_vars:
+                    return self.reg_vars[name].get().strip()
+            for name in candidates:
+                target = name.lower().replace("_", " ").strip()
+                for k, v in self.reg_vars.items():
+                    if k.lower().replace("_", " ").strip() == target:
+                        return v.get().strip()
+            return ""
+
+        def _normalize_classification(s: str) -> str:
+            if not s:
+                return ""
+            import re
+            tokens = [t.strip().lower() for t in re.split(r"[|/;,]+", s) if t.strip()]
+            return " | ".join(tokens)
+
+        old_author = _get_field_val("Author")
+        old_family = _get_field_val("Family")
+        old_higher_classification = _get_field_val("Higher Classification", "Higher_Classification", "higher_classification", "Classification")
 
         new_genus = result.get("genus", "")
         new_species = result.get("species", "")
@@ -1159,7 +1177,7 @@ class ObjectProgramUI(
             })
 
         # Check for Family update
-        if new_family and new_family != old_family:
+        if new_family and new_family.lower() != old_family.lower():
             updates_available.append({
                 "field": "Family",
                 "current": old_family,
@@ -1169,7 +1187,7 @@ class ObjectProgramUI(
             })
 
         # Check for Higher Classification update
-        if new_higher_classification and new_higher_classification != old_higher_classification:
+        if new_higher_classification and _normalize_classification(new_higher_classification) != _normalize_classification(old_higher_classification):
             updates_available.append({
                 "field": "Higher Classification",
                 "current": old_higher_classification,
