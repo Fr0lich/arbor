@@ -86,31 +86,6 @@ class FilterDialogController:
         tab_nav.pack(fill="x", side="top")
         tk.Frame(tab_nav, bg=COLORS["outline"], height=1).pack(fill="x", side="bottom")
 
-        # Global Match Mode Toggle
-        global_mode_frame = tk.Frame(tab_nav, bg=COLORS["surface_container_highest"])
-        global_mode_frame.pack(side="right", fill="y", padx=sc(16))
-
-        tk.Label(global_mode_frame, text="Match criteria:", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"]).pack(side="left", padx=(0, sc(8)))
-
-        style = ttk.Style(ui.root)
-        style.configure("GlobalMode.TCombobox", fieldbackground=COLORS["surface"], background=COLORS["surface"], borderwidth=0)
-
-        def on_global_mode_change(event):
-            val = global_mode_cb.get()
-            if "ALL" in val.upper():
-                ui.filter_mode.set("AND")
-            else:
-                ui.filter_mode.set("OR")
-            ui.update_filter_button_text()
-
-        current_mode = ui.filter_mode.get()
-        cb_val = "All selected (AND)" if current_mode == "AND" else "Any selected (OR)"
-
-        global_mode_cb = ttk.Combobox(global_mode_frame, values=["All selected (AND)", "Any selected (OR)"], state="readonly", width=18, style="GlobalMode.TCombobox", cursor="hand2")
-        global_mode_cb.set(cb_val)
-        global_mode_cb.pack(side="left", pady=sc(8))
-        global_mode_cb.bind("<<ComboboxSelected>>", on_global_mode_change)
-
         tab_content_area = tk.Frame(main_container, bg=COLORS["surface"])
         tab_content_area.pack(fill="both", expand=True)
 
@@ -144,7 +119,7 @@ class FilterDialogController:
             ui.filter_tab_buttons[name] = (btn, bottom_border)
 
         create_tab_btn("status", "Status & General")
-        create_tab_btn("problems", "Problems & Unknowns")
+        create_tab_btn("problems", "Problems & History")
         create_tab_btn("images", "Images")
         create_tab_btn("location", "Location")
 
@@ -169,6 +144,58 @@ class FilterDialogController:
             lbl.pack(side="left", padx=(0, sc(8)))
             all_widgets.append((text.lower(), f, COLORS["surface"]))
             return chk
+
+        def make_tristate_row(parent, text, var, color_bar=None):
+            f = tk.Frame(parent, bg=COLORS["surface"], cursor="hand2")
+            f.pack(fill="x", pady=sc(3))
+
+            box_btn = tk.Label(
+                f, text=" ", font=("JetBrains Mono", sc(11), "bold"),
+                width=3, height=1, relief="solid", bd=1,
+                bg=COLORS["surface"], fg=COLORS["outline"], cursor="hand2"
+            )
+            box_btn.pack(side="left", padx=(0, sc(6)))
+
+            if color_bar:
+                tk.Frame(f, bg=color_bar, width=4, height=sc(14)).pack(side="left", padx=(0, sc(8)))
+
+            lbl = tk.Label(f, text=text, font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"], cursor="hand2")
+            lbl.pack(side="left", padx=(0, sc(8)))
+
+            badge = tk.Label(f, text="IGNORE", font=("JetBrains Mono", sc(9), "bold"), fg=COLORS["outline"], bg=COLORS["surface_container_low"], padx=sc(6), pady=sc(1), relief="flat")
+            badge.pack(side="right", padx=sc(4))
+
+            def update_visual():
+                raw = var.get() if hasattr(var, "get") else "Ignore"
+                val = str(raw).strip().lower()
+                if val in ("has", "true", "1"):
+                    box_btn.config(text="✓", fg=COLORS["secondary"], bg="#e8f5e9", highlightbackground=COLORS["secondary"], bd=1)
+                    badge.config(text="HAS (✓)", fg="#2e7d32", bg="#e8f5e9")
+                elif val in ("not", "false", "-1"):
+                    box_btn.config(text="−", fg=COLORS["error"], bg="#ffebee", highlightbackground=COLORS["error"], bd=1)
+                    badge.config(text="NOT (−)", fg="#c93a40", bg="#ffebee")
+                else:
+                    box_btn.config(text=" ", fg=COLORS["outline"], bg=COLORS["surface"], highlightbackground=COLORS["outline"], bd=1)
+                    badge.config(text="IGNORE", fg=COLORS["outline"], bg=COLORS["surface_container_low"])
+
+            def cycle_state(delta=1, event=None):
+                states = ["Ignore", "Has", "Not"]
+                curr = var.get() if hasattr(var, "get") else "Ignore"
+                curr_normalized = "Has" if curr in ("Has", "HAS", True, 1) else ("Not" if curr in ("Not", "NOT", "-1") else "Ignore")
+                idx = states.index(curr_normalized) if curr_normalized in states else 0
+                next_state = states[(idx + delta) % len(states)]
+                var.set(next_state)
+                update_visual()
+                ui.update_filter_button_text()
+                return "break"
+
+            for w in (f, box_btn, lbl, badge):
+                w.bind("<Button-1>", lambda e: cycle_state(1, e))
+                w.bind("<Button-3>", lambda e: cycle_state(-1, e))
+
+            update_visual()
+            all_widgets.append((text.lower(), f, COLORS["surface"]))
+            return f
 
         # TAB 1: STATUS
         tab_status = tk.Frame(tab_content_area, bg=COLORS["surface"])
@@ -207,7 +234,7 @@ class FilterDialogController:
                 ent_old_tax.pack(fill="x", pady=(sc(4), 0))
                 all_widgets.append(("old taxonomy", ent_old_tax, COLORS["surface"]))
 
-        # TAB 2: PROBLEMS
+        # TAB 2: PROBLEMS & HISTORY
         tab_probs = tk.Frame(tab_content_area, bg=COLORS["surface"])
         ui.filter_tabs["problems"] = tab_probs
 
@@ -228,11 +255,15 @@ class FilterDialogController:
         if hasattr(ui, "_bind_canvas_mousewheel"):
             ui.root.after(100, lambda: ui._bind_canvas_mousewheel(probs_canvas, _on_prob_scroll))
 
-        p_list = create_group(probs_inner, "Problems Checklist")
+        p_list = create_group(probs_inner, "Problems & History (Click to cycle: [ ] Ignore -> [✓] Has -> [−] Not)")
         normal_problems = [p for p in ui.problem_columns if "Image" not in p]
         for col in normal_problems:
-            make_chk(p_list, col.replace("_", " "), ui.filter_vars.get(col), COLORS["error"])
-        make_chk(p_list, "Any problem (except images)", ui.filter_vars.get("Any_Problem"), COLORS["error"])
+            make_tristate_row(p_list, col.replace("_", " "), ui.filter_vars.get(col), COLORS["error"])
+
+        make_tristate_row(p_list, "Any problem (all error flags)", ui.filter_vars.get("Any_Problem"), COLORS["error"])
+
+        if "Historical_Data" in ui.filter_vars:
+            make_tristate_row(p_list, "Historical Data (Has / No History)", ui.filter_vars.get("Historical_Data"), COLORS["surface_tint"])
 
         u_list = create_group(probs_inner, "Unknown values")
         if not hasattr(ui, "filter_unknown_var"):
@@ -367,10 +398,19 @@ class FilterDialogController:
         from tkinter import simpledialog
         name = simpledialog.askstring("Save Preset", "Enter preset name:", parent=ui.filter_window)
         if name:
+            vars_to_save = {}
+            for k, v in ui.filter_vars.items():
+                if isinstance(v, tk.StringVar):
+                    val = v.get().strip()
+                    if val.lower() in ("has", "not"):
+                        vars_to_save[k] = val
+                elif isinstance(v, tk.BooleanVar) and v.get():
+                    vars_to_save[k] = True
+
             preset = {
-                "vars": {k: v.get() for k, v in ui.filter_vars.items() if isinstance(v, tk.BooleanVar) and v.get()},
+                "vars": vars_to_save,
                 "locs": {k: v.get() for k, v in ui.filter_location_vars.items() if v.get()},
-                "mode": ui.filter_mode.get()
+                "mode": "AND"
             }
             prefs_dir = os.path.dirname(getattr(config, "_PREFS_PATH", "user_prefs.json"))
             presets_file = os.path.join(prefs_dir, "filter_presets.json")
@@ -426,20 +466,22 @@ class FilterDialogController:
 
             for k, v in preset.get("vars", {}).items():
                 if k in ui.filter_vars:
-                    ui.filter_vars[k].set(v)
+                    target_var = ui.filter_vars[k]
+                    if isinstance(target_var, tk.StringVar):
+                        if str(v).lower() in ("has", "true", "1"):
+                            target_var.set("Has")
+                        elif str(v).lower() in ("not", "false", "-1"):
+                            target_var.set("Not")
+                        else:
+                            target_var.set("Ignore")
+                    elif isinstance(target_var, tk.BooleanVar):
+                        target_var.set(bool(v))
+
             for k, v in preset.get("locs", {}).items():
                 if k in ui.filter_location_vars:
                     ui.filter_location_vars[k].set(v)
 
-            legacy_modes = preset.get("modes", {})
-            if "mode" in preset:
-                ui.filter_mode.set(preset["mode"])
-            elif legacy_modes:
-                if any(m == "AND" for m in legacy_modes.values()):
-                    ui.filter_mode.set("AND")
-                else:
-                    ui.filter_mode.set("OR")
-            else:
+            if hasattr(ui, "filter_mode"):
                 ui.filter_mode.set("AND")
 
             ui.update_filter_button_text()
@@ -482,11 +524,15 @@ class FilterDialogController:
     def clear_filter(ui, win, destroy_win=True):
         """Reset all filter checkboxes and location filters, updating list and status."""
         for v in ui.filter_vars.values():
-            v.set(False)
+            if isinstance(v, tk.StringVar):
+                v.set("Ignore")
+            else:
+                v.set(False)
         if hasattr(ui, "filter_unknown_var"):
             ui.filter_unknown_var.set(False)
 
-        ui.filter_mode.set("AND")
+        if hasattr(ui, "filter_mode"):
+            ui.filter_mode.set("AND")
 
         for v in ui.filter_location_vars.values():
             v.set("")

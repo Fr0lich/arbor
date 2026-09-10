@@ -1110,6 +1110,62 @@ def test_photo_route_directory_safety(mock_app_state, tmp_path):
     assert res.json.get("error") == "Photo not found"
 
 
+def test_mobile_tristate_problem_and_history_filtering(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Setup test data with known problems and history
+    # 1024: Genus Problem = True (Genus is missing), History = in historical_dbs (1024)
+    # 1025: Genus Problem = False ("Quercus"), History = not in historical_dbs
+    mock_app_state.config["ui_sections"]["problems"] = [
+        {"name": "Genus_Problem", "maps_to": "Genus"},
+        {"name": "MissingLabel", "maps_to": "ProblemDescription"}
+    ]
+    mock_app_state.historical_dbs = [{
+        "name": "hist.xlsx",
+        "reg_by_id": pd.DataFrame({"Genus": ["Pinus"]}, index=["1024"])
+    }]
+    mock_app_state.df_reg.at["1024", "Genus"] = ""
+    mock_app_state.df_reg.at["1025", "Genus"] = "Quercus"
+
+    # 1. Test Genus_Problem:has
+    res_has = client.get('/api/objects?specific_problems=Genus_Problem:has', headers=headers)
+    assert res_has.status_code == 200
+    ids_has = [o["id"] for o in res_has.json["objects"]]
+    assert "1024" in ids_has
+    assert "1025" not in ids_has
+
+    # 2. Test Genus_Problem:not
+    res_not = client.get('/api/objects?specific_problems=Genus_Problem:not', headers=headers)
+    assert res_not.status_code == 200
+    ids_not = [o["id"] for o in res_not.json["objects"]]
+    assert "1025" in ids_not
+    assert "1024" not in ids_not
+
+    # 3. Test Historical_Data:has
+    res_hist_has = client.get('/api/objects?specific_problems=Historical_Data:has', headers=headers)
+    assert res_hist_has.status_code == 200
+    ids_hist_has = [o["id"] for o in res_hist_has.json["objects"]]
+    assert "1024" in ids_hist_has
+    assert "1025" not in ids_hist_has
+
+    # 4. Test Historical_Data:not
+    res_hist_not = client.get('/api/objects?specific_problems=Historical_Data:not', headers=headers)
+    assert res_hist_not.status_code == 200
+    ids_hist_not = [o["id"] for o in res_hist_not.json["objects"]]
+    assert "1025" in ids_hist_not
+    assert "1024" not in ids_hist_not
+
+    # 5. Combined test: Genus_Problem:has AND Historical_Data:not (should match none of 1024 or 1025)
+    res_comb = client.get('/api/objects?specific_problems=Genus_Problem:has,Historical_Data:not', headers=headers)
+    assert res_comb.status_code == 200
+    ids_comb = [o["id"] for o in res_comb.json["objects"]]
+    assert "1024" not in ids_comb
+    assert "1025" not in ids_comb
+
+
+
 
 
 

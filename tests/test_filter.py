@@ -181,22 +181,19 @@ class TestFilterManager:
             unknown_fields=unk_fields,
             image_mode="folder"
         )
-        # 1: Has_Images=True, Reviewed=True -> Match
-        # 3: Has_Images=True, Reviewed=True -> Match
-        assert res == ["1", "3"]
-
-    def test_or_mode_multi_criteria(self, sample_filter_data):
+    def test_tristate_problem_exclusion(self, sample_filter_data):
         df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, unk_fields = sample_filter_data
         fm = FilterManager()
-        # Images_Problem OR Has_History
-        groups = {"Problems": ["Images_Problem"], "Status": ["Has_History"]}
+        # Collector_Problem == NOT (does NOT have collector problem)
+        # Objects with Collector_Problem: Object 3 has missing collector -> True. Objects 1, 2, 4 do NOT have collector problem.
+        groups = {"Problems": {"Collector_Problem": "NOT"}}
         res = fm.apply_filter(
             df_reg=df_reg,
             reg_dict=reg_dict,
             obs_dict=obs_dict,
             history_set=history_set,
             groups=groups,
-            global_mode="OR",
+            global_mode="AND",
             not_reviewed_only=False,
             location_filters=("", "", ""),
             problem_columns=prob_cols,
@@ -204,8 +201,91 @@ class TestFilterManager:
             unknown_fields=unk_fields,
             image_mode="folder"
         )
-        # History: 1, 4. Images_Problem: 3.
-        assert res == ["1", "3", "4"]
+        assert res == ["1", "2", "4"]
+
+    def test_tristate_any_problem_not(self, sample_filter_data):
+        df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, unk_fields = sample_filter_data
+        fm = FilterManager()
+        # Any_Problem == NOT (Clean objects with NO problems whatsoever)
+        # Object 2 has Other_problem=True. Object 3 has Images_Problem=True and Collector_Problem=True.
+        # Objects 1 and 4 have no problems.
+        groups = {"Problems": {"Any_Problem": "NOT"}}
+        res = fm.apply_filter(
+            df_reg=df_reg,
+            reg_dict=reg_dict,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups=groups,
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            unknown_fields=unk_fields,
+            image_mode="folder"
+        )
+        assert res == ["1", "4"]
+
+    def test_tristate_historical_data_filter(self, sample_filter_data):
+        df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, unk_fields = sample_filter_data
+        fm = FilterManager()
+        # Historical_Data == HAS
+        groups_has = {"Problems": {"Historical_Data": "HAS"}}
+        res_has = fm.apply_filter(
+            df_reg=df_reg,
+            reg_dict=reg_dict,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups=groups_has,
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            unknown_fields=unk_fields,
+            image_mode="folder"
+        )
+        assert res_has == ["1", "4"]
+
+        # Historical_Data == NOT
+        groups_not = {"Problems": {"Historical_Data": "NOT"}}
+        res_not = fm.apply_filter(
+            df_reg=df_reg,
+            reg_dict=reg_dict,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups=groups_not,
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            unknown_fields=unk_fields,
+            image_mode="folder"
+        )
+        assert res_not == ["2", "3"]
+
+    def test_problem_with_no_history_combination(self, sample_filter_data):
+        df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, unk_fields = sample_filter_data
+        fm = FilterManager()
+        # Collector_Problem == HAS AND Historical_Data == NOT
+        # Object 3 has Collector_Problem and no history.
+        groups = {"Problems": {"Collector_Problem": "HAS", "Historical_Data": "NOT"}}
+        res = fm.apply_filter(
+            df_reg=df_reg,
+            reg_dict=reg_dict,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups=groups,
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            unknown_fields=unk_fields,
+            image_mode="folder"
+        )
+        assert res == ["3"]
 
     def test_location_filters(self, sample_filter_data):
         df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, unk_fields = sample_filter_data

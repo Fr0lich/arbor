@@ -61,11 +61,27 @@ class FilterManager:
         fast_problem_cache = {}
         include_image_problems = (image_mode == "folder")
 
-        # Combine all group items once
+        # Combine all group items once, supporting dictionaries and lists with HAS/NOT states
         all_items = []
         for group_name, items in groups.items():
-            if items:
-                all_items.extend(items)
+            if not items:
+                continue
+            if isinstance(items, dict):
+                for k, state in items.items():
+                    s = str(state).strip().upper()
+                    if s in ("HAS", "NOT"):
+                        all_items.append((k, s))
+                    elif state is True or state == 1:
+                        all_items.append((k, "HAS"))
+            elif isinstance(items, (list, tuple, set)):
+                for item in items:
+                    if isinstance(item, tuple) and len(item) == 2:
+                        k, state = item
+                        s = str(state).strip().upper()
+                        if s in ("HAS", "NOT"):
+                            all_items.append((k, s))
+                    elif isinstance(item, str):
+                        all_items.append((item, "HAS"))
 
         def fast_has_history(oid):
             if oid in history_set:
@@ -146,9 +162,22 @@ class FilterManager:
 
         # Optimization: Create a fast check function closure that avoids dictionary lookups
         # for string conditions and pre-calculates loop invariants.
-        def create_evaluator(p):
+        def create_evaluator(item):
+            if isinstance(item, tuple):
+                p, state = item
+            else:
+                p, state = item, "HAS"
+
+            is_not = (state == "NOT")
+
             if p == "Any_Problem":
+                if is_not:
+                    return lambda oid, obs, reg: not fast_has_any_problem(oid, obs, reg)
                 return lambda oid, obs, reg: fast_has_any_problem(oid, obs, reg)
+            elif p in ("Historical_Data", "History"):
+                if is_not:
+                    return lambda oid, obs, reg: not fast_has_history(oid)
+                return lambda oid, obs, reg: fast_has_history(oid)
             elif p == "Has_Images":
                 if image_mode == "online":
                     return lambda oid, obs, reg: True
@@ -188,15 +217,19 @@ class FilterManager:
             elif p == "Reviewed_With_Problem":
                 return lambda oid, obs, reg: (bool(obs.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs, reg))
             elif p == "Problem_With_History" or p == "Has_History":
+                if is_not:
+                    return lambda oid, obs, reg: not fast_has_history(oid)
                 return lambda oid, obs, reg: fast_has_history(oid)
             elif p == "Has_Unvalidated":
                 return lambda oid, obs, reg: (str(oid) in unval_set or (str(oid).isdigit() and str(int(str(oid))) in unval_set))
             elif p == "Search_Old_Taxonomy":
                 return lambda oid, obs, reg: (str(oid) in old_tax_matched_set or (str(oid).isdigit() and str(int(str(oid))) in old_tax_matched_set))
             else:
+                if is_not:
+                    return lambda oid, obs, reg: not fast_is_problem_active(oid, p, obs, reg)
                 return lambda oid, obs, reg: fast_is_problem_active(oid, p, obs, reg)
 
-        evaluators = [create_evaluator(p) for p in all_items]
+        evaluators = [create_evaluator(item) for item in all_items]
 
         def get_location_str(val):
             if val is None or val == "" or (isinstance(val, float) and pd.isna(val)):
@@ -212,96 +245,52 @@ class FilterManager:
         # Pre-compute DataFrame index logic as array or list
         indices = df_reg.index.tolist()
 
-        if global_mode == "AND":
-            for oid in indices:
-                obs_row = obs_get(oid)
-                if obs_row is None:
-                    s_oid = str(oid)
-                    obs_row = obs_get(s_oid)
-                    if obs_row is None and s_oid.isdigit():
-                        obs_row = obs_get(int(s_oid), {})
-                        if obs_row is None:
-                            obs_row = {}
+        # Strict universal implicit AND evaluation
+        for oid in indices:
+            obs_row = obs_get(oid)
+            if obs_row is None:
+                s_oid = str(oid)
+                obs_row = obs_get(s_oid)
+                if obs_row is None and s_oid.isdigit():
+                    obs_row = obs_get(int(s_oid), {})
+                    if obs_row is None:
+                        obs_row = {}
 
-                if not_reviewed_only:
-                    if obs_row.get(REVIEWED_COLUMN):
-                        continue
-                    filtered_ids.append(oid)
+            if not_reviewed_only:
+                if obs_row.get(REVIEWED_COLUMN):
+                    continue
+                filtered_ids.append(oid)
+                continue
+
+            # Short-circuit location checks early before executing heavy group evaluations
+            if building_filter and get_location_str(obs_row.get("Building", "")) != building_filter:
+                continue
+            if floor_filter and get_location_str(obs_row.get("Floor", "")) != floor_filter:
+                continue
+            if clean_cabinet_filter:
+                cabinet_val = get_location_str(obs_row.get("Cabinet", "")).lower()
+                if clean_cabinet_filter not in cabinet_val.replace(" ", ""):
                     continue
 
-                # Short-circuit location checks early before executing heavy group evaluations
-                if building_filter and get_location_str(obs_row.get("Building", "")) != building_filter:
-                    continue
-                if floor_filter and get_location_str(obs_row.get("Floor", "")) != floor_filter:
-                    continue
-                if clean_cabinet_filter:
-                    cabinet_val = get_location_str(obs_row.get("Cabinet", "")).lower()
-                    if clean_cabinet_filter not in cabinet_val.replace(" ", ""):
-                        continue
+            reg_row = reg_get(oid)
+            if reg_row is None:
+                s_oid = str(oid)
+                reg_row = reg_get(s_oid)
+                if reg_row is None and s_oid.isdigit():
+                    reg_row = reg_get(int(s_oid), {})
+                    if reg_row is None:
+                        reg_row = {}
 
-                reg_row = reg_get(oid)
-                if reg_row is None:
-                    s_oid = str(oid)
-                    reg_row = reg_get(s_oid)
-                    if reg_row is None and s_oid.isdigit():
-                        reg_row = reg_get(int(s_oid), {})
-                        if reg_row is None:
-                            reg_row = {}
+            if not all_items:
+                filtered_ids.append(oid)
+                continue
 
-                if not all_items:
-                    filtered_ids.append(oid)
-                    continue
-
-                matched = True
-                for eval_fn in evaluators:
-                    if not eval_fn(oid, obs_row, reg_row):
-                        matched = False
-                        break
-                if matched:
-                    filtered_ids.append(oid)
-        else: # OR mode
-            for oid in indices:
-                obs_row = obs_get(oid)
-                if obs_row is None:
-                    s_oid = str(oid)
-                    obs_row = obs_get(s_oid)
-                    if obs_row is None and s_oid.isdigit():
-                        obs_row = obs_get(int(s_oid), {})
-                        if obs_row is None:
-                            obs_row = {}
-
-                if not_reviewed_only:
-                    if obs_row.get(REVIEWED_COLUMN):
-                        continue
-                    filtered_ids.append(oid)
-                    continue
-
-                # Short-circuit location checks early before executing heavy group evaluations
-                if building_filter and get_location_str(obs_row.get("Building", "")) != building_filter:
-                    continue
-                if floor_filter and get_location_str(obs_row.get("Floor", "")) != floor_filter:
-                    continue
-                if clean_cabinet_filter:
-                    cabinet_val = get_location_str(obs_row.get("Cabinet", "")).lower()
-                    if clean_cabinet_filter not in cabinet_val.replace(" ", ""):
-                        continue
-
-                reg_row = reg_get(oid)
-                if reg_row is None:
-                    s_oid = str(oid)
-                    reg_row = reg_get(s_oid)
-                    if reg_row is None and s_oid.isdigit():
-                        reg_row = reg_get(int(s_oid), {})
-                        if reg_row is None:
-                            reg_row = {}
-
-                if not all_items:
-                    filtered_ids.append(oid)
-                    continue
-
-                for eval_fn in evaluators:
-                    if eval_fn(oid, obs_row, reg_row):
-                        filtered_ids.append(oid)
-                        break
+            matched = True
+            for eval_fn in evaluators:
+                if not eval_fn(oid, obs_row, reg_row):
+                    matched = False
+                    break
+            if matched:
+                filtered_ids.append(oid)
 
         return filtered_ids

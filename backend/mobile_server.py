@@ -1394,8 +1394,20 @@ self.addEventListener('fetch', (event) => {
                     combined_loc = _get_combined(loc_col, matched_indices).map(_clean_val).str.lower()
                     matched_indices = matched_indices[combined_loc == loc_val]
 
-                # Specific Problems Filters (from Advanced Filter Modal)
+                # Specific Problems & History Filters (from Advanced Filter Modal)
                 if specific_problems:
+                    # Parse specific problems into dict of {name: state ('has' | 'not')}
+                    parsed_specific_problems = {}
+                    for sp_item in specific_problems:
+                        sp_item = sp_item.strip()
+                        if not sp_item:
+                            continue
+                        if ":" in sp_item:
+                            p_name, p_state = sp_item.split(":", 1)
+                            parsed_specific_problems[p_name.strip()] = p_state.strip().lower()
+                        else:
+                            parsed_specific_problems[sp_item] = "has"
+
                     # Collect schema-defined problems and mapping
                     schema_problems = []
                     problem_to_field = {}
@@ -1422,24 +1434,42 @@ self.addEventListener('fetch', (event) => {
                             if field in df_reg.columns:
                                 raw_vals = df_reg[field].reindex(indices)
                                 is_missing = raw_vals.isna() | (raw_vals.map(_clean_val) == "")
-                                # Check for unknown strings
-                                is_unknown = raw_vals.isna() | raw_vals.map(lambda x: str(x).strip().lower() in ("", "unknown", "?", "ukjent"))
-                                auto_mask = is_missing & ~is_unknown
+                                is_explicitly_unknown = raw_vals.map(lambda x: str(x).strip().lower() in ("unknown", "?", "ukjent", "-", "nan") if pd.notna(x) else False)
+                                auto_mask = is_missing & ~is_explicitly_unknown
                                 return obs_mask | auto_mask
 
                         return obs_mask
 
-                    combined_problem_mask = pd.Series(False, index=matched_indices)
+                    # Apply strict universal AND across each specific problem condition
+                    for p_name, p_state in parsed_specific_problems.items():
+                        is_not = (p_state == "not")
 
-                    for sp in specific_problems:
-                        if sp == "Any_Problem":
+                        if p_name in ("Historical_Data", "History"):
+                            hist_mask = pd.Series([
+                                (oid in history_set or str(oid) in history_set or (str(oid).isdigit() and int(str(oid)) in history_set))
+                                for oid in matched_indices
+                            ], index=matched_indices)
+                            if is_not:
+                                matched_indices = matched_indices[~hist_mask]
+                            else:
+                                matched_indices = matched_indices[hist_mask]
+
+                        elif p_name == "Any_Problem":
+                            any_prob_mask = pd.Series(False, index=matched_indices)
                             for sp_schema in schema_problems:
                                 if "Image" not in sp_schema:
-                                    combined_problem_mask |= get_problem_mask(sp_schema, matched_indices)
-                        else:
-                            combined_problem_mask |= get_problem_mask(sp, matched_indices)
+                                    any_prob_mask |= get_problem_mask(sp_schema, matched_indices)
+                            if is_not:
+                                matched_indices = matched_indices[~any_prob_mask]
+                            else:
+                                matched_indices = matched_indices[any_prob_mask]
 
-                    matched_indices = matched_indices[combined_problem_mask]
+                        else:
+                            prob_mask = get_problem_mask(p_name, matched_indices)
+                            if is_not:
+                                matched_indices = matched_indices[~prob_mask]
+                            else:
+                                matched_indices = matched_indices[prob_mask]
 
                 total_matching = len(matched_indices)
 
@@ -3189,7 +3219,7 @@ INDEX_TEMPLATE = """
     let isReviewed = false;
     let activeStatusFilter = 'all';
     let noImageFilterActive = false;
-    let activeAdvancedFilters = { locations: {}, problems: [] };
+    let activeAdvancedFilters = { locations: {}, problems: {} };
     let activeSortBy = 'location';
     let searchQuery = '';
     let searchDebounceTimer = null;
@@ -4219,13 +4249,53 @@ INDEX_TEMPLATE = """
       fetchList();
     }
 
+    function cycleTriState(btn) {
+      const row = btn.closest('[data-prob-name]');
+      if (!row) return;
+      const pName = row.getAttribute('data-prob-name');
+      const currState = row.getAttribute('data-state') || 'ignore';
+      let nextState = 'ignore';
+      if (currState === 'ignore') nextState = 'has';
+      else if (currState === 'has') nextState = 'not';
+      else nextState = 'ignore';
+
+      row.setAttribute('data-state', nextState);
+      updateTriStateVisual(row, nextState);
+    }
+
+    function updateTriStateVisual(row, state) {
+      const badge = row.querySelector('.tristate-badge');
+      const icon = row.querySelector('.tristate-icon');
+      if (!badge || !icon) return;
+
+      if (state === 'has') {
+        row.className = 'flex items-center justify-between p-2.5 rounded-[2px] border border-fern bg-fern-light/30 transition-colors cursor-pointer touch-press';
+        badge.className = 'tristate-badge px-2.5 py-1 text-[11px] font-bold rounded-[2px] bg-fern text-white shadow-xs';
+        badge.textContent = 'HAS (✓)';
+        icon.textContent = '✓';
+        icon.className = 'tristate-icon text-sm font-bold text-fern';
+      } else if (state === 'not') {
+        row.className = 'flex items-center justify-between p-2.5 rounded-[2px] border border-ember bg-ember-light/30 transition-colors cursor-pointer touch-press';
+        badge.className = 'tristate-badge px-2.5 py-1 text-[11px] font-bold rounded-[2px] bg-ember text-white shadow-xs';
+        badge.textContent = 'NOT (−)';
+        icon.textContent = '−';
+        icon.className = 'tristate-icon text-sm font-bold text-ember';
+      } else {
+        row.className = 'flex items-center justify-between p-2.5 rounded-[2px] border border-bordercol bg-surface hover:bg-tonal1 transition-colors cursor-pointer touch-press';
+        badge.className = 'tristate-badge px-2.5 py-1 text-[11px] font-bold rounded-[2px] bg-tonal2 text-ink-muted';
+        badge.textContent = 'IGNORE';
+        icon.textContent = '□';
+        icon.className = 'tristate-icon text-sm font-normal text-ink-faint';
+      }
+    }
+
     function openFilterModal() {
       // Populate Location Filters
       const locContainer = document.getElementById('filterModalLocations');
       locContainer.innerHTML = '';
       if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
         activeSchema.ui_sections.location.forEach(field => {
-          if (field.type === 'checkbox') return; // Skip bool locations for simplicity, or implement if needed
+          if (field.type === 'checkbox') return; // Skip bool locations for simplicity
 
           let inputHtml = '';
           if (field.type === 'choice' && field.choices) {
@@ -4250,13 +4320,14 @@ INDEX_TEMPLATE = """
         });
       }
 
-      // Populate Specific Problems
+      // Populate Specific Problems & History with Tri-State Controls
       const probContainer = document.getElementById('filterModalProblems');
       probContainer.innerHTML = '';
 
-      // Static specific problems
+      // Static items
       let staticProblems = [
-        { name: "Any_Problem", label: "Any problem (except images)" },
+        { name: "Any_Problem", label: "Any problem (all flags)" },
+        { name: "Historical_Data", label: "Historical Data (Has / No History)" },
         { name: "Images_Missing", label: "Missing Images" }
       ];
 
@@ -4270,13 +4341,27 @@ INDEX_TEMPLATE = """
       const allProblems = staticProblems.concat(dynamicProblems);
 
       allProblems.forEach(p => {
-        const isChecked = activeAdvancedFilters.problems.includes(p.name);
+        const currState = (activeAdvancedFilters.problems && activeAdvancedFilters.problems[p.name]) || 'ignore';
         probContainer.innerHTML += `
-          <label class="flex items-center gap-2 p-1.5 rounded-[2px] hover:bg-tonal1 cursor-pointer">
-            <input type="checkbox" id="filter_prob_${p.name}" value="${p.name}" ${isChecked ? 'checked' : ''} class="w-4 h-4 text-fern rounded-[2px] border-bordercol cursor-pointer" />
-            <span class="text-xs font-sans text-ink">${p.label}</span>
-          </label>
+          <div
+            data-prob-name="${p.name}"
+            data-state="${currState}"
+            onclick="cycleTriState(this)"
+            class="flex items-center justify-between p-2.5 rounded-[2px] border border-bordercol bg-surface hover:bg-tonal1 transition-colors cursor-pointer touch-press"
+          >
+            <div class="flex items-center gap-2.5">
+              <span class="tristate-icon text-sm text-ink-faint font-mono">□</span>
+              <span class="text-xs font-sans font-medium text-ink">${p.label}</span>
+            </div>
+            <span class="tristate-badge px-2.5 py-1 text-[11px] font-bold rounded-[2px] bg-tonal2 text-ink-muted">IGNORE</span>
+          </div>
         `;
+      });
+
+      // Apply initial visual state styling
+      probContainer.querySelectorAll('[data-prob-name]').forEach(row => {
+        const st = row.getAttribute('data-state') || 'ignore';
+        updateTriStateVisual(row, st);
       });
 
       openModal('filterModal');
@@ -4291,7 +4376,7 @@ INDEX_TEMPLATE = """
       const btn = document.getElementById('btnFilterModalTrigger');
       if (!badge) return;
       const hasLocs = activeAdvancedFilters.locations && Object.values(activeAdvancedFilters.locations).some(v => Boolean(v && String(v).trim()));
-      const hasProbs = activeAdvancedFilters.problems && activeAdvancedFilters.problems.length > 0;
+      const hasProbs = activeAdvancedFilters.problems && Object.keys(activeAdvancedFilters.problems).length > 0;
       const isActive = hasLocs || hasProbs;
       if (isActive) {
         badge.classList.remove('hidden');
@@ -4319,12 +4404,14 @@ INDEX_TEMPLATE = """
         });
       }
 
-      // Gather Problems
-      activeAdvancedFilters.problems = [];
-      const probCheckboxes = document.querySelectorAll('#filterModalProblems input[type="checkbox"]');
-      probCheckboxes.forEach(cb => {
-        if (cb.checked) {
-          activeAdvancedFilters.problems.push(cb.value);
+      // Gather Problems with tri-state
+      activeAdvancedFilters.problems = {};
+      const probRows = document.querySelectorAll('#filterModalProblems [data-prob-name]');
+      probRows.forEach(row => {
+        const pName = row.getAttribute('data-prob-name');
+        const pState = row.getAttribute('data-state');
+        if (pName && (pState === 'has' || pState === 'not')) {
+          activeAdvancedFilters.problems[pName] = pState;
         }
       });
 
@@ -4334,15 +4421,18 @@ INDEX_TEMPLATE = """
     }
 
     function clearAdvancedFilters() {
-      activeAdvancedFilters = { locations: {}, problems: [] };
+      activeAdvancedFilters = { locations: {}, problems: {} };
       if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
         activeSchema.ui_sections.location.forEach(field => {
           const el = document.getElementById(`filter_loc_${field.name}`);
           if (el) el.value = '';
         });
       }
-      const probCheckboxes = document.querySelectorAll('#filterModalProblems input[type="checkbox"]');
-      probCheckboxes.forEach(cb => { cb.checked = false; });
+      const probRows = document.querySelectorAll('#filterModalProblems [data-prob-name]');
+      probRows.forEach(row => {
+        row.setAttribute('data-state', 'ignore');
+        updateTriStateVisual(row, 'ignore');
+      });
 
       updateFilterIndicator();
       closeFilterModal();
@@ -4356,24 +4446,25 @@ INDEX_TEMPLATE = """
           url += `&status=${encodeURIComponent(activeStatusFilter)}`;
         }
 
-        // Append No Image filter
-        if (noImageFilterActive) {
-          // If we also had specific problems, we append it, but handled below
-        }
-
         // Append Location Filters
-        for (const [key, val] of Object.entries(activeAdvancedFilters.locations)) {
+        for (const [key, val] of Object.entries(activeAdvancedFilters.locations || {})) {
           url += `&loc_${encodeURIComponent(key)}=${encodeURIComponent(val)}`;
         }
 
-        // Append Specific Problems (merge with No Image pill logic)
-        let combinedProblems = [...activeAdvancedFilters.problems];
-        if (noImageFilterActive && !combinedProblems.includes('Images_Missing')) {
-          combinedProblems.push('Images_Missing');
+        // Append Specific Problems (key:state serialized)
+        const probEntries = [];
+        for (const [pName, pState] of Object.entries(activeAdvancedFilters.problems || {})) {
+          if (pState === 'has' || pState === 'not') {
+            probEntries.push(`${pName}:${pState}`);
+          }
         }
 
-        if (combinedProblems.length > 0) {
-          url += `&specific_problems=${encodeURIComponent(combinedProblems.join(','))}`;
+        if (noImageFilterActive && !probEntries.some(p => p.startsWith('Images_Missing:'))) {
+          probEntries.push('Images_Missing:has');
+        }
+
+        if (probEntries.length > 0) {
+          url += `&specific_problems=${encodeURIComponent(probEntries.join(','))}`;
         }
 
         const res = await apiFetch(url);

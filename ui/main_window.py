@@ -828,7 +828,7 @@ class ObjectProgramUI(
             if "maps_to" in field and field["maps_to"] and field["maps_to"] != "Other" and name != "Other_problem":
                 self.problem_to_field[name] = field["maps_to"]
 
-        # filter (som fÃ¸r)
+        # filter (som før)
         self.filter_problems = self.problem_columns + [
             "Images_Missing",
             "Has_Images",
@@ -840,13 +840,23 @@ class ObjectProgramUI(
             "Extra_Not_Empty",
         ]
 
-        self.filter_vars = {
-            col: tk.BooleanVar(value=False)
-            for col in self.filter_problems
-        }
+        self.filter_vars = {}
+        for col in self.problem_columns:
+            self.filter_vars[col] = tk.StringVar(value="Ignore")
 
-        self.filter_vars["Any_Problem"] = tk.BooleanVar(value=False)
-        # Status combination filters
+        # Tri-state problem and history filters
+        self.filter_vars["Any_Problem"] = tk.StringVar(value="Ignore")
+        self.filter_vars["Historical_Data"] = tk.StringVar(value="Ignore")
+
+        # Status & Boolean filters
+        self.filter_vars["Images_Missing"]        = tk.BooleanVar(value=False)
+        self.filter_vars["Has_Images"]            = tk.BooleanVar(value=False)
+        self.filter_vars["Reviewed"]              = tk.BooleanVar(value=False)
+        self.filter_vars["Not_Reviewed"]          = tk.BooleanVar(value=False)
+        self.filter_vars["Comment_Empty"]         = tk.BooleanVar(value=False)
+        self.filter_vars["Comment_Not_Empty"]     = tk.BooleanVar(value=False)
+        self.filter_vars["Extra_Empty"]           = tk.BooleanVar(value=False)
+        self.filter_vars["Extra_Not_Empty"]       = tk.BooleanVar(value=False)
         self.filter_vars["Reviewed_With_Problem"] = tk.BooleanVar(value=False)
         self.filter_vars["Problem_With_History"]  = tk.BooleanVar(value=False)
         self.filter_vars["Has_History"]           = tk.BooleanVar(value=False)
@@ -854,9 +864,6 @@ class ObjectProgramUI(
         self.filter_vars["Search_Old_Taxonomy"]   = tk.BooleanVar(value=False)
         self.search_old_taxonomy_var              = tk.StringVar(value="")
 
-
-
-        
         self.build_sections()
 
 #-- BUILD SECTIONS
@@ -5218,10 +5225,15 @@ class ObjectProgramUI(
         if query == self._inline_search_placeholder:
             query = ""
 
-        problems = [
-            k for k, v in self.filter_vars.items()
-            if v.get() and k not in ('Images_Missing', 'Has_Images', 'Reviewed', 'Not_Reviewed', 'Problem_With_History', 'Has_History', 'Reviewed_With_Problem')
-        ]
+        problems = []
+        for k, v in self.filter_vars.items():
+            val = v.get()
+            if isinstance(v, tk.StringVar):
+                s_val = str(val).strip().lower()
+                if s_val in ("has", "not"):
+                    problems.append(f"{k}:{s_val}")
+            elif isinstance(v, tk.BooleanVar) and val and k not in ('Images_Missing', 'Has_Images', 'Reviewed', 'Not_Reviewed', 'Problem_With_History', 'Has_History', 'Reviewed_With_Problem'):
+                problems.append(f"{k}:has")
 
         locations = {k: v.get() for k, v in getattr(self, "filter_location_vars", {}).items() if v.get()}
         no_image = bool(self.filter_vars.get('Images_Missing') and self.filter_vars.get('Images_Missing').get())
@@ -6416,13 +6428,21 @@ class ObjectProgramUI(
         return obs_val or auto_val
 
 
-#-------
-
     def build_filter_state(self):
+        active_probs = {}
+        for c, v in self.filter_vars.items():
+            val = v.get()
+            if isinstance(v, tk.StringVar):
+                s_val = str(val).strip().upper()
+                if s_val in ("HAS", "NOT"):
+                    active_probs[c] = s_val
+            elif isinstance(v, tk.BooleanVar) and val:
+                active_probs[c] = "HAS"
+
         return {
-            "problems": [c for c, v in self.filter_vars.items() if v.get()],
-            "unknown": self.filter_unknown_var.get(),
-            "mode": self.filter_mode.get(),
+            "problems": active_probs,
+            "unknown": self.filter_unknown_var.get() if hasattr(self, "filter_unknown_var") else False,
+            "mode": getattr(self, "filter_mode", None).get() if hasattr(self, "filter_mode") else "AND",
         }
 
 #----
@@ -6432,41 +6452,41 @@ class ObjectProgramUI(
         not_reviewed_only = getattr(self, "_filter_not_reviewed_only", False)
         self._filter_not_reviewed_only = False  # reset etter bruk
 
-        filter_state = {
-            "problems": [c for c, v in self.filter_vars.items() if v.get()],
-            "unknown": self.filter_unknown_var.get(),
-            "mode": self.filter_mode.get(),
-        }
+        filter_state = self.build_filter_state()
 
         groups = {
-            "Problems": [],
+            "Problems": {},
             "Images": [],
             "Status": [],
             "Text": [],
             "Unknown": []
         }
 
-       
         for key, var in self.filter_vars.items():
-            if not var.get():
-                continue
-
-            if key in ["Images_Missing", "Has_Images"]:
-                groups["Images"].append(key)
-
-            elif key in self.problem_columns:
-                if "Image" in key:
+            val = var.get()
+            if isinstance(var, tk.StringVar):
+                s_val = str(val).strip().upper()
+                if s_val in ("HAS", "NOT"):
+                    if key in ["Images_Missing", "Has_Images"]:
+                        groups["Images"].append((key, s_val))
+                    elif key in self.problem_columns and "Image" in key:
+                        groups["Images"].append((key, s_val))
+                    else:
+                        groups["Problems"][key] = s_val
+            elif isinstance(var, tk.BooleanVar) and val:
+                if key in ["Images_Missing", "Has_Images"]:
                     groups["Images"].append(key)
-                else:
-                    groups["Problems"].append(key)
-
-            elif key in ["Reviewed", "Not_Reviewed",
-                         "Reviewed_With_Problem", "Problem_With_History", "Has_History",
-                         "Has_Unvalidated", "Search_Old_Taxonomy"]:
-                groups["Status"].append(key)
-
-            elif key in ["Comment_Empty", "Comment_Not_Empty", "Extra_Empty", "Extra_Not_Empty"]:
-                groups["Text"].append(key)
+                elif key in self.problem_columns:
+                    if "Image" in key:
+                        groups["Images"].append(key)
+                    else:
+                        groups["Problems"][key] = "HAS"
+                elif key in ["Reviewed", "Not_Reviewed",
+                             "Reviewed_With_Problem", "Problem_With_History", "Has_History",
+                             "Has_Unvalidated", "Search_Old_Taxonomy"]:
+                    groups["Status"].append(key)
+                elif key in ["Comment_Empty", "Comment_Not_Empty", "Extra_Empty", "Extra_Not_Empty"]:
+                    groups["Text"].append(key)
 
         if filter_state["unknown"]:
             groups["Unknown"].append("Unknown")
@@ -7031,7 +7051,20 @@ class ObjectProgramUI(
 
 
     def update_filter_button_text(self):
-        active = [k for k, v in self.filter_vars.items() if v.get()]
+        active = []
+        for k, v in self.filter_vars.items():
+            val = v.get()
+            if isinstance(v, tk.StringVar):
+                s_val = str(val).strip().upper()
+                if s_val == "HAS":
+                    clean_k = k.replace("_Problem", "").replace("_", " ")
+                    active.append(f"+{clean_k}")
+                elif s_val == "NOT":
+                    clean_k = k.replace("_Problem", "").replace("_", " ")
+                    active.append(f"-{clean_k}")
+            elif isinstance(v, tk.BooleanVar) and val:
+                clean_k = k.replace("_Problem", "").replace("_", " ")
+                active.append(clean_k)
 
         if getattr(self, "filter_unknown_var", None) and self.filter_unknown_var.get():
             active.append("Unknown")
@@ -7053,10 +7086,13 @@ class ObjectProgramUI(
 
     def _quick_filter(self, mode):
         for v in self.filter_vars.values():
-            v.set(False)
+            if isinstance(v, tk.StringVar):
+                v.set("Ignore")
+            else:
+                v.set(False)
 
         if mode == "problems":
-            self.filter_vars["Any_Problem"].set(True)
+            self.filter_vars["Any_Problem"].set("Has")
         elif mode == "images":
             self.filter_vars["Images_Missing"].set(True)
         elif mode == "not_reviewed":
@@ -7064,7 +7100,7 @@ class ObjectProgramUI(
         elif mode == "reviewed_problem":
             self.filter_vars["Reviewed_With_Problem"].set(True)
         elif mode == "has_history":
-            self.filter_vars["Has_History"].set(True)
+            self.filter_vars["Historical_Data"].set("Has")
 
         self.update_filter_button_text()
 
@@ -7297,7 +7333,10 @@ class ObjectProgramUI(
 
     def _clear_filter_quick(self):
         for v in self.filter_vars.values():
-            v.set(False)
+            if isinstance(v, tk.StringVar):
+                v.set("Ignore")
+            else:
+                v.set(False)
         if hasattr(self, "filter_unknown_var"):
             self.filter_unknown_var.set(False)
         self.filter_mode.set("AND")
