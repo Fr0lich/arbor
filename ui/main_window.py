@@ -1125,27 +1125,51 @@ class ObjectProgramUI(
             mb.showwarning("GBIF Check", "Could not fetch accepted name data.", parent=self.root)
             return
 
-        def _get_field_val(*candidates):
-            for name in candidates:
-                if name in self.reg_vars:
-                    return self.reg_vars[name].get().strip()
-            for name in candidates:
-                target = name.lower().replace("_", " ").strip()
-                for k, v in self.reg_vars.items():
-                    if k.lower().replace("_", " ").strip() == target:
-                        return v.get().strip()
+        def _get_live_field_value(*candidates):
+            # 1. Check live widgets in reg_entries (includes multiline Text widgets and Entry widgets)
+            if hasattr(self, "reg_entries") and isinstance(self.reg_entries, dict):
+                for name in candidates:
+                    for k, w in self.reg_entries.items():
+                        if k.lower().replace("_", " ").strip() == name.lower().replace("_", " ").strip():
+                            if isinstance(w, tk.Text):
+                                txt = w.get("1.0", tk.END).strip()
+                                if txt: return txt
+                            elif hasattr(w, "get"):
+                                try:
+                                    txt = str(w.get()).strip()
+                                    if txt: return txt
+                                except Exception:
+                                    pass
+            # 2. Check StringVar bindings in reg_vars
+            if hasattr(self, "reg_vars") and isinstance(self.reg_vars, dict):
+                for name in candidates:
+                    for k, v in self.reg_vars.items():
+                        if k.lower().replace("_", " ").strip() == name.lower().replace("_", " ").strip():
+                            try:
+                                txt = str(v.get()).strip()
+                                if txt: return txt
+                            except Exception:
+                                pass
+            # 3. Check underlying in-memory DataFrame
+            import utils
+            import pandas as pd
+            if getattr(self, "app", None) and getattr(self.app, "df_reg", None) is not None:
+                oid = getattr(self.app, "current_object_id", None)
+                if oid and oid in self.app.df_reg.index:
+                    row = self.app.df_reg.loc[oid]
+                    for name in candidates:
+                        for col in self.app.df_reg.columns:
+                            if col.lower().replace("_", " ").strip() == name.lower().replace("_", " ").strip():
+                                val = row.get(col, "")
+                                if pd.notna(val) and str(val).strip():
+                                    return utils.fmt_pandas_val(val).strip()
             return ""
 
-        def _normalize_classification(s: str) -> str:
-            if not s:
-                return ""
-            import re
-            tokens = [t.strip().lower() for t in re.split(r"[|/;,]+", s) if t.strip()]
-            return " | ".join(tokens)
+        import backend.gbif
 
-        old_author = _get_field_val("Author")
-        old_family = _get_field_val("Family")
-        old_higher_classification = _get_field_val("Higher Classification", "Higher_Classification", "higher_classification", "Classification")
+        old_author = _get_live_field_value("Author", "author")
+        old_family = _get_live_field_value("Family", "family")
+        old_higher_classification = _get_live_field_value("Higher Classification", "Higher_Classification", "higher_classification", "Classification")
 
         new_genus = result.get("genus", "")
         new_species = result.get("species", "")
@@ -1167,10 +1191,10 @@ class ObjectProgramUI(
                 })
 
         # Check for Author update
-        if new_author and new_author != old_author:
+        if new_author and not backend.gbif.is_author_equivalent(old_author, new_author):
             updates_available.append({
                 "field": "Author",
-                "current": old_author,
+                "current": old_author or "(Empty)",
                 "gbif": new_author,
                 "selected": True,
                 "data": {"author": new_author}
@@ -1180,17 +1204,17 @@ class ObjectProgramUI(
         if new_family and new_family.lower() != old_family.lower():
             updates_available.append({
                 "field": "Family",
-                "current": old_family,
+                "current": old_family or "(Empty)",
                 "gbif": new_family,
                 "selected": not bool(old_family), # Default true if currently empty
                 "data": {"family": new_family}
             })
 
         # Check for Higher Classification update
-        if new_higher_classification and _normalize_classification(new_higher_classification) != _normalize_classification(old_higher_classification):
+        if new_higher_classification and not backend.gbif.is_classification_equivalent(old_higher_classification, new_higher_classification):
             updates_available.append({
                 "field": "Higher Classification",
-                "current": old_higher_classification,
+                "current": old_higher_classification or "(Empty)",
                 "gbif": new_higher_classification,
                 "selected": not bool(old_higher_classification), # Default true if currently empty
                 "data": {"higherClassification": new_higher_classification}
@@ -1219,12 +1243,41 @@ class ObjectProgramUI(
 
         notes = []
 
+        def _set_live_field_value(candidates, new_val):
+            val_str = str(new_val) if new_val is not None else ""
+            # Update widgets in reg_entries
+            if hasattr(self, "reg_entries") and isinstance(self.reg_entries, dict):
+                for name in candidates:
+                    for k, w in self.reg_entries.items():
+                        if k.lower().replace("_", " ").strip() == name.lower().replace("_", " ").strip():
+                            if isinstance(w, tk.Text):
+                                w.delete("1.0", tk.END)
+                                w.insert("1.0", val_str)
+                            elif hasattr(w, "delete") and hasattr(w, "insert"):
+                                w.delete(0, tk.END)
+                                w.insert(0, val_str)
+            # Update StringVar in reg_vars
+            if hasattr(self, "reg_vars") and isinstance(self.reg_vars, dict):
+                for name in candidates:
+                    for k, v in self.reg_vars.items():
+                        if k.lower().replace("_", " ").strip() == name.lower().replace("_", " ").strip():
+                            try:
+                                v.set(val_str)
+                            except Exception:
+                                pass
+            # Update in-memory df_reg
+            if getattr(self, "app", None) and getattr(self.app, "df_reg", None) is not None:
+                oid = getattr(self.app, "current_object_id", None)
+                if oid and oid in self.app.df_reg.index:
+                    for name in candidates:
+                        for col in self.app.df_reg.columns:
+                            if col.lower().replace("_", " ").strip() == name.lower().replace("_", " ").strip():
+                                self.app.df_reg.at[oid, col] = val_str
+
         # Update Taxonomy
         if "genus" in result and "species" in result:
-            if "Genus" in self.reg_vars:
-                self.reg_vars["Genus"].set(result["genus"])
-            if "Species" in self.reg_vars:
-                self.reg_vars["Species"].set(result["species"])
+            _set_live_field_value(["Genus", "genus"], result["genus"])
+            _set_live_field_value(["Species", "species"], result["species"])
 
             old_name = f"{old_genus} {old_species} {old_author}".strip()
             if result.get("is_synonym_update"):
@@ -1234,22 +1287,19 @@ class ObjectProgramUI(
 
         # Update Author
         if "author" in result:
-            if "Author" in self.reg_vars:
-                self.reg_vars["Author"].set(result["author"])
+            _set_live_field_value(["Author", "author"], result["author"])
             if "genus" not in result: # If taxonomy wasn't updated, log just author
                 notes.append(f"Author updated from: {old_author or '(Empty)'}.")
 
         # Update Family
         if "family" in result:
-            if "Family" in self.reg_vars:
-                self.reg_vars["Family"].set(result["family"])
+            _set_live_field_value(["Family", "family"], result["family"])
             if old_family:
                 notes.append(f"Family updated from: {old_family}.")
 
         # Update Higher Classification
         if "higherClassification" in result:
-            if "Higher Classification" in self.reg_vars:
-                self.reg_vars["Higher Classification"].set(result["higherClassification"])
+            _set_live_field_value(["Higher Classification", "Higher_Classification", "higher_classification", "Classification"], result["higherClassification"])
             if old_higher_classification:
                 notes.append(f"Higher Classification updated from: {old_higher_classification}.")
 

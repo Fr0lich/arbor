@@ -98,6 +98,74 @@ def get_accepted_name(usage_key: int):
         return {"error": str(e)}
 
 
+def is_author_equivalent(a1: Any, a2: Any) -> bool:
+    """Compare two author strings taking into account abbreviations, spacing, and punctuation."""
+    s1 = str(a1 or "").strip()
+    s2 = str(a2 or "").strip()
+    if not s1 and not s2:
+        return True
+    if not s1 or not s2:
+        return False
+    if s1 == s2:
+        return True
+    norm1 = s1.replace(".", "").replace(",", "").replace("(", "").replace(")", "").replace(" ", "").lower()
+    norm2 = s2.replace(".", "").replace(",", "").replace("(", "").replace(")", "").replace(" ", "").lower()
+    return norm1 == norm2
+
+
+def is_classification_equivalent(existing_val: Any, gbif_val: Any) -> bool:
+    """Compare existing higher classification against GBIF considering rank depth, formatting, and division synonyms."""
+    if existing_val is None or gbif_val is None:
+        return False
+    e_str = str(existing_val).strip()
+    g_str = str(gbif_val).strip()
+    if not e_str and not g_str:
+        return True
+    if not e_str or not g_str:
+        return False
+    if e_str == g_str:
+        return True
+
+    import re
+    def tokenize(s):
+        raw_tokens = re.split(r"[|/;,]+", s)
+        tokens = []
+        for t in raw_tokens:
+            cleaned = t.strip().lower()
+            if cleaned:
+                if cleaned in ("magnoliophyta", "angiospermae", "spermatophyta", "anthophyta"):
+                    cleaned = "tracheophyta"
+                elif cleaned in ("pinophyta", "coniferophyta", "gymnospermae"):
+                    cleaned = "tracheophyta"
+                tokens.append(cleaned)
+        return tokens
+
+    e_tokens = tokenize(e_str)
+    g_tokens = tokenize(g_str)
+
+    if not e_tokens or not g_tokens:
+        return False
+
+    if e_tokens == g_tokens:
+        return True
+
+    set_e = set(e_tokens)
+    set_g = set(g_tokens)
+
+    if set_e == set_g:
+        return True
+
+    # If existing has all GBIF ranks plus extras (e.g. family or subranks), it is equivalent
+    if set_g.issubset(set_e):
+        return True
+
+    # If existing has at least 3 ranks (e.g. Class+Order+Kingdom) and matches GBIF ranks, it is equivalent
+    if len(e_tokens) >= 3 and set_e.issubset(set_g):
+        return True
+
+    return False
+
+
 def _process_single_item(item: Dict[str, Any], cancel_event=None) -> Optional[Dict[str, Any]]:
     """Process a single item against GBIF and return proposed changes if any."""
     if cancel_event and cancel_event.is_set():
@@ -160,11 +228,10 @@ def _process_single_item(item: Dict[str, Any], cancel_event=None) -> Optional[Di
         c_val = current_map[k]
         p_val = proposed_map[k]
         if k == "Higher Classification":
-            def _norm(s):
-                if not s: return ""
-                import re
-                return " | ".join([t.strip().lower() for t in re.split(r"[|/;,]+", s) if t.strip()])
-            if p_val and _norm(p_val) != _norm(c_val):
+            if p_val and not is_classification_equivalent(c_val, p_val):
+                changes.append({"field": k, "old": c_val, "new": p_val})
+        elif k == "Author":
+            if p_val and not is_author_equivalent(c_val, p_val):
                 changes.append({"field": k, "old": c_val, "new": p_val})
         elif k == "Family":
             if p_val and p_val.lower() != c_val.lower():

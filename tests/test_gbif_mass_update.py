@@ -239,3 +239,45 @@ def test_batch_gbif_match_ignores_equivalent_higher_classification():
         assert len(res) == 0  # No changes proposed because they are equivalent!
 
 
+def test_author_equivalence_and_validation():
+    from backend.gbif import is_author_equivalent
+    # Identical with punctuation / dot variations
+    assert is_author_equivalent("L.", "L") is True
+    assert is_author_equivalent("L.", "L.") is True
+    assert is_author_equivalent("(L.) Ehrh.", "(L.) Ehrh.") is True
+    assert is_author_equivalent("Hook. f.", "Hook.f.") is True
+    assert is_author_equivalent("", "") is True
+
+    # Genuine differences
+    assert is_author_equivalent("", "L.") is False
+    assert is_author_equivalent("Ehrh.", "Roth") is False
+    assert is_author_equivalent("L.", "Linnaeus") is False
+
+
+def test_classification_equivalence_subsets_and_synonyms():
+    from backend.gbif import is_classification_equivalent
+    gbif_standard = "Plantae | Tracheophyta | Magnoliopsida | Fagales"
+
+    # Subset with at least 3 ranks (e.g. Tracheophyta + Magnoliopsida + Fagales)
+    assert is_classification_equivalent("Tracheophyta | Magnoliopsida | Fagales", gbif_standard) is True
+    assert is_classification_equivalent("Plantae | Magnoliopsida | Fagales", gbif_standard) is True
+
+    # Superset (with Family)
+    assert is_classification_equivalent("Plantae | Tracheophyta | Magnoliopsida | Fagales | Fagaceae", gbif_standard) is True
+
+    # Traditional division synonym
+    assert is_classification_equivalent("Plantae | Magnoliophyta | Magnoliopsida | Fagales", gbif_standard) is True
+    assert is_classification_equivalent("Plantae | Angiospermae | Magnoliopsida | Fagales", gbif_standard) is True
+
+    # Incomplete high-level only (e.g. only 2 ranks, missing order & class) -> flags for update
+    assert is_classification_equivalent("Plantae | Tracheophyta", gbif_standard) is False
+
+    # Conflicting order
+    assert is_classification_equivalent("Plantae | Tracheophyta | Magnoliopsida | Rosales", gbif_standard) is False
+
+    # Empty vs filled
+    assert is_classification_equivalent("", gbif_standard) is False
+    assert is_classification_equivalent(None, gbif_standard) is False
+
+
+
