@@ -1419,16 +1419,77 @@ class ObjectProgramUI(
             return
 
         prog_win = tk.Toplevel(self.root)
-        prog_win.title("Querying GBIF API...")
-        prog_win.geometry(f"{sc(380)}x{sc(150)}")
+        prog_win.title("Querying GBIF API")
         prog_win.resizable(False, False)
         prog_win.transient(self.root)
         prog_win.grab_set()
 
+        is_dark = getattr(self, "dark_mode_active", False)
+        if is_dark:
+            bg_color = "#181c19"
+            fg_title = "#e8ebe9"
+            fg_status = "#a6adc8"
+            bar_trough = "#141715"
+            bar_color = "#3a7d44"
+            btn_cancel_bg = "#242a25"
+            btn_cancel_fg = "#e8ebe9"
+            btn_cancel_hover = "#2f3630"
+            border_color = "#2c302e"
+        else:
+            bg_color = "#fbfaf8"
+            fg_title = "#2c302e"
+            fg_status = "#444748"
+            bar_trough = "#e9ece5"
+            bar_color = "#2c302e"
+            btn_cancel_bg = "#fbfaf8"
+            btn_cancel_fg = "#2c302e"
+            btn_cancel_hover = "#e9ece5"
+            border_color = "#dadada"
+
+        prog_win.configure(bg=bg_color)
+        import utils
+        utils.center_and_fit_toplevel(prog_win, sc(440), sc(180))
+
+        main_container = tk.Frame(prog_win, bg=bg_color, padx=sc(24), pady=sc(16))
+        main_container.pack(fill="both", expand=True)
+
+        # Title Label
+        tk.Label(
+            main_container,
+            text="Querying GBIF Taxonomy",
+            font=("Segoe UI", sc(12), "bold"),
+            bg=bg_color,
+            fg=fg_title
+        ).pack(anchor="w", pady=(0, sc(6)))
+
         lbl_text = tk.StringVar(value=f"Querying GBIF for 0 of {len(items)} objects...")
-        ttk.Label(prog_win, textvariable=lbl_text, font=("Segoe UI", sc(9))).pack(pady=(sc(15), sc(8)))
-        pbar = ttk.Progressbar(prog_win, maximum=len(items), mode="determinate")
-        pbar.pack(fill="x", padx=sc(20), pady=(0, sc(15)))
+        lbl_status = tk.Label(
+            main_container,
+            textvariable=lbl_text,
+            font=("Consolas", sc(9)),
+            bg=bg_color,
+            fg=fg_status
+        )
+        lbl_status.pack(anchor="w", pady=(0, sc(12)))
+
+        # Progress Bar Style
+        style = ttk.Style(prog_win)
+        style.theme_use("clam")
+        style.configure(
+            "GBIFBatch.Horizontal.TProgressbar",
+            troughcolor=bar_trough,
+            background=bar_color,
+            thickness=sc(8),
+            borderwidth=0
+        )
+        pbar = ttk.Progressbar(
+            main_container,
+            style="GBIFBatch.Horizontal.TProgressbar",
+            orient="horizontal",
+            maximum=len(items),
+            mode="determinate"
+        )
+        pbar.pack(fill="x", pady=(0, sc(14)))
 
         import threading
         cancel_event = threading.Event()
@@ -1437,7 +1498,26 @@ class ObjectProgramUI(
             cancel_event.set()
             prog_win.destroy()
 
-        ttk.Button(prog_win, text="Cancel", command=on_cancel).pack()
+        # Footer with Cancel button
+        btn_cancel = tk.Button(
+            main_container,
+            text="CANCEL",
+            font=("Segoe UI", sc(9), "bold"),
+            bg=btn_cancel_bg,
+            fg=btn_cancel_fg,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            padx=sc(14),
+            pady=sc(5),
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color,
+            command=on_cancel
+        )
+        btn_cancel.pack(side="right")
+        btn_cancel.bind("<Enter>", lambda e: btn_cancel.config(bg=btn_cancel_hover))
+        btn_cancel.bind("<Leave>", lambda e: btn_cancel.config(bg=btn_cancel_bg))
 
         def update_prog(cur, total, cur_oid):
             if prog_win.winfo_exists():
@@ -3872,53 +3952,102 @@ class ObjectProgramUI(
         win.resizable(True, True)
         win.transient(self.root)
 
-        bg_color = "#181c19" if self.dark_mode_active else "#f2f5f1"
+        is_dark = getattr(self, "dark_mode_active", False)
+        bg_color = "#181c19" if is_dark else "#fbfaf8"
+        fg_color = "#e8ebe9" if is_dark else "#2c302e"
+        border_color = "#2c302e" if is_dark else "#dadada"
+        card_bg = "#111412" if is_dark else "#ffffff"
+        btn_sec_bg = card_bg
+        btn_sec_fg = fg_color
+        btn_sec_hover = "#242a25" if is_dark else "#e9ece5"
+
         win.configure(background=bg_color)
 
         import utils
-        utils.center_and_fit_toplevel(win, sc(400), sc(250))
+        utils.center_and_fit_toplevel(win, sc(420), sc(280))
 
         win.bind("<Escape>", lambda e: win.destroy())
 
-        frame = ttk.Frame(win, padding=sc(16))
+        frame = tk.Frame(win, bg=bg_color, padx=sc(16), pady=sc(14))
         frame.pack(fill="both", expand=True)
 
         # Header
-        lbl_header = ttk.Label(
-            frame,
-            text="DATA OPTIONS",
-            font=("Segoe UI", sc(12), "bold"),
-            foreground="#2c302e" if not self.dark_mode_active else "#e8ebe9"
-        )
-        lbl_header.pack(anchor="w", pady=(0, 10))
+        hdr_frame = tk.Frame(frame, bg=bg_color)
+        hdr_frame.pack(fill="x", pady=(0, sc(12)))
 
-        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 15))
+        tk.Label(
+            hdr_frame,
+            text="DATA OPTIONS",
+            font=("Segoe UI", sc(11), "bold"),
+            fg=fg_color,
+            bg=bg_color
+        ).pack(anchor="w")
+
+        tk.Frame(hdr_frame, bg=border_color, height=1).pack(fill="x", pady=(sc(6), 0))
 
         def run_cmd(cmd):
             win.destroy()
             cmd()
 
         # Buttons
-        ttk.Button(
+        books_btn = tk.Button(
             frame,
             text="Load books",
-            command=lambda: run_cmd(self.load_books_file)
-        , cursor="hand2").pack(fill="x", pady=(0, 6))
+            command=lambda: run_cmd(self.load_books_file),
+            font=("Segoe UI", sc(9.5), "bold"),
+            bg=btn_sec_bg,
+            fg=btn_sec_fg,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            padx=sc(12),
+            pady=sc(7),
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color
+        )
+        books_btn.pack(fill="x", pady=(0, sc(8)))
+        books_btn.bind("<Enter>", lambda e: books_btn.config(bg=btn_sec_hover))
+        books_btn.bind("<Leave>", lambda e: books_btn.config(bg=btn_sec_bg))
 
-        ttk.Button(
+        hist_btn = tk.Button(
             frame,
             text="Load earlier databases",
-            command=lambda: run_cmd(self.load_historical_databases)
-        , cursor="hand2").pack(fill="x", pady=(0, 12))
+            command=lambda: run_cmd(self.load_historical_databases),
+            font=("Segoe UI", sc(9.5), "bold"),
+            bg=btn_sec_bg,
+            fg=btn_sec_fg,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            padx=sc(12),
+            pady=sc(7),
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color
+        )
+        hist_btn.pack(fill="x", pady=(0, sc(12)))
+        hist_btn.bind("<Enter>", lambda e: hist_btn.config(bg=btn_sec_hover))
+        hist_btn.bind("<Leave>", lambda e: hist_btn.config(bg=btn_sec_bg))
 
-        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(0, 12))
+        tk.Frame(frame, bg=border_color, height=1).pack(fill="x", pady=(0, sc(10)))
 
-        ttk.Checkbutton(
-            frame, cursor="hand2",
+        chk = tk.Checkbutton(
+            frame,
+            cursor="hand2",
             text="Show all historical data",
             variable=self.show_all_history_var,
-            command=self._on_history_toggle
-        ).pack(anchor="w")
+            command=self._on_history_toggle,
+            font=("Segoe UI", sc(9.5)),
+            bg=bg_color,
+            fg=fg_color,
+            activebackground=bg_color,
+            activeforeground=fg_color,
+            selectcolor=bg_color,
+            bd=0,
+            highlightthickness=0
+        )
+        chk.pack(anchor="w")
 
 
 
@@ -4492,43 +4621,59 @@ class ObjectProgramUI(
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
         dialog.resizable(True, True)
-        dialog.minsize(sc(550), sc(400))  # U2-G: scaled to DPI
+        dialog.minsize(sc(580), sc(420))
         dialog.grab_set()
 
-        s = getattr(self, "_scale", 1.0)
+        is_dark = getattr(self, "dark_mode_active", False)
+        bg_color = "#181c19" if is_dark else "#fbfaf8"
+        fg_color = "#e8ebe9" if is_dark else "#2c302e"
+        text_bg = "#111412" if is_dark else "#ffffff"
+        text_fg = "#e8ebe9" if is_dark else "#2c302e"
+        border_color = "#2c302e" if is_dark else "#dadada"
+        btn_primary_bg = "#3a7d44" if is_dark else "#2c302e"
+        btn_primary_hover = "#4b9e57" if is_dark else "#3d4240"
+        btn_sec_bg = bg_color
+        btn_sec_fg = fg_color
+        btn_sec_hover = "#242a25" if is_dark else "#e9ece5"
+
+        dialog.configure(bg=bg_color)
+
         import utils
-        utils.center_and_fit_toplevel(dialog, int(600 * s), int(450 * s))
+        utils.center_and_fit_toplevel(dialog, sc(640), sc(480))
 
         # Main frame
-        frame = ttk.Frame(dialog, padding=15)
+        frame = tk.Frame(dialog, bg=bg_color, padx=sc(16), pady=sc(16))
         frame.pack(fill="both", expand=True)
 
         # Title / Header
-        header_lbl = ttk.Label(
+        header_lbl = tk.Label(
             frame, text=message,
             font=("Segoe UI", sc(11), "bold"),
-            wraplength=int(550 * s),
+            fg="#c93a40" if is_crash else fg_color,
+            bg=bg_color,
+            wraplength=sc(600),
             justify="left"
         )
-        header_lbl.pack(anchor="w", pady=(0, 10))
+        header_lbl.pack(anchor="w", pady=(0, sc(10)))
 
         # Text container for scrollbar
-        text_frame = ttk.Frame(frame)
-        text_frame.pack(fill="both", expand=True, pady=5)
+        text_frame = tk.Frame(frame, bg=bg_color, bd=1, relief="solid", highlightbackground=border_color)
+        text_frame.pack(fill="both", expand=True, pady=sc(4))
 
         text_area = tk.Text(
             text_frame,
             wrap="none",
-            font=("Courier New", sc(9.5)),
-            bg="#1e1e1e", # dark background
-            fg="#d4d4d4", # light gray text
-            insertbackground="white",
-            highlightthickness=1,
-            highlightbackground="#3c3c3c",
-            relief="flat"
+            font=("JetBrains Mono", sc(9.5)),
+            bg=text_bg,
+            fg=text_fg,
+            insertbackground=text_fg,
+            highlightthickness=0,
+            relief="flat",
+            padx=sc(8),
+            pady=sc(8)
         )
         text_area.insert("1.0", traceback_text)
-        text_area.configure(state="disabled") # read-only
+        text_area.configure(state="disabled")  # read-only
         text_area.pack(side="left", fill="both", expand=True)
 
         # Scrollbars
@@ -4537,11 +4682,11 @@ class ObjectProgramUI(
         text_area.config(yscrollcommand=v_scroll.set)
 
         h_scroll = ttk.Scrollbar(frame, orient="horizontal", command=text_area.xview)
-        h_scroll.pack(fill="x", pady=(2, 8))
+        h_scroll.pack(fill="x", pady=(sc(4), sc(10)))
         text_area.config(xscrollcommand=h_scroll.set)
 
         # Footer frame with copy and close buttons
-        footer = ttk.Frame(frame)
+        footer = tk.Frame(frame, bg=bg_color)
         footer.pack(fill="x", side="bottom")
 
         def copy_traceback():
@@ -4550,8 +4695,20 @@ class ObjectProgramUI(
             copy_btn.config(text="Copied!")
             self.root.after(1500, lambda: copy_btn.config(text="Copy to Clipboard"))
 
-        copy_btn = ttk.Button(footer, text="Copy to Clipboard", command=copy_traceback, cursor="hand2")
+        copy_btn = tk.Button(
+            footer, text="Copy to Clipboard",
+            command=copy_traceback,
+            font=("Segoe UI", sc(9.5)),
+            bg=btn_sec_bg, fg=btn_sec_fg,
+            relief="flat", bd=0, cursor="hand2",
+            padx=sc(12), pady=sc(5),
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color
+        )
         copy_btn.pack(side="left")
+        copy_btn.bind("<Enter>", lambda e: copy_btn.config(bg=btn_sec_hover))
+        copy_btn.bind("<Leave>", lambda e: copy_btn.config(bg=btn_sec_bg))
 
         if is_crash:
             def emergency_autosave():
@@ -4576,14 +4733,41 @@ class ObjectProgramUI(
                     from tkinter import messagebox
                     messagebox.showerror("Emergency Save Failed", f"Failed to autosave:\n{e}", parent=dialog)
 
-            save_btn = ttk.Button(footer, text="Emergency Autosave", command=emergency_autosave, cursor="hand2")
-            save_btn.pack(side="left", padx=10)
+            save_btn = tk.Button(
+                footer, text="Emergency Autosave",
+                command=emergency_autosave,
+                font=("Segoe UI", sc(9.5), "bold"),
+                bg="#ba1a1a", fg="#ffffff",
+                relief="flat", bd=0, cursor="hand2",
+                padx=sc(12), pady=sc(5)
+            )
+            save_btn.pack(side="left", padx=sc(10))
+            save_btn.bind("<Enter>", lambda e: save_btn.config(bg="#d93838"))
+            save_btn.bind("<Leave>", lambda e: save_btn.config(bg="#ba1a1a"))
 
-            quit_btn = ttk.Button(footer, text="Quit Application", command=self.root.destroy, cursor="hand2")
+            quit_btn = tk.Button(
+                footer, text="Quit Application",
+                command=self.root.destroy,
+                font=("Segoe UI", sc(9.5), "bold"),
+                bg=btn_primary_bg, fg="#ffffff",
+                relief="flat", bd=0, cursor="hand2",
+                padx=sc(14), pady=sc(5)
+            )
             quit_btn.pack(side="right")
+            quit_btn.bind("<Enter>", lambda e: quit_btn.config(bg=btn_primary_hover))
+            quit_btn.bind("<Leave>", lambda e: quit_btn.config(bg=btn_primary_bg))
         else:
-            close_btn = ttk.Button(footer, text="Close", command=dialog.destroy, cursor="hand2")
+            close_btn = tk.Button(
+                footer, text="Close",
+                command=dialog.destroy,
+                font=("Segoe UI", sc(9.5), "bold"),
+                bg=btn_primary_bg, fg="#ffffff",
+                relief="flat", bd=0, cursor="hand2",
+                padx=sc(16), pady=sc(5)
+            )
             close_btn.pack(side="right")
+            close_btn.bind("<Enter>", lambda e: close_btn.config(bg=btn_primary_hover))
+            close_btn.bind("<Leave>", lambda e: close_btn.config(bg=btn_primary_bg))
 
     def show_banner(self, text, banner_type="info", duration_ms=4000, action_callback=None):
         """Displays an inline notification banner at the top of the workspace with a slide-in transition."""
@@ -6006,22 +6190,40 @@ class ObjectProgramUI(
         win.resizable(True, True)
         win.transient(self.root)
 
-        import utils
-        utils.center_and_fit_toplevel(win, sc(380), sc(340))
+        is_dark = getattr(self, "dark_mode_active", False)
+        bg_color = "#181c19" if is_dark else "#fbfaf8"
+        fg_color = "#e8ebe9" if is_dark else "#2c302e"
+        border_color = "#2c302e" if is_dark else "#dadada"
+        btn_primary_bg = "#3a7d44" if is_dark else "#2c302e"
+        btn_primary_hover = "#4b9e57" if is_dark else "#3d4240"
+        btn_primary_fg = "#ffffff"
+        btn_sec_bg = bg_color
+        btn_sec_fg = fg_color
+        btn_sec_hover = "#242a25" if is_dark else "#e9ece5"
 
-        frame = ttk.Frame(win, padding=15)
+        win.configure(bg=bg_color)
+
+        import utils
+        utils.center_and_fit_toplevel(win, sc(400), sc(360))
+
+        frame = tk.Frame(win, bg=bg_color, padx=sc(16), pady=sc(14))
         frame.pack(fill="both", expand=True)
 
         # Header Title
+        hdr_frame = tk.Frame(frame, bg=bg_color)
+        hdr_frame.pack(fill="x", pady=(0, sc(12)))
+
         tk.Label(
-            frame,
+            hdr_frame,
             text="EDIT LOCATION",
             font=("Segoe UI", sc(11), "bold"),
-            fg="#2c302e"
-        ).pack(anchor="w", pady=(0, 15))
+            fg=fg_color,
+            bg=bg_color
+        ).pack(anchor="w")
+        tk.Frame(hdr_frame, bg=border_color, height=1).pack(fill="x", pady=(sc(6), 0))
 
         # Input Grid container
-        grid_frame = ttk.Frame(frame)
+        grid_frame = tk.Frame(frame, bg=bg_color)
         grid_frame.pack(fill="both", expand=True)
 
         orig_location_entries = list(getattr(self, "location_entries", []))
@@ -6034,8 +6236,12 @@ class ObjectProgramUI(
             var = self.location_vars.get(name)
             
             # Label
-            lbl = ttk.Label(grid_frame, text=name, font=("Segoe UI", sc(9.5), "bold"))
-            lbl.grid(row=row, column=0, sticky="w", padx=(0, 10), pady=6)
+            lbl = tk.Label(
+                grid_frame, text=name,
+                font=("Segoe UI", sc(9.5), "bold"),
+                fg=fg_color, bg=bg_color
+            )
+            lbl.grid(row=row, column=0, sticky="w", padx=(0, sc(10)), pady=sc(5))
 
             # Input widget
             if ftype == "choice":
@@ -6048,9 +6254,12 @@ class ObjectProgramUI(
                     state="readonly" if name != "Stored as" else "normal"
                 )
             elif ftype == "checkbox":
-                widget = ttk.Checkbutton(
+                widget = tk.Checkbutton(
                     grid_frame, cursor="hand2", text="", variable=var,
                     onvalue="True", offvalue="False",
+                    bg=bg_color, fg=fg_color,
+                    activebackground=bg_color, activeforeground=fg_color,
+                    selectcolor=bg_color, bd=0, highlightthickness=0,
                     command=lambda n=name, v=var: self._on_checkbox_change(n, v)
                 )
             else:
@@ -6059,7 +6268,7 @@ class ObjectProgramUI(
                     state="disabled" if field.get("readonly") else "normal"
                 )
 
-            widget.grid(row=row, column=1, sticky="ew", pady=6)
+            widget.grid(row=row, column=1, sticky="ew", pady=sc(5))
             self.location_entries.append(widget)
 
             # Keyboard navigation bindings for entries inside pop-up
@@ -6068,8 +6277,8 @@ class ObjectProgramUI(
         grid_frame.columnconfigure(1, weight=1)
 
         # Footer actions
-        footer = ttk.Frame(frame)
-        footer.pack(fill="x", side="bottom", pady=(15, 0))
+        footer = tk.Frame(frame, bg=bg_color)
+        footer.pack(fill="x", side="bottom", pady=(sc(12), 0))
 
         def save_and_close():
             self.commit_current_object()
@@ -6078,31 +6287,31 @@ class ObjectProgramUI(
         # DONE Button (Primary)
         done_btn = tk.Button(
             footer, text="DONE",
-            bg="#2c302e", fg="#ffffff",
+            bg=btn_primary_bg, fg=btn_primary_fg,
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0, cursor="hand2",
-            padx=16, pady=6,
+            padx=sc(16), pady=sc(6),
             command=save_and_close
         )
         done_btn.pack(side="right")
-        done_btn.bind("<Enter>", lambda e: done_btn.config(bg="#333333"))
-        done_btn.bind("<Leave>", lambda e: done_btn.config(bg="#2c302e"))
+        done_btn.bind("<Enter>", lambda e: done_btn.config(bg=btn_primary_hover))
+        done_btn.bind("<Leave>", lambda e: done_btn.config(bg=btn_primary_bg))
 
         # CANCEL Button (Secondary outline style)
         cancel_btn = tk.Button(
             footer, text="CANCEL",
-            bg=win.cget("bg"), fg="#2c302e",
+            bg=btn_sec_bg, fg=btn_sec_fg,
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0, cursor="hand2",
-            padx=12, pady=5,
+            padx=sc(12), pady=sc(5),
             highlightthickness=1,
-            highlightbackground="#747878",
-            highlightcolor="#747878",
+            highlightbackground=border_color,
+            highlightcolor=border_color,
             command=win.destroy
         )
-        cancel_btn.pack(side="right", padx=(0, 10))
-        cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg="#e2e2e2"))
-        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=win.cget("bg")))
+        cancel_btn.pack(side="right", padx=(0, sc(10)))
+        cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg=btn_sec_hover))
+        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=btn_sec_bg))
 
         # Esc binding to close
         win.bind("<Escape>", lambda e: win.destroy())
@@ -6224,25 +6433,40 @@ class ObjectProgramUI(
         win.resizable(True, True)
         win.transient(self.root)
 
-        import utils
-        utils.center_and_fit_toplevel(win, sc(400), sc(350))
+        is_dark = getattr(self, "dark_mode_active", False)
+        bg_color = "#181c19" if is_dark else "#fbfaf8"
+        fg_color = "#e8ebe9" if is_dark else "#2c302e"
+        border_color = "#2c302e" if is_dark else "#dadada"
+        btn_primary_bg = "#3a7d44" if is_dark else "#2c302e"
+        btn_primary_hover = "#4b9e57" if is_dark else "#3d4240"
+        btn_primary_fg = "#ffffff"
+        btn_sec_bg = bg_color
+        btn_sec_fg = fg_color
+        btn_sec_hover = "#242a25" if is_dark else "#e9ece5"
 
-        frame = ttk.Frame(win, padding=15)
+        win.configure(bg=bg_color)
+
+        import utils
+        utils.center_and_fit_toplevel(win, sc(440), sc(380))
+
+        frame = tk.Frame(win, bg=bg_color, padx=sc(16), pady=sc(14))
         frame.pack(fill="both", expand=True)
 
         # Header
-        header_frame = ttk.Frame(frame)
-        header_frame.pack(fill="x", pady=(0, 15))
+        header_frame = tk.Frame(frame, bg=bg_color)
+        header_frame.pack(fill="x", pady=(0, sc(12)))
 
         tk.Label(
             header_frame,
             text="⚠ EDIT PROBLEM FLAGS",
             font=("Segoe UI", sc(11), "bold"),
-            fg="#c93a40"
-        ).pack(side="left")
+            fg="#c93a40",
+            bg=bg_color
+        ).pack(anchor="w")
+        tk.Frame(header_frame, bg=border_color, height=1).pack(fill="x", pady=(sc(6), 0))
 
         # Checkbutton Grid container
-        grid_frame = ttk.Frame(frame)
+        grid_frame = tk.Frame(frame, bg=bg_color)
         grid_frame.pack(fill="both", expand=True)
 
         orig_problem_checkbuttons = list(getattr(self, "problem_checkbuttons", []))
@@ -6259,16 +6483,24 @@ class ObjectProgramUI(
             row = i // 2
             col = i % 2
 
-            cb = ttk.Checkbutton(
+            cb = tk.Checkbutton(
                 grid_frame, cursor="hand2",
                 text=name.replace("_", " "),
                 variable=var,
+                font=("Segoe UI", sc(9.5)),
+                bg=bg_color,
+                fg=fg_color,
+                activebackground=bg_color,
+                activeforeground=fg_color,
+                selectcolor=bg_color,
+                bd=0,
+                highlightthickness=0,
                 command=lambda: (
                     self.update_reg_fields_visibility(skip_snap=True),
                     self.commit_current_object()
                 )
             )
-            cb.grid(row=row, column=col, sticky="w", padx=10, pady=8)
+            cb.grid(row=row, column=col, sticky="w", padx=sc(8), pady=sc(6))
             self.problem_checkbuttons.append(cb)
 
             self.keybindings.bind_problem_shortcuts(cb)
@@ -6277,19 +6509,20 @@ class ObjectProgramUI(
         grid_frame.columnconfigure(1, weight=1)
 
         # Separator line before image status
-        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=(10, 6))
+        tk.Frame(frame, bg=border_color, height=1).pack(fill="x", pady=(sc(10), sc(6)))
 
         # Images missing label using the existing textvariable
-        lbl = ttk.Label(
+        lbl = tk.Label(
             frame,
             textvariable=self.images_missing_var,
-            foreground="#c93a40",
+            fg="#c93a40",
+            bg=bg_color,
             font=("Segoe UI", sc(9.5), "bold")
         )
-        lbl.pack(anchor="w", pady=(0, 10))
+        lbl.pack(anchor="w", pady=(0, sc(10)))
 
         # Footer actions
-        footer = ttk.Frame(frame)
+        footer = tk.Frame(frame, bg=bg_color)
         footer.pack(fill="x", side="bottom")
 
         def save_and_close():
@@ -6299,30 +6532,31 @@ class ObjectProgramUI(
         # DONE Button (Primary)
         done_btn = tk.Button(
             footer, text="DONE",
-            bg="#2c302e", fg="#ffffff",
+            bg=btn_primary_bg, fg=btn_primary_fg,
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0, cursor="hand2",
-            padx=16, pady=6,
+            padx=sc(16), pady=sc(6),
             command=save_and_close
         )
         done_btn.pack(side="right")
-        done_btn.bind("<Enter>", lambda e: done_btn.config(bg="#333333"))
-        done_btn.bind("<Leave>", lambda e: done_btn.config(bg="#2c302e"))
+        done_btn.bind("<Enter>", lambda e: done_btn.config(bg=btn_primary_hover))
+        done_btn.bind("<Leave>", lambda e: done_btn.config(bg=btn_primary_bg))
 
         # CANCEL Button (Secondary outline)
         cancel_btn = tk.Button(
             footer, text="CANCEL",
-            bg=win.cget("bg"), fg="#2c302e",
+            bg=btn_sec_bg, fg=btn_sec_fg,
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0, cursor="hand2",
-            padx=12, pady=5,
+            padx=sc(12), pady=sc(5),
             highlightthickness=1,
-            highlightbackground="#747878",
-            highlightcolor="#747878",
+            highlightbackground=border_color,
+            highlightcolor=border_color,
             command=win.destroy
         )
-        cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg="#e2e2e2"))
-        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=win.cget("bg")))
+        cancel_btn.pack(side="right", padx=(0, sc(10)))
+        cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg=btn_sec_hover))
+        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=btn_sec_bg))
 
         win.bind("<Escape>", lambda e: win.destroy())
         

@@ -197,52 +197,73 @@ def show_shortcuts(ui):
 
     win = tk.Toplevel(ui.root)
     win.title("Keyboard Shortcuts HUD")
-    utils.center_and_fit_toplevel(win, 800, 650)
+    utils.center_and_fit_toplevel(win, sc(840), sc(680))
 
     is_dark = getattr(ui, "dark_mode_active", False)
-    bg_color = "#181c19" if is_dark else "#f2f5f1"
+    bg_color = "#181c19" if is_dark else "#fbfaf8"
     fg_title = "#e8ebe9" if is_dark else "#2c302e"
-    fg_label = "#a6adc8" if is_dark else "#444748"
-    fg_nomatch = "#c93a40" if is_dark else "#c93a40"
-    fg_cat = "#89b4fa" if is_dark else "#1976d2"
-    bg_key = "#11111b" if is_dark else "#e0e0e0"
-    fg_key = "#f9e2af" if is_dark else "#000000"
-    fg_desc = "#a6adc8" if is_dark else "#444748"
-    fg_footer = "#585b70" if is_dark else "#757575"
+    fg_label = "#a6adc8" if is_dark else "#757d77"
+    fg_nomatch = "#c93a40"
+    fg_cat = "#3a7d44"
+    bg_key = "#111412" if is_dark else "#f2f5f1"
+    fg_key = "#e8ebe9" if is_dark else "#2c302e"
+    key_border = "#2c302e" if is_dark else "#dadada"
+    fg_desc = "#c6cac7" if is_dark else "#444748"
+    fg_footer = "#757d77"
+    border_color = "#2c302e" if is_dark else "#dadada"
+    btn_primary_bg = "#3a7d44" if is_dark else "#2c302e"
+    btn_primary_hover = "#4b9e57" if is_dark else "#3d4240"
 
     win.configure(background=bg_color)
     win.transient(ui.root)
     win.bind("<Escape>", lambda e: win.destroy())
 
     title_frame = tk.Frame(win, bg=bg_color)
-    title_frame.pack(fill="x", padx=20, pady=(15, 10))
+    title_frame.pack(fill="x", padx=sc(24), pady=(sc(16), sc(8)))
 
     tk.Label(
         title_frame,
-        text="Keyboard Shortcuts Cheat Sheet",
-        font=("Segoe UI", sc(16), "bold"),
+        text="KEYBOARD SHORTCUTS",
+        font=("Segoe UI", sc(13), "bold"),
         fg=fg_title,
         bg=bg_color
-    ).pack(side="left")
-
-    search_frame = tk.Frame(win, bg=bg_color)
-    search_frame.pack(fill="x", padx=20, pady=(0, 15))
+    ).pack(anchor="w")
 
     tk.Label(
-        search_frame,
-        text="Search: ",
-        font=("Segoe UI", sc(10), "bold"),
+        title_frame,
+        text="Comprehensive navigation, focus, and curation shortcut cheat sheet.",
+        font=("Segoe UI", sc(9)),
         fg=fg_label,
         bg=bg_color
-    ).pack(side="left")
+    ).pack(anchor="w", pady=(sc(2), 0))
+
+    search_frame = tk.Frame(win, bg=bg_color, padx=sc(24))
+    search_frame.pack(fill="x", pady=(0, sc(12)))
+
+    search_card = tk.Frame(search_frame, bg=bg_key, bd=1, relief="solid", highlightbackground=border_color, highlightthickness=1, padx=sc(10), pady=sc(6))
+    search_card.pack(fill="x")
+
+    tk.Label(
+        search_card,
+        text="🔍",
+        font=("Segoe UI", sc(9.5)),
+        fg=fg_label,
+        bg=bg_key
+    ).pack(side="left", padx=(0, sc(6)))
 
     search_var = tk.StringVar()
-    search_ent = ttk.Entry(search_frame, textvariable=search_var, font=("Segoe UI", sc(10)))
-    search_ent.pack(side="left", fill="x", expand=True, padx=(5, 0))
+    search_ent = tk.Entry(
+        search_card, textvariable=search_var,
+        font=("Segoe UI", sc(9.5)),
+        bg=bg_key, fg=fg_key,
+        insertbackground=fg_key,
+        bd=0, highlightthickness=0
+    )
+    search_ent.pack(side="left", fill="x", expand=True)
     search_ent.focus_set()
 
     content_outer = tk.Frame(win, bg=bg_color)
-    content_outer.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+    content_outer.pack(fill="both", expand=True, padx=sc(24), pady=(0, sc(10)))
 
     canvas = tk.Canvas(content_outer, bg=bg_color, highlightthickness=0)
     scrollbar = ttk.Scrollbar(content_outer, orient="vertical", command=canvas.yview)
@@ -322,34 +343,42 @@ def show_shortcuts(ui):
                 font=("Segoe UI", sc(11), "italic"),
                 fg=fg_nomatch,
                 bg=bg_color
-            ).pack(pady=20)
+            ).pack(pady=sc(20))
             return
 
         for cat, items in categories.items():
             cat_frame = tk.Frame(scroll_content, bg=bg_color)
-            cat_frame.pack(fill="x", pady=(10, 5), anchor="w")
+            cat_frame.pack(fill="x", pady=(sc(12), sc(4)), anchor="w")
 
             tk.Label(
                 cat_frame,
                 text=cat,
-                font=("Segoe UI", sc(11), "bold"),
+                font=("JetBrains Mono", sc(10), "bold"),
                 fg=fg_cat,
                 bg=bg_color
-            ).pack(anchor="w", padx=5)
+            ).pack(side="left")
+
+            tk.Frame(cat_frame, bg=border_color, height=1).pack(side="left", fill="x", expand=True, padx=(sc(10), 0))
 
             grid_frame = tk.Frame(scroll_content, bg=bg_color)
-            grid_frame.pack(fill="x", padx=15, pady=2, anchor="w")
-            grid_frame.columnconfigure(0, minsize=220)
+            grid_frame.pack(fill="x", padx=sc(4), pady=sc(2), anchor="w")
+            grid_frame.columnconfigure(0, minsize=sc(240))
             grid_frame.columnconfigure(1, weight=1)
 
             for r, (keys, desc) in enumerate(items):
-                key_container = tk.Frame(grid_frame, bg=bg_key, bd=1, relief="ridge", padx=6, pady=3)
-                key_container.grid(row=r, column=0, sticky="w", pady=3, padx=(0, 10))
+                key_container = tk.Frame(
+                    grid_frame, bg=bg_key,
+                    bd=1, relief="solid",
+                    highlightbackground=key_border,
+                    highlightthickness=1,
+                    padx=sc(8), pady=sc(3)
+                )
+                key_container.grid(row=r, column=0, sticky="w", pady=sc(3), padx=(0, sc(12)))
 
                 tk.Label(
                     key_container,
                     text=keys,
-                    font=("Consolas", sc(10), "bold"),
+                    font=("JetBrains Mono", sc(9.5), "bold"),
                     fg=fg_key,
                     bg=bg_key
                 ).pack()
@@ -357,18 +386,18 @@ def show_shortcuts(ui):
                 tk.Label(
                     grid_frame,
                     text=desc,
-                    font=("Segoe UI", sc(10)),
+                    font=("Segoe UI", sc(9.5)),
                     fg=fg_desc,
                     bg=bg_color,
-                    wraplength=550,
+                    wraplength=sc(520),
                     justify="left"
-                ).grid(row=r, column=1, sticky="w", pady=3)
+                ).grid(row=r, column=1, sticky="w", pady=sc(3))
 
     draw_shortcuts()
     search_var.trace_add("write", lambda *args: draw_shortcuts(search_var.get()))
 
     footer = tk.Frame(win, bg=bg_color)
-    footer.pack(fill="x", side="bottom", pady=10, padx=20)
+    footer.pack(fill="x", side="bottom", pady=sc(10), padx=sc(24))
 
     tk.Label(
         footer,
@@ -378,9 +407,19 @@ def show_shortcuts(ui):
         bg=bg_color
     ).pack(side="left")
 
-    ttk.Button(
+    close_btn = tk.Button(
         footer,
-        text="Close",
+        text="CLOSE",
         command=win.destroy,
-        cursor="hand2"
-    ).pack(side="right")
+        font=("Segoe UI", sc(9.5), "bold"),
+        bg=btn_primary_bg,
+        fg="#ffffff",
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        padx=sc(16),
+        pady=sc(5)
+    )
+    close_btn.pack(side="right")
+    close_btn.bind("<Enter>", lambda e: close_btn.config(bg=btn_primary_hover))
+    close_btn.bind("<Leave>", lambda e: close_btn.config(bg=btn_primary_bg))

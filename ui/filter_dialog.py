@@ -305,6 +305,7 @@ class FilterDialogController:
         l_group = create_group(loc_inner, "Location Fields")
         loc_fields = ui.app.config.get("ui_sections", {}).get("location", [])
 
+        style = ttk.Style(win)
         style.configure("Flat.TCombobox", fieldbackground=COLORS["surface"], background=COLORS["surface"], borderwidth=0)
 
         for field in loc_fields:
@@ -432,6 +433,7 @@ class FilterDialogController:
     @staticmethod
     def load_filter_preset(ui):
         """Open preset picker and apply chosen preset."""
+        from config import sc
         import utils
         prefs_dir = os.path.dirname(getattr(config, "_PREFS_PATH", "user_prefs.json"))
         presets_file = os.path.join(prefs_dir, "filter_presets.json")
@@ -444,16 +446,82 @@ class FilterDialogController:
             data = json.load(f)
 
         if not data:
+            if hasattr(ui, "show_banner"):
+                ui.show_banner("No presets saved yet.", "info")
             return
 
-        win = tk.Toplevel(ui.filter_window)
+        win = tk.Toplevel(ui.filter_window if hasattr(ui, "filter_window") and ui.filter_window and ui.filter_window.winfo_exists() else ui.root)
         win.title("Load Preset")
-        utils.center_and_fit_toplevel(win, 250, 300)
+        win.resizable(True, True)
+        win.transient(ui.root)
 
-        lb = tk.Listbox(win)
-        lb.pack(fill="both", expand=True, padx=10, pady=10)
+        is_dark = getattr(ui, "dark_mode_active", False)
+        bg_color = "#181c19" if is_dark else "#fbfaf8"
+        fg_color = "#e8ebe9" if is_dark else "#2c302e"
+        fg_muted = "#a6adc8" if is_dark else "#757d77"
+        border_color = "#2c302e" if is_dark else "#dadada"
+        list_bg = "#111412" if is_dark else "#ffffff"
+        btn_primary_bg = "#3a7d44" if is_dark else "#2c302e"
+        btn_primary_hover = "#4b9e57" if is_dark else "#3d4240"
+        btn_sec_bg = bg_color
+        btn_sec_fg = fg_color
+        btn_sec_hover = "#242a25" if is_dark else "#e9ece5"
+
+        win.configure(bg=bg_color)
+        utils.center_and_fit_toplevel(win, sc(380), sc(440))
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        frame = tk.Frame(win, bg=bg_color, padx=sc(16), pady=sc(14))
+        frame.pack(fill="both", expand=True)
+
+        # Header Title
+        hdr_frame = tk.Frame(frame, bg=bg_color)
+        hdr_frame.pack(fill="x", pady=(0, sc(12)))
+
+        tk.Label(
+            hdr_frame,
+            text="LOAD FILTER PRESET",
+            font=("Segoe UI", sc(11), "bold"),
+            fg=fg_color,
+            bg=bg_color
+        ).pack(anchor="w")
+
+        tk.Label(
+            hdr_frame,
+            text=f"Select a preset ({len(data)} available) to apply:",
+            font=("Segoe UI", sc(9)),
+            fg=fg_muted,
+            bg=bg_color
+        ).pack(anchor="w", pady=(sc(2), 0))
+
+        tk.Frame(hdr_frame, bg=border_color, height=1).pack(fill="x", pady=(sc(8), 0))
+
+        # List Container with 1px border
+        list_container = tk.Frame(frame, bg=list_bg, bd=1, relief="solid", highlightbackground=border_color, highlightthickness=1)
+        list_container.pack(fill="both", expand=True, pady=(0, sc(12)))
+
+        lb = tk.Listbox(
+            list_container,
+            bg=list_bg,
+            fg=fg_color,
+            font=("Segoe UI", sc(10)),
+            selectbackground="#3a7d44",
+            selectforeground="#ffffff",
+            activestyle="none",
+            relief="flat",
+            bd=0,
+            highlightthickness=0
+        )
+        sb = ttk.Scrollbar(list_container, orient="vertical", command=lb.yview)
+        lb.configure(yscrollcommand=sb.set)
+
+        lb.pack(side="left", fill="both", expand=True, padx=sc(4), pady=sc(4))
+        sb.pack(side="right", fill="y")
+
         for k in data.keys():
             lb.insert("end", k)
+        if lb.size() > 0:
+            lb.selection_set(0)
 
         def on_load():
             sel = lb.curselection()
@@ -462,7 +530,7 @@ class FilterDialogController:
             name = lb.get(sel[0])
             preset = data[name]
 
-            FilterDialogController.clear_filter(ui, ui.filter_window, destroy_win=False)
+            FilterDialogController.clear_filter(ui, getattr(ui, "filter_window", None), destroy_win=False)
 
             for k, v in preset.get("vars", {}).items():
                 if k in ui.filter_vars:
@@ -487,7 +555,39 @@ class FilterDialogController:
             ui.update_filter_button_text()
             win.destroy()
 
-        ttk.Button(win, text="Load", command=on_load, cursor="hand2").pack(pady=10)
+        lb.bind("<Double-Button-1>", lambda e: on_load())
+        lb.bind("<Return>", lambda e: on_load())
+
+        # Footer Actions
+        footer = tk.Frame(frame, bg=bg_color)
+        footer.pack(fill="x", side="bottom")
+
+        load_btn = tk.Button(
+            footer, text="LOAD PRESET",
+            bg=btn_primary_bg, fg="#ffffff",
+            font=("Segoe UI", sc(9.5), "bold"),
+            relief="flat", bd=0, cursor="hand2",
+            padx=sc(16), pady=sc(6),
+            command=on_load
+        )
+        load_btn.pack(side="right")
+        load_btn.bind("<Enter>", lambda e: load_btn.config(bg=btn_primary_hover))
+        load_btn.bind("<Leave>", lambda e: load_btn.config(bg=btn_primary_bg))
+
+        cancel_btn = tk.Button(
+            footer, text="CANCEL",
+            bg=btn_sec_bg, fg=btn_sec_fg,
+            font=("Segoe UI", sc(9.5), "bold"),
+            relief="flat", bd=0, cursor="hand2",
+            padx=sc(12), pady=sc(5),
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color,
+            command=win.destroy
+        )
+        cancel_btn.pack(side="right", padx=(0, sc(10)))
+        cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg=btn_sec_hover))
+        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=btn_sec_bg))
 
     @staticmethod
     def filter_nav_down(ui, event=None):

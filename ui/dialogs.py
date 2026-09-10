@@ -1611,13 +1611,15 @@ class LoadingWindow:
             fg_title = "#e8ebe9"
             fg_status = "#a6adc8"
             bar_trough = "#141715"
-            bar_color = "#cba6f7"
+            bar_color = "#3a7d44"
+            border_color = "#2c302e"
         else:
             bg_color = "#fbfaf8"
             fg_title = "#2c302e"
             fg_status = "#444748"
             bar_trough = "#e9ece5"
-            bar_color = "#000000"
+            bar_color = "#3a7d44"
+            border_color = "#dadada"
 
         self.win.configure(bg=bg_color)
         self.win.resizable(False, False)
@@ -1625,30 +1627,34 @@ class LoadingWindow:
         # Center the splash window
         from config import sc
         import utils
-        utils.center_and_fit_toplevel(self.win, sc(450), sc(180))
+        utils.center_and_fit_toplevel(self.win, sc(460), sc(190))
         
         # Prevent user closing it manually
         self.win.protocol("WM_DELETE_WINDOW", lambda: None)
         self.win.grab_set()
+
+        # Inner container card with subtle 1px border
+        card = tk.Frame(self.win, bg=bg_color, bd=1, relief="solid", highlightbackground=border_color, highlightthickness=1)
+        card.pack(fill="both", expand=True, padx=sc(10), pady=sc(10))
         
-        # Title Label
+        # Header Label
         tk.Label(
-            self.win,
+            card,
             text="Initializing Application",
-            font=("Segoe UI", sc(14), "bold"),
+            font=("Segoe UI", sc(13), "bold"),
             bg=bg_color,
             fg=fg_title
-        ).pack(pady=(sc(24), sc(10)))
+        ).pack(pady=(sc(18), sc(6)))
         
         # Progress status label (saved as attribute to easily update)
         self.status_lbl = tk.Label(
-            self.win,
+            card,
             text="Loading Excel database...",
-            font=("Courier New", sc(9)),
+            font=("JetBrains Mono", sc(9)),
             bg=bg_color,
             fg=fg_status
         )
-        self.status_lbl.pack(pady=(0, sc(8)))
+        self.status_lbl.pack(pady=(0, sc(12)))
         
         # Progress Bar
         style = ttk.Style(self.win)
@@ -1661,12 +1667,12 @@ class LoadingWindow:
             borderwidth=0
         )
         self.progress_bar = ttk.Progressbar(
-            self.win,
+            card,
             style="Splash.Horizontal.TProgressbar",
             orient="horizontal",
             mode="determinate"
         )
-        self.progress_bar.pack(fill="x", padx=sc(35), pady=sc(10))
+        self.progress_bar.pack(fill="x", padx=sc(28), pady=(0, sc(16)))
         
         # Register on UI instance
         self.ui._loading_window = self
