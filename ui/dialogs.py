@@ -203,8 +203,8 @@ class StartupDialog:
     Layout:
         win (bg=surface) → centered card (bg=white, 1px outline border)
             header  → arbor + Project Setup
-            body    → 4 sections: DB path, Import, Image Source, Recent Projects
-            footer  → LAUNCH SYSTEM (Primary.TButton style)
+            body    → 3 streamlined sections: Database (+ Profile & Wizard), Image Source, Recent Projects
+            footer  → Help | Mobile Companion | LAUNCH SYSTEM
     """
 
     # ------------------------------------------------------------------
@@ -232,11 +232,6 @@ class StartupDialog:
         import config as _cfg
         self._scale = getattr(_cfg, "_detected_scale", 1.0)
 
-
-        self._last_scale = self._scale
-        self._compact = False
-
-
         # ── Window shell ──────────────────────────────────────────────
         self.win = tk.Toplevel(parent)
         self.win.title("arbor — Project Setup")
@@ -245,11 +240,9 @@ class StartupDialog:
         screen_w = self.win.winfo_screenwidth()
         screen_h = self.win.winfo_screenheight()
         min_w = min(480, max(360, screen_w - 40))
-        min_h = min(540, max(420, screen_h - 80))
+        min_h = min(520, max(400, screen_h - 80))
         self.win.minsize(min_w, min_h)
         self.win.configure(bg=self.C_BG)
-
-        self.win.bind("<Configure>", self._on_resize)
 
         # Force to front
         self.win.lift()
@@ -258,11 +251,12 @@ class StartupDialog:
         self.win.focus_force()
 
         self.completed = False
+        self.mobile_mode = False
         self.win.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # State vars
         self.db_path_var      = tk.StringVar()
-        self.import_path_var  = tk.StringVar()
+        self.db_var           = tk.StringVar()
         self.image_mode       = tk.StringVar(value="folder")
         self.image_folder_var = tk.StringVar()
 
@@ -270,6 +264,7 @@ class StartupDialog:
         last = _cfg.get_last_dir("last_db_dir")
         if last and os.path.isfile(last):
             self.db_path_var.set(last)
+            self._auto_detect_config(last)
 
         # Pre-populate image folder path from last used
         last_img_dir = _cfg.get_last_dir("last_image_dir")
@@ -284,11 +279,10 @@ class StartupDialog:
         import utils
 
         w = int(640 * self._scale)
-        h = int(680 * self._scale)
+        h = int(640 * self._scale)
 
         self.win.geometry(f"{w}x{h}")
         utils.center_and_fit_toplevel(self.win, w, h)
-
 
         # Refresh LAUNCH state based on pre-populated path
         self._refresh_launch_state()
@@ -377,12 +371,9 @@ class StartupDialog:
         if frame:
             _apply_tag(frame)
 
-
-
     def _sep(self, parent, color=None, vertical=False):
         """1px separator line."""
         color = color or self.C_OUTLINE_VAR
-        orient = "horizontal" if not vertical else "vertical"
         if vertical:
             tk.Frame(parent, bg=color, width=1).pack(side="left", fill="y")
         else:
@@ -442,94 +433,38 @@ class StartupDialog:
         body = tk.Frame(card, bg=self.C_CARD, padx=int(16*s), pady=int(16*s))
         body.pack(fill="both", expand=True)
 
-        # 1 — Select Database
-        self._build_file_row(
-            body,
-            label_text="Select Database",
-            path_var=self.db_path_var,
-            entry_bg=self.C_SURFACE_LOW,
-            placeholder=None,
-            browse_cmd=self.browse_database,
-            status_type="required",
-            tutorial_id="db_path_entry",
-            action_btn_text="+ Create New Database",
-            action_cmd=self.create_new_database_startup
-        )
-        tk.Frame(body, bg=self.C_CARD, height=int(16*s)).pack()  # spacer
+        # 1 — Select Database & Configuration Profile
+        self._build_database_section(body)
+        tk.Frame(body, bg=self.C_CARD, height=int(18*s)).pack()  # spacer
 
-        # 2 — Import Excel/CSV (optional)
-        self._build_file_row(
-            body,
-            label_text="Import Excel/CSV (Optional Data Source)",
-            path_var=self.import_path_var,
-            entry_bg=self.C_CARD,
-            placeholder="No file selected...",
-            browse_cmd=self.browse_import,
-            status_type="optional",
-        )
-        tk.Frame(body, bg=self.C_CARD, height=int(16*s)).pack()  # spacer
-
-        # 3 — Image Source toggle
+        # 2 — Image Source toggle
         self._build_image_source(body)
         tk.Frame(body, bg=self.C_CARD, height=int(20*s)).pack()  # spacer
 
-        # 4 — Recent Projects
+        # 3 — Recent Projects
         self._build_recent_table(body)
-        tk.Frame(body, bg=self.C_CARD, height=int(8*s)).pack()   # spacer
-
-        # Advanced link (Books / Historical DB — demoted)
-
-
-        adv = tk.Button(
-            body,
-            text="Advanced Setup (Books / Historical databases)",
-            bg=self.C_SURFACE_LOW,
-            fg=self.C_ON_SURFACE,
-            font=("Segoe UI", sc(9), "bold"),
-            relief="flat",
-            bd=0,
-            anchor="w",
-            cursor="hand2",
-            padx=10,
-            pady=6,
-            command=self._show_advanced,
-            highlightthickness=1,
-            highlightbackground=self.C_OUTLINE
-        )
-
-        adv.pack(anchor="w", fill="x", pady=(6, 0))
-        
-        # Hover effect
-        adv.bind("<Enter>", lambda e: adv.config(
-            bg=self.C_HOVER,
-            fg=self.C_PRIMARY
-        ))
-        adv.bind("<Leave>", lambda e: adv.config(
-            bg=self.C_SURFACE_LOW,
-            fg=self.C_ON_SURFACE
-        ))
 
     # ------------------------------------------------------------------
     # Section Header helper
     # ------------------------------------------------------------------
 
-    def _build_section_header(self, parent, text, status_type=None, action_btn_text=None, action_cmd=None):
+    def _build_section_header(self, parent, text, status_type=None):
         s = self._scale
         header_frame = tk.Frame(parent, bg=self.C_CARD)
-        header_frame.pack(anchor="w", fill="x", pady=(0, int(2*s)))
+        header_frame.pack(anchor="w", fill="x", pady=(0, int(4*s)))
 
         # Determine badge text and color
         badge_text = ""
         badge_color = ""
         if status_type == "required":
             badge_text = " REQUIRED "
-            badge_color = "#c93a40" # Red
+            badge_color = "#c93a40"  # Red
         elif status_type == "recommended":
             badge_text = " RECOMMENDED "
-            badge_color = "#3a7d44" # Green
+            badge_color = "#3a7d44"  # Green
         elif status_type == "optional":
             badge_text = " OPTIONAL "
-            badge_color = "#747878" # Gray
+            badge_color = "#747878"  # Gray
 
         if badge_text:
             badge_lbl = tk.Label(
@@ -549,45 +484,26 @@ class StartupDialog:
         )
         lbl.pack(side="left")
 
-        if action_btn_text and action_cmd:
-            btn = tk.Button(
-                header_frame, text=action_btn_text,
-                bg=self.C_SURFACE_LOW, fg=self.C_PRIMARY,
-                font=("Segoe UI", sc(8.5), "bold"),
-                relief="flat", bd=0, cursor="hand2",
-                padx=sc(6), pady=sc(1),
-                command=action_cmd,
-                highlightthickness=1, highlightbackground=self.C_OUTLINE
-            )
-            btn.pack(side="right")
-            btn.bind("<Enter>", lambda e, b=btn: b.config(bg=self.C_HOVER))
-            btn.bind("<Leave>", lambda e, b=btn: b.config(bg=self.C_SURFACE_LOW))
-
         return header_frame
 
     # ------------------------------------------------------------------
-    # File-row helper (label + entry + browse button)
+    # Database Section (File Entry + Profile Dropdown + New DB Button)
     # ------------------------------------------------------------------
 
-    def _build_file_row(self, parent, label_text, path_var, entry_bg,
-                        placeholder, browse_cmd, status_type=None, tutorial_id=None,
-                        action_btn_text=None, action_cmd=None):
+    def _build_database_section(self, parent):
         s = self._scale
-        self._build_section_header(
-            parent, label_text, status_type=status_type,
-            action_btn_text=action_btn_text, action_cmd=action_cmd
-        )
+        self._build_section_header(parent, "Select Database", status_type="required")
 
+        # Database File Entry Row
         row = tk.Frame(parent, bg=self.C_CARD)
-        if tutorial_id:
-            row.tutorial_id = tutorial_id
+        row.tutorial_id = "db_path_entry"
         row.pack(fill="x", expand=True)
 
         entry = tk.Entry(
             row,
-            textvariable=path_var,
-            readonlybackground=entry_bg,
-            bg=entry_bg,
+            textvariable=self.db_path_var,
+            readonlybackground=self.C_SURFACE_LOW,
+            bg=self.C_SURFACE_LOW,
             fg=self.C_ON_SURFACE,
             font=("Courier New", sc(10)),
             relief="flat",
@@ -598,25 +514,22 @@ class StartupDialog:
         )
         entry.pack(side="left", fill="x", expand=True, ipady=int(6*s))
 
-        # Show placeholder in muted color when empty
-        if placeholder:
-            def _update_placeholder(*_):
-                val = path_var.get()
-                entry.config(
-                    fg=(self.C_OUTLINE if not val else self.C_ON_SURFACE),
-                )
-                if not val:
-                    entry.config(state="normal")
-                    entry.delete(0, "end")
-                    entry.insert(0, placeholder)
-                    entry.config(state="readonly", fg=self.C_OUTLINE)
-                else:
-                    entry.config(fg=self.C_ON_SURFACE)
-            path_var.trace_add("write", _update_placeholder)
-            _update_placeholder()
+        # Placeholder update
+        placeholder = "No database file selected..."
+        def _update_placeholder(*_):
+            val = self.db_path_var.get()
+            if not val:
+                entry.config(state="normal")
+                entry.delete(0, "end")
+                entry.insert(0, placeholder)
+                entry.config(state="readonly", fg=self.C_OUTLINE)
+            else:
+                entry.config(fg=self.C_ON_SURFACE)
+        self.db_path_var.trace_add("write", _update_placeholder)
+        _update_placeholder()
 
-        # Browse button (32×32, attached right, 1px left border via highlight trick)
-        btn = tk.Button(
+        # Browse button
+        browse_btn = tk.Button(
             row,
             text="…",
             bg=self.C_HEADER_BG,
@@ -626,17 +539,78 @@ class StartupDialog:
             bd=0,
             cursor="hand2",
             width=3,
-            command=browse_cmd,
+            command=self.browse_database,
             highlightthickness=1,
             highlightbackground=self.C_OUTLINE,
         )
-        btn.pack(side="right", ipady=int(5*s))
-        btn.bind("<Enter>", lambda e: btn.config(bg=self.C_HOVER))
-        btn.bind("<Leave>", lambda e: btn.config(bg=self.C_HEADER_BG))
+        browse_btn.pack(side="right", ipady=int(5*s))
+        browse_btn.bind("<Enter>", lambda e: browse_btn.config(bg=self.C_HOVER))
+        browse_btn.bind("<Leave>", lambda e: browse_btn.config(bg=self.C_HEADER_BG))
 
-        if path_var is self.db_path_var:
-            # Track changes to enable/disable LAUNCH button
-            path_var.trace_add("write", lambda *_: self._refresh_launch_state())
+        self.db_path_var.trace_add("write", lambda *_: self._refresh_launch_state())
+
+        # Sub-row for Actions and Database Profile selection
+        sub_row = tk.Frame(parent, bg=self.C_CARD)
+        sub_row.pack(fill="x", pady=(int(8*s), 0))
+
+        # Prominent "+ Create New Database" button
+        create_btn = tk.Button(
+            sub_row,
+            text="+ Create New Database",
+            bg=self.C_SURFACE_LOW,
+            fg=self.C_PRIMARY,
+            font=("Segoe UI", sc(9), "bold"),
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            padx=int(10*s),
+            pady=int(4*s),
+            command=self.create_new_database_startup,
+            highlightthickness=1,
+            highlightbackground=self.C_OUTLINE
+        )
+        create_btn.pack(side="left")
+        create_btn.bind("<Enter>", lambda e: create_btn.config(bg=self.C_HOVER))
+        create_btn.bind("<Leave>", lambda e: create_btn.config(bg=self.C_SURFACE_LOW))
+
+        # Database Profile / Config selector on right
+        profile_frame = tk.Frame(sub_row, bg=self.C_CARD)
+        profile_frame.pack(side="right")
+
+        tk.Label(
+            profile_frame,
+            text="Profile:",
+            bg=self.C_CARD,
+            fg=self.C_ON_VARIANT,
+            font=("Segoe UI", sc(9), "bold")
+        ).pack(side="left", padx=(0, 4))
+
+        db_names = list(DATABASE_CONFIGS.keys())
+        if not self.db_var.get() and db_names:
+            self.db_var.set(db_names[0])
+
+        self.db_dropdown = ttk.Combobox(
+            profile_frame,
+            textvariable=self.db_var,
+            values=db_names,
+            state="readonly",
+            cursor="hand2",
+            width=18
+        )
+        self.db_dropdown.pack(side="left")
+
+    def _auto_detect_config(self, path):
+        """Auto-detect database configuration from filename, updating self.db_var."""
+        if not path:
+            return
+        basename = os.path.basename(path).lower()
+        for name in DATABASE_CONFIGS.keys():
+            if name.lower() in basename or basename in name.lower():
+                self.db_var.set(name)
+                return
+        # If no substring match, default to first available
+        if DATABASE_CONFIGS and not self.db_var.get():
+            self.db_var.set(next(iter(DATABASE_CONFIGS)))
 
     # ------------------------------------------------------------------
     # Image Source 3-segment toggle
@@ -677,7 +651,6 @@ class StartupDialog:
                 command=lambda m=mode: self._set_image_mode(m),
             )
             if i < len(segments) - 1:
-                # Right-border separator via a thin frame
                 btn.pack(side="left", fill="both", expand=True, ipady=int(6*s))
                 tk.Frame(toggle_outer, bg=self.C_OUTLINE, width=1).pack(side="left", fill="y")
             else:
@@ -686,82 +659,87 @@ class StartupDialog:
 
         # Local folder sub-row (hidden unless "folder" is selected)
         self._folder_row = tk.Frame(self._image_source_container, bg=self.C_CARD)
-        self._build_file_row(
-            self._folder_row,
-            label_text="Local Image Directory",
-            path_var=self.image_folder_var,
-            entry_bg=self.C_SURFACE_LOW,
-            placeholder="No folder selected...",
-            browse_cmd=self.select_folder,
-        )
+        self._build_folder_picker_row(self._folder_row)
 
         self._set_image_mode("folder")  # initial state
+
+    def _build_folder_picker_row(self, parent):
+        s = self._scale
+        self._build_section_header(parent, "Local Image Directory")
+
+        row = tk.Frame(parent, bg=self.C_CARD)
+        row.pack(fill="x", expand=True)
+
+        entry = tk.Entry(
+            row,
+            textvariable=self.image_folder_var,
+            readonlybackground=self.C_SURFACE_LOW,
+            bg=self.C_SURFACE_LOW,
+            fg=self.C_ON_SURFACE,
+            font=("Courier New", sc(10)),
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=self.C_OUTLINE,
+            highlightcolor=self.C_PRIMARY,
+            state="readonly",
+        )
+        entry.pack(side="left", fill="x", expand=True, ipady=int(6*s))
+
+        placeholder = "No folder selected..."
+        def _update_folder_ph(*_):
+            val = self.image_folder_var.get()
+            if not val:
+                entry.config(state="normal")
+                entry.delete(0, "end")
+                entry.insert(0, placeholder)
+                entry.config(state="readonly", fg=self.C_OUTLINE)
+            else:
+                entry.config(fg=self.C_ON_SURFACE)
+        self.image_folder_var.trace_add("write", _update_folder_ph)
+        _update_folder_ph()
+
+        btn = tk.Button(
+            row,
+            text="…",
+            bg=self.C_HEADER_BG,
+            fg=self.C_ON_VARIANT,
+            font=("Segoe UI", sc(11)),
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            width=3,
+            command=self.select_folder,
+            highlightthickness=1,
+            highlightbackground=self.C_OUTLINE,
+        )
+        btn.pack(side="right", ipady=int(5*s))
+        btn.bind("<Enter>", lambda e: btn.config(bg=self.C_HOVER))
+        btn.bind("<Leave>", lambda e: btn.config(bg=self.C_HEADER_BG))
 
     def _set_image_mode(self, mode):
         self.image_mode.set(mode)
 
-        # ✅ 1. Update button styles
+        # 1. Update button styles
         for m, btn in self._seg_buttons.items():
             if m == mode:
                 btn.config(bg=self.C_PRIMARY, fg=self.C_ON_PRIMARY)
             else:
                 btn.config(bg=self.C_CARD, fg=self.C_ON_VARIANT)
-
-                # Clean rebind
                 btn.unbind("<Enter>")
                 btn.unbind("<Leave>")
-
                 btn.bind("<Enter>", lambda e, b=btn: b.config(bg=self.C_HOVER))
                 btn.bind("<Leave>", lambda e, b=btn, bm=m: b.config(
                     bg=self.C_CARD if bm != self.image_mode.get() else self.C_PRIMARY
                 ))
 
-        # ✅ 2. Show / hide folder row (MUST be outside loop)
+        # 2. Show / hide folder row
         if mode == "folder":
             if not self._folder_row.winfo_ismapped():
-                self._folder_row.pack(fill="x", pady=(int(4 * self._scale), 0))
-                self._folder_row.update_idletasks()  # ✅ animation polish
-                self._resize_to_fit()
+                self._folder_row.pack(fill="x", pady=(int(6 * self._scale), 0))
+                self._folder_row.update_idletasks()
         else:
             if self._folder_row.winfo_ismapped():
                 self._folder_row.pack_forget()
-
-        # ✅ 3. Enable / disable contents
-        state = "normal" if mode == "folder" else "disabled"
-
-        for child in self._folder_row.winfo_children():
-            for sub in child.winfo_children():
-                try:
-                    if isinstance(sub, tk.Label):
-                        sub.config(
-                            fg=self.C_ON_SURFACE if state == "normal" else self.C_OUTLINE
-                        )
-                    else:
-                        sub.configure(state=state)
-                except Exception:
-                    pass
-
-
-    def _resize_to_fit(self):
-        try:
-            self.win.update_idletasks()
-            req_h = self._outer.winfo_reqheight()
-            canv_h = self._outer.master.winfo_height()
-            if canv_h > 1 and req_h > canv_h:
-                cur_win_h = self.win.winfo_height()
-                missing_h = req_h - canv_h
-
-                max_h = self.win.winfo_screenheight() - 100
-                target_win_h = min(cur_win_h + missing_h, max_h)
-
-                if target_win_h > cur_win_h:
-                    geom = self.win.geometry()
-                    m = re.match(r"(\d+)x(\d+)([-+]\d+)([-+]\d+)", geom)
-                    if m:
-                        w, h, x, y = m.groups()
-                        self.win.geometry(f"{w}x{target_win_h}{x}{y}")
-        except Exception:
-            pass
 
     # ------------------------------------------------------------------
     # Recent Projects table
@@ -770,7 +748,7 @@ class StartupDialog:
     def _build_recent_table(self, parent):
         s = self._scale
         self._label_md(parent, "Recent Projects", bg=self.C_CARD).pack(
-            anchor="w", pady=(0, int(2*s))
+            anchor="w", pady=(0, int(4*s))
         )
 
         table = tk.Frame(
@@ -789,9 +767,6 @@ class StartupDialog:
         self._label_md(hdr, "FILE PATH", bg=self.C_SURFACE_LOW).pack(
             side="left", padx=int(8*s), anchor="w"
         )
-        self._label_md(hdr, "LAST MODIFIED", bg=self.C_SURFACE_LOW).pack(
-            side="right", padx=int(8*s), anchor="e"
-        )
         self._sep(table, self.C_OUTLINE)
 
         # Rows
@@ -809,10 +784,9 @@ class StartupDialog:
         else:
             for i, entry in enumerate(recent[:5]):
                 path = entry.get("path", "")
-                modified = entry.get("modified", "")
-                self._build_recent_row(table, path, modified, i)
+                self._build_recent_row(table, path, i)
 
-    def _build_recent_row(self, table, path, modified, index):
+    def _build_recent_row(self, table, path, index):
         s = self._scale
         row = tk.Frame(table, bg=self.C_CARD, height=int(28*s), cursor="hand2")
         row.pack(fill="x")
@@ -826,67 +800,19 @@ class StartupDialog:
         )
         path_lbl.pack(side="left", padx=int(8*s), fill="x", expand=True)
 
-        path_lbl._last_width = -1
-        import tkinter.font as tkfont
-
-        # Cache font so it's not recreated on every resize event
-        lbl_font = tkfont.Font(font=("Courier New", sc(9)))
-
-        def _on_configure(e):
-            width = e.width
-            if width <= 10 or width == getattr(path_lbl, "_last_width", -1):
-                return
-            path_lbl._last_width = width
-
-            if lbl_font.measure(path) <= width:
-                path_lbl.config(text=path)
-                return
-
-            ellipsis = "…"
-            low = 0
-            high = len(path)
-            best_trunc = ""
-
-            while low <= high:
-                mid = (low + high) // 2
-                trunc = path[-mid:] if mid > 0 else ""
-                test_str = ellipsis + trunc
-
-                if lbl_font.measure(test_str) <= width:
-                    best_trunc = test_str
-                    low = mid + 1
-                else:
-                    high = mid - 1
-
-            if not best_trunc:
-                best_trunc = ellipsis
-            path_lbl.config(text=best_trunc)
-
-        path_lbl.bind("<Configure>", _on_configure)
-
-        date_lbl = tk.Label(
-            row, text=modified,
-            bg=self.C_CARD, fg=self.C_ON_VARIANT,
-            font=("Courier New", sc(9)),
-            anchor="e", cursor="hand2", width=12
-        )
-        date_lbl.pack(side="right", padx=int(8*s))
-
         # Hover + click for each widget in the row
         def _hover_on(e):
             row.config(bg=self.C_HOVER)
             path_lbl.config(bg=self.C_HOVER, fg=self.C_PRIMARY)
-            date_lbl.config(bg=self.C_HOVER)
 
         def _hover_off(e):
             row.config(bg=self.C_CARD)
             path_lbl.config(bg=self.C_CARD, fg=self.C_ON_SURFACE)
-            date_lbl.config(bg=self.C_CARD)
 
         def _click(e, p=path):
             self.select_recent(p)
 
-        for widget in (row, path_lbl, date_lbl):
+        for widget in (row, path_lbl):
             widget.bind("<Enter>", _hover_on)
             widget.bind("<Leave>", _hover_off)
             widget.bind("<Button-1>", _click)
@@ -915,16 +841,11 @@ class StartupDialog:
         )
         self.ready_status_label.pack(side="top", fill="x", pady=(0, int(4*s)))
 
-        # Progress bar (hidden by default, shows during loading)
+        # Progress bar (hidden by default)
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(
             footer, variable=self.progress_var, maximum=100
         )
-        # Not packed yet — shown in _show_progress()
-
-
-
-
 
         # HELP button (Secondary style: outline/flat, aligned left)
         self.help_btn = tk.Button(
@@ -990,6 +911,14 @@ class StartupDialog:
         self.mobile_mode_btn.bind("<Leave>", lambda e: self.mobile_mode_btn.config(bg="#2d6a4f") if str(self.mobile_mode_btn.cget("state")) != "disabled" else None)
 
     def launch_mobile_mode(self):
+        path = self.db_path_var.get().strip()
+        if not path or path == "No database file selected...":
+            messagebox.showerror("Error", "Please select a database file first.")
+            return
+
+        if not self._resolve_config_and_path(path):
+            return
+
         self.mobile_mode = True
         self.completed = True
         self.win.destroy()
@@ -1006,8 +935,7 @@ class StartupDialog:
 
     def _refresh_launch_state(self):
         path = self.db_path_var.get().strip()
-        # Enable if path is set and is not the placeholder
-        valid = bool(path) and path != "No file selected..."
+        valid = bool(path) and path != "No database file selected..."
         self.continue_btn.config(state="normal" if valid else "disabled")
         if hasattr(self, "mobile_mode_btn"):
             self.mobile_mode_btn.config(state="normal" if valid else "disabled")
@@ -1028,101 +956,6 @@ class StartupDialog:
             self.progress_bar.pack_forget()
             self.progress_var.set(0)
 
-
-    # ------------------------------------------------------------------
-    # resize
-    # ------------------------------------------------------------------
-
-    def _on_resize(self, event):
-        if event.widget != self.win:
-            return
-
-
-        if not hasattr(self, "_last_scale"):
-            self._last_scale = self._scale
-            self._compact = False
-
-
-        new_w = self.win.winfo_width()
-        new_h = self.win.winfo_height()
-
-        base_w, base_h = 640, 680
-        scale = min(new_w / base_w, new_h / base_h)
-        scale = max(0.75, min(scale, 1.4))
-
-        # Detect compact mode
-        compact = new_w < 580 or new_h < 600
-
-        # Only update if something meaningful changed
-        if abs(scale - self._last_scale) < 0.05 and compact == self._compact:
-            return
-
-        self._scale = scale
-        self._last_scale = scale
-        self._compact = compact
-
-        self._apply_adaptive_layout()
-
-
-
-    def _apply_adaptive_layout(self):
-        s = self._scale
-
-        # Compact mode adjustments
-        if self._compact:
-            font_small = sc(8)
-            font_base = sc(9)
-            font_title = sc(14)
-            pad = 8
-        else:
-            font_small = sc(9)
-            font_base = sc(10)
-            font_title = sc(18)
-            pad = 16
-
-
-        # Adjust outer padding dynamically
-        pad = 10 if self._compact else 20
-        try:
-            if hasattr(self, "_card"):
-                self._card.pack_configure(padx=pad, pady=pad)
-            else:
-                self._outer.pack_configure(padx=pad, pady=pad)
-        except Exception:
-            pass
-
-        # Update ALL widgets recursively
-        def update_widget(widget):
-            try:
-                # Fonts
-                if isinstance(widget, tk.Label):
-                    txt = widget.cget("text")
-
-                    if "arbor" in txt:
-                        widget.config(font=("Courier New", font_small, "bold"))
-                    elif "Project Setup" in txt:
-                        widget.config(font=("Segoe UI", font_title, "bold"))
-                    elif txt.strip() in ("REQUIRED", "RECOMMENDED", "OPTIONAL"):
-                        widget.config(font=("Courier New", font_small, "bold"))
-                    else:
-                        widget.config(font=("Courier New", font_base))
-
-                elif isinstance(widget, tk.Button):
-                    widget.config(font=("Segoe UI", font_base, "bold" if not self._compact else "normal"))
-
-                elif isinstance(widget, tk.Entry):
-                    widget.config(font=("Courier New", font_base))
-
-            except Exception:
-                pass
-
-            for child in widget.winfo_children():
-                update_widget(child)
-
-        update_widget(self.win)
-
-
-
     # ------------------------------------------------------------------
     # Browse / select commands
     # ------------------------------------------------------------------
@@ -1138,10 +971,10 @@ class StartupDialog:
             return
         config.set_last_dir("last_db_dir", path)
         self.db_path_var.set(path)
+        self._auto_detect_config(path)
         self._refresh_launch_state()
 
         # Check for autosave
-        # Backward-compatible check for the new secure .autosave.json or legacy .autosave.xlsx.
         base, _ = os.path.splitext(path)
         autosave_path = base + ".autosave.json"
         if not os.path.exists(autosave_path):
@@ -1161,32 +994,14 @@ class StartupDialog:
             except Exception:
                 pass
 
-    def browse_import(self):
-        import config
-        path = filedialog.askopenfilename(
-            title="Select Import File",
-            filetypes=[("Spreadsheet / Database", "*.xlsx *.csv *.db")],
-            initialdir=config.get_last_dir("last_db_dir")
-        )
-        if not path:
-            return
-        self.import_path_var.set(path)
-        self.selected_excel_path = path
-
-
-
-
     def select_folder(self):
         import config
         folder = filedialog.askdirectory(
             initialdir=config.get_last_dir("last_image_dir")
         )
-
         if folder:
             config.set_last_dir("last_image_dir", folder)
             self.image_folder_var.set(folder)
-
-
 
     def select_recent(self, path):
         """Fill the DB path field from a recent-projects row click."""
@@ -1194,69 +1009,8 @@ class StartupDialog:
             messagebox.showwarning("File not found", f"Could not find:\n{path}")
             return
         self.db_path_var.set(path)
+        self._auto_detect_config(path)
         self._refresh_launch_state()
-
-    # ------------------------------------------------------------------
-    # Advanced setup (demoted Books / Historical)
-    # ------------------------------------------------------------------
-
-    def _show_advanced(self):
-        """Open a small secondary popup for Books and Historical DB loading."""
-        adv_win = tk.Toplevel(self.win)
-        adv_win.title("Advanced Setup")
-        adv_win.resizable(False, False)
-        adv_win.grab_set()
-
-        import utils
-        utils.center_and_fit_toplevel(adv_win, int(400 * self._scale), int(280 * self._scale))
-
-        frame = ttk.Frame(adv_win, padding=15)
-        frame.pack(fill="both", expand=True)
-
-        ttk.Label(frame, text="Advanced Data Sources",
-                  font=("Segoe UI", sc(11), "bold")).pack(anchor="w", pady=(0, 10))
-
-        # DB config selector (kept for config-mapping)
-        ttk.Label(frame, text="Select database config:").pack(anchor="w")
-        self.db_var = tk.StringVar()
-        db_names = list(DATABASE_CONFIGS.keys())
-        db_names.append("<Create New Database...>")
-        self.db_dropdown = ttk.Combobox(frame, textvariable=self.db_var,
-                                        values=db_names, state="readonly", cursor="hand2")
-        if db_names and len(db_names) > 1:
-            self.db_var.set(db_names[0])
-        self.db_dropdown.pack(fill="x", pady=(2, 10))
-        self.db_dropdown.bind("<<ComboboxSelected>>", self.on_db_selected)
-
-        self.books_label = ttk.Label(frame, text="No books loaded", foreground="gray")
-        ttk.Button(frame, text="Load Books", command=self.load_books_startup, cursor="hand2").pack(fill="x")
-        self.books_label.pack(anchor="w", pady=(2, 8))
-
-        self.history_label = ttk.Label(frame, text="No historical databases loaded", foreground="gray")
-        ttk.Button(frame, text="Load Earlier Databases",
-                   command=self.load_historical_startup, cursor="hand2").pack(fill="x")
-        self.history_label.pack(anchor="w", pady=(2, 8))
-
-        self.progress_bar_adv = ttk.Progressbar(frame, variable=self.progress_var, maximum=100)
-        self.progress_bar_adv.pack(fill="x", pady=4)
-        self.progress_bar_adv.pack_forget()
-
-        def _close_adv():
-            try:
-                adv_win.grab_release()
-            except Exception:
-                pass
-            adv_win.destroy()
-
-        adv_win.protocol("WM_DELETE_WINDOW", _close_adv)
-        ttk.Button(frame, text="Done", command=_close_adv, cursor="hand2").pack(anchor="e", pady=(8, 0))
-
-        # Point old progress_bar references to the advanced one
-        self.progress_bar = self.progress_bar_adv
-
-    # ------------------------------------------------------------------
-    # Existing load methods (unchanged)
-    # ------------------------------------------------------------------
 
     def create_new_database_startup(self):
         from ui.new_database_wizard import NewDatabaseWizard
@@ -1269,10 +1023,8 @@ class StartupDialog:
     def on_new_db_created(self, file_path=None, profile_name=None):
         from config import DATABASE_CONFIGS
         db_names = list(DATABASE_CONFIGS.keys())
-        new_values = list(db_names)
-        new_values.append("<Create New Database...>")
         if hasattr(self, "db_dropdown"):
-            self.db_dropdown["values"] = new_values
+            self.db_dropdown["values"] = db_names
             if profile_name and profile_name in db_names:
                 self.db_var.set(profile_name)
             elif db_names:
@@ -1285,7 +1037,6 @@ class StartupDialog:
         self.completed = False
         self.win.destroy()
 
-    # Alias for old code that used open_excel
     def open_excel(self):
         self.browse_database()
 
@@ -1297,223 +1048,42 @@ class StartupDialog:
         except Exception:
             pass
 
-    def load_books_startup(self):
-        import config
-        path = filedialog.askopenfilename(
-            title="Select Books Excel file",
-            filetypes=[("Database files", "*.xlsx *.db")],
-            initialdir=config.get_last_dir("last_book_dir")
-        )
-        if not path:
-            return
-        config.set_last_dir("last_book_dir", path)
-
-        selected_db = getattr(self, "db_var", tk.StringVar()).get()
-        if selected_db not in DATABASE_CONFIGS:
-            messagebox.showerror("Error", "Please select a database config first (Advanced Setup)")
-            return
-        self.app.config = DATABASE_CONFIGS[selected_db]
-
-        if hasattr(self, "books_label"):
-            self.books_label.config(text="Loading Books...", foreground="orange")
-        self.continue_btn.config(state="disabled")
-
-        if hasattr(self, "progress_bar"):
-            self.progress_bar.pack(fill="x", pady=4)
-            self.progress_var.set(5)
-        self.win.update_idletasks()
-
-        threading.Thread(target=self._load_books_worker, args=(path,), daemon=True).start()
-
-    def _load_books_worker(self, path):
-        try:
-            self.safe_ui_call(lambda: self.progress_var.set(10))
-            loaded = []
-            if path.endswith(".db"):
-                from repository import SQLiteRepository
-                df_reg, df_obs, *_ = SQLiteRepository.load_sqlite(path, self.app.config)
-                loaded.append({
-                    "name": "Books: DB", "path": path,
-                    "df_reg": df_reg, "reg_by_id": None,
-                })
-            else:
-                from repository import _open_excel_reader, _normalize_object_id_series
-                with _open_excel_reader(path) as xls:
-                    allowed_cols = set(self.app.config.get("books_columns", []))
-                    if "ObjectID" not in allowed_cols:
-                        allowed_cols.add("ObjectID")
-                    total_sheets = len(xls.sheet_names)
-                    for i, sheet_name in enumerate(xls.sheet_names):
-                        try:
-                            self.safe_ui_call(
-                                lambda i=i, t=total_sheets: self.progress_var.set(((i+1) / t) * 100)
-                            )
-                            df = pd.read_excel(xls, sheet_name=sheet_name,
-                                               usecols=lambda x: x in allowed_cols)
-                            if "ObjectID" not in df.columns:
-                                continue
-                            df["ObjectID"] = _normalize_object_id_series(df["ObjectID"])
-                            loaded.append({
-                                "name": f"Books: {sheet_name}", "path": path,
-                                "df_reg": df, "reg_by_id": None,
-                            })
-                        except Exception as sheet_err:
-                            print(f"Error loading sheet {sheet_name}: {sheet_err}")
-            self.safe_ui_call(lambda: self._finish_books_load(loaded))
-        except Exception as e:
-            debug_error("Load Books Failed", str(e))
-            err_msg = str(e)
-            self.safe_ui_call(
-                lambda: (
-                    self.books_label.config(text="Load failed", foreground="red")
-                    if hasattr(self, "books_label") else None,
-                    messagebox.showerror("Error", err_msg),
-                    self.continue_btn.config(state="normal"),
-                )
-            )
-
-    def load_historical_startup(self):
-        import config
-        paths = filedialog.askopenfilenames(
-            title="Select previous Excel databases",
-            filetypes=[("Database files", "*.xlsx *.db")],
-            initialdir=config.get_last_dir("last_db_dir")
-        )
-        if not paths:
-            return
-        config.set_last_dir("last_db_dir", paths[0])
-        self.continue_btn.config(state="disabled")
-        if hasattr(self, "history_label"):
-            self.history_label.config(text="Loading...", foreground="orange")
-        if hasattr(self, "progress_bar"):
-            self.progress_bar.pack(fill="x", pady=4)
-        self.progress_var.set(0)
-        self.win.update_idletasks()
-        threading.Thread(target=self._load_historical_worker, args=(paths,), daemon=True).start()
-
-    def _load_historical_worker(self, paths):
-        try:
-            loaded = []
-            total = len(paths)
-            from repository import SQLiteRepository, ExcelRepository
-            for i, path in enumerate(paths, start=1):
-                try:
-                    if path.endswith(".db"):
-                        df_reg, df_obs, *_ = SQLiteRepository.load_sqlite(path, self.app.config)
-                    else:
-                        df_reg, df_obs, *_ = ExcelRepository.load_excel(path, self.app.config)
-                    loaded.append({
-                        "name": f"ARK{i}", "path": path,
-                        "df_reg": df_reg, "reg_by_id": None,
-                    })
-                except Exception as e:
-                    err_msg = str(e)
-                    self.safe_ui_call(
-                        lambda: messagebox.showwarning("Load failed", err_msg)
-                    )
-                self.safe_ui_call(
-                    lambda i=i, total=total: self.progress_var.set((i / total) * 100)
-                )
-            self.safe_ui_call(lambda: self._finish_historical_load(loaded))
-        except Exception as e:
-            debug_error("Load Historical Failed", str(e))
-            err_msg = str(e)
-            self.safe_ui_call(
-                lambda: (
-                    messagebox.showerror("Error", err_msg),
-                    self.continue_btn.config(state="normal"),
-                )
-            )
-
-    def _finish_historical_load(self, loaded):
-        if hasattr(self, "progress_bar"):
-            self.progress_bar.pack_forget()
-        from collections import OrderedDict
-        if hasattr(self, "ui"):
-            self.ui._history_cache = OrderedDict()
-        else:
-            self.app._history_cache_pending = True
-        if not loaded:
-            if hasattr(self, "history_label"):
-                self.history_label.config(text="No valid databases loaded", foreground="red")
-            self.continue_btn.config(state="normal")
-            return
-        if not self.app.historical_dbs:
-            self.app.historical_dbs = []
-        self.app.historical_dbs.extend(loaded)
-        if hasattr(self, "history_label"):
-            self.history_label.config(text=f"{len(loaded)} databases loaded", foreground="green")
-        self.continue_btn.config(state="normal")
-        oid = self.app.current_object_id
-        if oid:
-            try:
-                if hasattr(self, "ui"):
-                    self.ui.update_history_indicator(oid)
-            except Exception:
-                pass
-
-    def _finish_books_load(self, loaded):
-        if hasattr(self, "progress_bar"):
-            self.progress_bar.pack_forget()
-        from collections import OrderedDict
-        if hasattr(self, "ui"):
-            self.ui._history_cache = OrderedDict()
-        else:
-            self.app._history_cache_pending = True
-        if not loaded:
-            if hasattr(self, "books_label"):
-                self.books_label.config(text="No valid sheets found", foreground="red")
-            self.continue_btn.config(state="normal")
-            return
-        if not self.app.historical_dbs:
-            self.app.historical_dbs = []
-        self.app.historical_dbs.extend(loaded)
-        oid = self.app.current_object_id
-        if oid:
-            if hasattr(self, "ui"):
-                self.ui.update_history_indicator(oid)
-        if hasattr(self, "books_label"):
-            self.books_label.config(text=f"Books loaded ({len(loaded)} sheets)", foreground="green")
-        self.continue_btn.config(state="normal")
-
     # ------------------------------------------------------------------
-    # Finish / launch
+    # Finish / launch helpers
     # ------------------------------------------------------------------
 
-    def finish(self):
-        path = self.db_path_var.get().strip()
-        if not path:
-            messagebox.showerror("Error", "Please select a database file first.")
-            return
-
-        # Map path to a DATABASE_CONFIG by matching file stem, or default to first
-        matched_config = None
-        matched_name = None
-        basename = os.path.basename(path).lower()
-
-        for name, cfg in DATABASE_CONFIGS.items():
-            if name.lower() in basename or basename in name.lower():
-                matched_config = cfg
-                matched_name = name
-                break
+    def _resolve_config_and_path(self, path):
+        """Resolve database configuration profile and populate app.config."""
+        selected_name = self.db_var.get().strip() if hasattr(self, "db_var") else None
+        matched_config = DATABASE_CONFIGS.get(selected_name) if selected_name else None
 
         if matched_config is None:
+            # Fall back to filename auto-detection
+            basename = os.path.basename(path).lower()
+            for name, cfg in DATABASE_CONFIGS.items():
+                if name.lower() in basename or basename in name.lower():
+                    matched_config = cfg
+                    selected_name = name
+                    break
+
+        if matched_config is None and DATABASE_CONFIGS:
             # Fall back to first available config
-            matched_name = next(iter(DATABASE_CONFIGS))
-            matched_config = DATABASE_CONFIGS[matched_name]
+            selected_name = next(iter(DATABASE_CONFIGS))
+            matched_config = DATABASE_CONFIGS[selected_name]
+
+        if matched_config is None:
+            messagebox.showerror("Error", "No valid database configuration profile found.")
+            return False
 
         self.app.config = matched_config
-        self.app.config_name = matched_name
-        self.completed = True
-
-        # Record in recent files
-        add_recent_file(path)
+        self.app.config_name = selected_name
+        self.selected_excel_path = path
 
         # Set image mode properties for main to read
         mode = self.image_mode.get()
         if mode == "folder" and not self.image_folder_var.get():
             messagebox.showerror("Error", "Please select a local image directory or switch to Online/Offline mode.")
-            return
+            return False
 
         if mode == "folder":
             import config
@@ -1521,8 +1091,21 @@ class StartupDialog:
 
         self.image_mode_val = mode
         self.image_folder_val = self.image_folder_var.get()
-        self.selected_excel_path = path
 
+        # Record in recent files
+        add_recent_file(path)
+        return True
+
+    def finish(self):
+        path = self.db_path_var.get().strip()
+        if not path or path == "No database file selected...":
+            messagebox.showerror("Error", "Please select a database file first.")
+            return
+
+        if not self._resolve_config_and_path(path):
+            return
+
+        self.completed = True
         self.win.update_idletasks()
         self.win.destroy()
 
@@ -1564,7 +1147,7 @@ class StartupDialog:
         prefs["disable_tutorials"] = not curr
         config.save_prefs(prefs)
 
-        if not curr: # meaning we just set it to True (disabled)
+        if not curr:  # meaning we just set it to True (disabled)
             from ui.tutorial import TutorialManager
             TutorialManager().close_tutorial()
             messagebox.showinfo("Tutorials Disabled", "All interactive tutorials have been disabled globally.")
@@ -1576,16 +1159,17 @@ class StartupDialog:
             "Setup Help",
             "SETUP STEPS\n\n"
             "REQUIRED\n"
-            "1. Select a database file (.xlsx, .db, .sqlite)\n\n"
+            "1. Select or Create a Database\n"
+            "   - Choose a .xlsx, .db, or .sqlite file\n"
+            "   - Select or verify the matching Configuration Profile\n"
+            "   - Or click '+ Create New Database' to build a custom schema\n\n"
             "RECOMMENDED\n"
-            "2. Choose image source\n"
-            "   - Online = images loaded from repository\n"
-            "   - Local Directory = select local image folder\n"
-            "   - Offline = no images\n\n"
-            "OPTIONAL\n"
-            "3. Import Excel/CSV = additional observation data\n\n"
-            "Click LAUNCH SYSTEM to start.\n\n"
-            "TIP: You can change all settings later in the program."
+            "2. Choose Image Source\n"
+            "   - Online = images loaded from remote repository\n"
+            "   - Local Directory = specify local high-res photo folder\n"
+            "   - Offline = work without specimen imagery\n\n"
+            "Click LAUNCH SYSTEM to start, or Mobile Companion to serve over LAN.\n\n"
+            "TIP: You can change all settings later in the main application."
         )
 
 
