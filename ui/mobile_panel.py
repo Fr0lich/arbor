@@ -570,10 +570,10 @@ class MobilePanel:
         if not self._is_alive():
             return
         try:
-            qr = qrcode.QRCode(box_size=3, border=1)
+            qr = qrcode.QRCode(box_size=4, border=4)
             qr.add_data(url_to_encode)
             qr.make(fit=True)
-            img = qr.make_image(fill_color="#1b4332", back_color="white")
+            img = qr.make_image(fill_color="black", back_color="white")
             self.qr_image_ref = ImageTk.PhotoImage(img)
             self.qr_label.config(image=self.qr_image_ref, text="")
         except Exception:
