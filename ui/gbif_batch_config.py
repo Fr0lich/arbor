@@ -13,13 +13,13 @@ class GBIFBatchConfigDialog(tk.Toplevel):
     """
     def __init__(self, parent, main_app):
         super().__init__(parent)
+        self.withdraw()  # Prevent premature top-left rendering flicker
         self.parent = parent
         self.main_app = main_app
 
         self.title("Batch GBIF Taxonomy Analysis")
         self.minsize(sc(540), sc(440))
         self.transient(parent)
-        self.grab_set()
 
         self.cancel_event = threading.Event()
         self.scope_var = tk.StringVar(value="filtered")
@@ -50,6 +50,8 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         self._build_ui()
         import utils
         utils.center_and_fit_toplevel(self, sc(560), sc(480))
+        self.lift()
+        self.focus_set()
 
     def _build_ui(self):
         is_dark = getattr(self.main_app, "dark_mode_active", False)
@@ -390,21 +392,25 @@ class GBIFBatchConfigDialog(tk.Toplevel):
     def _on_analysis_complete(self, diff_results):
         if not self.winfo_exists():
             return
+        parent_ref = self.parent
+        app_ref = self.main_app.app
+        main_app_ref = self.main_app
+
         self.destroy()
 
         if not diff_results:
             messagebox.showinfo(
                 "GBIF Review",
                 "All checked taxonomy records are up to date with GBIF (no changes detected).",
-                parent=self.parent
+                parent=parent_ref
             )
             return
 
         from ui.gbif_review import GBIFReviewDialog
         GBIFReviewDialog(
-            self.parent,
-            self.main_app.app,
+            parent_ref,
+            app_ref,
             diff_results,
-            on_applied_callback=self.main_app._on_gbif_batch_applied
+            on_applied_callback=main_app_ref._on_gbif_batch_applied
         )
 

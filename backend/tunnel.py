@@ -9,6 +9,8 @@ import time
 
 import os
 import urllib.request
+import urllib.error
+import ssl
 import platform
 import stat
 import tarfile
@@ -84,7 +86,7 @@ class ResilientSSHTunnel:
                 'a.pinggy.io',
                 '443',
                 f'0:127.0.0.1:{self.port}',
-                re.compile(r'(https://[a-zA-Z0-9.-]+?\.(?:free\.pinggy\.net|run\.pinggy-free\.link|a\.pinggy\.link|pinggy\.link))')
+                re.compile(r'(https://[a-zA-Z0-9.-]+?\.(?:free\.pinggy\.net|run\.pinggy-free\.link|a\.pinggy\.link|free\.pinggy\.link|pinggy\.link|pinggy\.net))')
             ),
             (
                 'nokey@localhost.run',
@@ -315,9 +317,19 @@ def ensure_cloudflared():
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
 
+                def _open_url(request):
+                    try:
+                        return urllib.request.urlopen(request)
+                    except (ssl.SSLCertVerificationError, urllib.error.URLError) as ssl_err:
+                        if isinstance(ssl_err, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(ssl_err) or "certificate verify failed" in str(ssl_err).lower():
+                            logging.warning(f"SSL certificate verification failed for cloudflared download. Retrying with unverified context...")
+                            unverified_ctx = ssl._create_unverified_context()
+                            return urllib.request.urlopen(request, context=unverified_ctx)
+                        raise
+
                 if is_tgz:
                     temp_tgz = os.path.join(cf_dir, "cloudflared.tgz")
-                    with urllib.request.urlopen(req) as response, open(temp_tgz, 'wb') as f:
+                    with _open_url(req) as response, open(temp_tgz, 'wb') as f:
                         shutil.copyfileobj(response, f)
 
                     with tarfile.open(temp_tgz, 'r:gz') as tar:
@@ -325,7 +337,7 @@ def ensure_cloudflared():
 
                     os.remove(temp_tgz)
                 else:
-                    with urllib.request.urlopen(req) as response, open(binary_path, 'wb') as f:
+                    with _open_url(req) as response, open(binary_path, 'wb') as f:
                         shutil.copyfileobj(response, f)
 
                 last_error = None

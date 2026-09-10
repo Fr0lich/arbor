@@ -484,3 +484,101 @@ def test_gbif_batch_config_progress_and_percent():
     finally:
         app_worker.stop()
         root.destroy()
+
+
+def test_gbif_review_dialog_pagination_and_cross_page_selection():
+    import tkinter as tk
+    from ui.gbif_review import GBIFReviewDialog
+    from unittest.mock import MagicMock, patch
+
+    # Generate 150 mock diff items (simulating large dataset)
+    diff_results = []
+    reg_rows = []
+    obs_rows = []
+    for i in range(150):
+        oid = str(i + 1)
+        reg_rows.append({"ObjectID": oid, "Genus": f"OldGen{i}", "Species": f"oldspec{i}", "Author": "L.", "Family": "Fam"})
+        obs_rows.append({"ObjectID": oid, "Genus_Problem": True, "Species_Problem": False})
+        diff_results.append({
+            "oid": oid,
+            "current": {"Genus": f"OldGen{i}", "Species": f"oldspec{i}", "Author": "L.", "Family": "Fam"},
+            "proposed": {"Genus": f"NewGen{i}", "Species": f"newspec{i}", "Author": "L.", "Family": "Fam"},
+            "changes": [
+                {"field": "Genus", "old": f"OldGen{i}", "new": f"NewGen{i}"},
+                {"field": "Species", "old": f"oldspec{i}", "new": f"newspec{i}"}
+            ],
+            "status": "SYNONYM" if i % 2 == 0 else "ACCEPTED",
+            "rank": "SPECIES"
+        })
+
+    app = MagicMock()
+    app.df_reg = pd.DataFrame(reg_rows).set_index("ObjectID")
+    app.df_obs = pd.DataFrame(obs_rows).set_index("ObjectID")
+    app._log_records = []
+    app.df_log = pd.DataFrame()
+    app.config = {"ui_sections": {"problems": [{"name": "Genus_Problem", "maps_to": "Genus"}]}}
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        dialog = GBIFReviewDialog(root, app, diff_results)
+
+        # 1. Check pagination structure (default page_size = 25 -> 150 / 25 = 6 pages)
+        assert dialog.page_size == 25
+        assert dialog.current_page == 0
+        assert len(dialog.item_cards) == 25  # Only 25 rendered on screen!
+        assert len(dialog.selection_state) == 300  # All 300 field changes tracked globally!
+
+        # 2. Test next page navigation
+        dialog._goto_next_page()
+        assert dialog.current_page == 1
+        assert len(dialog.item_cards) == 25
+        assert "26" in dialog.item_cards  # Second page starts at #26
+
+        # 3. Test last page navigation
+        dialog._goto_last_page()
+        assert dialog.current_page == 5
+        assert "150" in dialog.item_cards
+
+        # 4. Test Search filter
+        dialog.search_var.set("NewGen10")
+        filtered = dialog._get_filtered_results()
+        assert len(filtered) >= 1
+        assert dialog.current_page == 0
+
+        # Reset search
+        dialog.search_var.set("")
+
+        # 5. Test Status filter
+        dialog.status_var.set("Synonyms (75)")
+        dialog._on_status_filter_changed()
+        assert dialog.status_filter == "synonym"
+        assert len(dialog._get_filtered_results()) == 75
+
+        # Reset status
+        dialog.status_var.set("All (150)")
+        dialog._on_status_filter_changed()
+
+        # 6. Test Deselect & Select Page vs Batch
+        dialog._deselect_all_batch()
+        assert sum(1 for v in dialog.selection_state.values() if v) == 0
+
+        dialog._select_current_page()
+        # Page 1 has 25 specimens * 2 changes = 50 selected
+        assert sum(1 for v in dialog.selection_state.values() if v) == 50
+
+        dialog._select_all_batch()
+        assert sum(1 for v in dialog.selection_state.values() if v) == 300
+
+        # 7. Test Applying updates across all pages
+        with patch("tkinter.messagebox.showinfo"):
+            dialog._apply_selected()
+
+        # Check all 150 items were updated
+        assert app.df_reg.at["1", "Genus"] == "NewGen0"
+        assert app.df_reg.at["150", "Genus"] == "NewGen149"
+        assert bool(app.df_obs.at["1", "Genus_Problem"]) is False
+        assert len(app._log_records) == 150
+    finally:
+        root.destroy()
+

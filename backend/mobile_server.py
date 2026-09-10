@@ -40,6 +40,27 @@ def is_unknown(value):
         return False
     return v in ("ukjent", "unknown", "?", "-", "nan")
 
+
+def _get_row_dict_safe(df, oid):
+    """Safely extract a flat single-row dictionary from a DataFrame, even if duplicate index keys exist."""
+    if df is None or oid is None:
+        return {}
+    try:
+        if oid in df.index:
+            row_data = df.loc[[oid]]
+            if not row_data.empty:
+                return row_data.iloc[0].to_dict()
+    except Exception:
+        try:
+            row_data = df.loc[oid]
+            if isinstance(row_data, pd.DataFrame):
+                return row_data.iloc[0].to_dict()
+            elif isinstance(row_data, pd.Series):
+                return row_data.to_dict()
+        except Exception:
+            pass
+    return {}
+
 def get_problem_to_field_map(config):
     problem_to_field = {}
     if config and isinstance(config, dict):
@@ -415,8 +436,12 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
         return None, f"Object {oid} not found in active database"
 
 
-    effective_reg_updates = reg_updates
-    effective_obs_updates = obs_updates
+    resolved_obs_oid = _resolve_oid_in_df(app_state.df_obs, oid)
+    curr_reg = _get_row_dict_safe(app_state.df_reg, resolved_reg_oid)
+    curr_obs = _get_row_dict_safe(app_state.df_obs, resolved_obs_oid)
+
+    effective_reg_updates = dict(reg_updates) if reg_updates else {}
+    effective_obs_updates = dict(obs_updates) if obs_updates else {}
     effective_reviewed = reviewed
 
     # Conflict check
@@ -466,10 +491,6 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
                     if base_snapshot is None:
                         base_snapshot = stacks[0]
 
-                    curr_reg = app_state.df_reg.loc[resolved_reg_oid].to_dict()
-                    resolved_obs_oid_check = _resolve_oid_in_df(app_state.df_obs, oid)
-                    curr_obs = app_state.df_obs.loc[resolved_obs_oid_check].to_dict() if (app_state.df_obs is not None and resolved_obs_oid_check is not None) else {}
-
                     base_reg = base_snapshot.get("reg", {})
                     base_obs = base_snapshot.get("obs", {})
 
@@ -477,67 +498,64 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
                     host_mod_reg = {k for k, v in curr_reg.items() if str(v) != str(base_reg.get(k, ""))}
                     host_mod_obs = {k for k, v in curr_obs.items() if str(v) != str(base_obs.get(k, ""))}
 
-                    # Client deltas: fields actually mutated by client relative to its baseline
-                    client_delta_reg = {}
-                    if reg_updates:
-                        for k, v in reg_updates.items():
-                            base_v = base_reg.get(k, curr_reg.get(k, ""))
-                            if str(v) != str(base_v):
-                                client_delta_reg[k] = v
-
-                    client_delta_obs = {}
-                    if obs_updates:
-                        for k, v in obs_updates.items():
-                            base_v = base_obs.get(k, curr_obs.get(k, ""))
-                            if str(v) != str(base_v):
-                                client_delta_obs[k] = v
-
-                    client_mod_reg = set(client_delta_reg.keys())
-                    client_mod_obs = set(client_delta_obs.keys())
-
+                    # Client modified fields: fields explicitly targeted for update by the client
+                    client_mod_reg = set(effective_reg_updates.keys())
+                    client_mod_obs = set(effective_obs_updates.keys())
                     if reviewed is not None:
-                        base_rev_raw = base_obs.get("Reviewed", curr_obs.get("Reviewed", False))
-                        base_rev_bool = (
-                            str(base_rev_raw).strip().lower() in ("true", "1", "yes", "t")
-                            if isinstance(base_rev_raw, (str, int, bool))
-                            else bool(base_rev_raw)
+                        curr_rev_raw = curr_obs.get("Reviewed", False)
+                        curr_rev_bool = (
+                            str(curr_rev_raw).strip().lower() in ("true", "1", "yes", "t")
+                            if isinstance(curr_rev_raw, (str, int, bool))
+                            else bool(curr_rev_raw)
                         )
-                        if bool(reviewed) != base_rev_bool:
+                        if bool(reviewed) != curr_rev_bool:
                             client_mod_obs.add(REVIEWED_COLUMN)
-                        else:
-                            effective_reviewed = None
 
-                    # A true conflict occurs if both sides modified the same field to DIFFERENT values
+                    # A true conflict occurs IF AND ONLY IF both sides modified the same field to DIFFERENT values
                     conflict_reg = set()
                     for k in (client_mod_reg & host_mod_reg):
-                        if str(reg_updates.get(k, "")) != str(curr_reg.get(k, "")):
+                        c_val = str(effective_reg_updates.get(k, ""))
+                        b_val = str(base_reg.get(k, ""))
+                        curr_v = str(curr_reg.get(k, ""))
+                        if c_val == b_val:
+                            # Client did not change this field; drop from update to preserve host's newer change
+                            effective_reg_updates.pop(k, None)
+                        elif c_val != curr_v:
                             conflict_reg.add(k)
 
                     conflict_obs = set()
                     for k in (client_mod_obs & host_mod_obs):
                         if k == REVIEWED_COLUMN:
                             curr_rev_bool = str(curr_obs.get("Reviewed", False)).strip().lower() in ("true", "1", "yes", "t")
-                            if bool(reviewed) != curr_rev_bool:
+                            base_rev_bool = str(base_obs.get("Reviewed", False)).strip().lower() in ("true", "1", "yes", "t")
+                            if bool(reviewed) == base_rev_bool:
+                                # Client did not change reviewed status; preserve host
+                                effective_reviewed = None
+                            elif bool(reviewed) != curr_rev_bool:
                                 conflict_obs.add(k)
-                        elif str(obs_updates.get(k, "")) != str(curr_obs.get(k, "")):
-                            conflict_obs.add(k)
+                        else:
+                            c_val = str(effective_obs_updates.get(k, ""))
+                            b_val = str(base_obs.get(k, ""))
+                            curr_v = str(curr_obs.get(k, ""))
+                            if c_val == b_val:
+                                effective_obs_updates.pop(k, None)
+                            elif c_val != curr_v:
+                                conflict_obs.add(k)
 
                     if conflict_reg or conflict_obs:
                         return None, f"Conflict: Host has newer changes for {oid}"
 
-                    effective_reg_updates = client_delta_reg
-                    effective_obs_updates = client_delta_obs
-
     # 1. Snapshot for Undo Stack
-    old_reg = app_state.df_reg.loc[resolved_reg_oid].to_dict()
+    old_reg = _get_row_dict_safe(app_state.df_reg, resolved_reg_oid)
     resolved_obs_oid = _resolve_oid_in_df(app_state.df_obs, oid)
-    old_obs = app_state.df_obs.loc[resolved_obs_oid].to_dict() if (app_state.df_obs is not None and resolved_obs_oid is not None) else {}
+    old_obs = _get_row_dict_safe(app_state.df_obs, resolved_obs_oid)
 
     undo_snapshot = {
         "oid": str(oid),
         "reg": old_reg.copy(),
         "obs": old_obs.copy(),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "source": "mobile"
     }
     app_state.undo_stacks.setdefault(resolved_reg_oid, []).append(undo_snapshot)
     if len(app_state.undo_stacks[resolved_reg_oid]) > 20:
@@ -583,8 +601,9 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
         current_reviewed_bool = is_reviewed_bool
         if is_reviewed_bool != old_reviewed_bool:
             if app_state.df_obs is not None and resolved_obs_oid is not None and resolved_obs_oid in app_state.df_obs.index:
-                if "Reviewed" in app_state.df_obs.columns:
-                    app_state.df_obs.at[resolved_obs_oid, "Reviewed"] = is_reviewed_bool
+                if "Reviewed" not in app_state.df_obs.columns:
+                    app_state.df_obs["Reviewed"] = False
+                app_state.df_obs.at[resolved_obs_oid, "Reviewed"] = is_reviewed_bool
                 if "ReviewedAt" in app_state.df_obs.columns:
                     app_state.df_obs.at[resolved_obs_oid, "ReviewedAt"] = datetime.now().isoformat(timespec="seconds") if is_reviewed_bool else ""
                 changed_fields.append("Reviewed")
@@ -962,7 +981,7 @@ class MobileServer:
 const CACHE_NAME = 'arbor-companion-v2';
 const ASSETS = [
     '/login',
-    'https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js',
+    'https://cdn.tailwindcss.com',
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap'
 ];
 
@@ -1243,10 +1262,33 @@ self.addEventListener('fetch', (event) => {
                 def _clean_val(val):
                     if val is None or pd.isna(val):
                         return ""
-                    if isinstance(val, float) and val.is_integer():
-                        return str(int(val))
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        try:
+                            if float(val).is_integer():
+                                return str(int(val))
+                        except Exception:
+                            pass
                     s = str(val).strip()
                     return "" if s.lower() in ("nan", "none", "<na>") else s
+
+                def _clean_series(s):
+                    if s is None or (isinstance(s, pd.Series) and s.empty):
+                        return pd.Series("", dtype=object)
+                    return s.map(_clean_val)
+
+                def _is_truthy_series(s):
+                    if s is None or (isinstance(s, pd.Series) and s.empty):
+                        return pd.Series(False, dtype=bool)
+                    if pd.api.types.is_bool_dtype(s.dtype):
+                        return s.fillna(False).astype(bool)
+                    s_clean = s.fillna("").astype(str).str.strip().str.lower()
+                    return s_clean.isin(["true", "1", "1.0", "yes", "t", "x"])
+
+                def _is_unknown_series(s):
+                    if s is None or (isinstance(s, pd.Series) and s.empty):
+                        return pd.Series(False, dtype=bool)
+                    s_clean = s.fillna("").astype(str).str.strip().str.lower()
+                    return s.notna() & (s_clean.isin(["ukjent", "unknown", "?", "-", "nan"]))
 
                 def _get_combined(col_name, indices):
                     """Helper to efficiently combine columns across registration and observation data safely with index dtype normalization."""
@@ -1274,8 +1316,8 @@ self.addEventListener('fetch', (event) => {
                         obs_col = pd.Series([obs_map.get(str(idx), "") for idx in indices], index=indices, dtype=object)
                     else:
                         obs_col = obs_s.reindex(indices).astype(object)
-                    obs_str = obs_col.map(_clean_val)
-                    valid_mask = obs_str != ""
+                    obs_clean = _clean_series(obs_col)
+                    valid_mask = obs_clean != ""
                     reg_col[valid_mask] = obs_col[valid_mask]
                     return reg_col
 
@@ -1336,7 +1378,7 @@ self.addEventListener('fetch', (event) => {
                         flagged_mask = pd.Series(False, index=matched_indices)
                         for p_col in prob_cols:
                             combined_prob = _get_combined(p_col, matched_indices)
-                            flagged_mask |= combined_prob.map(_clean_val).str.lower().isin(["true", "1", "yes", "t", "x"])
+                            flagged_mask |= _is_truthy_series(combined_prob)
                         matched_indices = matched_indices[flagged_mask]
                     elif status_filter in ('conflict', 'cfct', 'history'):
                         history_mask = pd.Series([oid in history_set or str(oid) in history_set or (str(oid).isdigit() and int(str(oid)) in history_set) for oid in matched_indices], index=matched_indices)
@@ -1346,31 +1388,31 @@ self.addEventListener('fetch', (event) => {
                         for col in df_reg.columns:
                             if str(col).lower() in ("objectid", "id"):
                                 continue
-                            unknown_mask |= df_reg[col].reindex(matched_indices).map(is_unknown)
+                            unknown_mask |= _is_unknown_series(df_reg[col].reindex(matched_indices))
                         matched_indices = matched_indices[unknown_mask]
 
                 # Cabinet filter
                 if cabinet_filter:
-                    combined_cabinets = _get_combined("Cabinet", matched_indices).map(_clean_val).str.lower()
+                    combined_cabinets = _clean_series(_get_combined("Cabinet", matched_indices)).str.lower()
                     mask = combined_cabinets == cabinet_filter
                     matched_indices = matched_indices[mask]
 
                 # Room filter
                 if room_filter:
-                    combined_rooms = _get_combined("Room", matched_indices).map(_clean_val).str.lower()
+                    combined_rooms = _clean_series(_get_combined("Room", matched_indices)).str.lower()
                     mask = combined_rooms == room_filter
                     matched_indices = matched_indices[mask]
 
                 # Genus filter
                 if genus_filter:
                     if "Genus" in df_reg.columns:
-                        mask = df_reg["Genus"].reindex(matched_indices).map(_clean_val).str.lower() == genus_filter
+                        mask = _clean_series(df_reg["Genus"].reindex(matched_indices)).str.lower() == genus_filter
                         matched_indices = matched_indices[mask]
 
                 # Collector filter
                 if collector_filter:
                     if "Collector" in df_reg.columns:
-                        mask = df_reg["Collector"].reindex(matched_indices).map(_clean_val).str.lower().str.contains(collector_filter, regex=False)
+                        mask = _clean_series(df_reg["Collector"].reindex(matched_indices)).str.lower().str.contains(collector_filter, regex=False)
                         matched_indices = matched_indices[mask]
 
                 # Has problems filter
@@ -1382,7 +1424,7 @@ self.addEventListener('fetch', (event) => {
 
                     for p_col in problems:
                         combined_prob = _get_combined(p_col, matched_indices)
-                        mask |= combined_prob.map(_clean_val).str.lower().isin(["true", "1", "yes", "t"])
+                        mask |= _is_truthy_series(combined_prob)
 
                     if has_problems_filter in ["true", "1", "yes", "t"]:
                         matched_indices = matched_indices[mask]
@@ -1391,7 +1433,7 @@ self.addEventListener('fetch', (event) => {
 
                 # Dynamic Location Filters
                 for loc_col, loc_val in loc_filters.items():
-                    combined_loc = _get_combined(loc_col, matched_indices).map(_clean_val).str.lower()
+                    combined_loc = _clean_series(_get_combined(loc_col, matched_indices)).str.lower()
                     matched_indices = matched_indices[combined_loc == loc_val]
 
                 # Specific Problems & History Filters (from Advanced Filter Modal)
@@ -1424,17 +1466,17 @@ self.addEventListener('fetch', (event) => {
                     def get_problem_mask(prob_col, indices):
                         if prob_col == "Images_Missing":
                             if "Images_Missing" in df_obs.columns if df_obs is not None else False:
-                                return _get_combined("Images_Missing", indices).map(_clean_val).str.lower().isin(["true", "1", "yes", "t"])
+                                return _is_truthy_series(_get_combined("Images_Missing", indices))
                             return pd.Series(False, index=indices)
 
-                        obs_mask = _get_combined(prob_col, indices).map(_clean_val).str.lower().isin(["true", "1", "yes", "t"])
+                        obs_mask = _is_truthy_series(_get_combined(prob_col, indices))
 
                         if prob_col in problem_to_field:
                             field = problem_to_field[prob_col]
                             if field in df_reg.columns:
                                 raw_vals = df_reg[field].reindex(indices)
-                                is_missing = raw_vals.isna() | (raw_vals.map(_clean_val) == "")
-                                is_explicitly_unknown = raw_vals.map(lambda x: str(x).strip().lower() in ("unknown", "?", "ukjent", "-", "nan") if pd.notna(x) else False)
+                                is_missing = raw_vals.isna() | (_clean_series(raw_vals) == "")
+                                is_explicitly_unknown = _is_unknown_series(raw_vals)
                                 auto_mask = is_missing & ~is_explicitly_unknown
                                 return obs_mask | auto_mask
 
@@ -1477,7 +1519,7 @@ self.addEventListener('fetch', (event) => {
                 facets = {}
 
                 # 1. Cabinets facet
-                cabinet_series = _get_combined("Cabinet", matched_indices).map(_clean_val)
+                cabinet_series = _clean_series(_get_combined("Cabinet", matched_indices))
                 cabinet_series = cabinet_series[cabinet_series != ""]
                 facets["cabinets"] = cabinet_series.value_counts().to_dict()
 
@@ -1504,7 +1546,7 @@ self.addEventListener('fetch', (event) => {
                         f_mask = pd.Series(False, index=matched_indices)
                         for p_col in prob_cols:
                             combined_prob = _get_combined(p_col, matched_indices)
-                            f_mask |= combined_prob.map(_clean_val).str.lower().isin(["true", "1", "yes", "t", "x"])
+                            f_mask |= _is_truthy_series(combined_prob)
                         flagged_count = int(f_mask.sum())
 
                     if history_set:
@@ -1515,7 +1557,7 @@ self.addEventListener('fetch', (event) => {
                     for col in df_reg.columns:
                         if str(col).lower() in ("objectid", "id"):
                             continue
-                        u_mask |= df_reg[col].reindex(matched_indices).map(is_unknown)
+                        u_mask |= _is_unknown_series(df_reg[col].reindex(matched_indices))
                     unknown_count = int(u_mask.sum())
 
                 facets["reviewed_count"] = reviewed_count
@@ -1539,12 +1581,12 @@ self.addEventListener('fetch', (event) => {
                             matched_indices = matched_indices.sort_values(ascending=ascending)
                     elif sort_by == 'genus':
                         if "Genus" in df_reg.columns:
-                            sort_series = df_reg["Genus"].reindex(matched_indices).map(_clean_val)
+                            sort_series = _clean_series(df_reg["Genus"].reindex(matched_indices))
                             matched_indices = matched_indices[sort_series.argsort()]
                             if not ascending:
                                 matched_indices = matched_indices[::-1]
                     elif sort_by == 'cabinet':
-                        sort_series = _get_combined("Cabinet", matched_indices).map(_clean_val)
+                        sort_series = _clean_series(_get_combined("Cabinet", matched_indices))
                         matched_indices = matched_indices[sort_series.argsort()]
                         if not ascending:
                             matched_indices = matched_indices[::-1]
@@ -1895,8 +1937,8 @@ self.addEventListener('fetch', (event) => {
 
                 self.app_state.dirty = True
 
-                reg_row = self.app_state.df_reg.loc[resolved_reg_oid].to_dict() if (self.app_state.df_reg is not None and resolved_reg_oid is not None) else {}
-                obs_row = self.app_state.df_obs.loc[resolved_obs_oid].to_dict() if (self.app_state.df_obs is not None and resolved_obs_oid is not None) else {}
+                reg_row = _get_row_dict_safe(self.app_state.df_reg, resolved_reg_oid)
+                obs_row = _get_row_dict_safe(self.app_state.df_obs, resolved_obs_oid)
                 history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
                 prob_cols = []
                 if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
@@ -1972,8 +2014,8 @@ self.addEventListener('fetch', (event) => {
 
                 resolved_reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
                 resolved_obs_oid = _resolve_oid_in_df(self.app_state.df_obs, oid)
-                reg_row = self.app_state.df_reg.loc[resolved_reg_oid].to_dict() if (self.app_state.df_reg is not None and resolved_reg_oid is not None) else {}
-                obs_row = self.app_state.df_obs.loc[resolved_obs_oid].to_dict() if (self.app_state.df_obs is not None and resolved_obs_oid is not None) else {}
+                reg_row = _get_row_dict_safe(self.app_state.df_reg, resolved_reg_oid)
+                obs_row = _get_row_dict_safe(self.app_state.df_obs, resolved_obs_oid)
                 history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
                 prob_cols = []
                 if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
@@ -2260,7 +2302,7 @@ LOGIN_TEMPLATE = """<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Arbor Companion Login</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-[#121915] text-[#1c241f] min-h-screen flex items-center justify-center p-4 antialiased">
   <div class="w-full max-w-sm bg-white rounded-2xl p-6 shadow-2xl border border-emerald-900/20 text-center space-y-4">
@@ -2296,7 +2338,7 @@ INDEX_TEMPLATE = """
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Arbor Mobile Companion</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" rel="stylesheet">
@@ -3229,6 +3271,8 @@ INDEX_TEMPLATE = """
     let dirtyFields = new Set();
     let currentUnvalidatedMap = {};
     let wakeLockSentinel = null;
+    let isWalkModeWanted = false;
+    try { isWalkModeWanted = localStorage.getItem('arbor_walk_mode') === 'true'; } catch(e) {}
 
     let locationPresets = {};
     let lastSelectedPreset = "Default";
@@ -3464,7 +3508,17 @@ INDEX_TEMPLATE = """
         if (!res.ok) {
           console.warn(`API response status ${res.status} for ${url}`);
         }
-        const data = await res.json();
+        let data = {};
+        try {
+          data = await res.json();
+        } catch (jsonErr) {
+          data = {};
+        }
+        if (data && typeof data === 'object') {
+          data._status = res.status;
+          data.status = res.status;
+          data._ok = res.ok;
+        }
         if (isCacheable) {
           cacheApiResponse(url, data);
         }
@@ -3573,11 +3627,17 @@ INDEX_TEMPLATE = """
 
       // 1. Immediately initiate live SSE connection in background so desktop detects phone right away
       setupEventSource();
+      if (isWalkModeWanted) {
+        acquireWakeLock(true);
+      }
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
           _reconnectDelay = 2000;
           if (_reconnectTimer) clearTimeout(_reconnectTimer);
           setupEventSource();  // closes stale connection and opens a fresh one
+          if (isWalkModeWanted && !wakeLockSentinel) {
+            acquireWakeLock(true);
+          }
         }
       });
       window.addEventListener('online', () => {
@@ -4078,37 +4138,67 @@ INDEX_TEMPLATE = """
       document.body.appendChild(overlay);
     }
 
-    // ==========================================
-    // SCREEN WAKE LOCK (WALK MODE)
-    // ==========================================
-    async function toggleWakeLock() {
+    function updateWakeLockUI(active) {
       const btn = document.getElementById('btnWakeLock');
       const icon = document.getElementById('wakeLockIcon');
-      if (wakeLockSentinel) {
-        await wakeLockSentinel.release();
-        wakeLockSentinel = null;
+      if (!btn || !icon) return;
+      if (active) {
+        btn.className = 'p-2 rounded-[2px] border transition-all touch-target-min bg-amber-400 text-black border-amber-600 ring-2 ring-amber-300 shadow-xs font-bold flex items-center justify-center';
+        icon.innerText = '☀️';
+        icon.classList.add('animate-spin-slow');
+      } else {
         btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center';
         icon.innerText = '🌙';
         icon.classList.remove('animate-spin-slow');
-        showToast('Walk Mode Deactivated (Sleep Allowed)');
-      } else if ('wakeLock' in navigator) {
-        try {
-          wakeLockSentinel = await navigator.wakeLock.request('screen');
-          btn.className = 'p-2 rounded-[2px] border transition-all touch-target-min bg-amber-400 text-black border-amber-600 ring-2 ring-amber-300 shadow-xs font-bold flex items-center justify-center';
-          icon.innerText = '☀️';
-          icon.classList.add('animate-spin-slow');
-          showToast('Walk Mode Active (Screen Sleep Prevented)');
-          wakeLockSentinel.addEventListener('release', () => {
-            wakeLockSentinel = null;
-            btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center';
-            icon.innerText = '🌙';
-            icon.classList.remove('animate-spin-slow');
-          });
-        } catch (err) {
-          showToast('Wake Lock unavailable on this device', true);
+      }
+    }
+
+    async function acquireWakeLock(silent = false) {
+      if (!('wakeLock' in navigator)) {
+        if (!silent) showToast('Wake Lock API not supported on this browser', true);
+        return false;
+      }
+      try {
+        if (wakeLockSentinel) {
+          try { await wakeLockSentinel.release(); } catch(e) {}
+          wakeLockSentinel = null;
         }
+        wakeLockSentinel = await navigator.wakeLock.request('screen');
+        updateWakeLockUI(true);
+        wakeLockSentinel.addEventListener('release', () => {
+          wakeLockSentinel = null;
+          if (!isWalkModeWanted) {
+            updateWakeLockUI(false);
+          }
+        });
+        if (!silent) showToast('Walk Mode Active (Screen Sleep Prevented)');
+        return true;
+      } catch (err) {
+        if (!silent) showToast('Wake Lock unavailable on this device', true);
+        return false;
+      }
+    }
+
+    async function releaseWakeLock(silent = false) {
+      isWalkModeWanted = false;
+      try { localStorage.setItem('arbor_walk_mode', 'false'); } catch (e) {}
+      if (wakeLockSentinel) {
+        try {
+          await wakeLockSentinel.release();
+        } catch (e) {}
+        wakeLockSentinel = null;
+      }
+      updateWakeLockUI(false);
+      if (!silent) showToast('Walk Mode Deactivated (Sleep Allowed)');
+    }
+
+    async function toggleWakeLock() {
+      if (isWalkModeWanted || wakeLockSentinel) {
+        await releaseWakeLock();
       } else {
-        showToast('Wake Lock API not supported on this browser', true);
+        isWalkModeWanted = true;
+        try { localStorage.setItem('arbor_walk_mode', 'true'); } catch (e) {}
+        await acquireWakeLock();
       }
     }
 
@@ -5882,138 +5972,160 @@ INDEX_TEMPLATE = """
         return;
       }
       isSaving = true;
-      hasPendingSave = false;
 
       try {
-        const btnRev = document.getElementById('btnMarkReviewed');
+        while (true) {
+          hasPendingSave = false;
+          const btnRev = document.getElementById('btnMarkReviewed');
 
-        const regPayload = {};
-        const obsPayload = {};
+          const regPayload = {};
+          const obsPayload = {};
 
-        // Collect all dynamic inputs
-        document.querySelectorAll('[data-section="registration"]').forEach(input => {
-          const f = input.getAttribute('data-field');
-          if (dirtyFields.has(f)) {
-            regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
-          }
-        });
-
-        document.querySelectorAll('[data-section="observation"]').forEach(input => {
-          const f = input.getAttribute('data-field');
-          if (dirtyFields.has(f)) {
-            if (input.type === 'checkbox') {
-              obsPayload[f] = input.checked;
-            } else {
-              obsPayload[f] = input.value;
+          // Collect all dynamic inputs
+          document.querySelectorAll('[data-section="registration"]').forEach(input => {
+            const f = input.getAttribute('data-field');
+            if (dirtyFields.has(f)) {
+              regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
             }
-          }
-        });
+          });
 
-        // Merge problem flags
-        if (currentRecord && currentRecord.observation) {
-          Object.keys(currentRecord.observation).forEach(k => {
-            if (k.endsWith('_Problem') || k.startsWith('Unknown_')) {
-              if (dirtyFields.has(k)) {
-                obsPayload[k] = currentRecord.observation[k];
+          document.querySelectorAll('[data-section="observation"]').forEach(input => {
+            const f = input.getAttribute('data-field');
+            if (dirtyFields.has(f)) {
+              if (input.type === 'checkbox') {
+                obsPayload[f] = input.checked;
+              } else {
+                obsPayload[f] = input.value;
               }
             }
           });
-        }
 
-        // If nothing was dirtied, and review status wasn't checked, we technically don't need to save,
-        // but the server handles empty updates gracefully.
-        dirtyFields.clear();
-
-        const unvalSourcesList = Object.entries(currentUnvalidatedMap || {}).map(([field, comment]) => ({ field, comment }));
-
-        const payload = {
-          id: currentOid,
-          reviewed: isReviewed,
-          registration: regPayload,
-          observation: obsPayload,
-          unvalidated_sources: unvalSourcesList,
-          timestamp: new Date().toISOString()
-        };
-
-        if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
-          queueMutation(payload);
-          if (btnRev) btnRev.disabled = false;
-
-          // Optimistically update UI models to prevent local interruption
-          if (currentRecord) {
-            currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-            currentRecord.unvalidated_sources = unvalSourcesList;
-            updateReviewButtonUI();
+          // Merge problem flags
+          if (currentRecord && currentRecord.observation) {
+            Object.keys(currentRecord.observation).forEach(k => {
+              if (k.endsWith('_Problem') || k.startsWith('Unknown_')) {
+                if (dirtyFields.has(k)) {
+                  obsPayload[k] = currentRecord.observation[k];
+                }
+              }
+            });
           }
 
-          const listItem = objectList.find(o => String(o.id) === String(currentOid));
-          if (listItem) {
-            listItem.review_status = isReviewed ? 'reviewed' : 'pending';
-            listItem.has_unvalidated = (unvalSourcesList.length > 0);
-          }
+          // If nothing was dirtied, and review status wasn't checked, we technically don't need to save,
+          // but the server handles empty updates gracefully.
+          dirtyFields.clear();
 
-          return;
-        }
-        if (btnRev) btnRev.disabled = false;
+          const unvalSourcesList = Object.entries(currentUnvalidatedMap || {}).map(([field, comment]) => ({ field, comment }));
 
-        try {
-          const res = await apiFetch('/api/update', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-          });
+          const payload = {
+            id: currentOid,
+            reviewed: isReviewed,
+            registration: regPayload,
+            observation: obsPayload,
+            unvalidated_sources: unvalSourcesList,
+            timestamp: new Date().toISOString()
+          };
 
-          // Handle case where fetch returns a network error or empty object instead of throwing
-          if (!res || res.error === 'Failed to fetch' || (Object.keys(res).length === 0)) {
-             throw new Error('Network failure');
-          }
+          if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
+            queueMutation(payload);
+            if (btnRev) btnRev.disabled = false;
 
-          document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
-          if (btnRev) btnRev.disabled = false;
-          const undoBtn = document.getElementById('btnMobileUndo');
-          if (undoBtn) undoBtn.classList.remove('hidden');
-          if (undoBtn) undoBtn.classList.add('flex');
-
-          if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
-            if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
-            if (res.has_history !== undefined) currentRecord.has_history = res.has_history;
-            if (res.has_unknown !== undefined) currentRecord.has_unknown = res.has_unknown;
-            if (res.review_status !== undefined) currentRecord.review_status = res.review_status;
-            updateReviewButtonUI();
+            // Optimistically update UI models to prevent local interruption
+            if (currentRecord) {
+              currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+              currentRecord.unvalidated_sources = unvalSourcesList;
+              updateReviewButtonUI();
+            }
 
             const listItem = objectList.find(o => String(o.id) === String(currentOid));
             if (listItem) {
-              if (res.has_flags !== undefined) listItem.has_flags = res.has_flags;
-              if (res.has_history !== undefined) listItem.has_history = res.has_history;
-              if (res.has_unknown !== undefined) listItem.has_unknown = res.has_unknown;
-              if (res.review_status !== undefined) listItem.review_status = res.review_status;
+              listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+              listItem.has_unvalidated = (unvalSourcesList.length > 0);
+            }
+
+            if (!hasPendingSave) break;
+            continue;
+          }
+          if (btnRev) btnRev.disabled = false;
+
+          try {
+            const res = await apiFetch('/api/update', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            });
+
+            // Check for conflict response (409) or conflict message
+            if (res && (res._status === 409 || res.status === 409 || (typeof res.error === 'string' && res.error.includes('Conflict')))) {
+              showToast(`⚠️ ${res.error || 'Conflict: Host modified this record'}`, true);
+              const syncStatus = document.getElementById('footerSyncStatus');
+              if (syncStatus) {
+                syncStatus.innerHTML = '<span class="font-mono text-ember font-medium" id="footerSyncStatusText">⚠️ Host conflict</span>';
+              }
+              if (btnRev) btnRev.disabled = false;
+              if (!hasPendingSave) break;
+              continue;
+            }
+
+            if (res && res.error && res.error !== 'Failed to fetch') {
+              showToast(`⚠️ ${res.error}`, true);
+              if (btnRev) btnRev.disabled = false;
+              if (!hasPendingSave) break;
+              continue;
+            }
+
+            // Handle case where fetch returns a network error or empty object instead of throwing
+            if (!res || res.error === 'Failed to fetch' || (Object.keys(res).length === 0)) {
+               throw new Error('Network failure');
+            }
+
+            document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
+            if (btnRev) btnRev.disabled = false;
+            const undoBtn = document.getElementById('btnMobileUndo');
+            if (undoBtn) undoBtn.classList.remove('hidden');
+            if (undoBtn) undoBtn.classList.add('flex');
+
+            if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
+              if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
+              if (res.has_history !== undefined) currentRecord.has_history = res.has_history;
+              if (res.has_unknown !== undefined) currentRecord.has_unknown = res.has_unknown;
+              if (res.review_status !== undefined) currentRecord.review_status = res.review_status;
+              updateReviewButtonUI();
+
+              const listItem = objectList.find(o => String(o.id) === String(currentOid));
+              if (listItem) {
+                if (res.has_flags !== undefined) listItem.has_flags = res.has_flags;
+                if (res.has_history !== undefined) listItem.has_history = res.has_history;
+                if (res.has_unknown !== undefined) listItem.has_unknown = res.has_unknown;
+                if (res.review_status !== undefined) listItem.review_status = res.review_status;
+              }
+            }
+
+            // Hide 'Edit saved' message if we determine we're actually disconnected
+            if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
+                document.getElementById('footerSyncStatusText').classList.add('hidden');
+            }
+          } catch (err) {
+            queueMutation(payload);
+            if (btnRev) btnRev.disabled = false;
+
+            // Optimistically update UI models to prevent local interruption
+            if (currentRecord) {
+              currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+              updateReviewButtonUI();
+            }
+
+            const listItem = objectList.find(o => String(o.id) === String(currentOid));
+            if (listItem) {
+              listItem.review_status = isReviewed ? 'reviewed' : 'pending';
             }
           }
 
-          // Hide 'Edit saved' message if we determine we're actually disconnected
-          if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
-              document.getElementById('footerSyncStatusText').classList.add('hidden');
-          }
-        } catch (err) {
-          queueMutation(payload);
-          if (btnRev) btnRev.disabled = false;
-
-          // Optimistically update UI models to prevent local interruption
-          if (currentRecord) {
-            currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-            updateReviewButtonUI();
-          }
-
-          const listItem = objectList.find(o => String(o.id) === String(currentOid));
-          if (listItem) {
-            listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+          if (!hasPendingSave) {
+            break;
           }
         }
       } finally {
         isSaving = false;
-        if (hasPendingSave) {
-          hasPendingSave = false;
-          saveCurrentEdits();
-        }
       }
     }
 

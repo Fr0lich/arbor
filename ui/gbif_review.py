@@ -1,18 +1,19 @@
-﻿import tkinter as tk
+import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
 from datetime import datetime
 import os
 import getpass
 import tkinter.font as tkFont
-from typing import List, Dict, Any, Optional
+import math
+from typing import List, Dict, Any, Optional, Tuple
 from config import sc
 from ui.state import app_bus, DATABASE_UPDATED
 
 FONT_UI = ("sans-serif", 10)
 FONT_UI_BOLD = ("sans-serif", 10, "bold")
 FONT_UI_LG = ("sans-serif", 12, "bold")
-FONT_UI_XL = ("sans-serif", 16, "bold")
+FONT_UI_XL = ("sans-serif", 15, "bold")
 FONT_MONO = ("Consolas", 10)
 FONT_MONO_SM = ("Consolas", 8)
 
@@ -28,7 +29,7 @@ def init_fonts():
     FONT_UI = (ui_family, sc(10))
     FONT_UI_BOLD = (ui_family, sc(10), "bold")
     FONT_UI_LG = (ui_family, sc(12), "bold")
-    FONT_UI_XL = (ui_family, sc(16), "bold")
+    FONT_UI_XL = (ui_family, sc(15), "bold")
     FONT_MONO = (mono_family, sc(10))
     FONT_MONO_SM = (mono_family, sc(8))
     _fonts_initialized = True
@@ -55,66 +56,173 @@ COLORS = {
 
 class GBIFReviewDialog(tk.Toplevel):
     """
-    Gold-standard Taxonomic Reconciliation & Review dialog modeled after HistoricalConflictResolverWindow.
-    Provides clear before/after comparison chips, selective field application, and full audit logging.
+    High-Performance Paginated Taxonomic Reconciliation & Review dialog.
+    Supports reviewing thousands of specimens instantaneously with 0 GDI coordinate overflow,
+    virtualized page rendering, live filtering, and global cross-page batch selection tracking.
     """
     def __init__(self, parent, app_state, diff_results: List[Dict[str, Any]], on_applied_callback=None):
         super().__init__(parent)
+        self.withdraw()  # Prevent top-left flashing during widget construction
         init_fonts()
         self.parent = parent
         self.app_state = app_state
-        self.diff_results = diff_results
+        self.diff_results = diff_results or []
         self.on_applied_callback = on_applied_callback
 
         self.title("GBIF Taxonomic Review & Reconciliation")
         self.configure(bg=COLORS["bg"])
+        self.minsize(sc(800), sc(540))
 
-        import utils
-        utils.center_and_fit_toplevel(self, sc(1100), sc(700))
-        self.minsize(sc(750), sc(500))
+        # Pagination & Filter State
+        self.page_size = 25
+        self.current_page = 0
+        self.search_query = ""
+        self.status_filter = "all"  # "all", "synonym", "accepted"
 
-        # Flatten changes & state
+        # Global Cross-Page Selection Tracking
+        self.selection_state: Dict[Tuple[str, str], bool] = {}
+        self.all_changes: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self.oid_to_diff: Dict[str, Dict[str, Any]] = {}
+
+        for d in self.diff_results:
+            oid = str(d.get("oid", ""))
+            self.oid_to_diff[oid] = d
+            for chg in d.get("changes", []):
+                field = chg.get("field", "")
+                key = (oid, field)
+                self.selection_state[key] = True
+                self.all_changes[key] = chg
+
+        # Page-local UI references
         self.item_cards = {}
         self.specimen_frames = {}
-        self.field_vars = {}  # (oid, field_name) -> BooleanVar
+        self.page_field_vars = {}  # (oid, field) -> BooleanVar on current page
 
         self._build_ui()
+        self._render_current_page()
+
+        import utils
+        utils.center_and_fit_toplevel(self, sc(1120), sc(720))
         self.transient(parent)
-        self.grab_set()
+        self.lift()
+        self.focus_set()
+
+    def _get_filtered_results(self) -> List[Dict[str, Any]]:
+        q = self.search_query.strip().lower()
+        sf = self.status_filter
+
+        results = []
+        for d in self.diff_results:
+            oid = str(d.get("oid", "")).strip().lower()
+            status = str(d.get("status", "")).strip().lower()
+            match_type = str(d.get("match_type", "")).strip().lower()
+
+            # Status filter
+            if sf == "synonym" and "synonym" not in status:
+                continue
+            elif sf == "accepted" and "synonym" in status:
+                continue
+
+            # Query filter (matches OID or any taxon field)
+            if q:
+                curr_vals = " ".join(str(v).lower() for v in d.get("current", {}).values())
+                prop_vals = " ".join(str(v).lower() for v in d.get("proposed", {}).values())
+                combined = f"{oid} {status} {match_type} {curr_vals} {prop_vals}"
+                if q not in combined:
+                    continue
+
+            results.append(d)
+
+        return results
 
     def _build_ui(self):
-        # 1. Header Bar
-        header = tk.Frame(self, bg=COLORS["surface"], height=sc(48))
+        # 1. Header Bar with Title & Search / Status Filters
+        header = tk.Frame(self, bg=COLORS["surface"], height=sc(52))
         header.pack(fill="x", side="top")
         tk.Frame(header, bg=COLORS["border"], height=sc(1)).pack(fill="x", side="bottom")
 
+        hdr_left = tk.Frame(header, bg=COLORS["surface"])
+        hdr_left.pack(side="left", padx=sc(16), pady=sc(10))
+
         tk.Label(
-            header,
-            text="GBIF_TAXONOMIC_REVIEW_AND_RECONCILIATION",
+            hdr_left,
+            text="🌿 GBIF TAXONOMIC RECONCILIATION",
             font=FONT_UI_LG,
             fg=COLORS["primary"],
             bg=COLORS["surface"]
-        ).pack(side="left", padx=sc(16), pady=sc(12))
+        ).pack(side="left")
+
+        # Search & Status Filter on Right of Header
+        hdr_right = tk.Frame(header, bg=COLORS["surface"])
+        hdr_right.pack(side="right", padx=sc(16), pady=sc(10))
+
+        # Status filter pills
+        syn_count = sum(1 for d in self.diff_results if d.get("status") == "SYNONYM")
+        acc_count = len(self.diff_results) - syn_count
+
+        self.status_var = tk.StringVar(value="all")
+        stat_combo = ttk.Combobox(
+            hdr_right,
+            textvariable=self.status_var,
+            values=[
+                f"All ({len(self.diff_results)})",
+                f"Synonyms ({syn_count})",
+                f"Accepted / Spelling ({acc_count})"
+            ],
+            state="readonly",
+            width=22,
+            font=FONT_UI
+        )
+        stat_combo.current(0)
+        stat_combo.bind("<<ComboboxSelected>>", self._on_status_filter_changed)
+        stat_combo.pack(side="right", padx=(sc(8), 0))
+
+        # Search box
+        self.search_var = tk.StringVar()
+        self.search_entry = tk.Entry(
+            hdr_right,
+            textvariable=self.search_var,
+            font=FONT_UI,
+            bg=COLORS["surface_dim"],
+            fg=COLORS["text"],
+            relief="flat",
+            bd=0,
+            width=20,
+            highlightthickness=1,
+            highlightbackground=COLORS["border"],
+            highlightcolor=COLORS["primary"]
+        )
+        self.search_entry.pack(side="right", ipady=sc(3))
+        self.search_var.trace_add("write", lambda *args: self._on_search_changed())
+
+        tk.Label(
+            hdr_right,
+            text="🔍 Search:",
+            font=FONT_UI_BOLD,
+            fg=COLORS["text_muted"],
+            bg=COLORS["surface"]
+        ).pack(side="right", padx=(0, sc(4)))
 
         # 2. Main content area (Split View: Left Sidebar Directory + Right Cards)
         main_area = tk.Frame(self, bg=COLORS["bg"])
         main_area.pack(fill="both", expand=True)
 
         # --- Left Sidebar (Specimen Directory) ---
-        sidebar = tk.Frame(main_area, width=sc(280), bg=COLORS["surface_dim"])
+        sidebar = tk.Frame(main_area, width=sc(260), bg=COLORS["surface_dim"])
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         tk.Frame(sidebar, bg=COLORS["border"], width=sc(1)).pack(side="right", fill="y")
 
-        dir_header = tk.Frame(sidebar, bg=COLORS["border"], height=sc(40))
+        dir_header = tk.Frame(sidebar, bg=COLORS["border"], height=sc(36))
         dir_header.pack(fill="x")
-        tk.Label(
+        self.dir_title_label = tk.Label(
             dir_header,
-            text="SPECIMEN_DIRECTORY",
+            text="PAGE SPECIMENS",
             font=FONT_MONO_SM,
             fg=COLORS["text_muted"],
             bg=COLORS["border"]
-        ).pack(side="left", padx=sc(12), pady=sc(12))
+        )
+        self.dir_title_label.pack(side="left", padx=sc(10), pady=sc(8))
 
         self.dir_canvas = tk.Canvas(sidebar, bg=COLORS["surface_dim"], highlightthickness=0)
         dir_scrollbar = ttk.Scrollbar(sidebar, orient="vertical", command=self.dir_canvas.yview)
@@ -132,51 +240,88 @@ class GBIFReviewDialog(tk.Toplevel):
         dir_scrollbar.pack(side="right", fill="y")
         self.dir_canvas.bind("<MouseWheel>", self._on_dir_mousewheel)
 
-        # --- Right Main Area (Scrollable Cards) ---
+        # --- Right Main Area (Scrollable Cards with Top Pagination) ---
         right_area = tk.Frame(main_area, bg=COLORS["bg"])
         right_area.pack(side="left", fill="both", expand=True)
 
-        # Context Header
-        ctx_header = tk.Frame(right_area, bg=COLORS["surface"], height=sc(70))
-        ctx_header.pack(fill="x")
-        tk.Frame(ctx_header, bg=COLORS["border"], height=sc(1)).pack(side="bottom", fill="x")
+        # Top Pagination & Context Bar
+        self.ctx_header = tk.Frame(right_area, bg=COLORS["surface"], height=sc(48))
+        self.ctx_header.pack(fill="x")
+        tk.Frame(self.ctx_header, bg=COLORS["border"], height=sc(1)).pack(side="bottom", fill="x")
 
-        total_changes = sum(len(d.get("changes", [])) for d in self.diff_results)
-        tk.Label(
-            ctx_header,
-            text=f"REVIEW: {len(self.diff_results)} SPECIMENS WITH TAXONOMIC UPDATES",
-            font=FONT_UI_XL,
+        self.page_info_label = tk.Label(
+            self.ctx_header,
+            text="",
+            font=FONT_UI_BOLD,
             fg=COLORS["primary"],
             bg=COLORS["surface"]
-        ).pack(anchor="w", padx=sc(24), pady=(sc(12), sc(2)))
+        )
+        self.page_info_label.pack(side="left", padx=sc(16), pady=sc(10))
 
-        tk.Label(
-            ctx_header,
-            text=f"Detected {total_changes} suggested field updates from GBIF. Check the boxes for each change you wish to apply.",
-            font=FONT_UI,
+        # Pagination controls
+        nav_frame = tk.Frame(self.ctx_header, bg=COLORS["surface"])
+        nav_frame.pack(side="right", padx=sc(16), pady=sc(8))
+
+        self.btn_first = tk.Button(
+            nav_frame, text="⏮", command=self._goto_first_page,
+            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(3)
+        )
+        self.btn_first.pack(side="left", padx=(0, sc(4)))
+
+        self.btn_prev = tk.Button(
+            nav_frame, text="◀ Prev", command=self._goto_prev_page,
+            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3)
+        )
+        self.btn_prev.pack(side="left", padx=(0, sc(8)))
+
+        self.page_num_label = tk.Label(
+            nav_frame,
+            text="Page 1 of 1",
+            font=FONT_UI_BOLD,
             fg=COLORS["text_muted"],
             bg=COLORS["surface"]
-        ).pack(anchor="w", padx=sc(24), pady=(0, sc(12)))
+        )
+        self.page_num_label.pack(side="left", padx=sc(4))
+
+        self.btn_next = tk.Button(
+            nav_frame, text="Next ▶", command=self._goto_next_page,
+            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3)
+        )
+        self.btn_next.pack(side="left", padx=(sc(8), sc(4)))
+
+        self.btn_last = tk.Button(
+            nav_frame, text="⏭", command=self._goto_last_page,
+            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(3)
+        )
+        self.btn_last.pack(side="left", padx=(0, sc(12)))
+
+        # Per-page selector
+        tk.Label(nav_frame, text="Per page:", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(side="left")
+        self.page_size_var = tk.StringVar(value=str(self.page_size))
+        ps_combo = ttk.Combobox(nav_frame, textvariable=self.page_size_var, values=["25", "50", "100"], state="readonly", width=4, font=FONT_MONO_SM)
+        ps_combo.pack(side="left", padx=(sc(4), 0))
+        ps_combo.bind("<<ComboboxSelected>>", self._on_page_size_changed)
 
         # Scrollable Canvas for Specimen Cards
         self.canvas = tk.Canvas(right_area, bg=COLORS["bg"], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(right_area, orient="vertical", command=self.canvas.yview)
-        self.cards_frame = tk.Frame(self.canvas, bg=COLORS["bg"], padx=sc(20), pady=sc(16))
+        self.scrollbar = ttk.Scrollbar(right_area, orient="vertical", command=self.canvas.yview)
+        self.cards_frame = tk.Frame(self.canvas, bg=COLORS["bg"], padx=sc(18), pady=sc(14))
 
         self.cards_frame.bind(
             "<Configure>",
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")) if e.widget == self.cards_frame else None
         )
-        canvas_window = self.canvas.create_window((0, 0), window=self.cards_frame, anchor="nw")
-        self.canvas.bind("<Configure>", lambda e, cw=canvas_window: self.canvas.itemconfig(cw, width=e.width))
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.cards_frame, anchor="nw")
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
 
         self.canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        self.canvas.configure(yscrollcommand=scrollbar.set)
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.bind("<MouseWheel>", self._on_main_mousewheel)
-
-        # Populate Directory & Cards
-        self._populate_all()
 
         # 3. Bottom Action Bar
         bottom_bar = tk.Frame(self, bg=COLORS["surface"], height=sc(56))
@@ -186,20 +331,27 @@ class GBIFReviewDialog(tk.Toplevel):
         b_content = tk.Frame(bottom_bar, bg=COLORS["surface"], padx=sc(16), pady=sc(10))
         b_content.pack(fill="both", expand=True)
 
-        # Quick selection buttons
+        # Batch Selection Controls
         sel_all_btn = tk.Button(
-            b_content, text="Select All", command=self._select_all,
+            b_content, text="Select All (Batch)", command=self._select_all_batch,
             font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(12), pady=sc(4)
+            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(4)
         )
-        sel_all_btn.pack(side="left", padx=(0, sc(8)))
+        sel_all_btn.pack(side="left", padx=(0, sc(6)))
 
         desel_all_btn = tk.Button(
-            b_content, text="Deselect All", command=self._deselect_all,
+            b_content, text="Deselect All", command=self._deselect_all_batch,
             font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(12), pady=sc(4)
+            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(4)
         )
-        desel_all_btn.pack(side="left")
+        desel_all_btn.pack(side="left", padx=(0, sc(6)))
+
+        sel_page_btn = tk.Button(
+            b_content, text="Select Page", command=self._select_current_page,
+            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(4)
+        )
+        sel_page_btn.pack(side="left")
 
         # Summary label
         self.summary_label = tk.Label(
@@ -209,7 +361,7 @@ class GBIFReviewDialog(tk.Toplevel):
             fg=COLORS["text_muted"],
             bg=COLORS["surface"]
         )
-        self.summary_label.pack(side="left", padx=sc(24))
+        self.summary_label.pack(side="left", padx=sc(20))
 
         # Action Buttons
         cancel_btn = tk.Button(
@@ -226,15 +378,56 @@ class GBIFReviewDialog(tk.Toplevel):
         )
         self.apply_btn.pack(side="right")
 
-        self._update_summary()
+    def _render_current_page(self):
+        # 1. Clear previous page widgets
+        for child in self.dir_list.winfo_children():
+            child.destroy()
+        for child in self.cards_frame.winfo_children():
+            child.destroy()
 
-    def _populate_all(self):
-        for diff in self.diff_results:
+        self.item_cards.clear()
+        self.specimen_frames.clear()
+        self.page_field_vars.clear()
+
+        # 2. Get filtered results and slice page
+        filtered = self._get_filtered_results()
+        total_items = len(filtered)
+        total_pages = max(1, math.ceil(total_items / self.page_size))
+
+        if self.current_page >= total_pages:
+            self.current_page = max(0, total_pages - 1)
+
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, total_items)
+        page_items = filtered[start_idx:end_idx]
+
+        # Update Navigation & Header Labels
+        if total_items == 0:
+            self.page_info_label.config(text="No matching specimens found.")
+            self.page_num_label.config(text="Page 0 of 0")
+            self.btn_first.config(state="disabled")
+            self.btn_prev.config(state="disabled")
+            self.btn_next.config(state="disabled")
+            self.btn_last.config(state="disabled")
+        else:
+            self.page_info_label.config(
+                text=f"Showing specimens {start_idx + 1}–{end_idx} of {total_items} (Batch total: {len(self.diff_results)})"
+            )
+            self.page_num_label.config(text=f"Page {self.current_page + 1} of {total_pages}")
+            self.btn_first.config(state="normal" if self.current_page > 0 else "disabled")
+            self.btn_prev.config(state="normal" if self.current_page > 0 else "disabled")
+            self.btn_next.config(state="normal" if self.current_page < total_pages - 1 else "disabled")
+            self.btn_last.config(state="normal" if self.current_page < total_pages - 1 else "disabled")
+
+        self.dir_title_label.config(text=f"SPECIMENS ({len(page_items)})")
+
+        # 3. Populate Directory and Specimen Cards for Current Page
+        for diff in page_items:
             oid = str(diff.get("oid", ""))
             status = diff.get("status", "ACCEPTED")
             changes = diff.get("changes", [])
 
-            # --- 1. Left Sidebar Entry ---
+            # --- Left Directory Entry ---
             f_frame = tk.Frame(self.dir_list, bg=COLORS["surface_dim"], cursor="hand2", padx=sc(8), pady=sc(6))
             f_frame.pack(fill="x", pady=sc(1))
 
@@ -250,7 +443,7 @@ class GBIFReviewDialog(tk.Toplevel):
                     card = self.item_cards[target_oid]
                     y = card.winfo_y()
                     if self.cards_frame.winfo_height() > 0:
-                        self.canvas.yview_moveto(max(0, (y - 20) / self.cards_frame.winfo_height()))
+                        self.canvas.yview_moveto(max(0, (y - 10) / self.cards_frame.winfo_height()))
 
             f_frame.bind("<Button-1>", lambda e, f=_scroll_to: f())
             for child in f_frame.winfo_children():
@@ -258,21 +451,21 @@ class GBIFReviewDialog(tk.Toplevel):
 
             self.specimen_frames[oid] = f_frame
 
-            # --- 2. Right Card Frame ---
+            # --- Right Card Frame ---
             card = tk.Frame(
                 self.cards_frame,
                 bg=COLORS["surface"],
                 highlightbackground=COLORS["border"],
                 highlightthickness=1,
                 padx=sc(16),
-                pady=sc(14)
+                pady=sc(12)
             )
-            card.pack(fill="x", pady=(0, sc(14)))
+            card.pack(fill="x", pady=(0, sc(12)))
             self.item_cards[oid] = card
 
             # Card Header
             c_header = tk.Frame(card, bg=COLORS["surface"])
-            c_header.pack(fill="x", pady=(0, sc(10)))
+            c_header.pack(fill="x", pady=(0, sc(8)))
 
             tk.Label(
                 c_header,
@@ -298,16 +491,22 @@ class GBIFReviewDialog(tk.Toplevel):
             # Field Rows
             for chg in changes:
                 field = chg["field"]
-                old_val = str(chg["old"])
-                new_val = str(chg["new"])
+                old_val = str(chg.get("old", ""))
+                new_val = str(chg.get("new", ""))
 
-                var = tk.BooleanVar(value=True)
-                self.field_vars[(oid, field)] = (var, chg)
+                key = (oid, field)
+                is_selected = self.selection_state.get(key, True)
 
-                row_frame = tk.Frame(card, bg=COLORS["surface"], pady=sc(4))
-                row_frame.pack(fill="x", pady=(0, sc(6)))
+                var = tk.BooleanVar(value=is_selected)
+                self.page_field_vars[key] = var
 
-                # Top line: Checkbox with field name
+                def _on_toggle(k=key, v=var):
+                    self.selection_state[k] = v.get()
+                    self._update_summary()
+
+                row_frame = tk.Frame(card, bg=COLORS["surface"], pady=sc(3))
+                row_frame.pack(fill="x", pady=(0, sc(4)))
+
                 chk = tk.Checkbutton(
                     row_frame,
                     text=field,
@@ -319,12 +518,12 @@ class GBIFReviewDialog(tk.Toplevel):
                     activeforeground=COLORS["primary"],
                     selectcolor=COLORS["surface"],
                     cursor="hand2",
-                    command=self._update_summary
+                    command=_on_toggle
                 )
-                chk.pack(anchor="w", pady=(0, sc(4)))
+                chk.pack(anchor="w", pady=(0, sc(2)))
 
                 # Chips Grid
-                grid_frame = tk.Frame(row_frame, bg=COLORS["surface"], padx=sc(20))
+                grid_frame = tk.Frame(row_frame, bg=COLORS["surface"], padx=sc(16))
                 grid_frame.pack(fill="x")
                 grid_frame.columnconfigure(0, weight=1)
                 grid_frame.columnconfigure(1, weight=1)
@@ -336,7 +535,7 @@ class GBIFReviewDialog(tk.Toplevel):
                     highlightbackground=COLORS["error_border"],
                     highlightthickness=1,
                     padx=sc(10),
-                    pady=sc(6)
+                    pady=sc(5)
                 )
                 db_chip.grid(row=0, column=0, sticky="ew", padx=(0, sc(6)))
 
@@ -363,7 +562,7 @@ class GBIFReviewDialog(tk.Toplevel):
                     highlightbackground=COLORS["success_border"],
                     highlightthickness=1,
                     padx=sc(10),
-                    pady=sc(6)
+                    pady=sc(5)
                 )
                 gbif_chip.grid(row=0, column=1, sticky="ew", padx=(sc(6), 0))
 
@@ -383,6 +582,60 @@ class GBIFReviewDialog(tk.Toplevel):
                     bg=COLORS["success_bg"]
                 ).pack(anchor="w")
 
+        # Scroll to top of cards
+        self.canvas.yview_moveto(0)
+        self._update_summary()
+
+    def _goto_first_page(self):
+        if self.current_page != 0:
+            self.current_page = 0
+            self._render_current_page()
+
+    def _goto_prev_page(self):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self._render_current_page()
+
+    def _goto_next_page(self):
+        filtered = self._get_filtered_results()
+        total_pages = max(1, math.ceil(len(filtered) / self.page_size))
+        if self.current_page < total_pages - 1:
+            self.current_page += 1
+            self._render_current_page()
+
+    def _goto_last_page(self):
+        filtered = self._get_filtered_results()
+        total_pages = max(1, math.ceil(len(filtered) / self.page_size))
+        if self.current_page != total_pages - 1:
+            self.current_page = total_pages - 1
+            self._render_current_page()
+
+    def _on_page_size_changed(self, event=None):
+        try:
+            new_size = int(self.page_size_var.get())
+            if new_size > 0:
+                self.page_size = new_size
+                self.current_page = 0
+                self._render_current_page()
+        except Exception:
+            pass
+
+    def _on_search_changed(self):
+        self.search_query = self.search_var.get()
+        self.current_page = 0
+        self._render_current_page()
+
+    def _on_status_filter_changed(self, event=None):
+        val = self.status_var.get()
+        if "Synonyms" in val:
+            self.status_filter = "synonym"
+        elif "Accepted" in val:
+            self.status_filter = "accepted"
+        else:
+            self.status_filter = "all"
+        self.current_page = 0
+        self._render_current_page()
+
     def _on_dir_mousewheel(self, event):
         if event.delta:
             self.dir_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -391,27 +644,38 @@ class GBIFReviewDialog(tk.Toplevel):
         if event.delta:
             self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    def _select_all(self):
-        for var, _ in self.field_vars.values():
+    def _select_all_batch(self):
+        for k in self.selection_state.keys():
+            self.selection_state[k] = True
+        for var in self.page_field_vars.values():
             var.set(True)
         self._update_summary()
 
-    def _deselect_all(self):
-        for var, _ in self.field_vars.values():
+    def _deselect_all_batch(self):
+        for k in self.selection_state.keys():
+            self.selection_state[k] = False
+        for var in self.page_field_vars.values():
             var.set(False)
         self._update_summary()
 
+    def _select_current_page(self):
+        for k, var in self.page_field_vars.items():
+            self.selection_state[k] = True
+            var.set(True)
+        self._update_summary()
+
     def _update_summary(self):
-        sel_count = sum(1 for var, _ in self.field_vars.values() if var.get())
-        total_count = len(self.field_vars)
-        self.summary_label.config(text=f"Selected: {sel_count} / {total_count} field updates")
+        sel_count = sum(1 for v in self.selection_state.values() if v)
+        total_count = len(self.selection_state)
+        selected_oids = {oid for (oid, f), v in self.selection_state.items() if v}
+        self.summary_label.config(text=f"Selected: {sel_count} / {total_count} field updates ({len(selected_oids)} specimens)")
         self.apply_btn.config(text=f"Apply Selected Updates ({sel_count})")
 
     def _apply_selected(self):
         selected_updates = [
-            (oid, chg)
-            for (oid, field), (var, chg) in self.field_vars.items()
-            if var.get()
+            (oid, self.all_changes[(oid, field)])
+            for (oid, field), is_sel in self.selection_state.items()
+            if is_sel and (oid, field) in self.all_changes
         ]
 
         if not selected_updates:
@@ -525,6 +789,7 @@ class GBIFReviewDialog(tk.Toplevel):
             parent=self.parent
         )
         self.destroy()
+
 
 
 def rollback_gbif_updates(app_state, main_window=None):
