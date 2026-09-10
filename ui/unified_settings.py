@@ -353,6 +353,7 @@ class UnifiedSettingsWindow:
         self.var_auto_resolve = tk.BooleanVar(value=p.get("auto_resolve_conflicts", False))
         self.var_strict_validation = tk.BooleanVar(value=p.get("strict_input_validation", False))
         self.var_enable_gbif = tk.BooleanVar(value=p.get("enable_gbif", False))
+        self.var_gbif_max_workers = tk.IntVar(value=int(p.get("gbif_max_workers", 5)))
 
         # Toolbar draft vars
         self.draft_toolbar_vars = {}
@@ -1151,6 +1152,15 @@ class UnifiedSettingsWindow:
                           command=lambda: self._notify_live("enable_gbif", self.var_enable_gbif.get()),
                           ui_ref=self.app or self, info_text="Shows the 'Check GBIF' button to validate Genus and Species against GBIF.")
 
+        f_workers = tk.Frame(card3, bg=self.COLORS["card_bg"])
+        f_workers.pack(fill="x", pady=sc(6))
+        tk.Label(f_workers, text="GBIF Batch Concurrency:", font=self.FONT_DATA,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
+        create_info_badge(f_workers, "Maximum concurrent worker threads when running batch taxonomic checks against GBIF (1-10). Lower if experiencing rate limits or timeouts.", ui_ref=self.app or self).pack(side="left", padx=(sc(6), sc(8)))
+        ttk.Combobox(f_workers, textvariable=self.var_gbif_max_workers,
+                     values=[1, 2, 3, 4, 5, 6, 8, 10],
+                     state="readonly", width=6, cursor="hand2").pack(side="left", padx=sc(4))
+
     # ── TAB 7: TOOLS ─────────────────────────────────────────────────────────
     def _build_tab_tools(self):
         c = self._create_scrollable_tab("tools")
@@ -1375,6 +1385,10 @@ class UnifiedSettingsWindow:
         p["auto_resolve_conflicts"] = self.var_auto_resolve.get()
         p["strict_input_validation"] = self.var_strict_validation.get()
         p["enable_gbif"] = self.var_enable_gbif.get()
+        try:
+            p["gbif_max_workers"] = int(self.var_gbif_max_workers.get())
+        except Exception:
+            p["gbif_max_workers"] = 5
 
         # ── Write prefs["advanced"] sub-key for backward compatibility ────────
         # (apply_theme() and AdvancedSettingsWindow read from prefs["advanced"])
@@ -1386,6 +1400,7 @@ class UnifiedSettingsWindow:
         adv["enable_bulk_editor"] = p["enable_bulk_editor"]
         adv["enable_focus_mode_toggle"] = p["enable_focus_mode_toggle"]
         adv["enable_gbif"] = p["enable_gbif"]
+        adv["gbif_max_workers"] = p["gbif_max_workers"]
         adv["enable_excel_import_backup"] = p["enable_excel_import_backup"]
         adv["autosave_archive_limit"] = str(p.get("autosave_archive_limit", 10))
         adv["log_verbosity"] = p["log_verbosity"]

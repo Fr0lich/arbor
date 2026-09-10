@@ -101,6 +101,17 @@ ADVANCED_SETTINGS_SCHEMA = [
         "callback": "refresh_gbif_button"
     },
     {
+        "id": "gbif_max_workers",
+        "type": "choice",
+        "tab": "UX & Themes",
+        "group": "Taxonomy Validation",
+        "label": "GBIF Batch Concurrency",
+        "description": "Maximum concurrent workers (1-10) for GBIF batch queries.",
+        "choices": ["1", "2", "3", "4", "5", "6", "8", "10"],
+        "default": "5",
+        "refresh_type": "none"
+    },
+    {
         "id": "enable_problem_highlights",
         "type": "toggle",
         "tab": "UX & Themes",

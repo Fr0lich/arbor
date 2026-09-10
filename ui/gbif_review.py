@@ -91,13 +91,16 @@ class GBIFReviewDialog(tk.Toplevel):
         self.tree.heading("status", text="Status", anchor="center")
         self.tree.heading("rank", text="Rank", anchor="center")
 
-        self.tree.column("selected", width=sc(50), anchor="center")
-        self.tree.column("oid", width=sc(80), anchor="w")
-        self.tree.column("field", width=sc(120), anchor="w")
-        self.tree.column("old", width=sc(160), anchor="w")
-        self.tree.column("new", width=sc(180), anchor="w")
-        self.tree.column("status", width=sc(90), anchor="center")
-        self.tree.column("rank", width=sc(70), anchor="center")
+        self.tree.column("selected", width=sc(50), anchor="center", stretch=False)
+        self.tree.column("oid", width=sc(80), anchor="w", stretch=False)
+        self.tree.column("field", width=sc(120), anchor="w", stretch=True)
+        self.tree.column("old", width=sc(160), anchor="w", stretch=True)
+        self.tree.column("new", width=sc(180), anchor="w", stretch=True)
+        self.tree.column("status", width=sc(90), anchor="center", stretch=False)
+        self.tree.column("rank", width=sc(70), anchor="center", stretch=False)
+
+        self.tree.tag_configure("selected_row", background="#f0f7f0")
+        self.tree.tag_configure("unselected_row", background="#ffffff")
 
         v_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=v_scroll.set)
@@ -125,6 +128,7 @@ class GBIFReviewDialog(tk.Toplevel):
 
         for row in self.rows:
             sel_mark = "✓" if row["selected"] else " "
+            tag = "selected_row" if row["selected"] else "unselected_row"
             self.tree.insert(
                 "",
                 "end",
@@ -137,7 +141,8 @@ class GBIFReviewDialog(tk.Toplevel):
                     row["new"],
                     row["status"],
                     row["rank"]
-                )
+                ),
+                tags=(tag,)
             )
 
     def _on_tree_click(self, event):
@@ -157,9 +162,10 @@ class GBIFReviewDialog(tk.Toplevel):
             if r["id"] == row_id:
                 r["selected"] = not r["selected"]
                 sel_mark = "✓" if r["selected"] else " "
+                tag = "selected_row" if r["selected"] else "unselected_row"
                 vals = list(self.tree.item(str(row_id), "values"))
                 vals[0] = sel_mark
-                self.tree.item(str(row_id), values=vals)
+                self.tree.item(str(row_id), values=vals, tags=(tag,))
                 break
         self._update_summary()
 

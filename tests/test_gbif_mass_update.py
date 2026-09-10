@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 import pandas as pd
 from unittest.mock import patch, MagicMock
 from models import AppState
@@ -117,3 +117,99 @@ def test_gbif_apply_and_rollback():
     assert app.df_reg.at["1001", "Author"] == "L."
     assert len(app._log_records) == 2
     assert app._log_records[-1]["Action"] == "GBIF_ROLLBACK"
+
+
+def test_check_gbif_network_error_returns_dict():
+    from backend.gbif import check_gbif
+    with patch("requests.get", side_effect=Exception("Connection timed out")):
+        res = check_gbif("Quercus", "robur")
+        assert isinstance(res, dict)
+        assert "error" in res
+        assert "Connection timed out" in res["error"]
+
+
+def test_check_gbif_higher_classification_formatting():
+    from backend.gbif import check_gbif
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "scientificName": "Quercus robur L.",
+        "canonicalName": "Quercus robur",
+        "genus": "Quercus",
+        "species": "Quercus robur",
+        "kingdom": "Plantae",
+        "phylum": "Tracheophyta",
+        "class": "",  # Empty
+        "order": None,  # None
+        "matchType": "EXACT",
+        "status": "ACCEPTED",
+        "rank": "SPECIES"
+    }
+    with patch("requests.get", return_value=mock_resp):
+        res = check_gbif("Quercus", "robur")
+        assert res["higherClassification"] == "Plantae | Tracheophyta"
+
+
+def test_batch_gbif_match_skip_missing_genus():
+    items = [
+        {"oid": "1", "genus": "", "species": "robur"},
+        {"oid": "2", "genus": "   ", "species": "sylvestris"}
+    ]
+    with patch("backend.gbif.check_gbif") as mock_check:
+        res = batch_gbif_match(items)
+        assert len(res) == 0
+        mock_check.assert_not_called()
+
+
+def test_batch_gbif_match_synonym_partial_overwrite():
+    items = [{
+        "oid": "101",
+        "genus": "OldGenus",
+        "species": "old_spec",
+        "author": "OldAuthor",
+        "family": "OldFamily",
+        "higher_classification": "OldHigher"
+    }]
+    gbif_synonym = {
+        "genus": "SynGenus",
+        "species": "syn_spec",
+        "author": "SynAuthor",
+        "family": "SynFamily",
+        "higherClassification": "SynHigher",
+        "status": "SYNONYM",
+        "synonym": True,
+        "acceptedUsageKey": 99999,
+        "matchType": "EXACT",
+        "rank": "SPECIES"
+    }
+    # Accepted name only returns genus/species, empty author/family/higher
+    acc_name = {
+        "genus": "NewGenus",
+        "species": "new_spec",
+        "author": "",
+        "family": "",
+        "higherClassification": ""
+    }
+
+    with patch("backend.gbif.check_gbif", return_value=gbif_synonym), \
+         patch("backend.gbif.get_accepted_name", return_value=acc_name):
+        res = batch_gbif_match(items, max_workers=2)
+
+    assert len(res) == 1
+    proposed = res[0]["proposed"]
+    assert proposed["Genus"] == "NewGenus"
+    assert proposed["Species"] == "new_spec"
+    assert proposed["Author"] == "SynAuthor"  # Retained from gbif_synonym because acc_data had empty
+    assert proposed["Family"] == "SynFamily"
+    assert proposed["Higher Classification"] == "SynHigher"
+
+
+def test_batch_gbif_match_cancellation():
+    import threading
+    items = [{"oid": str(i), "genus": "Pinus", "species": f"spec_{i}"} for i in range(20)]
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    with patch("backend.gbif.check_gbif") as mock_check:
+        res = batch_gbif_match(items, cancel_event=cancel_event, max_workers=2)
+        assert len(res) == 0
+

@@ -1052,16 +1052,28 @@ class ObjectProgramUI(
             if self.gbif_btn.winfo_manager() == "pack":
                 self.gbif_btn.pack_forget()
 
+    def _reset_gbif_button(self):
+        self._gbif_checking = False
+        if hasattr(self, "gbif_btn") and self.gbif_btn.winfo_exists():
+            self.gbif_btn.config(text="🔍 Check GBIF", bg="#2b8a3e")
+
     def check_gbif_action(self):
         if not self.app.current_object_id:
+            return
+
+        if getattr(self, "_gbif_checking", False):
             return
 
         genus = self.reg_vars.get("Genus", tk.StringVar()).get().strip()
         species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
 
-        if not genus and not species:
-            messagebox.showinfo("GBIF Check", "Genus and Species are empty.", parent=self.root)
+        if not genus:
+            messagebox.showinfo("GBIF Check", "Genus is required to check GBIF.", parent=self.root)
             return
+
+        self._gbif_checking = True
+        if hasattr(self, "gbif_btn") and self.gbif_btn.winfo_exists():
+            self.gbif_btn.config(text="Loading...", bg="#6c757d")
 
         import threading
 
@@ -1077,8 +1089,13 @@ class ObjectProgramUI(
     def _on_gbif_result(self, result, old_genus, old_species):
         if hasattr(self, "hide_banner"):
             self.hide_banner()
+        if isinstance(result, dict) and "error" in result:
+            self._reset_gbif_button()
+            messagebox.showerror("GBIF Network Error", f"Failed to connect to GBIF API:\n{result['error']}", parent=self.root)
+            return
         if not result:
-            messagebox.showwarning("GBIF Check", "Could not find a match for this scientific name or an error occurred.", parent=self.root)
+            self._reset_gbif_button()
+            messagebox.showwarning("GBIF Check", "Could not find a match for this scientific name.", parent=self.root)
             return
 
         # If it's a synonym, fetch the accepted name and then prompt to update
@@ -1096,7 +1113,13 @@ class ObjectProgramUI(
         self._process_gbif_updates(result, old_genus, old_species, is_synonym=False)
 
     def _process_gbif_updates(self, result, old_genus, old_species, is_synonym=False):
-        self.hide_banner()
+        self._reset_gbif_button()
+        if hasattr(self, "hide_banner"):
+            self.hide_banner()
+        if isinstance(result, dict) and "error" in result:
+            import tkinter.messagebox as mb
+            mb.showerror("GBIF Network Error", f"Failed to fetch accepted name data:\n{result['error']}", parent=self.root)
+            return
         if not result:
             import tkinter.messagebox as mb
             mb.showwarning("GBIF Check", "Could not fetch accepted name data.", parent=self.root)
