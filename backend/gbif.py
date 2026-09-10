@@ -176,7 +176,6 @@ def _process_single_item(item: Dict[str, Any], cancel_event=None) -> Optional[Di
     species = str(item.get("species", "") or "").strip()
     author = str(item.get("author", "") or "").strip()
     family = str(item.get("family", "") or "").strip()
-    higher = str(item.get("higher_classification", "") or item.get("Higher Classification", "") or "").strip()
 
     if not genus:
         return None
@@ -199,38 +198,30 @@ def _process_single_item(item: Dict[str, Any], cancel_event=None) -> Optional[Di
                 gbif_data["author"] = acc_data["author"]
             if acc_data.get("family"):
                 gbif_data["family"] = acc_data["family"]
-            if acc_data.get("higherClassification"):
-                gbif_data["higherClassification"] = acc_data["higherClassification"]
 
     prop_genus = gbif_data.get("genus") or ""
     prop_species = gbif_data.get("species") or ""
     prop_author = gbif_data.get("author") or ""
     prop_family = gbif_data.get("family") or ""
-    prop_higher = gbif_data.get("higherClassification") or ""
 
     current_map = {
         "Genus": genus,
         "Species": species,
         "Author": author,
         "Family": family,
-        "Higher Classification": higher
     }
     proposed_map = {
         "Genus": prop_genus,
         "Species": prop_species,
         "Author": prop_author,
         "Family": prop_family,
-        "Higher Classification": prop_higher
     }
 
     changes = []
-    for k in ["Genus", "Species", "Author", "Family", "Higher Classification"]:
+    for k in ["Genus", "Species", "Author", "Family"]:
         c_val = current_map[k]
         p_val = proposed_map[k]
-        if k == "Higher Classification":
-            if p_val and not is_classification_equivalent(c_val, p_val):
-                changes.append({"field": k, "old": c_val, "new": p_val})
-        elif k == "Author":
+        if k == "Author":
             if p_val and not is_author_equivalent(c_val, p_val):
                 changes.append({"field": k, "old": c_val, "new": p_val})
         elif k == "Family":

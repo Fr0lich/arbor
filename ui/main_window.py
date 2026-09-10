@@ -1169,13 +1169,11 @@ class ObjectProgramUI(
 
         old_author = _get_live_field_value("Author", "author")
         old_family = _get_live_field_value("Family", "family")
-        old_higher_classification = _get_live_field_value("Higher Classification", "Higher_Classification", "higher_classification", "Classification")
 
         new_genus = result.get("genus", "")
         new_species = result.get("species", "")
         new_author = result.get("author", "")
         new_family = result.get("family", "")
-        new_higher_classification = result.get("higherClassification", "")
 
         updates_available = []
 
@@ -1210,16 +1208,6 @@ class ObjectProgramUI(
                 "data": {"family": new_family}
             })
 
-        # Check for Higher Classification update
-        if new_higher_classification and not backend.gbif.is_classification_equivalent(old_higher_classification, new_higher_classification):
-            updates_available.append({
-                "field": "Higher Classification",
-                "current": old_higher_classification or "(Empty)",
-                "gbif": new_higher_classification,
-                "selected": not bool(old_higher_classification), # Default true if currently empty
-                "data": {"higherClassification": new_higher_classification}
-            })
-
         if not updates_available:
             import tkinter.messagebox as mb
             if result.get("matchType") == "EXACT":
@@ -1234,9 +1222,9 @@ class ObjectProgramUI(
         self.root.wait_window(dialog)
 
         if dialog.result_data:
-            self._apply_gbif_update(dialog.result_data, old_genus, old_species, old_author, old_family, old_higher_classification)
+            self._apply_gbif_update(dialog.result_data, old_genus, old_species, old_author, old_family)
 
-    def _apply_gbif_update(self, result, old_genus, old_species, old_author, old_family, old_higher_classification):
+    def _apply_gbif_update(self, result, old_genus, old_species, old_author, old_family):
         if not result:
             self.hide_banner()
             return
@@ -1274,34 +1262,82 @@ class ObjectProgramUI(
                             if col.lower().replace("_", " ").strip() == name.lower().replace("_", " ").strip():
                                 self.app.df_reg.at[oid, col] = val_str
 
+        oid = getattr(self.app, "current_object_id", None)
+        if hasattr(self, "push_undo_state") and oid:
+            try:
+                self.push_undo_state(oid)
+                if hasattr(self.app, "redo_stacks") and isinstance(self.app.redo_stacks, dict):
+                    self.app.redo_stacks.setdefault(oid, []).clear()
+            except Exception:
+                pass
+
+        reg_changed_fields = []
+        reg_changed_values = []
+        prob_changed_fields = []
+        prob_changed_values = []
+
         # Update Taxonomy
         if "genus" in result and "species" in result:
-            _set_live_field_value(["Genus", "genus"], result["genus"])
-            _set_live_field_value(["Species", "species"], result["species"])
+            new_g = str(result["genus"])
+            new_s = str(result["species"])
+            _set_live_field_value(["Genus", "genus"], new_g)
+            _set_live_field_value(["Species", "species"], new_s)
+            if old_genus != new_g:
+                reg_changed_fields.append("Genus")
+                reg_changed_values.append(f'Genus: "{old_genus}" -> "{new_g}"')
+            if old_species != new_s:
+                reg_changed_fields.append("Species")
+                reg_changed_values.append(f'Species: "{old_species}" -> "{new_s}"')
 
             old_name = f"{old_genus} {old_species} {old_author}".strip()
             if result.get("is_synonym_update"):
-                notes.append(f"Updated from synonym: {old_name}.")
+                notes.append(f"Updated from synonym: {old_name} (via GBIF).")
             else:
-                notes.append(f"Updated spelling from: {old_name}.")
+                notes.append(f"Updated spelling from: {old_name} (via GBIF).")
 
         # Update Author
         if "author" in result:
-            _set_live_field_value(["Author", "author"], result["author"])
+            new_a = str(result["author"])
+            _set_live_field_value(["Author", "author"], new_a)
+            if old_author != new_a:
+                reg_changed_fields.append("Author")
+                reg_changed_values.append(f'Author: "{old_author}" -> "{new_a}"')
             if "genus" not in result: # If taxonomy wasn't updated, log just author
-                notes.append(f"Author updated from: {old_author or '(Empty)'}.")
+                notes.append(f"Author updated from: {old_author or '(Empty)'} (via GBIF).")
 
         # Update Family
         if "family" in result:
-            _set_live_field_value(["Family", "family"], result["family"])
+            new_f = str(result["family"])
+            _set_live_field_value(["Family", "family"], new_f)
+            if old_family != new_f:
+                reg_changed_fields.append("Family")
+                reg_changed_values.append(f'Family: "{old_family}" -> "{new_f}"')
             if old_family:
-                notes.append(f"Family updated from: {old_family}.")
+                notes.append(f"Family updated from: {old_family} (via GBIF).")
 
-        # Update Higher Classification
-        if "higherClassification" in result:
-            _set_live_field_value(["Higher Classification", "Higher_Classification", "higher_classification", "Classification"], result["higherClassification"])
-            if old_higher_classification:
-                notes.append(f"Higher Classification updated from: {old_higher_classification}.")
+        # Auto-clear mapped problem checkboxes for updated fields
+        if oid and hasattr(self, "problem_to_field") and hasattr(self.app, "df_obs") and self.app.df_obs is not None:
+            for f in reg_changed_fields:
+                for pc, mf in self.problem_to_field.items():
+                    if mf.lower().replace("_", " ").strip() == f.lower().replace("_", " ").strip():
+                        old_prob = False
+                        if oid in self.app.df_obs.index and pc in self.app.df_obs.columns:
+                            val = self.app.df_obs.at[oid, pc]
+                            old_prob = bool(val) if pd.notna(val) else False
+                        elif pc in self.problem_vars:
+                            old_prob = bool(self.problem_vars[pc].get())
+
+                        if old_prob:
+                            prob_changed_fields.append(pc)
+                            prob_changed_values.append(f'{pc}: "True" -> "False"')
+                            if pc in self.problem_vars:
+                                self.problem_vars[pc].set(False)
+                            if oid in self.app.df_obs.index and pc in self.app.df_obs.columns:
+                                self.app.df_obs.at[oid, pc] = False
+                            if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
+                                self._cached_obs_dict[oid][pc] = False
+                            if hasattr(self, "loaded_problem_states"):
+                                self.loaded_problem_states[pc] = False
 
         # Append notes to comment
         if notes and "Comment" in self.reg_vars and "Comment" in self.reg_entries:
@@ -1313,7 +1349,24 @@ class ObjectProgramUI(
             else:
                 text_widget.insert("1.0", note_str)
 
-        self.commit_current_object()
+        self._row_cache_dirty = True
+        self.commit_current_object(skip_logging=True)
+        if reg_changed_fields or prob_changed_fields:
+            self.log_action(
+                "GBIF_UPDATE",
+                changed_fields=reg_changed_fields,
+                changed_values=reg_changed_values,
+                prob_fields=prob_changed_fields,
+                prob_values=prob_changed_values,
+                oid=oid
+            )
+
+        if hasattr(self, "_update_all_problem_row_styles"):
+            self._update_all_problem_row_styles()
+
+        from ui.state import app_bus, DATABASE_UPDATED
+        app_bus.publish(DATABASE_UPDATED)
+
         if hasattr(self, "hide_banner"):
             self.hide_banner()
             self.show_banner("Taxonomy updated from GBIF.", "success")
@@ -1345,7 +1398,6 @@ class ObjectProgramUI(
             species = str(row.get("Species", "") if pd.notna(row.get("Species")) else "")
             author = str(row.get("Author", "") if pd.notna(row.get("Author")) else "")
             family = str(row.get("Family", "") if pd.notna(row.get("Family")) else "")
-            higher = str(row.get("Higher Classification", "") if pd.notna(row.get("Higher Classification")) else "")
             if genus or species:
                 items.append({
                     "oid": str(oid),
@@ -1353,7 +1405,6 @@ class ObjectProgramUI(
                     "species": species,
                     "author": author,
                     "family": family,
-                    "higher_classification": higher
                 })
 
         if not items:

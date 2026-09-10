@@ -211,6 +211,15 @@ class GBIFReviewDialog(tk.Toplevel):
             ts = datetime.now().isoformat(timespec="seconds")
             user_name = getpass.getuser()
 
+            problem_to_field = {}
+            if getattr(self.app_state, "config", None):
+                problems_cfg = self.app_state.config.get("ui_sections", {}).get("problems", [])
+                for p in problems_cfg:
+                    name = p.get("name")
+                    maps_to = p.get("maps_to") or p.get("target")
+                    if name and maps_to and maps_to != "Other" and name != "Other_problem":
+                        problem_to_field[name] = maps_to
+
             for oid, r_list in by_oid.items():
                 reg_oid = oid
                 if reg_oid not in self.app_state.df_reg.index:
@@ -225,6 +234,8 @@ class GBIFReviewDialog(tk.Toplevel):
 
                 changed_fields = []
                 changed_diffs = []
+                prob_changed = []
+                prob_diffs = []
 
                 for item in r_list:
                     f = item["field"]
@@ -237,7 +248,20 @@ class GBIFReviewDialog(tk.Toplevel):
                         changed_diffs.append(f'{f}: "{old_v}" -> "{new_v}"')
                         applied_count += 1
 
-                if changed_fields:
+                # Clear mapped problem flags
+                if self.app_state.df_obs is not None and problem_to_field:
+                    for f in changed_fields:
+                        for pc, mf in problem_to_field.items():
+                            if mf.lower().replace("_", " ").strip() == f.lower().replace("_", " ").strip():
+                                if reg_oid in self.app_state.df_obs.index and pc in self.app_state.df_obs.columns:
+                                    val = self.app_state.df_obs.at[reg_oid, pc]
+                                    if pd.notna(val) and bool(val):
+                                        self.app_state.df_obs.at[reg_oid, pc] = False
+                                        if pc not in prob_changed:
+                                            prob_changed.append(pc)
+                                            prob_diffs.append(f'{pc}: "True" -> "False"')
+
+                if changed_fields or prob_changed:
                     log_entry = {
                         "Timestamp": ts,
                         "User": user_name,
@@ -246,8 +270,8 @@ class GBIFReviewDialog(tk.Toplevel):
                         "Reviewed": "",
                         "ChangedFields": ", ".join(changed_fields),
                         "ChangedValues": " | ".join(changed_diffs),
-                        "ProblemsChanged": "",
-                        "ProblemsChangedValues": "",
+                        "ProblemsChanged": ", ".join(prob_changed),
+                        "ProblemsChangedValues": " | ".join(prob_diffs),
                         "LocationChanged": "",
                         "LocationChangedValues": "",
                         "SourceFile": os.path.basename(self.app_state.excel_path or ""),
@@ -343,6 +367,19 @@ def rollback_gbif_updates(app_state, main_window=None):
                     if field in app_state.df_reg.columns:
                         app_state.df_reg.at[reg_oid, field] = old_val
                         reverted_count += 1
+
+            # Restore cleared problems if recorded
+            pcv_str = str(entry.get("ProblemsChangedValues", ""))
+            if pcv_str and app_state.df_obs is not None:
+                prob_diffs = pcv_str.split(" | ")
+                for pd_item in prob_diffs:
+                    if ' -> ' in pd_item and ': "' in pd_item:
+                        p_parts = pd_item.split(': "', 1)
+                        p_col = p_parts[0].strip()
+                        p_val_parts = p_parts[1].split('" -> "', 1)
+                        p_old_val = p_val_parts[0].strip().lower() == "true"
+                        if reg_oid in app_state.df_obs.index and p_col in app_state.df_obs.columns:
+                            app_state.df_obs.at[reg_oid, p_col] = p_old_val
 
         rollback_log = {
             "Timestamp": datetime.now().isoformat(timespec="seconds"),
