@@ -429,6 +429,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         self.selected_iids = []   # list of selected oids
         self.focused_iid = None
         self._resize_job = None
+        self._selection_anchor_iid = None # anchor for shift-click selection
 
         # Event binding storage
         self.custom_bindings = []
@@ -794,9 +795,42 @@ class TreeviewListboxWrapper(ttk.Frame):
 
     def _on_card_click(self, oid, event=None):
         """Single-click: select card and navigate to its object."""
-        self.selected_iids = [oid]
+        # Handle Shift and Ctrl/Cmd modifiers
+        state = event.state if event else 0
+        shift_pressed = bool(state & 0x0001)
+        ctrl_pressed = bool((state & 0x0004) or (state & 0x20000) or (state & 0x0008)) # Control or Command/Meta
+
+        if shift_pressed and self._selection_anchor_iid:
+            anchor_idx = self._oid_to_index.get(self._selection_anchor_iid)
+            target_idx = self._oid_to_index.get(oid)
+            if anchor_idx is not None and target_idx is not None:
+                start_idx = min(anchor_idx, target_idx)
+                end_idx = max(anchor_idx, target_idx)
+                new_selection = []
+                for idx in range(start_idx, end_idx + 1):
+                    new_selection.append(self.items_list[idx])
+
+                if ctrl_pressed:
+                    # Append new selection to existing
+                    current_set = set(self.selected_iids)
+                    for item in new_selection:
+                        current_set.add(item)
+                    self.selected_iids = [item for item in self.items_list if item in current_set]
+                else:
+                    self.selected_iids = new_selection
+        elif ctrl_pressed:
+            if oid in self.selected_iids:
+                self.selected_iids.remove(oid)
+            else:
+                self.selected_iids.append(oid)
+            self._selection_anchor_iid = oid
+        else:
+            self.selected_iids = [oid]
+            self._selection_anchor_iid = oid
+
         self.focused_iid = oid
         self.redraw_cards_highlights()
+
         # Sync treeview selection silently — flag tells on_list_select not to
         # double-navigate (it would also block on _is_searching if active).
         self._card_driving_nav = True
@@ -807,26 +841,35 @@ class TreeviewListboxWrapper(ttk.Frame):
             pass
         finally:
             self._card_driving_nav = False
-        mw = self.main_window
-        # Commit unsaved edits on the previously loaded object
-        if hasattr(mw, "commit_current_object"):
-            mw.commit_current_object()
-        # Navigate directly – bypasses the _is_searching guard in on_list_select
-        if hasattr(mw, "_list_select_job") and mw._list_select_job:
-            try:
-                mw.root.after_cancel(mw._list_select_job)
-            except Exception:
-                pass
-        if hasattr(mw, "_deferred_list_select"):
-            mw._list_select_job = mw.root.after(
-                100, lambda o=oid: mw._deferred_list_select(o)
-            )
-        elif hasattr(mw, "load_object"):
-            mw.root.after(100, lambda o=oid: mw.load_object(o))
+
+        self.event_generate("<<ListboxSelect>>")
+
+        # Only trigger navigation if a single object is selected
+        if len(self.selected_iids) == 1:
+            nav_oid = self.selected_iids[0]
+            mw = self.main_window
+            # Commit unsaved edits on the previously loaded object
+            if hasattr(mw, "commit_current_object"):
+                mw.commit_current_object()
+            # Navigate directly – bypasses the _is_searching guard in on_list_select
+            if hasattr(mw, "_list_select_job") and mw._list_select_job:
+                try:
+                    mw.root.after_cancel(mw._list_select_job)
+                except Exception:
+                    pass
+            if hasattr(mw, "_deferred_list_select"):
+                mw._list_select_job = mw.root.after(
+                    100, lambda o=nav_oid: mw._deferred_list_select(o)
+                )
+            elif hasattr(mw, "load_object"):
+                mw.root.after(100, lambda o=nav_oid: mw.load_object(o))
 
     def _on_card_double_click(self, oid, event):
-        # Single-click already handles full navigation; just replay it.
-        self._on_card_click(oid, event)
+        # Double-clicking selects just this item and navigates
+        self.selected_iids = [oid]
+        self._selection_anchor_iid = oid
+        self.event_generate("<<ListboxSelect>>")
+        self._on_card_click(oid, None)
 
     def _on_checkbox_click(self, oid, event):
         self.main_window._toggle_reviewed_for_id(oid)
