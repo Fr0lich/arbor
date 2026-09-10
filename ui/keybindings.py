@@ -80,6 +80,9 @@ class KeybindingManager:
         self.root.bind("<Control-f>", self.ui.handle_ctrl_f)
         self.root.bind("<Control-F>", self.ui.handle_ctrl_f)
 
+        self.root.bind("<Control-p>", lambda e: self.ui.open_quick_peek())
+        self.root.bind("<Control-P>", lambda e: self.ui.open_quick_peek())
+
         # Collapsible Panel Toggles for Laptop Views
         self.root.bind("<F6>", self.ui.toggle_list_panel_shortcut)
         self.root.bind("<F7>", self.ui.toggle_reg_panel_shortcut)

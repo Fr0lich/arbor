@@ -67,6 +67,10 @@ class FilterPanel:
         app.filter_btn = app.toolbar_buttons['Filter']
         app.add_tooltip(app.toolbar_buttons['Filter'], "Ctrl+G")
 
+        app.toolbar_buttons['Peek'] = ttk.Button(sort_frame, text="🔍 Peek", style="Nav.TButton", command=app.open_quick_peek, cursor="hand2")
+        app.toolbar_buttons['Peek'].pack(side="left", padx=(4, 0))
+        app.add_tooltip(app.toolbar_buttons['Peek'], "Quick Peek at objects (Ctrl+P)")
+
         app.sync_filter_btn = ttk.Button(sort_frame, text="📱 Sync to Mobile", style="Nav.TButton", command=app.push_filter_to_mobile, cursor="hand2")
         app.sync_filter_btn.pack(side="left", padx=(4, 0))
         app.add_tooltip(app.sync_filter_btn, "Push working batch filter to mobile session")
