@@ -244,9 +244,93 @@ def _process_single_item(item: Dict[str, Any], cancel_event=None) -> Optional[Di
     return None
 
 
+def _query_single_taxon(genus: str, species: str, cancel_event=None) -> Optional[Dict[str, Any]]:
+    """Query GBIF for a single genus/species taxon combination, resolving synonyms if needed."""
+    if cancel_event and cancel_event.is_set():
+        return None
+    if not genus:
+        return None
+
+    gbif_data = check_gbif(genus, species)
+    if not gbif_data or "error" in gbif_data:
+        return None
+
+    if gbif_data.get("synonym") and gbif_data.get("acceptedUsageKey"):
+        if cancel_event and cancel_event.is_set():
+            return None
+        acc_data = get_accepted_name(gbif_data["acceptedUsageKey"])
+        if acc_data and "error" not in acc_data:
+            if acc_data.get("genus"):
+                gbif_data["genus"] = acc_data["genus"]
+            if acc_data.get("species"):
+                gbif_data["species"] = acc_data["species"]
+            if acc_data.get("author"):
+                gbif_data["author"] = acc_data["author"]
+            if acc_data.get("family"):
+                gbif_data["family"] = acc_data["family"]
+
+    return gbif_data
+
+
+def _evaluate_item_diff(item: Dict[str, Any], gbif_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Compare an individual item against resolved GBIF data and produce diffs."""
+    if not gbif_data or "error" in gbif_data:
+        return None
+
+    oid = str(item.get("oid", ""))
+    genus = str(item.get("genus", "") or "").strip()
+    species = str(item.get("species", "") or "").strip()
+    author = str(item.get("author", "") or "").strip()
+    family = str(item.get("family", "") or "").strip()
+
+    prop_genus = gbif_data.get("genus") or ""
+    prop_species = gbif_data.get("species") or ""
+    prop_author = gbif_data.get("author") or ""
+    prop_family = gbif_data.get("family") or ""
+
+    current_map = {
+        "Genus": genus,
+        "Species": species,
+        "Author": author,
+        "Family": family,
+    }
+    proposed_map = {
+        "Genus": prop_genus,
+        "Species": prop_species,
+        "Author": prop_author,
+        "Family": prop_family,
+    }
+
+    changes = []
+    for k in ["Genus", "Species", "Author", "Family"]:
+        c_val = current_map[k]
+        p_val = proposed_map[k]
+        if k == "Author":
+            if p_val and not is_author_equivalent(c_val, p_val):
+                changes.append({"field": k, "old": c_val, "new": p_val})
+        elif k == "Family":
+            if p_val and p_val.lower() != c_val.lower():
+                changes.append({"field": k, "old": c_val, "new": p_val})
+        else:
+            if p_val and p_val != c_val:
+                changes.append({"field": k, "old": c_val, "new": p_val})
+
+    if changes:
+        return {
+            "oid": oid,
+            "current": current_map,
+            "proposed": proposed_map,
+            "changes": changes,
+            "match_type": gbif_data.get("matchType") or "MATCH",
+            "status": gbif_data.get("status") or "ACCEPTED",
+            "rank": gbif_data.get("rank") or "SPECIES"
+        }
+    return None
+
+
 def batch_gbif_match(items: List[Dict[str, Any]], progress_callback=None, cancel_event=None, max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
     """
-    Query GBIF concurrently for a list of items and return proposed taxonomic changes.
+    Query GBIF concurrently for unique taxa and return proposed taxonomic changes across all items.
     """
     if not items:
         return []
@@ -260,40 +344,63 @@ def batch_gbif_match(items: List[Dict[str, Any]], progress_callback=None, cancel
             max_workers = 5
     max_workers = max(1, min(10, max_workers))
 
-    total = len(items)
-    results = []
-    completed_count = 0
+    # 1. Deduplicate unique taxa: (genus_clean, species_clean)
+    unique_taxa = {}
+    for item in items:
+        g = str(item.get("genus", "") or "").strip()
+        s = str(item.get("species", "") or "").strip()
+        if g:
+            key = (g.lower(), s.lower())
+            if key not in unique_taxa:
+                unique_taxa[key] = (g, s)
 
+    if not unique_taxa:
+        return []
+
+    total_taxa = len(unique_taxa)
+    taxon_cache = {}
+    completed_taxa = 0
+
+    # 2. Query GBIF concurrently only for distinct taxa
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_item = {
-            executor.submit(_process_single_item, item, cancel_event): item
-            for item in items
+        future_to_key = {
+            executor.submit(_query_single_taxon, g, s, cancel_event): key
+            for key, (g, s) in unique_taxa.items()
         }
 
-        for future in concurrent.futures.as_completed(future_to_item):
+        for future in concurrent.futures.as_completed(future_to_key):
             if cancel_event and cancel_event.is_set():
                 break
 
-            item = future_to_item[future]
-            cur_oid = str(item.get("oid", ""))
-            completed_count += 1
+            key = future_to_key[future]
+            completed_taxa += 1
 
             if progress_callback:
                 try:
-                    progress_callback(completed_count, total, cur_oid)
+                    progress_callback(completed_taxa, total_taxa, f"{unique_taxa[key][0]} {unique_taxa[key][1]}".strip())
                 except Exception:
                     pass
 
             try:
-                res = future.result()
-                if res:
-                    results.append(res)
+                gbif_res = future.result()
+                taxon_cache[key] = gbif_res
             except Exception as e:
-                print(f"Error processing item {cur_oid}: {e}")
+                print(f"Error querying taxon {key}: {e}")
+                taxon_cache[key] = None
 
-    # Maintain deterministic ordering matching item list
-    oid_order = {str(item.get("oid", "")): idx for idx, item in enumerate(items)}
-    results.sort(key=lambda r: oid_order.get(r.get("oid", ""), 0))
+    if cancel_event and cancel_event.is_set():
+        return []
+
+    # 3. Evaluate diffs for each item against the resolved taxon cache
+    results = []
+    for item in items:
+        g = str(item.get("genus", "") or "").strip()
+        s = str(item.get("species", "") or "").strip()
+        key = (g.lower(), s.lower())
+        gbif_data = taxon_cache.get(key)
+        diff = _evaluate_item_diff(item, gbif_data)
+        if diff:
+            results.append(diff)
 
     return results
 

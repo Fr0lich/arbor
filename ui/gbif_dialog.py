@@ -177,7 +177,7 @@ class GBIFUpdateDialog(tk.Toplevel):
             old_chip.grid(row=0, column=0, sticky="ew", padx=(0, sc(6)))
             self._bind_mousewheel(old_chip)
 
-            lbl_cur_tag = tk.Label(old_chip, text="CURRENT", font=("JetBrains Mono", sc(8), "bold"), fg=chip_old_fg, bg=chip_old_bg)
+            lbl_cur_tag = tk.Label(old_chip, text="YOUR DATABASE VALUE", font=("JetBrains Mono", sc(8), "bold"), fg=chip_old_fg, bg=chip_old_bg)
             lbl_cur_tag.pack(anchor="w")
             lbl_cur_val = tk.Label(old_chip, text=update["current"] or "(Empty)", font=("JetBrains Mono", sc(9.5)), fg=fg_title if update["current"] else fg_muted, bg=chip_old_bg, anchor="w")
             lbl_cur_val.pack(anchor="w")
@@ -196,7 +196,7 @@ class GBIFUpdateDialog(tk.Toplevel):
             new_chip.grid(row=0, column=1, sticky="ew", padx=(sc(6), 0))
             self._bind_mousewheel(new_chip)
 
-            lbl_new_tag = tk.Label(new_chip, text="PROPOSED (GBIF)", font=("JetBrains Mono", sc(8), "bold"), fg=chip_new_fg, bg=chip_new_bg)
+            lbl_new_tag = tk.Label(new_chip, text="GBIF SUGGESTED VALUE", font=("JetBrains Mono", sc(8), "bold"), fg=chip_new_fg, bg=chip_new_bg)
             lbl_new_tag.pack(anchor="w")
             lbl_new_val = tk.Label(new_chip, text=update["gbif"], font=("JetBrains Mono", sc(9.5), "bold"), fg=chip_new_fg, bg=chip_new_bg, anchor="w")
             lbl_new_val.pack(anchor="w")
@@ -210,7 +210,7 @@ class GBIFUpdateDialog(tk.Toplevel):
 
         cancel_btn = tk.Button(
             btn_frame,
-            text="CANCEL",
+            text="Cancel",
             command=self.destroy,
             font=("Segoe UI", sc(9.5), "bold"),
             bg=btn_sec_bg,
@@ -219,7 +219,7 @@ class GBIFUpdateDialog(tk.Toplevel):
             bd=0,
             cursor="hand2",
             padx=sc(14),
-            pady=sc(5),
+            pady=sc(6),
             highlightthickness=1,
             highlightbackground=border_color,
             highlightcolor=border_color
@@ -230,8 +230,8 @@ class GBIFUpdateDialog(tk.Toplevel):
 
         apply_btn = tk.Button(
             btn_frame,
-            text="APPLY SELECTED UPDATES",
-            command=self.apply,
+            text="Apply Selected Updates",
+            command=self._apply,
             font=("Segoe UI", sc(9.5), "bold"),
             bg=btn_primary_bg,
             fg="#ffffff",

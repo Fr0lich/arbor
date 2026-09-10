@@ -1,486 +1,425 @@
-import tkinter as tk
+﻿import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
 from datetime import datetime
 import os
 import getpass
+import tkinter.font as tkFont
+from typing import List, Dict, Any, Optional
 from config import sc
+from ui.state import app_bus, DATABASE_UPDATED
+
+FONT_UI = ("sans-serif", 10)
+FONT_UI_BOLD = ("sans-serif", 10, "bold")
+FONT_UI_LG = ("sans-serif", 12, "bold")
+FONT_UI_XL = ("sans-serif", 16, "bold")
+FONT_MONO = ("Consolas", 10)
+FONT_MONO_SM = ("Consolas", 8)
+
+_fonts_initialized = False
+def init_fonts():
+    global _fonts_initialized, FONT_UI, FONT_UI_BOLD, FONT_UI_LG, FONT_UI_XL, FONT_MONO, FONT_MONO_SM
+    if _fonts_initialized:
+        return
+    families = tkFont.families()
+    ui_family = "Hanken Grotesk" if "Hanken Grotesk" in families else "Helvetica" if "Helvetica" in families else "Segoe UI" if "Segoe UI" in families else "sans-serif"
+    mono_family = "JetBrains Mono" if "JetBrains Mono" in families else "Consolas" if "Consolas" in families else "Courier New"
+
+    FONT_UI = (ui_family, sc(10))
+    FONT_UI_BOLD = (ui_family, sc(10), "bold")
+    FONT_UI_LG = (ui_family, sc(12), "bold")
+    FONT_UI_XL = (ui_family, sc(16), "bold")
+    FONT_MONO = (mono_family, sc(10))
+    FONT_MONO_SM = (mono_family, sc(8))
+    _fonts_initialized = True
+
+COLORS = {
+    "bg": "#fbfaf8",
+    "surface": "#ffffff",
+    "surface_dim": "#e9ece5",
+    "border": "#d1d1d1",
+    "text": "#2c302e",
+    "text_muted": "#444748",
+    "primary": "#2c302e",
+    "on_primary": "#ffffff",
+    "error_bg": "#fef2f2",
+    "error_border": "#c93a40",
+    "error_text": "#c93a40",
+    "success_bg": "#f0fdf4",
+    "success_border": "#3a7d44",
+    "success_text": "#2b8a3e",
+    "warning": "#f59e0b",
+    "chip_tag": "#757d77"
+}
 
 
 class GBIFReviewDialog(tk.Toplevel):
-    def __init__(self, parent, app_state, diff_results, on_applied_callback=None):
+    """
+    Gold-standard Taxonomic Reconciliation & Review dialog modeled after HistoricalConflictResolverWindow.
+    Provides clear before/after comparison chips, selective field application, and full audit logging.
+    """
+    def __init__(self, parent, app_state, diff_results: List[Dict[str, Any]], on_applied_callback=None):
         super().__init__(parent)
+        init_fonts()
         self.parent = parent
         self.app_state = app_state
         self.diff_results = diff_results
         self.on_applied_callback = on_applied_callback
 
-        try:
-            self.title("Review GBIF Taxonomic Updates")
-            import utils
-            utils.center_and_fit_toplevel(self, sc(860), sc(620))
-            self.minsize(sc(640), sc(420))
-        except Exception:
-            pass
+        self.title("GBIF Taxonomic Review & Reconciliation")
+        self.configure(bg=COLORS["bg"])
 
-        # Check dark mode
-        is_dark = getattr(self.app_state, "dark_mode_active", False) if hasattr(self.app_state, "dark_mode_active") else False
-        self.bg_color = "#181c19" if is_dark else "#fbfaf8"
-        self.fg_title = "#e8ebe9" if is_dark else "#2c302e"
-        self.fg_muted = "#a6adc8" if is_dark else "#757d77"
-        self.border_color = "#2c302e" if is_dark else "#dadada"
-        self.card_bg = "#111412" if is_dark else "#ffffff"
-        self.chip_old_bg = "#231515" if is_dark else "#fef2f2"
-        self.chip_old_fg = "#c93a40"
-        self.chip_new_bg = "#122416" if is_dark else "#f0fdf4"
-        self.chip_new_fg = "#3a7d44"
-        self.btn_primary_bg = "#3a7d44" if is_dark else "#2c302e"
-        self.btn_primary_hover = "#4b9e57" if is_dark else "#3d4240"
-        self.btn_sec_bg = self.bg_color
-        self.btn_sec_fg = self.fg_title
-        self.btn_sec_hover = "#242a25" if is_dark else "#e9ece5"
+        import utils
+        utils.center_and_fit_toplevel(self, sc(1100), sc(700))
+        self.minsize(sc(750), sc(500))
 
-        try:
-            self.configure(bg=self.bg_color)
-        except Exception:
-            pass
-
-        self.rows = []
-        self.row_vars = {}
-        row_id = 0
-        for diff in self.diff_results:
-            oid = diff["oid"]
-            status = diff.get("status", "ACCEPTED")
-            rank = diff.get("rank", "")
-            for chg in diff["changes"]:
-                row_dict = {
-                    "id": row_id,
-                    "selected": True,
-                    "oid": str(oid),
-                    "field": chg["field"],
-                    "old": chg["old"],
-                    "new": chg["new"],
-                    "status": status,
-                    "rank": rank
-                }
-                self.rows.append(row_dict)
-                try:
-                    self.row_vars[row_id] = tk.BooleanVar(value=True)
-                except Exception:
-                    self.row_vars[row_id] = None
-                row_id += 1
+        # Flatten changes & state
+        self.item_cards = {}
+        self.specimen_frames = {}
+        self.field_vars = {}  # (oid, field_name) -> BooleanVar
 
         self._build_ui()
-        self._populate_tree()
-        try:
-            if parent is not None:
-                self.transient(parent)
-            self.grab_set()
-        except Exception:
-            pass
+        self.transient(parent)
+        self.grab_set()
 
     def _build_ui(self):
-        main_frame = tk.Frame(self, bg=self.bg_color, padx=sc(16), pady=sc(14))
-        main_frame.pack(fill="both", expand=True)
-
-        # Header Frame
-        hdr_frame = tk.Frame(main_frame, bg=self.bg_color)
-        hdr_frame.pack(fill="x", pady=(0, sc(10)))
-
-        title_row = tk.Frame(hdr_frame, bg=self.bg_color)
-        title_row.pack(fill="x")
+        # 1. Header Bar
+        header = tk.Frame(self, bg=COLORS["surface"], height=sc(48))
+        header.pack(fill="x", side="top")
+        tk.Frame(header, bg=COLORS["border"], height=sc(1)).pack(fill="x", side="bottom")
 
         tk.Label(
-            title_row,
-            text="GBIF TAXONOMIC REVIEW",
-            font=("Segoe UI", sc(13), "bold"),
-            fg=self.fg_title,
-            bg=self.bg_color
-        ).pack(side="left")
+            header,
+            text="GBIF_TAXONOMIC_REVIEW_AND_RECONCILIATION",
+            font=FONT_UI_LG,
+            fg=COLORS["primary"],
+            bg=COLORS["surface"]
+        ).pack(side="left", padx=sc(16), pady=sc(12))
 
-        # Object count badge
-        count_chip = tk.Frame(
-            title_row,
-            bg=self.btn_primary_bg,
-            bd=0,
-            padx=sc(8), pady=sc(2)
-        )
-        count_chip.pack(side="left", padx=(sc(10), 0))
+        # 2. Main content area (Split View: Left Sidebar Directory + Right Cards)
+        main_area = tk.Frame(self, bg=COLORS["bg"])
+        main_area.pack(fill="both", expand=True)
+
+        # --- Left Sidebar (Specimen Directory) ---
+        sidebar = tk.Frame(main_area, width=sc(280), bg=COLORS["surface_dim"])
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+        tk.Frame(sidebar, bg=COLORS["border"], width=sc(1)).pack(side="right", fill="y")
+
+        dir_header = tk.Frame(sidebar, bg=COLORS["border"], height=sc(40))
+        dir_header.pack(fill="x")
         tk.Label(
-            count_chip,
-            text=f"{len(self.rows)} Updates",
-            font=("JetBrains Mono", sc(9), "bold"),
-            fg="#ffffff",
-            bg=self.btn_primary_bg
-        ).pack()
+            dir_header,
+            text="SPECIMEN_DIRECTORY",
+            font=FONT_MONO_SM,
+            fg=COLORS["text_muted"],
+            bg=COLORS["border"]
+        ).pack(side="left", padx=sc(12), pady=sc(12))
 
-        sub_lbl = tk.Label(
-            hdr_frame,
-            text=f"Found {len(self.rows)} proposed changes across {len(self.diff_results)} objects. Review Before/After values and select changes to apply:",
-            font=("Segoe UI", sc(9)),
-            fg=self.fg_muted,
-            bg=self.bg_color
-        )
-        sub_lbl.pack(anchor="w", pady=(sc(4), 0))
+        self.dir_canvas = tk.Canvas(sidebar, bg=COLORS["surface_dim"], highlightthickness=0)
+        dir_scrollbar = ttk.Scrollbar(sidebar, orient="vertical", command=self.dir_canvas.yview)
+        self.dir_list = tk.Frame(self.dir_canvas, bg=COLORS["surface_dim"])
 
-        # Action Bar (Select All / Deselect All / Summary)
-        act_frame = tk.Frame(main_frame, bg=self.bg_color)
-        act_frame.pack(fill="x", pady=(sc(4), sc(8)))
-
-        sel_all_btn = tk.Button(
-            act_frame,
-            text="Select All",
-            command=self._select_all,
-            font=("Segoe UI", sc(9)),
-            bg=self.btn_sec_bg,
-            fg=self.btn_sec_fg,
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            padx=sc(10),
-            pady=sc(3),
-            highlightthickness=1,
-            highlightbackground=self.border_color,
-            highlightcolor=self.border_color
-        )
-        sel_all_btn.pack(side="left", padx=(0, sc(6)))
-        sel_all_btn.bind("<Enter>", lambda e: sel_all_btn.config(bg=self.btn_sec_hover))
-        sel_all_btn.bind("<Leave>", lambda e: sel_all_btn.config(bg=self.btn_sec_bg))
-
-        desel_all_btn = tk.Button(
-            act_frame,
-            text="Deselect All",
-            command=self._deselect_all,
-            font=("Segoe UI", sc(9)),
-            bg=self.btn_sec_bg,
-            fg=self.btn_sec_fg,
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            padx=sc(10),
-            pady=sc(3),
-            highlightthickness=1,
-            highlightbackground=self.border_color,
-            highlightcolor=self.border_color
-        )
-        desel_all_btn.pack(side="left", padx=(0, sc(12)))
-        desel_all_btn.bind("<Enter>", lambda e: desel_all_btn.config(bg=self.btn_sec_hover))
-        desel_all_btn.bind("<Leave>", lambda e: desel_all_btn.config(bg=self.btn_sec_bg))
-
-        self.summary_label = tk.Label(
-            act_frame,
-            text=f"Selected: {len(self.rows)} / {len(self.rows)}",
-            font=("Segoe UI", sc(9.5), "italic"),
-            fg=self.fg_muted,
-            bg=self.bg_color
-        )
-        self.summary_label.pack(side="left")
-
-        # Scrollable Cards Canvas Container
-        canvas_outer = tk.Frame(main_frame, bg=self.bg_color, bd=1, relief="solid", highlightbackground=self.border_color, highlightthickness=1)
-        canvas_outer.pack(fill="both", expand=True, pady=(0, sc(10)))
-
-        self.canvas = tk.Canvas(canvas_outer, bg=self.bg_color, bd=0, highlightthickness=0)
-        self.v_scroll = ttk.Scrollbar(canvas_outer, orient="vertical", command=self.canvas.yview)
-        self.scroll_frame = tk.Frame(self.canvas, bg=self.bg_color, padx=sc(8), pady=sc(8))
-
-        self.scroll_frame.bind(
+        self.dir_list.bind(
             "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            lambda e: self.dir_canvas.configure(scrollregion=self.dir_canvas.bbox("all")) if e.widget == self.dir_list else None
         )
+        dir_canvas_window = self.dir_canvas.create_window((0, 0), window=self.dir_list, anchor="nw")
+        self.dir_canvas.configure(yscrollcommand=dir_scrollbar.set)
+        self.dir_canvas.bind("<Configure>", lambda e: self.dir_canvas.itemconfig(dir_canvas_window, width=e.width))
 
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
-        self.canvas.bind(
+        self.dir_canvas.pack(side="left", fill="both", expand=True)
+        dir_scrollbar.pack(side="right", fill="y")
+        self.dir_canvas.bind("<MouseWheel>", self._on_dir_mousewheel)
+
+        # --- Right Main Area (Scrollable Cards) ---
+        right_area = tk.Frame(main_area, bg=COLORS["bg"])
+        right_area.pack(side="left", fill="both", expand=True)
+
+        # Context Header
+        ctx_header = tk.Frame(right_area, bg=COLORS["surface"], height=sc(70))
+        ctx_header.pack(fill="x")
+        tk.Frame(ctx_header, bg=COLORS["border"], height=sc(1)).pack(side="bottom", fill="x")
+
+        total_changes = sum(len(d.get("changes", [])) for d in self.diff_results)
+        tk.Label(
+            ctx_header,
+            text=f"REVIEW: {len(self.diff_results)} SPECIMENS WITH TAXONOMIC UPDATES",
+            font=FONT_UI_XL,
+            fg=COLORS["primary"],
+            bg=COLORS["surface"]
+        ).pack(anchor="w", padx=sc(24), pady=(sc(12), sc(2)))
+
+        tk.Label(
+            ctx_header,
+            text=f"Detected {total_changes} suggested field updates from GBIF. Check the boxes for each change you wish to apply.",
+            font=FONT_UI,
+            fg=COLORS["text_muted"],
+            bg=COLORS["surface"]
+        ).pack(anchor="w", padx=sc(24), pady=(0, sc(12)))
+
+        # Scrollable Canvas for Specimen Cards
+        self.canvas = tk.Canvas(right_area, bg=COLORS["bg"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(right_area, orient="vertical", command=self.canvas.yview)
+        self.cards_frame = tk.Frame(self.canvas, bg=COLORS["bg"], padx=sc(20), pady=sc(16))
+
+        self.cards_frame.bind(
             "<Configure>",
-            lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width) if getattr(self.canvas, "_last_w", None) != e.width and not setattr(self.canvas, "_last_w", e.width) else None
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")) if e.widget == self.cards_frame else None
         )
-        self.canvas.configure(yscrollcommand=self.v_scroll.set)
+        canvas_window = self.canvas.create_window((0, 0), window=self.cards_frame, anchor="nw")
+        self.canvas.bind("<Configure>", lambda e, cw=canvas_window: self.canvas.itemconfig(cw, width=e.width))
 
         self.canvas.pack(side="left", fill="both", expand=True)
-        self.v_scroll.pack(side="right", fill="y")
+        scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        self.canvas.bind("<MouseWheel>", self._on_main_mousewheel)
 
-        # Bind mouse wheel
-        self._bind_mousewheel(self.canvas)
-        self._bind_mousewheel(self.scroll_frame)
+        # Populate Directory & Cards
+        self._populate_all()
 
-        # Footer Actions
-        btn_frame = tk.Frame(main_frame, bg=self.bg_color)
-        btn_frame.pack(fill="x", side="bottom")
+        # 3. Bottom Action Bar
+        bottom_bar = tk.Frame(self, bg=COLORS["surface"], height=sc(56))
+        bottom_bar.pack(fill="x", side="bottom")
+        tk.Frame(bottom_bar, bg=COLORS["border"], height=sc(1)).pack(side="top", fill="x")
+
+        b_content = tk.Frame(bottom_bar, bg=COLORS["surface"], padx=sc(16), pady=sc(10))
+        b_content.pack(fill="both", expand=True)
+
+        # Quick selection buttons
+        sel_all_btn = tk.Button(
+            b_content, text="Select All", command=self._select_all,
+            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(12), pady=sc(4)
+        )
+        sel_all_btn.pack(side="left", padx=(0, sc(8)))
+
+        desel_all_btn = tk.Button(
+            b_content, text="Deselect All", command=self._deselect_all,
+            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(12), pady=sc(4)
+        )
+        desel_all_btn.pack(side="left")
+
+        # Summary label
+        self.summary_label = tk.Label(
+            b_content,
+            text="",
+            font=FONT_UI_BOLD,
+            fg=COLORS["text_muted"],
+            bg=COLORS["surface"]
+        )
+        self.summary_label.pack(side="left", padx=sc(24))
+
+        # Action Buttons
+        cancel_btn = tk.Button(
+            b_content, text="Cancel", command=self.destroy,
+            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(16), pady=sc(6)
+        )
+        cancel_btn.pack(side="right", padx=(sc(8), 0))
 
         self.apply_btn = tk.Button(
-            btn_frame,
-            text=f"APPLY SELECTED UPDATES ({len(self.rows)})",
-            command=self._apply_selected,
-            font=("Segoe UI", sc(9.5), "bold"),
-            bg=self.btn_primary_bg,
-            fg="#ffffff",
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            padx=sc(16),
-            pady=sc(6)
+            b_content, text="Apply Selected Updates", command=self._apply_selected,
+            font=FONT_UI_BOLD, bg=COLORS["success_border"], fg=COLORS["on_primary"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(20), pady=sc(6)
         )
-        self.apply_btn.pack(side="right", padx=(sc(8), 0))
-        self.apply_btn.bind("<Enter>", lambda e: self.apply_btn.config(bg=self.btn_primary_hover))
-        self.apply_btn.bind("<Leave>", lambda e: self.apply_btn.config(bg=self.btn_primary_bg))
+        self.apply_btn.pack(side="right")
 
-        cancel_btn = tk.Button(
-            btn_frame,
-            text="CANCEL",
-            command=self.destroy,
-            font=("Segoe UI", sc(9.5), "bold"),
-            bg=self.btn_sec_bg,
-            fg=self.btn_sec_fg,
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            padx=sc(14),
-            pady=sc(5),
-            highlightthickness=1,
-            highlightbackground=self.border_color,
-            highlightcolor=self.border_color
-        )
-        cancel_btn.pack(side="right")
-        cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg=self.btn_sec_hover))
-        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg=self.btn_sec_bg))
+        self._update_summary()
 
-    def _bind_mousewheel(self, widget):
-        widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
-        widget.bind("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"), add="+")
-        widget.bind("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"), add="+")
+    def _populate_all(self):
+        for diff in self.diff_results:
+            oid = str(diff.get("oid", ""))
+            status = diff.get("status", "ACCEPTED")
+            changes = diff.get("changes", [])
 
-    def _on_mousewheel(self, event):
-        if hasattr(self, "canvas") and self.canvas.winfo_exists() and event.delta:
-            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            # --- 1. Left Sidebar Entry ---
+            f_frame = tk.Frame(self.dir_list, bg=COLORS["surface_dim"], cursor="hand2", padx=sc(8), pady=sc(6))
+            f_frame.pack(fill="x", pady=sc(1))
 
-    def _populate_cards(self):
-        for w in self.scroll_frame.winfo_children():
-            w.destroy()
+            tag_color = COLORS["warning"] if status == "SYNONYM" else COLORS["success_border"]
+            tag_text = status.upper()
 
-        by_oid = {}
-        for r in self.rows:
-            by_oid.setdefault(r["oid"], []).append(r)
+            tk.Label(f_frame, text=f"#{oid}", font=FONT_MONO, fg=COLORS["text"], bg=COLORS["surface_dim"]).pack(side="left")
+            tk.Label(f_frame, text=f"({len(changes)} chg)", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface_dim"]).pack(side="left", padx=sc(4))
+            tk.Label(f_frame, text=tag_text, font=FONT_MONO_SM, fg=tag_color, bg=COLORS["surface_dim"]).pack(side="right")
 
-        for oid, r_list in by_oid.items():
-            status = r_list[0].get("status", "ACCEPTED")
-            rank = r_list[0].get("rank", "")
+            def _scroll_to(target_oid=oid):
+                if target_oid in self.item_cards:
+                    card = self.item_cards[target_oid]
+                    y = card.winfo_y()
+                    if self.cards_frame.winfo_height() > 0:
+                        self.canvas.yview_moveto(max(0, (y - 20) / self.cards_frame.winfo_height()))
 
-            # Specimen Card container
+            f_frame.bind("<Button-1>", lambda e, f=_scroll_to: f())
+            for child in f_frame.winfo_children():
+                child.bind("<Button-1>", lambda e, f=_scroll_to: f())
+
+            self.specimen_frames[oid] = f_frame
+
+            # --- 2. Right Card Frame ---
             card = tk.Frame(
-                self.scroll_frame,
-                bg=self.card_bg,
-                bd=1,
-                relief="solid",
-                highlightbackground=self.border_color,
-                highlightthickness=1
+                self.cards_frame,
+                bg=COLORS["surface"],
+                highlightbackground=COLORS["border"],
+                highlightthickness=1,
+                padx=sc(16),
+                pady=sc(14)
             )
-            card.pack(fill="x", pady=(0, sc(10)))
-            self._bind_mousewheel(card)
+            card.pack(fill="x", pady=(0, sc(14)))
+            self.item_cards[oid] = card
 
             # Card Header
-            card_header = tk.Frame(card, bg=self.card_bg, padx=sc(12), pady=sc(8))
-            card_header.pack(fill="x")
-            self._bind_mousewheel(card_header)
+            c_header = tk.Frame(card, bg=COLORS["surface"])
+            c_header.pack(fill="x", pady=(0, sc(10)))
 
             tk.Label(
-                card_header,
+                c_header,
                 text=f"SPECIMEN #{oid}",
-                font=("JetBrains Mono", sc(10), "bold"),
-                fg=self.fg_title,
-                bg=self.card_bg
+                font=FONT_UI_BOLD,
+                fg=COLORS["primary"],
+                bg=COLORS["surface"]
             ).pack(side="left")
 
-            # Rank & Status chip
-            status_chip = tk.Frame(
-                card_header,
-                bg=self.chip_new_bg if status == "ACCEPTED" else "#1c2b38",
-                bd=1,
-                relief="solid",
-                highlightbackground=self.chip_new_fg if status == "ACCEPTED" else "#4a7b9d",
-                highlightthickness=1,
+            match_type = diff.get("match_type", "MATCH")
+            badge_bg = COLORS["warning"] if status == "SYNONYM" else COLORS["surface_dim"]
+            badge_fg = "#000000" if status == "SYNONYM" else COLORS["text_muted"]
+            tk.Label(
+                c_header,
+                text=f"[{status} | {match_type}]",
+                font=FONT_MONO_SM,
+                fg=badge_fg,
+                bg=badge_bg,
                 padx=sc(6),
                 pady=sc(2)
-            )
-            status_chip.pack(side="right")
-            self._bind_mousewheel(status_chip)
+            ).pack(side="right")
 
-            status_text = f"{rank.upper()} • {status}" if rank else status
-            status_lbl = tk.Label(
-                status_chip,
-                text=status_text,
-                font=("JetBrains Mono", sc(8.5), "bold"),
-                fg=self.chip_new_fg if status == "ACCEPTED" else "#4a7b9d",
-                bg=self.chip_new_bg if status == "ACCEPTED" else "#1c2b38"
-            )
-            status_lbl.pack()
-            self._bind_mousewheel(status_lbl)
+            # Field Rows
+            for chg in changes:
+                field = chg["field"]
+                old_val = str(chg["old"])
+                new_val = str(chg["new"])
 
-            # Hairline divider
-            tk.Frame(card, bg=self.border_color, height=1).pack(fill="x")
+                var = tk.BooleanVar(value=True)
+                self.field_vars[(oid, field)] = (var, chg)
 
-            # Diff items within specimen card
-            diffs_container = tk.Frame(card, bg=self.card_bg, padx=sc(12), pady=sc(8))
-            diffs_container.pack(fill="x")
-            self._bind_mousewheel(diffs_container)
+                row_frame = tk.Frame(card, bg=COLORS["surface"], pady=sc(4))
+                row_frame.pack(fill="x", pady=(0, sc(6)))
 
-            for item in r_list:
-                row_id = item["id"]
-                var = self.row_vars.get(row_id)
-                if var is None:
-                    try:
-                        var = tk.BooleanVar(value=item["selected"])
-                        self.row_vars[row_id] = var
-                    except Exception:
-                        var = None
+                # Top line: Checkbox with field name
+                chk = tk.Checkbutton(
+                    row_frame,
+                    text=field,
+                    variable=var,
+                    font=FONT_UI_BOLD,
+                    fg=COLORS["text"],
+                    bg=COLORS["surface"],
+                    activebackground=COLORS["surface"],
+                    activeforeground=COLORS["primary"],
+                    selectcolor=COLORS["surface"],
+                    cursor="hand2",
+                    command=self._update_summary
+                )
+                chk.pack(anchor="w", pady=(0, sc(4)))
 
-                diff_row = tk.Frame(diffs_container, bg=self.card_bg, pady=sc(4))
-                diff_row.pack(fill="x")
-                self._bind_mousewheel(diff_row)
-
-                # Checkbox & Field Name
-                top_row = tk.Frame(diff_row, bg=self.card_bg)
-                top_row.pack(fill="x", anchor="w")
-                self._bind_mousewheel(top_row)
-
-                cb_kwargs = {
-                    "text": item["field"],
-                    "font": ("Segoe UI", sc(10), "bold"),
-                    "fg": self.fg_title,
-                    "bg": self.card_bg,
-                    "activebackground": self.card_bg,
-                    "activeforeground": self.fg_title,
-                    "selectcolor": self.card_bg,
-                    "bd": 0,
-                    "highlightthickness": 0,
-                    "cursor": "hand2",
-                    "command": lambda rid=row_id: self._on_card_toggle(rid)
-                }
-                if var is not None:
-                    cb_kwargs["variable"] = var
-
-                cb = tk.Checkbutton(top_row, **cb_kwargs)
-                cb.pack(side="left")
-                self._bind_mousewheel(cb)
-
-                # Before/After comparison grid
-                grid_frame = tk.Frame(diff_row, bg=self.card_bg, padx=sc(24), pady=sc(4))
+                # Chips Grid
+                grid_frame = tk.Frame(row_frame, bg=COLORS["surface"], padx=sc(20))
                 grid_frame.pack(fill="x")
                 grid_frame.columnconfigure(0, weight=1)
                 grid_frame.columnconfigure(1, weight=1)
-                self._bind_mousewheel(grid_frame)
 
-                # Current Value (Before)
-                old_chip = tk.Frame(
+                # Database (Old) Chip
+                db_chip = tk.Frame(
                     grid_frame,
-                    bg=self.chip_old_bg,
-                    bd=1,
-                    relief="solid",
-                    highlightbackground="#c93a40",
+                    bg=COLORS["error_bg"],
+                    highlightbackground=COLORS["error_border"],
                     highlightthickness=1,
-                    padx=sc(8),
-                    pady=sc(4)
+                    padx=sc(10),
+                    pady=sc(6)
                 )
-                old_chip.grid(row=0, column=0, sticky="ew", padx=(0, sc(6)))
-                self._bind_mousewheel(old_chip)
+                db_chip.grid(row=0, column=0, sticky="ew", padx=(0, sc(6)))
 
-                old_tag = tk.Label(
-                    old_chip,
-                    text="CURRENT",
-                    font=("JetBrains Mono", sc(8), "bold"),
-                    fg=self.chip_old_fg,
-                    bg=self.chip_old_bg
-                )
-                old_tag.pack(anchor="w")
-                self._bind_mousewheel(old_tag)
+                tk.Label(
+                    db_chip,
+                    text="YOUR DATABASE VALUE",
+                    font=FONT_MONO_SM,
+                    fg=COLORS["error_text"],
+                    bg=COLORS["error_bg"]
+                ).pack(anchor="w")
 
-                old_val = tk.Label(
-                    old_chip,
-                    text=item["old"] if item["old"] else "(Empty)",
-                    font=("JetBrains Mono", sc(9.5)),
-                    fg=self.fg_title if item["old"] else self.fg_muted,
-                    bg=self.chip_old_bg,
-                    anchor="w",
-                    wraplength=sc(320)
-                )
-                old_val.pack(anchor="w")
-                self._bind_mousewheel(old_val)
+                tk.Label(
+                    db_chip,
+                    text=old_val or "(Empty)",
+                    font=FONT_MONO,
+                    fg=COLORS["text"] if old_val else COLORS["text_muted"],
+                    bg=COLORS["error_bg"]
+                ).pack(anchor="w")
 
-                # Proposed Value (After)
-                new_chip = tk.Frame(
+                # GBIF (New) Chip
+                gbif_chip = tk.Frame(
                     grid_frame,
-                    bg=self.chip_new_bg,
-                    bd=1,
-                    relief="solid",
-                    highlightbackground=self.chip_new_fg,
+                    bg=COLORS["success_bg"],
+                    highlightbackground=COLORS["success_border"],
                     highlightthickness=1,
-                    padx=sc(8),
-                    pady=sc(4)
+                    padx=sc(10),
+                    pady=sc(6)
                 )
-                new_chip.grid(row=0, column=1, sticky="ew", padx=(sc(6), 0))
-                self._bind_mousewheel(new_chip)
+                gbif_chip.grid(row=0, column=1, sticky="ew", padx=(sc(6), 0))
 
-                new_tag = tk.Label(
-                    new_chip,
-                    text="PROPOSED (GBIF)",
-                    font=("JetBrains Mono", sc(8), "bold"),
-                    fg=self.chip_new_fg,
-                    bg=self.chip_new_bg
-                )
-                new_tag.pack(anchor="w")
-                self._bind_mousewheel(new_tag)
+                tk.Label(
+                    gbif_chip,
+                    text="GBIF SUGGESTED VALUE",
+                    font=FONT_MONO_SM,
+                    fg=COLORS["success_text"],
+                    bg=COLORS["success_bg"]
+                ).pack(anchor="w")
 
-                new_val = tk.Label(
-                    new_chip,
-                    text=item["new"] if item["new"] else "(Empty)",
-                    font=("JetBrains Mono", sc(9.5), "bold"),
-                    fg=self.chip_new_fg if item["new"] else self.fg_muted,
-                    bg=self.chip_new_bg,
-                    anchor="w",
-                    wraplength=sc(320)
-                )
-                new_val.pack(anchor="w")
-                self._bind_mousewheel(new_val)
+                tk.Label(
+                    gbif_chip,
+                    text=new_val,
+                    font=FONT_MONO,
+                    fg=COLORS["success_text"],
+                    bg=COLORS["success_bg"]
+                ).pack(anchor="w")
 
-    def _populate_tree(self):
-        """Compatibility alias for tests."""
-        self._populate_cards()
+    def _on_dir_mousewheel(self, event):
+        if event.delta:
+            self.dir_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    def _on_card_toggle(self, row_id):
-        for r in self.rows:
-            if r["id"] == row_id:
-                var = self.row_vars.get(row_id)
-                if var is not None and hasattr(var, "get"):
-                    r["selected"] = bool(var.get())
-                break
-        self._update_summary()
+    def _on_main_mousewheel(self, event):
+        if event.delta:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def _select_all(self):
-        for r in self.rows:
-            r["selected"] = True
-            var = self.row_vars.get(r["id"])
-            if var is not None and hasattr(var, "set"):
-                var.set(True)
+        for var, _ in self.field_vars.values():
+            var.set(True)
         self._update_summary()
 
     def _deselect_all(self):
-        for r in self.rows:
-            r["selected"] = False
-            var = self.row_vars.get(r["id"])
-            if var is not None and hasattr(var, "set"):
-                var.set(False)
+        for var, _ in self.field_vars.values():
+            var.set(False)
         self._update_summary()
 
     def _update_summary(self):
-        sel_count = sum(1 for r in self.rows if r["selected"])
-        if hasattr(self, "summary_label") and self.summary_label.winfo_exists():
-            self.summary_label.config(text=f"Selected: {sel_count} / {len(self.rows)}")
-        if hasattr(self, "apply_btn") and self.apply_btn.winfo_exists():
-            self.apply_btn.config(text=f"APPLY SELECTED UPDATES ({sel_count})")
+        sel_count = sum(1 for var, _ in self.field_vars.values() if var.get())
+        total_count = len(self.field_vars)
+        self.summary_label.config(text=f"Selected: {sel_count} / {total_count} field updates")
+        self.apply_btn.config(text=f"Apply Selected Updates ({sel_count})")
 
     def _apply_selected(self):
-        selected_rows = [r for r in self.rows if r["selected"]]
-        if not selected_rows:
-            messagebox.showwarning("No Changes Selected", "Please select at least one taxonomic update to apply.", parent=self)
+        selected_updates = [
+            (oid, chg)
+            for (oid, field), (var, chg) in self.field_vars.items()
+            if var.get()
+        ]
+
+        if not selected_updates:
+            messagebox.showwarning(
+                "No Changes Selected",
+                "Please select at least one taxonomic update to apply.",
+                parent=self
+            )
             return
 
         with self.app_state.df_lock:
@@ -494,14 +433,6 @@ class GBIFReviewDialog(tk.Toplevel):
                 else:
                     self.app_state._log_records = []
 
-            by_oid = {}
-            for r in selected_rows:
-                by_oid.setdefault(r["oid"], []).append(r)
-
-            applied_count = 0
-            ts = datetime.now().isoformat(timespec="seconds")
-            user_name = getpass.getuser()
-
             problem_to_field = {}
             if getattr(self.app_state, "config", None):
                 problems_cfg = self.app_state.config.get("ui_sections", {}).get("problems", [])
@@ -511,7 +442,16 @@ class GBIFReviewDialog(tk.Toplevel):
                     if name and maps_to and maps_to != "Other" and name != "Other_problem":
                         problem_to_field[name] = maps_to
 
-            for oid, r_list in by_oid.items():
+            # Group updates by oid
+            by_oid = {}
+            for oid, chg in selected_updates:
+                by_oid.setdefault(oid, []).append(chg)
+
+            applied_count = 0
+            ts = datetime.now().isoformat(timespec="seconds")
+            user_name = getpass.getuser()
+
+            for oid, chg_list in by_oid.items():
                 reg_oid = oid
                 if reg_oid not in self.app_state.df_reg.index:
                     if str(oid).isdigit() and int(oid) in self.app_state.df_reg.index:
@@ -528,7 +468,7 @@ class GBIFReviewDialog(tk.Toplevel):
                 prob_changed = []
                 prob_diffs = []
 
-                for item in r_list:
+                for item in chg_list:
                     f = item["field"]
                     new_v = item["new"]
                     old_v = item["old"]
@@ -539,7 +479,7 @@ class GBIFReviewDialog(tk.Toplevel):
                         changed_diffs.append(f'{f}: "{old_v}" -> "{new_v}"')
                         applied_count += 1
 
-                # Clear mapped problem flags
+                # Auto-clear mapped problem flags
                 if self.app_state.df_obs is not None and problem_to_field:
                     for f in changed_fields:
                         for pc, mf in problem_to_field.items():

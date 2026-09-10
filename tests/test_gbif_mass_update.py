@@ -243,7 +243,29 @@ def test_batch_gbif_match_cancellation():
         assert len(res) == 0
 
 
+def test_batch_gbif_match_taxon_deduplication():
+    # 100 items with only 2 unique taxa
+    items = []
+    for i in range(50):
+        items.append({"oid": f"p_{i}", "genus": "Pinus", "species": "sylvestris", "author": "L.", "family": "Pinaceae"})
+    for i in range(50):
+        items.append({"oid": f"b_{i}", "genus": "Betula", "species": "pendula", "author": "Roth", "family": "Betulaceae"})
+
+    mock_resp = {
+        ("Pinus", "sylvestris"): {"genus": "Pinus", "species": "sylvestris", "author": "Linnaeus", "family": "Pinaceae", "status": "ACCEPTED", "matchType": "EXACT", "rank": "SPECIES"},
+        ("Betula", "pendula"): {"genus": "Betula", "species": "pendula", "author": "Roth", "family": "Betulaceae", "status": "ACCEPTED", "matchType": "EXACT", "rank": "SPECIES"}
+    }
+
+    with patch("backend.gbif.check_gbif", side_effect=lambda g, s: mock_resp.get((g, s))) as mock_check:
+        diffs = batch_gbif_match(items, max_workers=2)
+        # Should only call check_gbif 2 times (once per unique taxon) instead of 100 times!
+        assert mock_check.call_count == 2
+        # Diff for all 50 Pinus specimens (author changed)
+        assert len(diffs) == 50
+
+
 def test_batch_apply_clears_mapped_problems_and_records_audit_log():
+    import tkinter as tk
     from ui.gbif_review import GBIFReviewDialog
     app = AppState()
     app.config = {
@@ -275,39 +297,62 @@ def test_batch_apply_clears_mapped_problems_and_records_audit_log():
         "rank": "SPECIES"
     }]
 
-    with patch("tkinter.Toplevel.__init__", return_value=None), \
-         patch.object(GBIFReviewDialog, "title"), \
-         patch.object(GBIFReviewDialog, "geometry"), \
-         patch.object(GBIFReviewDialog, "minsize"), \
-         patch.object(GBIFReviewDialog, "transient"), \
-         patch.object(GBIFReviewDialog, "grab_set"), \
-         patch.object(GBIFReviewDialog, "_build_ui"), \
-         patch.object(GBIFReviewDialog, "_populate_tree"), \
-         patch.object(GBIFReviewDialog, "destroy"), \
-         patch("tkinter.messagebox.showinfo"):
-        dialog = GBIFReviewDialog(None, app, diff_results)
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        dialog = GBIFReviewDialog(root, app, diff_results)
         # Apply selected
-        dialog._apply_selected()
+        with patch("tkinter.messagebox.showinfo"):
+            dialog._apply_selected()
 
-    # Verify registration DataFrame updated
-    assert app.df_reg.at["101", "Genus"] == "Pinus"
-    assert app.df_reg.at["101", "Species"] == "sylvestris"
+        # Verify registration DataFrame updated
+        assert app.df_reg.at["101", "Genus"] == "Pinus"
+        assert app.df_reg.at["101", "Species"] == "sylvestris"
 
-    # Verify problem flags mapped to Genus and Species are cleared
-    assert bool(app.df_obs.at["101", "Genus_Problem"]) is False
-    assert bool(app.df_obs.at["101", "Species_Problem"]) is False
-    # Unrelated problem remains intact
-    assert bool(app.df_obs.at["101", "Location_Problem"]) is True
+        # Verify problem flags mapped to Genus and Species are cleared
+        assert bool(app.df_obs.at["101", "Genus_Problem"]) is False
+        assert bool(app.df_obs.at["101", "Species_Problem"]) is False
+        # Unrelated problem remains intact
+        assert bool(app.df_obs.at["101", "Location_Problem"]) is True
 
-    # Verify audit log contains Action GBIF_UPDATE and problem diffs
-    assert len(app._log_records) == 1
-    log_rec = app._log_records[0]
-    assert log_rec["Action"] == "GBIF_UPDATE"
-    assert "Genus" in log_rec["ChangedFields"]
-    assert "Species" in log_rec["ChangedFields"]
-    assert "Genus_Problem" in log_rec["ProblemsChanged"]
-    assert "Species_Problem" in log_rec["ProblemsChanged"]
-    assert 'Genus_Problem: "True" -> "False"' in log_rec["ProblemsChangedValues"]
+        # Verify audit log contains Action GBIF_UPDATE and problem diffs
+        assert len(app._log_records) == 1
+        log_rec = app._log_records[0]
+        assert log_rec["Action"] == "GBIF_UPDATE"
+        assert "Genus" in log_rec["ChangedFields"]
+        assert "Species" in log_rec["ChangedFields"]
+        assert "Genus_Problem" in log_rec["ProblemsChanged"]
+        assert "Species_Problem" in log_rec["ProblemsChanged"]
+        assert 'Genus_Problem: "True" -> "False"' in log_rec["ProblemsChangedValues"]
+    finally:
+        root.destroy()
+
+
+def test_gbif_batch_config_dialog_scopes():
+    import tkinter as tk
+    from ui.gbif_batch_config import GBIFBatchConfigDialog
+    from unittest.mock import MagicMock
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        main_app = MagicMock()
+        main_app.root = root
+        main_app.app.df_reg = pd.DataFrame([
+            {"ObjectID": "1", "Genus": "Pinus", "Species": "sylvestris", "Author": "L.", "Family": "Pinaceae"},
+            {"ObjectID": "2", "Genus": "Betula", "Species": "pendula", "Author": "Roth", "Family": "Betulaceae"},
+            {"ObjectID": "3", "Genus": "Quercus", "Species": "robur", "Author": "L.", "Family": "Fagaceae"}
+        ]).set_index("ObjectID")
+        main_app.app.active_object_ids = ["1", "2"]
+        main_app.object_list.get_selected_ids.return_value = ["1"]
+
+        config_dlg = GBIFBatchConfigDialog(root, main_app)
+        assert config_dlg.all_count == 3
+        assert config_dlg.filtered_count == 2
+        assert config_dlg.selected_count == 1
+        assert config_dlg.scope_var.get() == "selected"
+    finally:
+        root.destroy()
 
 
 def test_author_equivalence_and_validation():
@@ -389,4 +434,53 @@ def test_gbif_toolbar_button_and_dropdown():
         root.destroy()
 
 
+def test_gbif_batch_config_progress_and_percent():
+    import tkinter as tk
+    from ui.gbif_batch_config import GBIFBatchConfigDialog
+    from backend.task_queue import app_worker
+    from unittest.mock import MagicMock, patch
 
+    root = tk.Tk()
+    root.withdraw()
+    app_worker.start(root)
+    try:
+        main_app = MagicMock()
+        main_app.root = root
+        main_app.app.df_reg = pd.DataFrame([
+            {"ObjectID": "1", "Genus": "Pinus", "Species": "sylvestris", "Author": "L.", "Family": "Pinaceae"},
+            {"ObjectID": "2", "Genus": "Betula", "Species": "pendula", "Author": "Roth", "Family": "Betulaceae"}
+        ]).set_index("ObjectID")
+        main_app.app.active_object_ids = ["1", "2"]
+        main_app.object_list.get_selected_ids.return_value = []
+
+        config_dlg = GBIFBatchConfigDialog(root, main_app)
+
+        # Progress bar and percentage elements exist
+        assert hasattr(config_dlg, "progress_bar")
+        assert hasattr(config_dlg, "pct_var")
+        assert hasattr(config_dlg, "status_var")
+        assert hasattr(config_dlg, "detail_var")
+
+        # Mock batch_gbif_match with progress callback execution
+        def mock_batch_match(items, progress_callback=None, cancel_event=None, max_workers=None):
+            if progress_callback:
+                progress_callback(1, 2, "Pinus sylvestris")
+                progress_callback(2, 2, "Betula pendula")
+            return []
+
+        with patch("backend.gbif.batch_gbif_match", side_effect=mock_batch_match), \
+             patch.object(config_dlg, "_on_analysis_complete") as mock_complete:
+            config_dlg._start_analysis()
+            config_dlg._worker_thread.join(timeout=2.0)
+
+            # Process task queue tasks on the main thread
+            app_worker._poll()
+            root.update()
+
+            assert config_dlg.progress_var.get() == 100.0
+            assert config_dlg.pct_var.get() == "100%"
+            assert "Betula pendula" in config_dlg.detail_var.get()
+            mock_complete.assert_called_once()
+    finally:
+        app_worker.stop()
+        root.destroy()
