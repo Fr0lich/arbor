@@ -11,6 +11,8 @@ import os
 import urllib.request
 import platform
 import stat
+import tarfile
+import shutil
 
 
 def ensure_ssh_key():
@@ -265,51 +267,77 @@ class ResilientSSHTunnel:
 
 def ensure_cloudflared():
     """Ensure the cloudflared binary exists locally, downloading it if necessary."""
-    try:
-        cf_dir = os.path.expanduser('~/.cloudflared')
-        os.makedirs(cf_dir, exist_ok=True)
+    cf_dir = os.path.expanduser('~/.cloudflared')
+    os.makedirs(cf_dir, exist_ok=True)
 
-        is_windows = sys.platform.startswith('win')
-        binary_name = 'cloudflared.exe' if is_windows else 'cloudflared'
-        binary_path = os.path.join(cf_dir, binary_name)
+    is_windows = sys.platform.startswith('win')
+    binary_name = 'cloudflared.exe' if is_windows else 'cloudflared'
+    binary_path = os.path.join(cf_dir, binary_name)
 
-        if not os.path.exists(binary_path):
-            system = platform.system().lower()
-            machine = platform.machine().lower()
+    if not os.path.exists(binary_path):
+        system = platform.system().lower()
+        machine = platform.machine().lower()
 
-            # Map architecture
-            if machine in ['x86_64', 'amd64']:
-                arch = 'amd64'
-            elif machine in ['arm64', 'aarch64']:
-                arch = 'arm64'
-            elif machine in ['i386', 'x86']:
-                arch = '386'
-            elif machine in ['arm']:
-                arch = 'arm'
-            else:
-                arch = 'amd64' # fallback
+        # Map architecture
+        if machine in ['x86_64', 'amd64']:
+            arch = 'amd64'
+        elif machine in ['arm64', 'aarch64']:
+            arch = 'arm64'
+        elif machine in ['i386', 'x86']:
+            arch = '386'
+        elif machine in ['arm']:
+            arch = 'arm'
+        else:
+            arch = 'amd64' # fallback
 
-            # Map OS and build URL
-            base_url = "https://github.com/cloudflare/cloudflared/releases/latest/download/"
-            if system == 'windows':
-                url = f"{base_url}cloudflared-windows-{arch}.exe"
-            elif system == 'darwin':
-                url = f"{base_url}cloudflared-darwin-{arch}" # macOS uses a single binary or tgz depending on version, let's try direct binary
-            else: # linux
-                url = f"{base_url}cloudflared-linux-{arch}"
+        # Map OS and build URL
+        base_url = "https://github.com/cloudflare/cloudflared/releases/latest/download/"
+        if system == 'windows':
+            url = f"{base_url}cloudflared-windows-{arch}.exe"
+            is_tgz = False
+        elif system == 'darwin':
+            url = f"{base_url}cloudflared-darwin-{arch}.tgz" # macOS uses a tgz
+            is_tgz = True
+        else: # linux
+            url = f"{base_url}cloudflared-linux-{arch}"
+            is_tgz = False
 
-            logging.info(f"Downloading cloudflared from {url}...")
-            urllib.request.urlretrieve(url, binary_path)
+        logging.info(f"Downloading cloudflared from {url}...")
 
-            # Make executable
-            if not is_windows:
-                st = os.stat(binary_path)
-                os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
+        last_error = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
 
-        return binary_path
-    except Exception as e:
-        logging.error(f"Failed to ensure cloudflared: {e}")
-        return None
+                if is_tgz:
+                    temp_tgz = os.path.join(cf_dir, "cloudflared.tgz")
+                    with urllib.request.urlopen(req) as response, open(temp_tgz, 'wb') as f:
+                        shutil.copyfileobj(response, f)
+
+                    with tarfile.open(temp_tgz, 'r:gz') as tar:
+                        tar.extract('cloudflared', path=cf_dir)
+
+                    os.remove(temp_tgz)
+                else:
+                    with urllib.request.urlopen(req) as response, open(binary_path, 'wb') as f:
+                        shutil.copyfileobj(response, f)
+
+                last_error = None
+                break  # Success
+            except Exception as e:
+                logging.warning(f"Download attempt {attempt + 1} failed: {e}")
+                last_error = e
+                time.sleep(1) # simple backoff
+
+        if last_error:
+            raise Exception(f"Failed to download cloudflared after 3 attempts: {last_error}")
+
+        # Make executable
+        if not is_windows:
+            st = os.stat(binary_path)
+            os.chmod(binary_path, st.st_mode | stat.S_IEXEC)
+
+    return binary_path
 
 class CloudflareTunnel:
     """Cloudflare Quick Tunnels (trycloudflare.com)."""
@@ -331,10 +359,16 @@ class CloudflareTunnel:
         self.thread.start()
 
     def _run(self, url_callback, status_callback):
-        binary_path = ensure_cloudflared()
-        if not binary_path:
+        try:
+            binary_path = ensure_cloudflared()
+            if not binary_path:
+                if status_callback:
+                    status_callback("🔴 Failed to download cloudflared")
+                return
+        except Exception as e:
+            logging.error(f"Failed to ensure cloudflared: {e}")
             if status_callback:
-                status_callback("🔴 Failed to download cloudflared")
+                status_callback(f"🔴 Failed to download cloudflared: {e}")
             return
 
         cmd = [binary_path, 'tunnel', '--url', f'http://127.0.0.1:{self.port}']
