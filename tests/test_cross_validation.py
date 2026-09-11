@@ -281,4 +281,214 @@ def test_gbif_batch_single_field_instant_apply():
     root.destroy()
 
 
+def test_gbif_batch_in_place_apply_and_undo():
+    """Test in-place UI updating without canvas destroying, and undo roundtrip for single field & whole specimen."""
+    root = tk.Tk()
+    root.withdraw()
+
+    df_reg = pd.DataFrame(
+        [
+            {"ObjectID": "3001", "Genus": "Quercus", "Species": "rubra_old", "Family": "Fagaceae", "Author": "L_old"}
+        ]
+    ).set_index("ObjectID")
+
+    df_obs = pd.DataFrame(
+        [
+            {"ObjectID": "3001", "Species_Problem": True, "Author_Problem": True}
+        ]
+    ).set_index("ObjectID")
+
+    app_state = MockAppState(df_reg=df_reg)
+    app_state.df_obs = df_obs
+    app_state.config = {
+        "ui_sections": {
+            "problems": [
+                {"name": "Species_Problem", "maps_to": "Species"},
+                {"name": "Author_Problem", "maps_to": "Author"},
+            ]
+        }
+    }
+
+    diff_results = [
+        {
+            "oid": "3001",
+            "current": {"Genus": "Quercus", "Species": "rubra_old", "Family": "Fagaceae", "Author": "L_old"},
+            "proposed": {"Genus": "Quercus", "Species": "rubra", "Family": "Fagaceae", "Author": "L."},
+            "changes": [
+                {"field": "Species", "old": "rubra_old", "new": "rubra"},
+                {"field": "Author", "old": "L_old", "new": "L."},
+            ],
+            "status": "ACCEPTED",
+            "match_type": "EXACT"
+        }
+    ]
+
+    dialog = GBIFReviewDialog(root, app_state, diff_results)
+
+    # Check widgets are registered
+    assert ("3001", "Species") in dialog.field_row_widgets
+    assert ("3001", "Author") in dialog.field_row_widgets
+    assert "3001" in dialog.card_header_widgets
+
+    sp_widget = dialog.field_row_widgets[("3001", "Species")]
+    sp_chk = sp_widget["chk"]
+    assert sp_chk.cget("state") == "normal"
+
+    # 1. Apply single field (Species)
+    dialog._apply_single_field("3001", "Species", "rubra_old", "rubra")
+
+    # Verify db and obs
+    assert app_state.df_reg.at["3001", "Species"] == "rubra"
+    assert bool(app_state.df_obs.at["3001", "Species_Problem"]) is False
+    assert ("3001", "Species") in dialog.applied_changes
+
+    # Verify field row widget updated in-place (no new widget instance created, checkbox disabled)
+    assert sp_chk.cget("state") == "disabled"
+    # Check that Undo button is present in btn_box
+    btn_box = sp_widget["btn_box"]
+    btn_texts = [w.cget("text") for w in btn_box.winfo_children() if isinstance(w, tk.Button) or isinstance(w, tk.Label)]
+    assert any("APPLIED" in t for t in btn_texts)
+    assert any("Undo" in t for t in btn_texts)
+
+    # 2. Undo single field (Species)
+    dialog._undo_single_field("3001", "Species", "rubra_old", "rubra")
+
+    # Verify db and obs reverted
+    assert app_state.df_reg.at["3001", "Species"] == "rubra_old"
+    assert bool(app_state.df_obs.at["3001", "Species_Problem"]) is True
+    assert ("3001", "Species") not in dialog.applied_changes
+    assert sp_chk.cget("state") == "normal"
+    btn_texts_after_undo = [w.cget("text") for w in btn_box.winfo_children() if isinstance(w, tk.Button) or isinstance(w, tk.Label)]
+    assert any("Apply Field" in t for t in btn_texts_after_undo)
+    assert not any("APPLIED" in t for t in btn_texts_after_undo)
+
+    # 3. Apply entire specimen
+    dialog._apply_specimen("3001")
+    assert app_state.df_reg.at["3001", "Species"] == "rubra"
+    assert app_state.df_reg.at["3001", "Author"] == "L."
+    assert bool(app_state.df_obs.at["3001", "Species_Problem"]) is False
+    assert bool(app_state.df_obs.at["3001", "Author_Problem"]) is False
+    assert ("3001", "Species") in dialog.applied_changes
+    assert ("3001", "Author") in dialog.applied_changes
+
+    # 4. Undo entire specimen
+    dialog._undo_specimen("3001")
+    assert app_state.df_reg.at["3001", "Species"] == "rubra_old"
+    assert app_state.df_reg.at["3001", "Author"] == "L_old"
+    assert bool(app_state.df_obs.at["3001", "Species_Problem"]) is True
+    assert bool(app_state.df_obs.at["3001", "Author_Problem"]) is True
+    assert ("3001", "Species") not in dialog.applied_changes
+    assert ("3001", "Author") not in dialog.applied_changes
+
+    dialog.destroy()
+    root.destroy()
+
+
+def test_gbif_batch_sidebar_mousewheel_scrolling():
+    """Test that the 'Page Specimens' left sidebar and cards area handle mousewheel scrolling properly."""
+    root = tk.Tk()
+    root.withdraw()
+
+    # Create 30 specimens
+    records = [{"ObjectID": str(1000 + i), "Genus": "Pinus", "Species": f"species_{i}", "Family": "Pinaceae", "Author": "L."} for i in range(30)]
+    df_reg = pd.DataFrame(records).set_index("ObjectID")
+
+    app_state = MockAppState(df_reg=df_reg)
+    diff_results = [
+        {
+            "oid": str(1000 + i),
+            "current": {"Genus": "Pinus", "Species": f"species_{i}", "Family": "Pinaceae", "Author": "L."},
+            "proposed": {"Genus": "Pinus", "Species": f"species_{i}_corr", "Family": "Pinaceae", "Author": "L."},
+            "changes": [{"field": "Species", "old": f"species_{i}", "new": f"species_{i}_corr"}],
+            "status": "ACCEPTED",
+            "match_type": "EXACT"
+        }
+        for i in range(30)
+    ]
+
+    dialog = GBIFReviewDialog(root, app_state, diff_results)
+
+    # Check 25 page specimens are rendered in sidebar and main card canvas
+    assert len(dialog.specimen_frames) == 25
+
+    # Verify scrollregion is initialized
+    bbox = dialog.dir_canvas.bbox("all")
+    assert bbox is not None
+    assert bbox[3] > 0  # height > 0
+
+    class MockEvent:
+        def __init__(self, delta=0, num=None):
+            self.delta = delta
+            self.num = num
+
+    # 1. Test direct scroll on dir_canvas
+    dialog.dir_canvas.yview_moveto(0.0)
+    dialog._on_dir_mousewheel(MockEvent(delta=-120))
+    # yview should have moved down (or attempted to scroll)
+    pos_after_down = dialog.dir_canvas.yview()
+
+    dialog._on_dir_mousewheel(MockEvent(delta=120))
+    pos_after_up = dialog.dir_canvas.yview()
+
+    # 2. Test routed mousewheel with active scroll target
+    dialog._set_active_scroll_target("dir")
+    dialog._on_routed_mousewheel(MockEvent(delta=-120))
+    dialog._set_active_scroll_target("main")
+    dialog._on_routed_mousewheel(MockEvent(delta=-120))
+
+    # 3. Test Linux scroll button events (4 and 5)
+    dialog._on_dir_mousewheel(MockEvent(num=5))
+    dialog._on_dir_mousewheel(MockEvent(num=4))
+
+    # 4. Clean dialog destruction and unbinding
+    dialog.destroy()
+    root.destroy()
+
+
+def test_gbif_batch_floating_toast_notifications():
+    """Test that toast notifications use floating overlay geometry (place) with zero window layout displacement."""
+    root = tk.Tk()
+    root.withdraw()
+
+    df_reg = pd.DataFrame(
+        [{"ObjectID": "5001", "Genus": "Quercus", "Species": "alba", "Family": "Fagaceae", "Author": "L."}]
+    ).set_index("ObjectID")
+
+    app_state = MockAppState(df_reg=df_reg)
+    diff_results = [
+        {
+            "oid": "5001",
+            "current": {"Genus": "Quercus", "Species": "alba", "Family": "Fagaceae", "Author": "L."},
+            "proposed": {"Genus": "Quercus", "Species": "alba", "Family": "Fagaceae", "Author": "L."},
+            "changes": [{"field": "Species", "old": "alba", "new": "alba L."}],
+            "status": "ACCEPTED",
+            "match_type": "EXACT"
+        }
+    ]
+
+    dialog = GBIFReviewDialog(root, app_state, diff_results)
+
+    # Toast frame should not be placed initially
+    assert not dialog.toast_frame.place_info()
+
+    # 1. Show success toast (Apply action)
+    dialog._show_toast("✓ Applied Species for Specimen #5001", level="success")
+    place_info = dialog.toast_frame.place_info()
+    assert place_info != {}
+    assert dialog.toast_icon.cget("text") == "✓"
+    assert "✓ Applied" in dialog.toast_label.cget("text")
+    assert dialog.toast_frame.cget("bg") == dialog.colors["success_bg"]
+
+    # 2. Show undo toast (Undo action)
+    dialog._show_toast("⎌ Undid Species for Specimen #5001", level="undo")
+    assert dialog.toast_icon.cget("text") == "⎌"
+    assert "⎌ Undid" in dialog.toast_label.cget("text")
+    assert dialog.toast_frame.cget("bg") == dialog.colors["warning_bg"]
+
+    # 3. Dismiss toast via _hide_toast
+    dialog._hide_toast()
+    assert not dialog.toast_frame.place_info()
+
+    dialog.destroy()
+    root.destroy()
 

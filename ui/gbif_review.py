@@ -128,6 +128,10 @@ class GBIFReviewDialog(tk.Toplevel):
         self.specimen_dir_widgets = {}
         self.page_field_vars = {}
         self.tab_buttons = {}
+        self.field_row_widgets = {}
+        self.card_header_widgets = {}
+        self._active_scroll_target = "main"
+        self._toast_timer = None
 
         self._build_ui()
         self._update_tab_buttons()
@@ -138,12 +142,30 @@ class GBIFReviewDialog(tk.Toplevel):
         self.bind("<Escape>", lambda e: self.destroy())
         self.bind("<F11>", lambda e: self._toggle_fullscreen())
         self.bind("<Alt-Return>", lambda e: self._toggle_fullscreen())
+        self.bind("<Destroy>", self._on_dialog_destroy)
+
+        self.bind_all("<MouseWheel>", self._on_routed_mousewheel)
+        self.bind_all("<Button-4>", self._on_routed_mousewheel)
+        self.bind_all("<Button-5>", self._on_routed_mousewheel)
 
         import utils
         utils.center_and_fit_toplevel(self, sc(1180), sc(760))
         self.lift()
         self.focus_set()
         self.deiconify()
+
+    def _bind_mousewheel_recursive(self, widget, handler):
+        try:
+            widget.bind("<MouseWheel>", handler, add="+")
+            widget.bind("<Button-4>", handler, add="+")
+            widget.bind("<Button-5>", handler, add="+")
+        except Exception:
+            pass
+        try:
+            for child in widget.winfo_children():
+                self._bind_mousewheel_recursive(child, handler)
+        except Exception:
+            pass
 
     @property
     def applied_oids(self) -> Set[str]:
@@ -455,15 +477,24 @@ class GBIFReviewDialog(tk.Toplevel):
         )
         self.tip_label.pack(side="left", pady=sc(2))
 
-        # 4. Inline Toast / Notification Banner (Hidden initially)
+        # 4. Floating Toast Notification Overlay (Hidden initially, uses place() on z-stack)
         self.toast_frame = tk.Frame(
             self,
             bg=C["success_bg"],
             highlightbackground=C["success_border"],
             highlightthickness=1,
-            padx=sc(16),
-            pady=sc(8)
+            padx=sc(14),
+            pady=sc(6)
         )
+        self.toast_icon = tk.Label(
+            self.toast_frame,
+            text="✓",
+            font=FONT_UI_BOLD,
+            fg=C["success_text"],
+            bg=C["success_bg"]
+        )
+        self.toast_icon.pack(side="left", padx=(0, sc(6)))
+
         self.toast_label = tk.Label(
             self.toast_frame,
             text="",
@@ -473,7 +504,7 @@ class GBIFReviewDialog(tk.Toplevel):
         )
         self.toast_label.pack(side="left")
 
-        toast_close = tk.Label(
+        self.toast_close = tk.Label(
             self.toast_frame,
             text="✕",
             font=FONT_UI_BOLD,
@@ -481,8 +512,8 @@ class GBIFReviewDialog(tk.Toplevel):
             bg=C["success_bg"],
             cursor="hand2"
         )
-        toast_close.pack(side="right")
-        toast_close.bind("<Button-1>", lambda e: self.toast_frame.pack_forget())
+        self.toast_close.pack(side="right", padx=(sc(12), 0))
+        self.toast_close.bind("<Button-1>", lambda e: self._hide_toast())
 
         # 5. Bottom Action Bar (Sticky, packed before main_area with fixed height)
         bottom_bar = tk.Frame(self, bg=C["surface_dim"], height=sc(60))
@@ -588,7 +619,13 @@ class GBIFReviewDialog(tk.Toplevel):
 
         self.dir_canvas.pack(side="left", fill="both", expand=True)
         self.dir_scrollbar.pack(side="right", fill="y")
-        self.dir_canvas.bind("<MouseWheel>", self._on_dir_mousewheel)
+
+        # Bind mousewheel and hover target routing to sidebar
+        self._bind_mousewheel_recursive(sidebar, self._on_dir_mousewheel)
+        self._bind_mousewheel_recursive(dir_scroll_frame, self._on_dir_mousewheel)
+        sidebar.bind("<Enter>", lambda e: self._set_active_scroll_target("dir"), add="+")
+        self.dir_canvas.bind("<Enter>", lambda e: self._set_active_scroll_target("dir"), add="+")
+        self.dir_list.bind("<Enter>", lambda e: self._set_active_scroll_target("dir"), add="+")
 
         # --- Right Main Area (Scrollable Cards with Top Pagination) ---
         right_area = tk.Frame(main_area, bg=C["bg"])
@@ -675,14 +712,55 @@ class GBIFReviewDialog(tk.Toplevel):
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.canvas.bind("<MouseWheel>", self._on_main_mousewheel)
 
-    def _show_toast(self, message: str):
+        self._bind_mousewheel_recursive(right_area, self._on_main_mousewheel)
+        self._bind_mousewheel_recursive(self.cards_frame, self._on_main_mousewheel)
+        right_area.bind("<Enter>", lambda e: self._set_active_scroll_target("main"), add="+")
+        self.canvas.bind("<Enter>", lambda e: self._set_active_scroll_target("main"), add="+")
+        self.cards_frame.bind("<Enter>", lambda e: self._set_active_scroll_target("main"), add="+")
+
+    def _show_toast(self, message: str, level: str = "success"):
         C = self.colors
-        if hasattr(self, "toast_label") and self.toast_label.winfo_exists():
-            self.toast_label.config(text=message)
-            self.toast_frame.pack(fill="x", side="top", after=self.tip_frame, padx=sc(16), pady=(sc(4), 0))
-            self.after(5000, lambda: self.toast_frame.pack_forget() if self.toast_frame.winfo_exists() else None)
+        if not hasattr(self, "toast_frame") or not self.toast_frame.winfo_exists():
+            return
+
+        if level == "undo" or level == "warning":
+            toast_bg = C["warning_bg"]
+            toast_fg = C["warning"]
+            toast_border = C["warning"]
+            icon_char = "⎌"
+        elif level == "info":
+            toast_bg = C["surface"]
+            toast_fg = C["text"]
+            toast_border = C["border"]
+            icon_char = "ℹ"
+        else:
+            toast_bg = C["success_bg"]
+            toast_fg = C["success_text"]
+            toast_border = C["success_border"]
+            icon_char = "✓"
+
+        self.toast_frame.config(bg=toast_bg, highlightbackground=toast_border)
+        self.toast_icon.config(text=icon_char, fg=toast_fg, bg=toast_bg)
+        self.toast_label.config(text=message, fg=toast_fg, bg=toast_bg)
+        self.toast_close.config(fg=toast_fg, bg=toast_bg)
+
+        # Place floating overlay at top center over z-stack
+        self.toast_frame.place(relx=0.5, y=sc(52), anchor="n")
+        self.toast_frame.lift()
+
+        # Reset timer
+        if hasattr(self, "_toast_timer") and self._toast_timer is not None:
+            try:
+                self.after_cancel(self._toast_timer)
+            except Exception:
+                pass
+        self._toast_timer = self.after(3500, self._hide_toast)
+
+    def _hide_toast(self):
+        if hasattr(self, "toast_frame") and self.toast_frame.winfo_exists():
+            self.toast_frame.place_forget()
+        self._toast_timer = None
 
     def _set_category_tab(self, tab_key: str):
         self.category_tab = tab_key
@@ -785,6 +863,277 @@ class GBIFReviewDialog(tk.Toplevel):
         self._update_sidebar_item(oid)
         self._update_summary()
 
+    def _update_field_row_ui(self, oid: str, field: str):
+        C = self.colors
+        key = (str(oid), field)
+        w = self.field_row_widgets.get(key)
+        if not w:
+            return
+
+        is_field_applied = key in self.applied_changes
+        old_val = w["old_val"]
+        new_val = w["new_val"]
+        matching_books = w["matching_books"]
+        badge_code = w["badge_code"]
+        badge_color = w["badge_color"]
+
+        # 1. Update Checkbox
+        chk = w["chk"]
+        if is_field_applied:
+            chk.config(
+                fg=C["text_muted"],
+                state="disabled",
+                cursor="arrow"
+            )
+        else:
+            chk.config(
+                fg=C["text"],
+                state="normal",
+                cursor="hand2"
+            )
+
+        # 2. Rebuild Button Box
+        btn_box = w["btn_box"]
+        for child in btn_box.winfo_children():
+            child.destroy()
+
+        if is_field_applied:
+            btn_undo = tk.Button(
+                btn_box,
+                text="⎌ Undo",
+                command=lambda o=oid, f=field, ov=old_val, nv=new_val: self._undo_single_field(o, f, ov, nv),
+                font=FONT_MONO_SM,
+                bg=C["surface_dim"],
+                fg=C["warning"],
+                activebackground=C["warning_bg"],
+                relief="solid",
+                bd=1,
+                cursor="hand2",
+                padx=sc(6),
+                pady=sc(1),
+                highlightthickness=1,
+                highlightbackground=C["warning"]
+            )
+            btn_undo.pack(side="right", padx=(sc(6), 0))
+
+            lbl_applied = tk.Label(
+                btn_box,
+                text="✓ APPLIED TO DATABASE",
+                font=FONT_MONO_SM,
+                fg=C["success_text"],
+                bg=C["success_bg"],
+                padx=sc(6),
+                pady=sc(2),
+                highlightthickness=1,
+                highlightbackground=C["success_border"]
+            )
+            lbl_applied.pack(side="right", padx=(sc(6), 0))
+        else:
+            btn_apply_field = tk.Button(
+                btn_box,
+                text="✓ Apply Field",
+                command=lambda o=oid, f=field, ov=old_val, nv=new_val: self._apply_single_field(o, f, ov, nv),
+                font=FONT_UI_BOLD,
+                bg=C["surface_dim"],
+                fg=C["success_text"],
+                activebackground=C["success_bg"],
+                relief="solid",
+                bd=1,
+                cursor="hand2",
+                padx=sc(8),
+                pady=sc(1),
+                highlightthickness=1,
+                highlightbackground=C["success_border"]
+            )
+            btn_apply_field.pack(side="right", padx=(sc(6), 0))
+
+        lbl_badge = tk.Label(
+            btn_box,
+            text=badge_code,
+            font=FONT_MONO_SM,
+            fg="#ffffff",
+            bg=badge_color,
+            padx=sc(6),
+            pady=sc(1)
+        )
+        lbl_badge.pack(side="right")
+
+        # 3. Update Suggestion Box & Label
+        sug_box = w["sug_box"]
+        sug_lbl = w["sug_lbl"]
+        if is_field_applied:
+            sug_box.config(
+                bg=C["surface_dim"],
+                highlightbackground=C["border"],
+                cursor="arrow"
+            )
+            sug_lbl.config(
+                fg=C["text_muted"],
+                bg=C["surface_dim"],
+                cursor="arrow"
+            )
+        else:
+            sug_box.config(
+                bg=C["success_bg"],
+                highlightbackground=C["success_border"],
+                cursor="hand2"
+            )
+            sug_lbl.config(
+                fg=C["success_text"],
+                bg=C["success_bg"],
+                cursor="hand2"
+            )
+
+        if "extra_badge" in w and w["extra_badge"] and w["extra_badge"].winfo_exists():
+            w["extra_badge"].destroy()
+
+        def _toggle_box(k=key, v=w["var"], target_oid=oid):
+            if k in self.applied_changes:
+                return
+            v.set(not v.get())
+            self.selection_state[k] = v.get()
+            self._update_sidebar_item(target_oid)
+            self._update_summary()
+
+        if matching_books:
+            book_badge_text = f"🌟 In Books: {matching_books[0].replace('Books: ', '')}"
+            book_badge = tk.Label(
+                sug_box,
+                text=book_badge_text,
+                font=FONT_MONO_SM,
+                fg="#ffffff" if not is_field_applied else C["text_muted"],
+                bg=C["success_border"] if not is_field_applied else C["surface_dim"],
+                padx=sc(6),
+                pady=sc(1),
+                cursor="hand2" if not is_field_applied else "arrow"
+            )
+            book_badge.pack(side="right", padx=(sc(6), 0))
+            book_badge.bind("<Button-1>", lambda e, f=_toggle_box: f())
+            w["extra_badge"] = book_badge
+        else:
+            tag_lbl = tk.Label(
+                sug_box,
+                text="[GBIF Backbone]",
+                font=FONT_MONO_SM,
+                fg=C["success_border"] if not is_field_applied else C["text_muted"],
+                bg=C["success_bg"] if not is_field_applied else C["surface_dim"],
+                cursor="hand2" if not is_field_applied else "arrow"
+            )
+            tag_lbl.pack(side="right")
+            tag_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
+            w["extra_badge"] = tag_lbl
+
+    def _update_card_header_ui(self, oid: str):
+        C = self.colors
+        hw = self.card_header_widgets.get(str(oid))
+        if not hw:
+            return
+
+        diff = hw["diff"]
+        changes = diff.get("changes", [])
+        status = diff.get("status", "ACCEPTED")
+        match_type = diff.get("match_type", "MATCH")
+
+        applied_chgs = [chg for chg in changes if (str(oid), chg["field"]) in self.applied_changes]
+        unapplied_chgs = [chg for chg in changes if (str(oid), chg["field"]) not in self.applied_changes]
+        is_fully_applied = len(applied_chgs) == len(changes) and len(changes) > 0
+        is_partially_applied = len(applied_chgs) > 0 and not is_fully_applied
+
+        book_matched_fields = [chg for chg in changes if find_book_matches_for_gbif(self.app_state, str(oid), chg["field"], chg.get("new", ""))]
+        has_books = len(book_matched_fields) > 0
+
+        hdr_right_box = hw["hdr_right_box"]
+        for child in hdr_right_box.winfo_children():
+            child.destroy()
+
+        card_ctrls = tk.Frame(hdr_right_box, bg=C["header_bg"])
+        card_ctrls.pack(side="left", padx=(0, sc(10)))
+
+        if not is_fully_applied and len(unapplied_chgs) > 0:
+            btn_all = tk.Button(
+                card_ctrls, text="All", command=lambda o=oid: self._select_card_fields(o, "all"),
+                font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["text"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
+            )
+            btn_all.pack(side="left", padx=(0, sc(2)))
+
+            if has_books:
+                btn_ver = tk.Button(
+                    card_ctrls, text="Verified", command=lambda o=oid: self._select_card_fields(o, "verified"),
+                    font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["success_text"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
+                )
+                btn_ver.pack(side="left", padx=(0, sc(2)))
+
+            btn_none = tk.Button(
+                card_ctrls, text="None", command=lambda o=oid: self._select_card_fields(o, "none"),
+                font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["text_muted"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
+            )
+            btn_none.pack(side="left", padx=(0, sc(6)))
+
+            btn_apply_card = tk.Button(
+                card_ctrls,
+                text="✓ Apply Remaining" if is_partially_applied else "✓ Apply Specimen",
+                command=lambda o=oid: self._apply_specimen(o),
+                font=FONT_UI_BOLD, bg=C["success"], fg="#ffffff", relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(2)
+            )
+            btn_apply_card.pack(side="left")
+
+        if len(applied_chgs) > 0:
+            btn_undo_card = tk.Button(
+                card_ctrls,
+                text="⎌ Undo Specimen",
+                command=lambda o=oid: self._undo_specimen(o),
+                font=FONT_UI_BOLD, bg=C["surface_dim"], fg=C["warning"], relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(2)
+            )
+            btn_undo_card.pack(side="left", padx=(sc(4), 0))
+
+        if has_books:
+            book_pill_bg = C["success"] if len(book_matched_fields) == len(changes) else C["warning"]
+            book_pill_fg = "#ffffff" if len(book_matched_fields) == len(changes) else "#000000"
+            tk.Label(
+                hdr_right_box,
+                text=f"🌟 {len(book_matched_fields)}/{len(changes)} Books",
+                font=FONT_MONO_SM,
+                fg=book_pill_fg,
+                bg=book_pill_bg,
+                padx=sc(6),
+                pady=sc(2)
+            ).pack(side="left", padx=(0, sc(6)))
+
+        if is_fully_applied:
+            badge_bg = C["success"]
+            badge_fg = "#ffffff"
+            badge_lbl_text = "[✓ ALL APPLIED]"
+        elif is_partially_applied:
+            badge_bg = C["warning"]
+            badge_fg = "#000000"
+            badge_lbl_text = f"[PARTIAL {len(applied_chgs)}/{len(changes)}]"
+        else:
+            badge_bg = C["warning"] if status == "SYNONYM" else (C["surface_dim"] if self.is_dark else "#444748")
+            badge_fg = "#000000" if status == "SYNONYM" else "#ffffff"
+            badge_lbl_text = f"[{status} | {match_type}]"
+
+        tk.Label(
+            hdr_right_box,
+            text=badge_lbl_text,
+            font=FONT_MONO_SM,
+            fg=badge_fg,
+            bg=badge_bg,
+            padx=sc(8),
+            pady=sc(2)
+        ).pack(side="left")
+
+    def _update_specimen_ui_in_place(self, oid: str):
+        diff = self.oid_to_diff.get(str(oid), {})
+        changes = diff.get("changes", [])
+        for chg in changes:
+            field = chg.get("field", "")
+            self._update_field_row_ui(str(oid), field)
+        self._update_card_header_ui(str(oid))
+        self._update_sidebar_item(str(oid))
+        self._update_tab_buttons()
+        self._update_summary()
+        self._update_selection_buttons()
+
     def _apply_single_field(self, oid: str, field: str, old_val: str, new_val: str):
         with self.app_state.df_lock:
             if self.app_state.df_reg is None:
@@ -838,7 +1187,8 @@ class GBIFReviewDialog(tk.Toplevel):
                 else:
                     self.app_state._log_records = []
             self.app_state._log_records.append(log_entry)
-            self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+            from repository import _normalise_log_dataframe
+            self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
             self.app_state.dirty = True
 
             self.applied_changes.add((str(oid), field))
@@ -849,9 +1199,71 @@ class GBIFReviewDialog(tk.Toplevel):
             except Exception:
                 pass
 
-        self._show_toast(f"✓ Applied {field}: '{old_val}' → '{new_val}' for Specimen #{oid}")
-        self._update_tab_buttons()
-        self._render_current_page()
+        self._show_toast(f"✓ Applied {field}: '{old_val}' → '{new_val}' for Specimen #{oid}", level="success")
+        self._update_specimen_ui_in_place(oid)
+
+    def _undo_single_field(self, oid: str, field: str, old_val: str, new_val: str):
+        with self.app_state.df_lock:
+            if self.app_state.df_reg is None:
+                messagebox.showerror("Error", "No active database loaded.", parent=self)
+                return
+            reg_oid = self._find_reg_oid(oid)
+            if reg_oid is None:
+                messagebox.showerror("Error", f"Specimen #{oid} not found in database.", parent=self)
+                return
+
+            if field in self.app_state.df_reg.columns:
+                self.app_state.df_reg.at[reg_oid, field] = old_val
+
+            prob_changed = []
+            prob_diffs = []
+            df_obs = getattr(self.app_state, "df_obs", None)
+            problem_to_field = self._get_problem_to_field_map()
+            if df_obs is not None and problem_to_field:
+                for pc, mf in problem_to_field.items():
+                    if mf.lower().replace("_", " ").strip() == field.lower().replace("_", " ").strip():
+                        if reg_oid in df_obs.index and pc in df_obs.columns:
+                            df_obs.at[reg_oid, pc] = True
+                            prob_changed.append(pc)
+                            prob_diffs.append(f'{pc}: "False" -> "True"')
+
+            ts = datetime.now().isoformat(timespec="seconds")
+            user_name = getpass.getuser()
+            excel_p = getattr(self.app_state, "excel_path", "") or ""
+            out_p = getattr(self.app_state, "output_path", "") or excel_p
+            log_entry = {
+                "Timestamp": ts,
+                "User": user_name,
+                "Action": "GBIF_UNDO",
+                "ObjectID": str(oid),
+                "Reviewed": "",
+                "ChangedFields": field,
+                "ChangedValues": f'{field}: "{new_val}" -> "{old_val}"',
+                "ProblemsChanged": ", ".join(prob_changed),
+                "ProblemsChangedValues": " | ".join(prob_diffs),
+                "LocationChanged": "",
+                "LocationChangedValues": "",
+                "SourceFile": os.path.basename(excel_p),
+                "OutputFile": os.path.basename(out_p)
+            }
+            if not hasattr(self.app_state, "_log_records") or not self.app_state._log_records:
+                df_log = getattr(self.app_state, "df_log", None)
+                if df_log is not None and not df_log.empty:
+                    self.app_state._log_records = df_log.to_dict(orient="records")
+                else:
+                    self.app_state._log_records = []
+            self.app_state._log_records.append(log_entry)
+            from repository import _normalise_log_dataframe
+            self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
+            self.app_state.dirty = True
+
+            self.applied_changes.discard((str(oid), field))
+            self.selection_state[(str(oid), field)] = True
+            if (str(oid), field) in self.page_field_vars:
+                self.page_field_vars[(str(oid), field)].set(True)
+
+        self._show_toast(f"⎌ Undid {field} update for Specimen #{oid} (reverted to '{old_val}')", level="undo")
+        self._update_specimen_ui_in_place(oid)
 
     def _apply_specimen(self, oid: str):
         diff = self.oid_to_diff.get(oid, {})
@@ -929,7 +1341,8 @@ class GBIFReviewDialog(tk.Toplevel):
                     else:
                         self.app_state._log_records = []
                 self.app_state._log_records.append(log_entry)
-                self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+                from repository import _normalise_log_dataframe
+                self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
                 self.app_state.dirty = True
 
         if self.on_applied_callback:
@@ -938,9 +1351,92 @@ class GBIFReviewDialog(tk.Toplevel):
             except Exception:
                 pass
 
-        self._show_toast(f"✓ Applied {len(changed_fields)} updates for Specimen #{oid}")
-        self._update_tab_buttons()
-        self._render_current_page()
+        self._show_toast(f"✓ Applied {len(changed_fields)} updates for Specimen #{oid}", level="success")
+        self._update_specimen_ui_in_place(oid)
+
+    def _undo_specimen(self, oid: str):
+        diff = self.oid_to_diff.get(str(oid), {})
+        changes = diff.get("changes", [])
+        applied_to_undo = [
+            chg for chg in changes
+            if (str(oid), chg["field"]) in self.applied_changes
+        ]
+        if not applied_to_undo:
+            messagebox.showinfo("No Applied Changes", f"No applied changes to undo for Specimen #{oid}.", parent=self)
+            return
+
+        with self.app_state.df_lock:
+            if self.app_state.df_reg is None:
+                messagebox.showerror("Error", "No active database loaded.", parent=self)
+                return
+            reg_oid = self._find_reg_oid(oid)
+            if reg_oid is None:
+                messagebox.showerror("Error", f"Specimen #{oid} not found in database.", parent=self)
+                return
+
+            changed_fields = []
+            changed_diffs = []
+            prob_changed = []
+            prob_diffs = []
+            df_obs = getattr(self.app_state, "df_obs", None)
+            problem_to_field = self._get_problem_to_field_map()
+
+            for item in applied_to_undo:
+                f = item["field"]
+                new_v = item["new"]
+                old_v = item["old"]
+                if f in self.app_state.df_reg.columns:
+                    self.app_state.df_reg.at[reg_oid, f] = old_v
+                    changed_fields.append(f)
+                    changed_diffs.append(f'{f}: "{new_v}" -> "{old_v}"')
+                    self.applied_changes.discard((str(oid), f))
+                    self.selection_state[(str(oid), f)] = True
+                    if (str(oid), f) in self.page_field_vars:
+                        self.page_field_vars[(str(oid), f)].set(True)
+
+            if df_obs is not None and problem_to_field:
+                for f in changed_fields:
+                    for pc, mf in problem_to_field.items():
+                        if mf.lower().replace("_", " ").strip() == f.lower().replace("_", " ").strip():
+                            if reg_oid in df_obs.index and pc in df_obs.columns:
+                                df_obs.at[reg_oid, pc] = True
+                                if pc not in prob_changed:
+                                    prob_changed.append(pc)
+                                    prob_diffs.append(f'{pc}: "False" -> "True"')
+
+            if changed_fields or prob_changed:
+                ts = datetime.now().isoformat(timespec="seconds")
+                user_name = getpass.getuser()
+                excel_p = getattr(self.app_state, "excel_path", "") or ""
+                out_p = getattr(self.app_state, "output_path", "") or excel_p
+                log_entry = {
+                    "Timestamp": ts,
+                    "User": user_name,
+                    "Action": "GBIF_UNDO",
+                    "ObjectID": str(oid),
+                    "Reviewed": "",
+                    "ChangedFields": ", ".join(changed_fields),
+                    "ChangedValues": " | ".join(changed_diffs),
+                    "ProblemsChanged": ", ".join(prob_changed),
+                    "ProblemsChangedValues": " | ".join(prob_diffs),
+                    "LocationChanged": "",
+                    "LocationChangedValues": "",
+                    "SourceFile": os.path.basename(excel_p),
+                    "OutputFile": os.path.basename(out_p)
+                }
+                if not hasattr(self.app_state, "_log_records") or not self.app_state._log_records:
+                    df_log = getattr(self.app_state, "df_log", None)
+                    if df_log is not None and not df_log.empty:
+                        self.app_state._log_records = df_log.to_dict(orient="records")
+                    else:
+                        self.app_state._log_records = []
+                self.app_state._log_records.append(log_entry)
+                from repository import _normalise_log_dataframe
+                self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
+                self.app_state.dirty = True
+
+        self._show_toast(f"⎌ Undid {len(changed_fields)} updates for Specimen #{oid}", level="undo")
+        self._update_specimen_ui_in_place(oid)
 
     def _render_current_page(self):
         C = self.colors
@@ -955,6 +1451,8 @@ class GBIFReviewDialog(tk.Toplevel):
         self.specimen_frames.clear()
         self.specimen_dir_widgets.clear()
         self.page_field_vars.clear()
+        self.field_row_widgets.clear()
+        self.card_header_widgets.clear()
 
         # 2. Get filtered results and slice page
         filtered = self._get_filtered_results()
@@ -1101,6 +1599,7 @@ class GBIFReviewDialog(tk.Toplevel):
                 child.bind("<Button-1>", lambda e, f=_scroll_to: f())
 
             self.specimen_frames[oid] = f_frame
+            self._bind_mousewheel_recursive(f_frame, self._on_dir_mousewheel)
 
             # --- Right Card Frame ---
             card = tk.Frame(
@@ -1111,6 +1610,7 @@ class GBIFReviewDialog(tk.Toplevel):
             )
             card.pack(fill="x", pady=(0, sc(12)))
             self.item_cards[oid] = card
+            self._bind_mousewheel_recursive(card, self._on_main_mousewheel)
 
             # Solid Card Header Bar with Rich Taxon Title & Quick Actions
             c_header = tk.Frame(card, bg=C["header_bg"])
@@ -1130,74 +1630,11 @@ class GBIFReviewDialog(tk.Toplevel):
             hdr_right_box = tk.Frame(c_header, bg=C["header_bg"])
             hdr_right_box.pack(side="right", padx=sc(12), pady=sc(6))
 
-            # Quick Card Toggle Chips: [All | Verified | None] & [Apply Specimen]
-            if not is_fully_applied and len(unapplied_chgs) > 0:
-                card_ctrls = tk.Frame(hdr_right_box, bg=C["header_bg"])
-                card_ctrls.pack(side="left", padx=(0, sc(10)))
-
-                btn_all = tk.Button(
-                    card_ctrls, text="All", command=lambda o=oid: self._select_card_fields(o, "all"),
-                    font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["text"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
-                )
-                btn_all.pack(side="left", padx=(0, sc(2)))
-
-                if has_books:
-                    btn_ver = tk.Button(
-                        card_ctrls, text="Verified", command=lambda o=oid: self._select_card_fields(o, "verified"),
-                        font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["success_text"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
-                    )
-                    btn_ver.pack(side="left", padx=(0, sc(2)))
-
-                btn_none = tk.Button(
-                    card_ctrls, text="None", command=lambda o=oid: self._select_card_fields(o, "none"),
-                    font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["text_muted"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
-                )
-                btn_none.pack(side="left", padx=(0, sc(6)))
-
-                # Apply This Specimen Button
-                btn_apply_card = tk.Button(
-                    card_ctrls, text="✓ Apply Specimen", command=lambda o=oid: self._apply_specimen(o),
-                    font=FONT_UI_BOLD, bg=C["success"], fg="#ffffff", relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(2)
-                )
-                btn_apply_card.pack(side="left")
-
-            # Book Matches Header Pill
-            if has_books:
-                book_pill_bg = C["success"] if len(book_matched_fields) == len(changes) else C["warning"]
-                book_pill_fg = "#ffffff" if len(book_matched_fields) == len(changes) else "#000000"
-                tk.Label(
-                    hdr_right_box,
-                    text=f"🌟 {len(book_matched_fields)}/{len(changes)} Books",
-                    font=FONT_MONO_SM,
-                    fg=book_pill_fg,
-                    bg=book_pill_bg,
-                    padx=sc(6),
-                    pady=sc(2)
-                ).pack(side="left", padx=(0, sc(6)))
-
-            match_type = diff.get("match_type", "MATCH")
-            if is_fully_applied:
-                badge_bg = C["success"]
-                badge_fg = "#ffffff"
-                badge_lbl_text = "[✓ ALL APPLIED]"
-            elif is_partially_applied:
-                badge_bg = C["warning"]
-                badge_fg = "#000000"
-                badge_lbl_text = f"[PARTIAL {len(applied_chgs)}/{len(changes)}]"
-            else:
-                badge_bg = C["warning"] if status == "SYNONYM" else (C["surface_dim"] if self.is_dark else "#444748")
-                badge_fg = "#000000" if status == "SYNONYM" else "#ffffff"
-                badge_lbl_text = f"[{status} | {match_type}]"
-
-            tk.Label(
-                hdr_right_box,
-                text=badge_lbl_text,
-                font=FONT_MONO_SM,
-                fg=badge_fg,
-                bg=badge_bg,
-                padx=sc(8),
-                pady=sc(2)
-            ).pack(side="left")
+            self.card_header_widgets[oid] = {
+                "hdr_right_box": hdr_right_box,
+                "diff": diff
+            }
+            self._update_card_header_ui(oid)
 
             # Card Content Body
             card_body = tk.Frame(card, bg=C["surface"], padx=sc(16), pady=sc(12))
@@ -1252,50 +1689,9 @@ class GBIFReviewDialog(tk.Toplevel):
                 )
                 chk.pack(side="left")
 
-                # Inline Apply Button or Applied Badge on Right of Sub-header
+                # Inline Apply Button / Undo / Applied Badge Container
                 btn_box = tk.Frame(sub_hdr, bg=C["surface"])
                 btn_box.pack(side="right")
-
-                if is_field_applied:
-                    tk.Label(
-                        btn_box,
-                        text="✓ APPLIED TO DATABASE",
-                        font=FONT_MONO_SM,
-                        fg=C["success_text"],
-                        bg=C["success_bg"],
-                        padx=sc(6),
-                        pady=sc(2),
-                        highlightthickness=1,
-                        highlightbackground=C["success_border"]
-                    ).pack(side="right", padx=(sc(6), 0))
-                else:
-                    btn_apply_field = tk.Button(
-                        btn_box,
-                        text="✓ Apply Field",
-                        command=lambda o=oid, f=field, ov=old_val, nv=new_val: self._apply_single_field(o, f, ov, nv),
-                        font=FONT_UI_BOLD,
-                        bg=C["surface_dim"],
-                        fg=C["success_text"],
-                        activebackground=C["success_bg"],
-                        relief="solid",
-                        bd=1,
-                        cursor="hand2",
-                        padx=sc(8),
-                        pady=sc(1),
-                        highlightthickness=1,
-                        highlightbackground=C["success_border"]
-                    )
-                    btn_apply_field.pack(side="right", padx=(sc(6), 0))
-
-                tk.Label(
-                    btn_box,
-                    text=badge_code,
-                    font=FONT_MONO_SM,
-                    fg="#ffffff",
-                    bg=badge_color,
-                    padx=sc(6),
-                    pady=sc(1)
-                ).pack(side="right")
 
                 # Comparison Grid Frame
                 grid_frame = tk.Frame(row_frame, bg=C["surface"])
@@ -1359,8 +1755,8 @@ class GBIFReviewDialog(tk.Toplevel):
                 )
                 sug_box.pack(fill="both", expand=True)
 
-                def _toggle_box(k=key, v=var, target_oid=oid, applied=is_field_applied):
-                    if applied:
+                def _toggle_box(k=key, v=var, target_oid=oid):
+                    if k in self.applied_changes:
                         return
                     v.set(not v.get())
                     self.selection_state[k] = v.get()
@@ -1378,38 +1774,31 @@ class GBIFReviewDialog(tk.Toplevel):
                 )
                 sug_lbl.pack(side="left", fill="x", expand=True)
 
-                # Check for Historical Book Corroboration on this field
-                matching_books = find_book_matches_for_gbif(self.app_state, oid, field, new_val)
-                if matching_books:
-                    book_badge_text = f"🌟 In Books: {matching_books[0].replace('Books: ', '')}"
-                    book_badge = tk.Label(
-                        sug_box,
-                        text=book_badge_text,
-                        font=FONT_MONO_SM,
-                        fg="#ffffff",
-                        bg=C["success_border"],
-                        padx=sc(6),
-                        pady=sc(1),
-                        cursor="hand2" if not is_field_applied else "arrow"
-                    )
-                    book_badge.pack(side="right", padx=(sc(6), 0))
-                    book_badge.bind("<Button-1>", lambda e, f=_toggle_box: f())
-                else:
-                    tag_lbl = tk.Label(
-                        sug_box,
-                        text="[GBIF Backbone]",
-                        font=FONT_MONO_SM,
-                        fg=C["success_border"] if not is_field_applied else C["text_muted"],
-                        bg=C["success_bg"] if not is_field_applied else C["surface_dim"],
-                        cursor="hand2" if not is_field_applied else "arrow"
-                    )
-                    tag_lbl.pack(side="right")
-                    tag_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
-
                 sug_box.bind("<Button-1>", lambda e, f=_toggle_box: f())
                 sug_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
 
-        # Scroll to top of cards
+                matching_books = find_book_matches_for_gbif(self.app_state, oid, field, new_val)
+
+                self.field_row_widgets[key] = {
+                    "chk": chk,
+                    "btn_box": btn_box,
+                    "sug_box": sug_box,
+                    "sug_lbl": sug_lbl,
+                    "var": var,
+                    "old_val": old_val,
+                    "new_val": new_val,
+                    "badge_code": badge_code,
+                    "badge_color": badge_color,
+                    "matching_books": matching_books,
+                    "extra_badge": None
+                }
+
+                self._update_field_row_ui(oid, field)
+
+        # Reset and configure scrollable areas
+        self.dir_canvas.configure(scrollregion=self.dir_canvas.bbox("all"))
+        self.dir_canvas.yview_moveto(0)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         self.canvas.yview_moveto(0)
         self._update_summary()
         self._update_selection_buttons()
@@ -1469,13 +1858,46 @@ class GBIFReviewDialog(tk.Toplevel):
         self._update_tab_buttons()
         self._render_current_page()
 
+    def _set_active_scroll_target(self, target: str):
+        self._active_scroll_target = target
+
+    def _on_routed_mousewheel(self, event):
+        if not self.winfo_exists():
+            return
+        if getattr(self, "_active_scroll_target", "main") == "dir":
+            self._on_dir_mousewheel(event)
+        else:
+            self._on_main_mousewheel(event)
+
     def _on_dir_mousewheel(self, event):
-        if event.delta:
+        if not hasattr(self, "dir_canvas") or not self.dir_canvas.winfo_exists():
+            return
+        if hasattr(event, "delta") and event.delta:
             self.dir_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif getattr(event, "num", None) == 4:
+            self.dir_canvas.yview_scroll(-1, "units")
+        elif getattr(event, "num", None) == 5:
+            self.dir_canvas.yview_scroll(1, "units")
 
     def _on_main_mousewheel(self, event):
-        if event.delta:
+        if not hasattr(self, "canvas") or not self.canvas.winfo_exists():
+            return
+        if hasattr(event, "delta") and event.delta:
             self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif getattr(event, "num", None) == 4:
+            self.canvas.yview_scroll(-1, "units")
+        elif getattr(event, "num", None) == 5:
+            self.canvas.yview_scroll(1, "units")
+
+    def _on_dialog_destroy(self, event=None):
+        if event and event.widget != self:
+            return
+        try:
+            self.unbind_all("<MouseWheel>")
+            self.unbind_all("<Button-4>")
+            self.unbind_all("<Button-5>")
+        except Exception:
+            pass
 
     def _update_selection_buttons(self):
         if not hasattr(self, "sel_all_btn") or not self.sel_all_btn.winfo_exists():
@@ -1731,7 +2153,7 @@ class GBIFReviewDialog(tk.Toplevel):
                 pass
 
         # Show notification toast and stay open for continuous triage
-        self._show_toast(f"✓ Successfully applied {applied_count} changes across {len(by_oid)} specimens to active database.")
+        self._show_toast(f"✓ Successfully applied {applied_count} changes across {len(by_oid)} specimens to active database.", level="success")
         self._update_tab_buttons()
         self._render_current_page()
 
