@@ -462,7 +462,7 @@ def test_gbif_batch_config_progress_and_percent():
         assert hasattr(config_dlg, "detail_var")
 
         # Mock batch_gbif_match with progress callback execution
-        def mock_batch_match(items, progress_callback=None, cancel_event=None, max_workers=None):
+        def mock_batch_match(items, progress_callback=None, cancel_event=None, *args, **kwargs):
             if progress_callback:
                 progress_callback(1, 2, "Pinus sylvestris")
                 progress_callback(2, 2, "Betula pendula")

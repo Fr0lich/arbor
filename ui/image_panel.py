@@ -871,6 +871,7 @@ class ImagePanel(ttk.Frame):
         self.image_container.update_idletasks()
 
         if self.app and self.app.config and not self.app.config.get("has_images", True):
+            self.render_specimen_summary_hub(oid)
             return
 
         if self.image_mode == "offline":
@@ -881,6 +882,7 @@ class ImagePanel(ttk.Frame):
             self.ensure_no_image_label()
             self.no_image_label.pack_forget()
             self.images_missing_label.config(text="Offline mode active (images disabled)")
+            self.render_specimen_summary_hub(oid)
             return
 
         self._image_load_token += 1
@@ -915,8 +917,7 @@ class ImagePanel(ttk.Frame):
 
         if not paths:
             self.images_missing_label.config(text="No images found")
-            self.ensure_no_image_label()
-            self.no_image_label.pack(pady=20)
+            self.render_specimen_summary_hub(oid)
             return
 
         if self.image_view_mode == "gallery":
@@ -1058,6 +1059,9 @@ class ImagePanel(ttk.Frame):
 
     def _show_no_images_online(self):
         self.images_missing_label.config(text="No online images found", foreground="#c93a40")
+        curr_oid = getattr(self.app, "current_object_id", None) if self.app else None
+        if curr_oid:
+            self.render_specimen_summary_hub(curr_oid)
 
     def _display_online_image(self, img, url, token):
         if token != self._image_load_token:
@@ -1553,6 +1557,270 @@ class ImagePanel(ttk.Frame):
                 self.image_cache.popitem(last=False)
         except Exception:
             pass
+
+    def render_specimen_summary_hub(self, oid):
+        """Renders the Specimen Audit Summary Hub when an object has no images or in offline mode."""
+        self._update_image_controls_visibility()
+        for w in self.image_container.winfo_children():
+            w.destroy()
+
+        if not oid:
+            empty_frame = tk.Frame(
+                self.image_container,
+                bg="#ffffff",
+                highlightthickness=1,
+                highlightbackground="#d1d1d1",
+                padx=sc(24),
+                pady=sc(32)
+            )
+            empty_frame.pack(fill="both", expand=True, padx=sc(20), pady=sc(20))
+            tk.Label(
+                empty_frame,
+                text="🏛️",
+                font=("Segoe UI Emoji", sc(32)),
+                bg="#ffffff"
+            ).pack(pady=(sc(10), sc(4)))
+            tk.Label(
+                empty_frame,
+                text="No Specimen Selected",
+                font=("Lora", sc(16), "bold"),
+                bg="#ffffff",
+                fg="#2c302e"
+            ).pack(pady=sc(4))
+            tk.Label(
+                empty_frame,
+                text="Select an object from the left list, or adjust your search filters to begin auditing.",
+                font=("Segoe UI", sc(10)),
+                bg="#ffffff",
+                fg="#757d77"
+            ).pack(pady=sc(4))
+            return
+
+        # Fetch data for specimen
+        genus = ""
+        species = ""
+        author = ""
+        family = ""
+        high_class = ""
+        collector = ""
+        coll_date = ""
+        coll_place = ""
+        box_label = ""
+        obs_text = ""
+        is_reviewed = False
+        active_problems = []
+
+        if self.app:
+            if getattr(self.app, "df_reg", None) is not None:
+                str_oid = str(oid)
+                int_oid = int(oid) if str_oid.isdigit() else None
+                row = None
+                if str_oid in self.app.df_reg.index:
+                    row = self.app.df_reg.loc[str_oid]
+                elif int_oid is not None and int_oid in self.app.df_reg.index:
+                    row = self.app.df_reg.loc[int_oid]
+
+                if row is not None:
+                    try:
+                        def _g(k):
+                            v = row.get(k, "")
+                            s = str(v).strip()
+                            return "" if s in ("nan", "None", "<NA>") else s
+                        genus = _g("Genus")
+                        species = _g("Species")
+                        author = _g("Author")
+                        family = _g("Family")
+                        high_class = _g("Higher Classification")
+                        collector = _g("Collector")
+                        coll_date = _g("Collection Date")
+                        coll_place = _g("Collection Place")
+                        box_label = _g("Box Label")
+                        obs_text = _g("Observation")
+                    except Exception:
+                        pass
+
+            if getattr(self.app, "df_obs", None) is not None:
+                str_oid = str(oid)
+                int_oid = int(oid) if str_oid.isdigit() else None
+                obs_row = None
+                if str_oid in self.app.df_obs.index:
+                    obs_row = self.app.df_obs.loc[str_oid]
+                elif int_oid is not None and int_oid in self.app.df_obs.index:
+                    obs_row = self.app.df_obs.loc[int_oid]
+
+                if obs_row is not None:
+                    try:
+                        rev_val = obs_row.get("Reviewed", False)
+                        is_reviewed = bool(rev_val) and str(rev_val).lower() not in ("false", "0", "nan", "none")
+                        if self.app.config and "ui_sections" in self.app.config and "problems" in self.app.config["ui_sections"]:
+                            for p in self.app.config["ui_sections"]["problems"]:
+                                p_name = p.get("name")
+                                if p_name and p_name in obs_row:
+                                    val = obs_row[p_name]
+                                    if bool(val) and str(val).lower() not in ("false", "0", "nan", "none"):
+                                        active_problems.append(p_name.replace("_Problem", ""))
+                    except Exception:
+                        pass
+
+        # Build Hub Container
+        hub_frame = tk.Frame(
+            self.image_container,
+            bg="#ffffff",
+            highlightthickness=1,
+            highlightbackground="#d1d1d1",
+            padx=sc(20),
+            pady=sc(16)
+        )
+        hub_frame.pack(fill="both", expand=True, padx=sc(16), pady=sc(16))
+
+        # Top Badge & Section Label
+        top_row = tk.Frame(hub_frame, bg="#ffffff")
+        top_row.pack(fill="x", pady=(0, sc(8)))
+
+        tk.Label(
+            top_row,
+            text="SPECIMEN AUDIT & TAXONOMIC SUMMARY",
+            font=("JetBrains Mono", sc(9), "bold"),
+            fg="#757d77",
+            bg="#ffffff"
+        ).pack(side="left")
+
+        status_text = "✓ REVIEWED" if is_reviewed else "⏳ UNREVIEWED"
+        status_bg = "#dcfce7" if is_reviewed else "#fef3c7"
+        status_fg = "#15803d" if is_reviewed else "#92400e"
+        tk.Label(
+            top_row,
+            text=status_text,
+            font=("JetBrains Mono", sc(8), "bold"),
+            bg=status_bg,
+            fg=status_fg,
+            padx=sc(6),
+            pady=sc(2)
+        ).pack(side="right")
+
+        # Scientific Name Header
+        name_parts = []
+        if genus: name_parts.append(genus)
+        if species: name_parts.append(species)
+        if author: name_parts.append(f"({author})" if not author.startswith("(") else author)
+        full_taxon = " ".join(name_parts) if name_parts else f"Specimen #{oid}"
+
+        tk.Label(
+            hub_frame,
+            text=full_taxon,
+            font=("Lora", sc(18), "bold italic"),
+            fg="#2c302e",
+            bg="#ffffff",
+            anchor="w",
+            justify="left"
+        ).pack(fill="x", pady=(0, sc(2)))
+
+        tax_meta = []
+        if family: tax_meta.append(f"Family: {family}")
+        if high_class: tax_meta.append(f"Higher Classification: {high_class}")
+        if tax_meta:
+            tk.Label(
+                hub_frame,
+                text="  •  ".join(tax_meta),
+                font=("Inter", sc(10)),
+                fg="#757d77",
+                bg="#ffffff",
+                anchor="w"
+            ).pack(fill="x", pady=(0, sc(12)))
+
+        tk.Frame(hub_frame, bg="#e9ece5", height=1).pack(fill="x", pady=(0, sc(12)))
+
+        # Metadata Details Grid
+        grid_frame = tk.Frame(hub_frame, bg="#ffffff")
+        grid_frame.pack(fill="x", pady=(0, sc(12)))
+        grid_frame.columnconfigure(0, weight=1)
+        grid_frame.columnconfigure(1, weight=1)
+
+        def _add_meta_item(parent, row, col, label, val):
+            box = tk.Frame(parent, bg="#fbfaf8", highlightthickness=1, highlightbackground="#e9ece5", padx=sc(8), pady=sc(6))
+            box.grid(row=row, column=col, sticky="nsew", padx=sc(4), pady=sc(4))
+            tk.Label(box, text=label.upper(), font=("JetBrains Mono", sc(8), "bold"), fg="#757d77", bg="#fbfaf8", anchor="w").pack(fill="x")
+            val_text = val if val else "—"
+            val_fg = "#2c302e" if val else "#9ca3af"
+            tk.Label(box, text=val_text, font=("Inter", sc(9)), fg=val_fg, bg="#fbfaf8", anchor="w", wraplength=sc(200), justify="left").pack(fill="x")
+
+        _add_meta_item(grid_frame, 0, 0, "Collector", collector)
+        _add_meta_item(grid_frame, 0, 1, "Collection Date", coll_date)
+        _add_meta_item(grid_frame, 1, 0, "Collection Place", coll_place)
+        _add_meta_item(grid_frame, 1, 1, "Box Label", box_label)
+
+        # Problem / Data Quality Card
+        prob_box = tk.Frame(hub_frame, bg="#ffffff", highlightthickness=1, highlightbackground="#e9ece5", padx=sc(10), pady=sc(8))
+        prob_box.pack(fill="x", pady=(0, sc(14)))
+
+        if active_problems:
+            tk.Label(prob_box, text="⚠️ ACTIVE PROBLEM FLAGS", font=("JetBrains Mono", sc(8), "bold"), fg="#b91c1c", bg="#ffffff", anchor="w").pack(fill="x", pady=(0, sc(4)))
+            prob_pill_frame = tk.Frame(prob_box, bg="#ffffff")
+            prob_pill_frame.pack(fill="x")
+            for p in active_problems:
+                tk.Label(
+                    prob_pill_frame,
+                    text=f"• {p}",
+                    font=("Inter", sc(9), "bold"),
+                    bg="#fee2e2",
+                    fg="#b91c1c",
+                    padx=sc(6),
+                    pady=sc(2)
+                ).pack(side="left", padx=sc(2), pady=sc(2))
+        else:
+            tk.Label(prob_box, text="✓ No flagged data errors for this specimen.", font=("Inter", sc(9)), fg="#15803d", bg="#ffffff", anchor="w").pack(fill="x")
+
+        # Contextual Actions Frame
+        btn_frame = tk.Frame(hub_frame, bg="#ffffff")
+        btn_frame.pack(fill="x", pady=(sc(4), 0))
+
+        if self.main_ui and hasattr(self.main_ui, "run_gbif_verification_for_current"):
+            tk.Button(
+                btn_frame,
+                text="🧬 Validate with GBIF",
+                font=("Segoe UI", sc(9), "bold"),
+                bg="#f2f5f1",
+                fg="#2c302e",
+                relief="solid",
+                bd=1,
+                padx=sc(10),
+                pady=sc(4),
+                cursor="hand2",
+                command=self.main_ui.run_gbif_verification_for_current
+            ).pack(side="left", padx=(0, sc(6)))
+
+        if self.main_ui and hasattr(self.main_ui, "open_historical_resolver_for_current"):
+            tk.Button(
+                btn_frame,
+                text="📖 Check Historical Books",
+                font=("Segoe UI", sc(9), "bold"),
+                bg="#f2f5f1",
+                fg="#2c302e",
+                relief="solid",
+                bd=1,
+                padx=sc(10),
+                pady=sc(4),
+                cursor="hand2",
+                command=self.main_ui.open_historical_resolver_for_current
+            ).pack(side="left", padx=(0, sc(6)))
+
+        if self.main_ui and hasattr(self.main_ui, "mark_current_as_reviewed"):
+            tk.Button(
+                btn_frame,
+                text="✓ Mark Reviewed (Ctrl+Enter)",
+                font=("Segoe UI", sc(9), "bold"),
+                bg="#3a7d44",
+                fg="#ffffff",
+                activebackground="#2e6436",
+                activeforeground="#ffffff",
+                relief="flat",
+                bd=0,
+                padx=sc(12),
+                pady=sc(4),
+                cursor="hand2",
+                command=self.main_ui.mark_current_as_reviewed
+            ).pack(side="right")
+
 
 
 # -----------------------------------------------------------------------------

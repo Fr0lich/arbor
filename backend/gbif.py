@@ -1,6 +1,37 @@
 import requests
 import concurrent.futures
+import re
 from typing import List, Dict, Optional, Any
+
+UNDETERMINED_SPECIES_EXACT = {
+    "", "sp", "sp.", "spp", "spp.", "spec", "spec.", "species",
+    "indet", "indet.", "undet", "undet.", "unknown", "?", "-", "--",
+    "none", "n/a", "na", "null"
+}
+
+_MORPHOSPECIES_PATTERN = re.compile(
+    r"^(sp\.?|spec\.?|indet\.?|species)\s*([0-9]+|[a-zA-Z]|nov\.?|nr\.?|aff\.?|cf\.?.*)?$",
+    re.IGNORECASE
+)
+
+
+def is_undetermined_species(species: Any) -> bool:
+    """
+    Returns True if species string indicates an undetermined taxon, open nomenclature,
+    morphospecies, or unassigned species (e.g. 'sp.', 'spp.', 'indet.', 'sp. 1', 'sp. nov.', '?').
+    """
+    if species is None:
+        return True
+    s = str(species).strip().lower()
+    if s in UNDETERMINED_SPECIES_EXACT:
+        return True
+    s_clean = s.rstrip(".").strip()
+    if s_clean in UNDETERMINED_SPECIES_EXACT:
+        return True
+    if _MORPHOSPECIES_PATTERN.match(s):
+        return True
+    return False
+
 
 def check_gbif(genus: str, species: str):
     genus = (genus or "").strip()
@@ -245,35 +276,55 @@ def _process_single_item(item: Dict[str, Any], cancel_event=None) -> Optional[Di
 
 
 def _query_single_taxon(genus: str, species: str, cancel_event=None) -> Optional[Dict[str, Any]]:
-    """Query GBIF for a single genus/species taxon combination, resolving synonyms if needed."""
+    """
+    Query GBIF for a single genus/species taxon combination, resolving synonyms and family hierarchy.
+    If species is undetermined ('sp.', 'indet.', blank), queries at genus rank.
+    """
     if cancel_event and cancel_event.is_set():
         return None
     if not genus:
         return None
 
-    gbif_data = check_gbif(genus, species)
+    is_undet = is_undetermined_species(species)
+    # If undetermined, query genus only
+    query_species = "" if is_undet else species
+
+    gbif_data = check_gbif(genus, query_species)
     if not gbif_data or "error" in gbif_data:
         return None
 
-    if gbif_data.get("synonym") and gbif_data.get("acceptedUsageKey"):
+    original_scientific_name = gbif_data.get("scientificName") or f"{genus} {query_species}".strip()
+    is_synonym = bool(gbif_data.get("synonym"))
+    accepted_scientific_name = ""
+
+    if is_synonym and gbif_data.get("acceptedUsageKey"):
         if cancel_event and cancel_event.is_set():
             return None
         acc_data = get_accepted_name(gbif_data["acceptedUsageKey"])
         if acc_data and "error" not in acc_data:
+            accepted_scientific_name = acc_data.get("scientificName") or ""
             if acc_data.get("genus"):
                 gbif_data["genus"] = acc_data["genus"]
-            if acc_data.get("species"):
+            if not is_undet and acc_data.get("species"):
                 gbif_data["species"] = acc_data["species"]
-            if acc_data.get("author"):
+            if not is_undet and acc_data.get("author"):
                 gbif_data["author"] = acc_data["author"]
             if acc_data.get("family"):
                 gbif_data["family"] = acc_data["family"]
+
+    gbif_data["is_undetermined"] = is_undet
+    gbif_data["is_synonym"] = is_synonym
+    gbif_data["original_scientific_name"] = original_scientific_name
+    gbif_data["accepted_scientific_name"] = accepted_scientific_name
+    if is_undet:
+        gbif_data["species"] = species
+        gbif_data["rank"] = "GENUS"
 
     return gbif_data
 
 
 def _evaluate_item_diff(item: Dict[str, Any], gbif_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Compare an individual item against resolved GBIF data and produce diffs."""
+    """Compare an individual item against resolved GBIF data and produce diffs with taxonomic reasons."""
     if not gbif_data or "error" in gbif_data:
         return None
 
@@ -283,9 +334,18 @@ def _evaluate_item_diff(item: Dict[str, Any], gbif_data: Optional[Dict[str, Any]
     author = str(item.get("author", "") or "").strip()
     family = str(item.get("family", "") or "").strip()
 
+    is_undet = is_undetermined_species(species) or gbif_data.get("is_undetermined", False)
+    is_synonym = gbif_data.get("is_synonym", False)
+
     prop_genus = gbif_data.get("genus") or ""
-    prop_species = gbif_data.get("species") or ""
-    prop_author = gbif_data.get("author") or ""
+    # If undetermined, NEVER change species name, but check Genus Author
+    if is_undet:
+        prop_species = species
+        prop_author = gbif_data.get("author") or ""
+    else:
+        prop_species = gbif_data.get("species") or ""
+        prop_author = gbif_data.get("author") or ""
+
     prop_family = gbif_data.get("family") or ""
 
     current_map = {
@@ -305,35 +365,103 @@ def _evaluate_item_diff(item: Dict[str, Any], gbif_data: Optional[Dict[str, Any]
     for k in ["Genus", "Species", "Author", "Family"]:
         c_val = current_map[k]
         p_val = proposed_map[k]
+
         if k == "Author":
             if p_val and not is_author_equivalent(c_val, p_val):
-                changes.append({"field": k, "old": c_val, "new": p_val})
+                if not c_val:
+                    r_code = "MISSING_AUTHOR"
+                    r_lbl = "+ Missing Author"
+                    expl = f"Populated {'Genus' if is_undet else 'Species'} author '{p_val}' from GBIF."
+                else:
+                    r_code = "AUTHOR_STANDARDIZED"
+                    r_lbl = "Author Standardized"
+                    expl = f"Standardized author from '{c_val}' to '{p_val}'."
+                changes.append({
+                    "field": k, "old": c_val, "new": p_val,
+                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl
+                })
         elif k == "Family":
             if p_val and p_val.lower() != c_val.lower():
-                changes.append({"field": k, "old": c_val, "new": p_val})
-        else:
+                if not c_val:
+                    r_code = "MISSING_FAMILY"
+                    r_lbl = "+ Missing Family"
+                    expl = f"Assigned family '{p_val}' from GBIF classification for genus '{prop_genus}'."
+                else:
+                    r_code = "FAMILY_UPDATE"
+                    r_lbl = "Family Reclassified"
+                    expl = f"Updated family classification from '{c_val}' to '{p_val}'."
+                changes.append({
+                    "field": k, "old": c_val, "new": p_val,
+                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl
+                })
+        elif k == "Species":
+            if not is_undet and p_val and p_val != c_val:
+                if is_synonym:
+                    r_code = "SYNONYM_SPECIES"
+                    r_lbl = "Accepted Species (Synonym)"
+                    expl = f"'{species}' is an older synonym for accepted species '{p_val}'."
+                else:
+                    r_code = "SPELLING"
+                    r_lbl = "Spelling / Typo Fix"
+                    expl = f"Corrected species spelling from '{c_val}' to '{p_val}'."
+                changes.append({
+                    "field": k, "old": c_val, "new": p_val,
+                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl
+                })
+        else:  # Genus
             if p_val and p_val != c_val:
-                changes.append({"field": k, "old": c_val, "new": p_val})
+                if is_synonym:
+                    r_code = "SYNONYM_GENUS"
+                    r_lbl = "⚠️ Reclassified Genus (Synonym)"
+                    expl = f"'{genus} {species}'.strip() is cataloged as a synonym for modern combination '{prop_genus} {prop_species}'.strip() in GBIF."
+                else:
+                    r_code = "SPELLING"
+                    r_lbl = "🔤 Spelling / Typo Fix"
+                    expl = f"Corrected genus spelling from '{c_val}' to '{p_val}'."
+                changes.append({
+                    "field": k, "old": c_val, "new": p_val,
+                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl
+                })
 
     if changes:
+        missing_family = (not bool(family)) and bool(prop_family)
+        missing_author = (not bool(author)) and bool(prop_author)
         return {
             "oid": oid,
             "current": current_map,
             "proposed": proposed_map,
             "changes": changes,
             "match_type": gbif_data.get("matchType") or "MATCH",
-            "status": gbif_data.get("status") or "ACCEPTED",
-            "rank": gbif_data.get("rank") or "SPECIES"
+            "status": "SYNONYM" if is_synonym else (gbif_data.get("status") or "ACCEPTED"),
+            "rank": gbif_data.get("rank") or ("GENUS" if is_undet else "SPECIES"),
+            "is_undetermined": is_undet,
+            "is_synonym": is_synonym,
+            "missing_family": missing_family,
+            "missing_author": missing_author,
+            "original_scientific_name": gbif_data.get("original_scientific_name", ""),
+            "accepted_scientific_name": gbif_data.get("accepted_scientific_name", "")
         }
     return None
 
 
-def batch_gbif_match(items: List[Dict[str, Any]], progress_callback=None, cancel_event=None, max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
+def batch_gbif_match(
+    items: List[Dict[str, Any]],
+    progress_callback=None,
+    cancel_event=None,
+    max_workers: Optional[int] = None,
+    exclude_undetermined: bool = False
+) -> List[Dict[str, Any]]:
     """
     Query GBIF concurrently for unique taxa and return proposed taxonomic changes across all items.
+    Supports excluding undetermined ('sp.') specimens or validating their Family/Genus safely.
     """
     if not items:
         return []
+
+    if exclude_undetermined:
+        items = [item for item in items if not is_undetermined_species(item.get("species"))]
+        if not items:
+            return []
 
     if max_workers is None:
         try:
@@ -344,15 +472,22 @@ def batch_gbif_match(items: List[Dict[str, Any]], progress_callback=None, cancel
             max_workers = 5
     max_workers = max(1, min(10, max_workers))
 
-    # 1. Deduplicate unique taxa: (genus_clean, species_clean)
+    # 1. Deduplicate unique taxa:
+    # Binomials map to (genus_lower, species_lower) -> (genus, species)
+    # Undetermined taxa map to (genus_lower, "__undetermined__") -> (genus, "")
     unique_taxa = {}
     for item in items:
         g = str(item.get("genus", "") or "").strip()
         s = str(item.get("species", "") or "").strip()
         if g:
-            key = (g.lower(), s.lower())
-            if key not in unique_taxa:
-                unique_taxa[key] = (g, s)
+            if is_undetermined_species(s):
+                key = (g.lower(), "__undetermined__")
+                if key not in unique_taxa:
+                    unique_taxa[key] = (g, s)
+            else:
+                key = (g.lower(), s.lower())
+                if key not in unique_taxa:
+                    unique_taxa[key] = (g, s)
 
     if not unique_taxa:
         return []
@@ -377,7 +512,8 @@ def batch_gbif_match(items: List[Dict[str, Any]], progress_callback=None, cancel
 
             if progress_callback:
                 try:
-                    progress_callback(completed_taxa, total_taxa, f"{unique_taxa[key][0]} {unique_taxa[key][1]}".strip())
+                    display_name = f"{unique_taxa[key][0]} {unique_taxa[key][1]}".strip()
+                    progress_callback(completed_taxa, total_taxa, display_name)
                 except Exception:
                     pass
 
@@ -396,11 +532,15 @@ def batch_gbif_match(items: List[Dict[str, Any]], progress_callback=None, cancel
     for item in items:
         g = str(item.get("genus", "") or "").strip()
         s = str(item.get("species", "") or "").strip()
-        key = (g.lower(), s.lower())
+        if is_undetermined_species(s):
+            key = (g.lower(), "__undetermined__")
+        else:
+            key = (g.lower(), s.lower())
         gbif_data = taxon_cache.get(key)
         diff = _evaluate_item_diff(item, gbif_data)
         if diff:
             results.append(diff)
 
     return results
+
 

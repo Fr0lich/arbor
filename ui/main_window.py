@@ -2292,6 +2292,17 @@ class ObjectProgramUI(
         popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
+    def open_historical_resolver_for_current(self):
+        """Opens Historical Conflict Resolver for the active specimen."""
+        if hasattr(self, "open_historical_suggestions"):
+            self.open_historical_suggestions(show_all_override=True)
+        else:
+            self.open_load_data_menu()
+
+    def run_gbif_verification_for_current(self):
+        """Runs GBIF verification/lookup for the active specimen."""
+        self.show_gbif_dropdown()
+
     def show_images_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
         popup.add_command(label="Image Source", command=self.open_image_menu)
@@ -3454,83 +3465,17 @@ class ObjectProgramUI(
         self.middle_frame = middle
         panes.add(middle, weight=3)
 
-        # Center header: compact single row (ID badge | Scholarly Serif title on left, location on right)
-        center_header = ttk.Frame(middle, style="MiddlePane.TFrame")
-        center_header.pack(fill="x", pady=0)
-        # 1px bottom border via a separator-like thin frame
-        ttk.Separator(middle, orient="horizontal").pack(fill="x")
+        # Contextual Action Strip for Active Specimen (Item B)
+        from ui.object_context_bar import ObjectContextBar
+        self.object_context_bar = ObjectContextBar(middle, app=self.app, main_ui=self)
+        self.object_context_bar.pack(fill="x", side="top")
 
-        # LEFT: Technical Monospace Accession ID badge
-        self.header_id_badge = tk.Label(
-            center_header,
-            text="",
-            font=("JetBrains Mono", sc(11), "bold"),
-            bg="#e9ece5",
-            fg="#2c302e",
-            padx=sc(8),
-            pady=sc(2),
-            relief="solid",
-            bd=1,
-            highlightbackground="#c4c7c7",
-            highlightthickness=1
-        )
-        self.header_id_badge.pack(side="left", anchor="center", padx=(sc(8), sc(4)), pady=sc(6))
-
-        # Scholarly Serif botanical scientific name
-        self.title_label = tk.Label(
-            center_header,
-            font=("Lora", sc(16), "bold italic"),
-            bg="#ffffff",
-            fg="#2c302e"
-        )
-        self.title_label.pack(side="left", anchor="center", padx=(sc(4), 0), pady=sc(6))
-
-        self.title_problem_count_label = tk.Label(
-            center_header,
-            font=("Inter", sc(10), "bold"),
-            fg="#c93a40",
-            bg="#ffffff"
-        )
-        self.title_problem_count_label.pack(side="left", anchor="center", padx=(sc(6), 0), pady=sc(6))
-
-        # Push to phone button
-        try:
-            from pytablericons import TablerIcons
-            import pytablericons.outline_icon as oi
-            from PIL import ImageTk
-            pil_img = TablerIcons.load(oi.OutlineIcon.DEVICE_MOBILE_SHARE, 20, '#555555', 1.5)
-            self._icon_mobile_share = ImageTk.PhotoImage(pil_img)
-            self.push_to_phone_btn = tk.Button(
-                center_header,
-                image=self._icon_mobile_share,
-                bg="#ffffff",
-                relief="flat",
-                bd=0,
-                cursor="hand2",
-                command=self.push_current_to_phone
-            )
-        except Exception:
-            self.push_to_phone_btn = tk.Button(
-                center_header,
-                text="📱 Push to Phone",
-                font=("Inter", sc(9)),
-                bg="#ffffff",
-                relief="solid",
-                bd=1,
-                cursor="hand2",
-                command=self.push_current_to_phone
-            )
-        self.push_to_phone_btn.pack(side="left", anchor="center", padx=(sc(8), 0), pady=sc(6))
-        self.add_tooltip(self.push_to_phone_btn, "Push object to connected mobile companion")
-
-        # RIGHT: location summary (Technical Monospace)
-        self.location_summary_label = tk.Label(
-            center_header,
-            font=("JetBrains Mono", sc(9)),
-            foreground="#757d77",
-            bg="#ffffff"
-        )
-        self.location_summary_label.pack(side="right", anchor="center", padx=(0, sc(8)), pady=sc(6))
+        # Retain component aliases for full compatibility with existing hooks
+        self.header_id_badge = self.object_context_bar.id_badge
+        self.title_label = self.object_context_bar.name_label
+        self.title_problem_count_label = self.object_context_bar.status_badge
+        self.push_to_phone_btn = self.object_context_bar.mobile_push_btn
+        self.location_summary_label = tk.Label(middle)
 
         # Middle Top (images) - packed directly in middle column since Problem Flags is relocated
 
@@ -5162,6 +5107,9 @@ class ObjectProgramUI(
                 self.reviewed_time_label.config(text=f"( {reviewed_at} )")
             else:
                 self.reviewed_time_label.config(text="")
+
+            if hasattr(self, "object_context_bar") and self.object_context_bar.winfo_exists():
+                self.object_context_bar.update_specimen(oid)
 
             self._load_unvalidated_for_object(oid)
 

@@ -62,7 +62,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         self.main_app = main_app
 
         self.title("Batch GBIF Taxonomy Analysis")
-        self.minsize(sc(640), sc(540))
+        self.minsize(sc(680), sc(600))
         self.transient(parent)
 
         self.cancel_event = threading.Event()
@@ -93,7 +93,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
 
         self._build_ui()
         import utils
-        utils.center_and_fit_toplevel(self, sc(660), sc(580))
+        utils.center_and_fit_toplevel(self, sc(720), sc(680))
         self.lift()
         self.focus_set()
         self.bind("<Return>", lambda e: self._start_analysis())
@@ -325,6 +325,107 @@ class GBIFBatchConfigDialog(tk.Toplevel):
             f"{self.all_count} objects"
         )
 
+        # Mode Selection Card
+        self.undetermined_mode_var = tk.StringVar(value="safe")
+        undet_card = tk.Frame(
+            container,
+            bg=surface,
+            highlightbackground=border,
+            highlightthickness=1
+        )
+        undet_card.pack(fill="x", pady=(0, sc(14)))
+
+        undet_hdr = tk.Frame(undet_card, bg="#2c302e" if not is_dark else "#1b1b1b")
+        undet_hdr.pack(fill="x")
+        tk.Label(
+            undet_hdr,
+            text="TAXONOMIC ANALYSIS MODE",
+            font=FONT_UI_BOLD,
+            fg="#ffffff",
+            bg="#2c302e" if not is_dark else "#1b1b1b"
+        ).pack(side="left", padx=sc(12), pady=sc(8))
+
+        undet_body = tk.Frame(undet_card, bg=surface, padx=sc(14), pady=sc(10))
+        undet_body.pack(fill="x")
+
+        # Option 1: All Objects (Adaptive Mode)
+        self.rb_undet_safe = tk.Radiobutton(
+            undet_body,
+            text="Option 1: Analyze All Specimens (Adaptive Mode) — Recommended",
+            variable=self.undetermined_mode_var,
+            value="safe",
+            font=FONT_UI_BOLD,
+            fg=text_color,
+            bg=surface,
+            activebackground=surface,
+            activeforeground=text_color,
+            selectcolor=surface,
+            cursor="hand2"
+        )
+        self.rb_undet_safe.pack(anchor="w")
+
+        opt1_desc = tk.Frame(undet_body, bg=surface)
+        opt1_desc.pack(anchor="w", padx=(sc(24), 0), pady=(0, sc(8)))
+
+        tk.Label(
+            opt1_desc,
+            text="• Full Species (e.g. Bombus pascuorum): Uses Genus + Species to find Family, verify the Species Author, check spelling, and identify accepted synonyms.",
+            font=FONT_UI,
+            fg=text_muted,
+            bg=surface,
+            wraplength=sc(560),
+            justify="left"
+        ).pack(anchor="w")
+
+        tk.Label(
+            opt1_desc,
+            text="• Undetermined Specimens (e.g. Bombus sp. / indet.): Uses Genus to find Family and Genus Author. The species name stays strictly preserved as 'sp.' (never guessed).",
+            font=FONT_UI,
+            fg=text_muted,
+            bg=surface,
+            wraplength=sc(560),
+            justify="left"
+        ).pack(anchor="w", pady=(sc(2), 0))
+
+        # Option 2: Complete Species Only
+        self.rb_undet_exclude = tk.Radiobutton(
+            undet_body,
+            text="Option 2: Complete Species Only (Skip 'sp.' / Undetermined)",
+            variable=self.undetermined_mode_var,
+            value="exclude",
+            font=FONT_UI_BOLD,
+            fg=text_color,
+            bg=surface,
+            activebackground=surface,
+            activeforeground=text_color,
+            selectcolor=surface,
+            cursor="hand2"
+        )
+        self.rb_undet_exclude.pack(anchor="w")
+
+        opt2_desc = tk.Frame(undet_body, bg=surface)
+        opt2_desc.pack(anchor="w", padx=(sc(24), 0))
+
+        tk.Label(
+            opt2_desc,
+            text="• Only checks specimens that already have a specific species name.",
+            font=FONT_UI,
+            fg=text_muted,
+            bg=surface,
+            wraplength=sc(560),
+            justify="left"
+        ).pack(anchor="w")
+
+        tk.Label(
+            opt2_desc,
+            text="• Completely skips records marked 'sp.', 'indet.', '?', or missing a species name entirely (ideal if you only want to review known species).",
+            font=FONT_UI,
+            fg=text_muted,
+            bg=surface,
+            wraplength=sc(560),
+            justify="left"
+        ).pack(anchor="w", pady=(sc(2), 0))
+
         # Progress Section (Hidden initially)
         self.progress_frame = tk.Frame(
             container,
@@ -452,7 +553,11 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         self.rb_all.config(state="disabled")
         self.rb_filt.config(state="disabled")
         self.rb_sel.config(state="disabled")
+        self.rb_undet_safe.config(state="disabled")
+        self.rb_undet_exclude.config(state="disabled")
         self.analyze_btn.config(text="ANALYZING...", fg="#ffffff", bg="#245e31", cursor="watch")
+
+        exclude_undet = (self.undetermined_mode_var.get() == "exclude")
 
         self.status_var.set(f"Querying GBIF taxonomy for {len(items)} objects in background...")
         self.pct_var.set("0%")
@@ -490,7 +595,8 @@ class GBIFBatchConfigDialog(tk.Toplevel):
                 diff_results = backend.gbif.batch_gbif_match(
                     items,
                     progress_callback=on_progress,
-                    cancel_event=self.cancel_event
+                    cancel_event=self.cancel_event,
+                    exclude_undetermined=exclude_undet
                 )
             except Exception as e:
                 diff_results = []

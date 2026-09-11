@@ -296,6 +296,8 @@ class GBIFReviewDialog(tk.Toplevel):
     def _get_tab_counts(self) -> Dict[str, int]:
         unapplied_diffs = [d for d in self.diff_results if self._diff_has_unapplied_changes(d)]
         verified = [d for d in unapplied_diffs if self._diff_has_unapplied_book_matches(d)]
+        missing_meta = [d for d in unapplied_diffs if d.get("missing_family") or d.get("missing_author")]
+        undetermined = [d for d in unapplied_diffs if d.get("is_undetermined")]
         synonyms = [d for d in unapplied_diffs if "synonym" in str(d.get("status", "")).strip().lower()]
         accepted = [d for d in unapplied_diffs if "synonym" not in str(d.get("status", "")).strip().lower()]
         applied_cnt = sum(1 for d in self.diff_results if self._diff_has_applied_changes(d))
@@ -304,6 +306,8 @@ class GBIFReviewDialog(tk.Toplevel):
             "pending": len(unapplied_diffs),
             "verified": len(verified),
             "accepted": len(accepted),
+            "missing_metadata": len(missing_meta),
+            "undetermined": len(undetermined),
             "synonym": len(synonyms),
             "applied": applied_cnt
         }
@@ -331,6 +335,12 @@ class GBIFReviewDialog(tk.Toplevel):
 
                 if tab == "verified":
                     if not self._diff_has_unapplied_book_matches(d):
+                        continue
+                elif tab == "missing_metadata":
+                    if not (d.get("missing_family") or d.get("missing_author")):
+                        continue
+                elif tab == "undetermined":
+                    if not d.get("is_undetermined"):
                         continue
                 elif tab == "synonym" and "synonym" not in status:
                     continue
@@ -440,6 +450,8 @@ class GBIFReviewDialog(tk.Toplevel):
             ("pending", "All Pending", C["primary"]),
             ("verified", "✓ Verified in Books", C["success_text"]),
             ("accepted", "🔤 Accepted / Spelling", C["text"]),
+            ("missing_metadata", "📋 Missing Family / Author", "#0284c7"),
+            ("undetermined", "🔬 Genus-Level (sp.)", "#757d77"),
             ("synonym", "⚠️ Synonyms", C["warning"]),
             ("applied", "✓ Applied", C["success_text"])
         ]
@@ -772,10 +784,36 @@ class GBIFReviewDialog(tk.Toplevel):
             self.status_var.set("Synonyms")
         elif tab_key == "accepted":
             self.status_var.set("Accepted / Spelling")
+        elif tab_key == "missing_metadata":
+            self.status_var.set("Missing Family / Author")
+        elif tab_key == "undetermined":
+            self.status_var.set("Genus-Level (sp.)")
         elif tab_key == "applied":
             self.status_var.set("Applied")
         else:
             self.status_var.set("All")
+
+        if hasattr(self, "tip_label") and self.tip_label.winfo_exists():
+            if tab_key == "synonym":
+                self.tip_label.config(
+                    text="💡 SYNONYM RECLASSIFICATIONS: These specimens were moved to a different genus by taxonomic revisions. If your museum prefers traditional genus names, you can leave Genus unchecked while accepting Family/Author."
+                )
+            elif tab_key == "verified":
+                self.tip_label.config(
+                    text="💡 100% VERIFIED: These suggestions match historical ledger books and collection catalogs in your database."
+                )
+            elif tab_key == "missing_metadata":
+                self.tip_label.config(
+                    text="💡 MISSING METADATA: GBIF verified and populated missing Family or Author fields. These are safe additions."
+                )
+            elif tab_key == "undetermined":
+                self.tip_label.config(
+                    text="💡 GENUS-LEVEL SPECIMENS (sp.): Identified to genus only. Family and Genus Author are verified; species names are strictly preserved as 'sp.'."
+                )
+            else:
+                self.tip_label.config(
+                    text="💡 GUIDED TRIAGE: 1. Start with \"✓ Verified in Books\" (100% Safe)  →  2. Review \"Accepted / Spelling\"  →  3. Evaluate \"⚠️ Synonyms\" one-by-one."
+                )
 
         self._update_tab_buttons()
         self._render_current_page()
@@ -1099,6 +1137,27 @@ class GBIFReviewDialog(tk.Toplevel):
                 pady=sc(2)
             ).pack(side="left", padx=(0, sc(6)))
 
+        if diff.get("is_undetermined"):
+            tk.Label(
+                hdr_right_box,
+                text="🔬 Genus-Level (sp.)",
+                font=FONT_MONO_SM,
+                fg="#ffffff",
+                bg="#4A5568",
+                padx=sc(6),
+                pady=sc(2)
+            ).pack(side="left", padx=(0, sc(6)))
+        elif diff.get("missing_family"):
+            tk.Label(
+                hdr_right_box,
+                text="+ Missing Family",
+                font=FONT_MONO_SM,
+                fg="#ffffff",
+                bg="#2e7d32",
+                padx=sc(6),
+                pady=sc(2)
+            ).pack(side="left", padx=(0, sc(6)))
+
         if is_fully_applied:
             badge_bg = C["success"]
             badge_fg = "#ffffff"
@@ -1107,10 +1166,20 @@ class GBIFReviewDialog(tk.Toplevel):
             badge_bg = C["warning"]
             badge_fg = "#000000"
             badge_lbl_text = f"[PARTIAL {len(applied_chgs)}/{len(changes)}]"
+        elif status == "SYNONYM" or diff.get("is_synonym"):
+            badge_bg = C["warning"]
+            badge_fg = "#000000"
+            badge_lbl_text = "⚠️ TAXONOMIC SYNONYM (comb. nov.)"
         else:
-            badge_bg = C["warning"] if status == "SYNONYM" else (C["surface_dim"] if self.is_dark else "#444748")
-            badge_fg = "#000000" if status == "SYNONYM" else "#ffffff"
-            badge_lbl_text = f"[{status} | {match_type}]"
+            has_spelling = any(c.get("reason_code") == "SPELLING" for c in changes)
+            if has_spelling:
+                badge_bg = "#0284c7"
+                badge_fg = "#ffffff"
+                badge_lbl_text = "🔤 SPELLING CORRECTION"
+            else:
+                badge_bg = C["surface_dim"] if self.is_dark else "#444748"
+                badge_fg = "#ffffff"
+                badge_lbl_text = f"[{status} | {match_type}]"
 
         tk.Label(
             hdr_right_box,
@@ -1689,6 +1758,40 @@ class GBIFReviewDialog(tk.Toplevel):
                 )
                 chk.pack(side="left")
 
+                reason_label = str(chg.get("reason_label") or "")
+                reason_code = str(chg.get("reason_code") or "")
+                explanation = str(chg.get("explanation") or "")
+
+                if reason_label:
+                    if reason_code in ("SYNONYM_GENUS", "SYNONYM_SPECIES"):
+                        r_bg = "#fffbeb" if not self.is_dark else "#332200"
+                        r_fg = "#b45309" if not self.is_dark else "#f59e0b"
+                        r_border = "#f59e0b"
+                    elif reason_code == "SPELLING":
+                        r_bg = "#eff6ff" if not self.is_dark else "#1e293b"
+                        r_fg = "#1d4ed8" if not self.is_dark else "#60a5fa"
+                        r_border = "#3b82f6"
+                    elif "MISSING" in reason_code:
+                        r_bg = C["success_bg"]
+                        r_fg = C["success_text"]
+                        r_border = C["success_border"]
+                    else:
+                        r_bg = C["surface_dim"]
+                        r_fg = C["text_muted"]
+                        r_border = C["border"]
+
+                    tk.Label(
+                        sub_hdr,
+                        text=reason_label,
+                        font=FONT_MONO_SM,
+                        fg=r_fg,
+                        bg=r_bg,
+                        padx=sc(6),
+                        pady=sc(1),
+                        highlightthickness=1,
+                        highlightbackground=r_border
+                    ).pack(side="left", padx=(sc(8), 0))
+
                 # Inline Apply Button / Undo / Applied Badge Container
                 btn_box = tk.Frame(sub_hdr, bg=C["surface"])
                 btn_box.pack(side="right")
@@ -1776,6 +1879,20 @@ class GBIFReviewDialog(tk.Toplevel):
 
                 sug_box.bind("<Button-1>", lambda e, f=_toggle_box: f())
                 sug_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
+
+                if explanation:
+                    exp_frame = tk.Frame(row_frame, bg=C["surface"])
+                    exp_frame.pack(fill="x", pady=(sc(4), 0))
+                    exp_fg = "#b45309" if (reason_code in ("SYNONYM_GENUS", "SYNONYM_SPECIES") and not self.is_dark) else ("#f59e0b" if reason_code in ("SYNONYM_GENUS", "SYNONYM_SPECIES") else C["text_muted"])
+                    tk.Label(
+                        exp_frame,
+                        text=f"ℹ️ {explanation}",
+                        font=FONT_MONO_SM,
+                        fg=exp_fg,
+                        bg=C["surface"],
+                        wraplength=sc(560),
+                        justify="left"
+                    ).pack(anchor="w")
 
                 matching_books = find_book_matches_for_gbif(self.app_state, oid, field, new_val)
 
