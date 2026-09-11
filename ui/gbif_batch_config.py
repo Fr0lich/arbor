@@ -254,12 +254,15 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         scope_body = tk.Frame(scope_card, bg=surface, padx=sc(14), pady=sc(10))
         scope_body.pack(fill="x")
 
-        def _make_scope_row(parent, val, title, count_text, enabled=True):
+        def _make_scope_row(parent, val, title, desc, count_text, enabled=True):
             row = tk.Frame(parent, bg=surface, cursor="hand2" if enabled else "arrow")
             row.pack(fill="x", pady=sc(4))
 
+            left_box = tk.Frame(row, bg=surface)
+            left_box.pack(side="left", fill="x", expand=True)
+
             rb = tk.Radiobutton(
-                row,
+                left_box,
                 text=title,
                 variable=self.scope_var,
                 value=val,
@@ -273,7 +276,16 @@ class GBIFBatchConfigDialog(tk.Toplevel):
                 state="normal" if enabled else "disabled",
                 command=self._update_scope_summary
             )
-            rb.pack(side="left")
+            rb.pack(anchor="w")
+
+            if desc:
+                tk.Label(
+                    left_box,
+                    text=desc,
+                    font=FONT_MONO_SM,
+                    fg=text_muted,
+                    bg=surface
+                ).pack(anchor="w", padx=(sc(24), 0))
 
             count_badge = tk.Label(
                 row,
@@ -284,7 +296,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
                 padx=sc(6),
                 pady=sc(2)
             )
-            count_badge.pack(side="right")
+            count_badge.pack(side="right", anchor="n")
             return rb
 
         # Radio Options
@@ -292,6 +304,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
             scope_body,
             "filtered",
             "Filtered Objects",
+            "Reconcile only specimens currently matching your search and filter criteria.",
             f"{self.filtered_count} objects"
         )
 
@@ -299,6 +312,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
             scope_body,
             "selected",
             "Selected Objects",
+            "Reconcile only specimens highlighted with active row selection.",
             f"{self.selected_count} objects",
             enabled=(self.selected_count > 0)
         )
@@ -307,6 +321,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
             scope_body,
             "all",
             "All Database Objects",
+            "Reconcile every specimen record across the entire active database.",
             f"{self.all_count} objects"
         )
 

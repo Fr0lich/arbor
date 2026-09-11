@@ -6,7 +6,7 @@ import os
 import getpass
 import tkinter.font as tkFont
 import math
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 from config import sc
 from ui.state import app_bus, DATABASE_UPDATED
 from backend.cross_validation import find_book_matches_for_gbif
@@ -51,6 +51,7 @@ COLORS = {
     "success_border": "#3a7d44",
     "success_text": "#2b8a3e",
     "warning": "#f59e0b",
+    "warning_bg": "#fffbeb",
     "chip_tag": "#757d77"
 }
 
@@ -58,8 +59,8 @@ COLORS = {
 class GBIFReviewDialog(tk.Toplevel):
     """
     High-Performance Paginated Taxonomic Reconciliation & Review dialog.
-    Supports reviewing thousands of specimens instantaneously with 0 GDI coordinate overflow,
-    virtualized page rendering, live filtering, and global cross-page batch selection tracking.
+    Supports reviewing thousands of specimens with phased category triage,
+    filter-scoped live application, real-time audit logging, and resilient fullscreen geometry.
     """
     def __init__(self, parent, app_state, diff_results: List[Dict[str, Any]], on_applied_callback=None):
         super().__init__(parent)
@@ -94,14 +95,18 @@ class GBIFReviewDialog(tk.Toplevel):
 
         self.title("GBIF Taxonomic Review & Reconciliation")
         self.configure(bg=self.colors["bg"])
-        self.minsize(sc(880), sc(580))
+        self.minsize(sc(920), sc(600))
 
-        # Pagination & Filter State
+        # Workflow & Filter State
         self.page_size = 25
         self.current_page = 0
         self.search_query = ""
-        self.status_filter = "all"  # "all", "verified", "synonym", "accepted"
+        self.category_tab = "pending"  # "pending", "verified", "accepted", "synonym", "applied"
         self._is_fullscreen = False
+
+        # Applied tracking across session
+        self._applied_oids: Set[str] = set()
+        self.applied_changes: Set[Tuple[str, str]] = set()
 
         # Global Cross-Page Selection Tracking
         self.selection_state: Dict[Tuple[str, str], bool] = {}
@@ -120,27 +125,50 @@ class GBIFReviewDialog(tk.Toplevel):
         # Page-local UI references
         self.item_cards = {}
         self.specimen_frames = {}
-        self.specimen_dir_widgets = {}  # oid -> {"tag_lbl": Label, "accent_bar": Frame, "status": str, "total_changes": int}
-        self.page_field_vars = {}  # (oid, field) -> BooleanVar on current page
+        self.specimen_dir_widgets = {}
+        self.page_field_vars = {}
+        self.tab_buttons = {}
 
         self._build_ui()
+        self._update_tab_buttons()
         self._render_current_page()
 
         self.bind("<Control-a>", lambda e: self._apply_selected())
         self.bind("<Control-Return>", lambda e: self._apply_selected())
         self.bind("<Escape>", lambda e: self.destroy())
         self.bind("<F11>", lambda e: self._toggle_fullscreen())
+        self.bind("<Alt-Return>", lambda e: self._toggle_fullscreen())
 
         import utils
-        utils.center_and_fit_toplevel(self, sc(1160), sc(740))
-        self.transient(parent)
+        utils.center_and_fit_toplevel(self, sc(1180), sc(760))
         self.lift()
         self.focus_set()
+        self.deiconify()
+
+    @property
+    def applied_oids(self) -> Set[str]:
+        return {str(oid).strip().lower() for oid, f in self.applied_changes} | getattr(self, "_applied_oids", set())
+
+    @applied_oids.setter
+    def applied_oids(self, val):
+        self._applied_oids = {str(x).strip().lower() for x in (val or set())}
+
+    @property
+    def status_filter(self) -> str:
+        if self.category_tab == "pending":
+            return "all"
+        return self.category_tab
+
+    @status_filter.setter
+    def status_filter(self, val: str):
+        if val == "all":
+            self.category_tab = "pending"
+        else:
+            self.category_tab = val
 
     def _toggle_fullscreen(self, event=None):
         self._is_fullscreen = not self._is_fullscreen
         try:
-            # On Windows, try zoomed state or -fullscreen attribute
             if self._is_fullscreen:
                 self.state("zoomed")
             else:
@@ -152,7 +180,7 @@ class GBIFReviewDialog(tk.Toplevel):
                 pass
 
         if hasattr(self, "btn_fullscreen") and self.btn_fullscreen.winfo_exists():
-            self.btn_fullscreen.config(text="🗗 Restore" if self._is_fullscreen else "⛶ Fullscreen")
+            self.btn_fullscreen.config(text="🗗 Restore" if self._is_fullscreen else "⛶ Maximize")
 
     def _diff_has_book_matches(self, diff: Dict[str, Any]) -> bool:
         oid = str(diff.get("oid", ""))
@@ -163,24 +191,130 @@ class GBIFReviewDialog(tk.Toplevel):
                 return True
         return False
 
+    def _diff_has_unapplied_book_matches(self, diff: Dict[str, Any]) -> bool:
+        oid = str(diff.get("oid", ""))
+        for chg in diff.get("changes", []):
+            field = chg.get("field", "")
+            val = chg.get("new", "")
+            if (oid, field) not in self.applied_changes:
+                if find_book_matches_for_gbif(self.app_state, oid, field, val):
+                    return True
+        return False
+
+    def _diff_has_unapplied_changes(self, diff: Dict[str, Any]) -> bool:
+        oid = str(diff.get("oid", ""))
+        return any((oid, chg.get("field", "")) not in self.applied_changes for chg in diff.get("changes", []))
+
+    def _diff_has_applied_changes(self, diff: Dict[str, Any]) -> bool:
+        oid = str(diff.get("oid", ""))
+        return any((oid, chg.get("field", "")) in self.applied_changes for chg in diff.get("changes", []))
+
+    def _is_diff_fully_applied(self, diff: Dict[str, Any]) -> bool:
+        oid = str(diff.get("oid", ""))
+        changes = diff.get("changes", [])
+        if not changes:
+            return True
+        return all((oid, chg.get("field", "")) in self.applied_changes for chg in changes)
+
+    def _get_specimen_title_info(self, diff: Dict[str, Any]) -> Dict[str, str]:
+        oid = str(diff.get("oid", ""))
+        curr = diff.get("current", {})
+        prop = diff.get("proposed", {})
+        curr_g = str(curr.get("Genus", "") or "").strip()
+        curr_s = str(curr.get("Species", "") or "").strip()
+        curr_tax = f"{curr_g} {curr_s}".strip() or "(No Taxon)"
+
+        prop_g = str(prop.get("Genus", "") or "").strip()
+        prop_s = str(prop.get("Species", "") or "").strip()
+        prop_tax = f"{prop_g} {prop_s}".strip()
+
+        is_rename = bool(prop_tax and prop_tax.lower() != curr_tax.lower())
+        if is_rename:
+            hdr_title = f"SPECIMEN #{oid} • {curr_tax}  →  {prop_tax}"
+            sidebar_tax = f"{curr_tax} → {prop_tax}"
+        else:
+            hdr_title = f"SPECIMEN #{oid} • {curr_tax}"
+            sidebar_tax = curr_tax
+
+        return {
+            "oid": oid,
+            "header_title": hdr_title,
+            "sidebar_tax": sidebar_tax,
+            "curr_tax": curr_tax,
+            "prop_tax": prop_tax,
+            "is_rename": is_rename
+        }
+
+    def _find_reg_oid(self, oid: str):
+        if not hasattr(self.app_state, "df_reg") or self.app_state.df_reg is None:
+            return None
+        reg_oid = oid
+        if reg_oid not in self.app_state.df_reg.index:
+            if str(oid).isdigit() and int(oid) in self.app_state.df_reg.index:
+                reg_oid = int(oid)
+            else:
+                matches = [idx for idx in self.app_state.df_reg.index if str(idx).strip() == str(oid).strip()]
+                if matches:
+                    reg_oid = matches[0]
+                else:
+                    return None
+        return reg_oid
+
+    def _get_problem_to_field_map(self) -> Dict[str, str]:
+        problem_to_field = {}
+        if getattr(self.app_state, "config", None):
+            problems_cfg = self.app_state.config.get("ui_sections", {}).get("problems", [])
+            for p in problems_cfg:
+                name = p.get("name")
+                maps_to = p.get("maps_to") or p.get("target")
+                if name and maps_to and maps_to != "Other" and name != "Other_problem":
+                    problem_to_field[name] = maps_to
+        return problem_to_field
+
+    def _get_tab_counts(self) -> Dict[str, int]:
+        unapplied_diffs = [d for d in self.diff_results if self._diff_has_unapplied_changes(d)]
+        verified = [d for d in unapplied_diffs if self._diff_has_unapplied_book_matches(d)]
+        synonyms = [d for d in unapplied_diffs if "synonym" in str(d.get("status", "")).strip().lower()]
+        accepted = [d for d in unapplied_diffs if "synonym" not in str(d.get("status", "")).strip().lower()]
+        applied_cnt = sum(1 for d in self.diff_results if self._diff_has_applied_changes(d))
+
+        return {
+            "pending": len(unapplied_diffs),
+            "verified": len(verified),
+            "accepted": len(accepted),
+            "synonym": len(synonyms),
+            "applied": applied_cnt
+        }
+
     def _get_filtered_results(self) -> List[Dict[str, Any]]:
         q = self.search_query.strip().lower()
-        sf = self.status_filter
+        tab = self.category_tab
 
         results = []
         for d in self.diff_results:
             oid = str(d.get("oid", "")).strip().lower()
             status = str(d.get("status", "")).strip().lower()
             match_type = str(d.get("match_type", "")).strip().lower()
+            has_unapplied = self._diff_has_unapplied_changes(d)
+            has_applied = self._diff_has_applied_changes(d)
 
-            # Status filter
-            if sf == "verified":
-                if not self._diff_has_book_matches(d):
+            # Tab filter
+            if tab == "applied":
+                if not has_applied:
                     continue
-            elif sf == "synonym" and "synonym" not in status:
-                continue
-            elif sf == "accepted" and "synonym" in status:
-                continue
+            else:
+                # Active triage tabs only include items with pending unapplied fields
+                if not has_unapplied:
+                    continue
+
+                if tab == "verified":
+                    if not self._diff_has_unapplied_book_matches(d):
+                        continue
+                elif tab == "synonym" and "synonym" not in status:
+                    continue
+                elif tab == "accepted" and "synonym" in status:
+                    continue
+                # tab == "pending" includes all items with unapplied fields
 
             # Query filter (matches OID or any taxon field)
             if q:
@@ -213,10 +347,10 @@ class GBIFReviewDialog(tk.Toplevel):
             bg=C["surface"]
         ).pack(side="left")
 
-        # Fullscreen button in header
+        # Fullscreen / Maximize button in header
         self.btn_fullscreen = tk.Button(
             hdr_left,
-            text="⛶ Fullscreen",
+            text="⛶ Maximize",
             command=self._toggle_fullscreen,
             font=FONT_MONO_SM,
             bg=C["surface_dim"],
@@ -231,34 +365,10 @@ class GBIFReviewDialog(tk.Toplevel):
         )
         self.btn_fullscreen.pack(side="left", padx=(sc(12), 0))
 
-        # Search & Status Filter on Right of Header
+        # Search box on Right of Header
         hdr_right = tk.Frame(header, bg=C["surface"])
         hdr_right.pack(side="right", padx=sc(16), pady=sc(8))
 
-        # Status filter pills & Book verified count
-        syn_count = sum(1 for d in self.diff_results if d.get("status") == "SYNONYM")
-        acc_count = len(self.diff_results) - syn_count
-        verified_count = sum(1 for d in self.diff_results if self._diff_has_book_matches(d))
-
-        self.status_var = tk.StringVar(value="all")
-        stat_combo = ttk.Combobox(
-            hdr_right,
-            textvariable=self.status_var,
-            values=[
-                f"All ({len(self.diff_results)})",
-                f"✓ Verified in Books ({verified_count})",
-                f"Synonyms ({syn_count})",
-                f"Accepted / Spelling ({acc_count})"
-            ],
-            state="readonly",
-            width=26,
-            font=FONT_UI
-        )
-        stat_combo.current(0)
-        stat_combo.bind("<<ComboboxSelected>>", self._on_status_filter_changed)
-        stat_combo.pack(side="right", padx=(sc(8), 0))
-
-        # Search box
         self.search_var = tk.StringVar()
         self.search_entry = tk.Entry(
             hdr_right,
@@ -268,7 +378,7 @@ class GBIFReviewDialog(tk.Toplevel):
             fg=C["text"],
             relief="flat",
             bd=0,
-            width=18,
+            width=22,
             highlightthickness=1,
             highlightbackground=C["border"],
             highlightcolor=C["primary"]
@@ -284,17 +394,108 @@ class GBIFReviewDialog(tk.Toplevel):
             bg=C["surface"]
         ).pack(side="right", padx=(0, sc(6)))
 
-        # 2. Bottom Action Bar (Sticky, packed before main_area to guarantee it stays pinned in fullscreen/resizing)
-        bottom_bar = tk.Frame(self, bg=C["surface_dim"], height=sc(56))
+        # Backward compatibility for status_var
+        self.status_var = tk.StringVar(value="All")
+
+        # 2. Workflow Stage Tabs Bar
+        tabs_bar = tk.Frame(self, bg=C["surface_dim"], height=sc(42))
+        tabs_bar.pack(fill="x", side="top")
+        tk.Frame(tabs_bar, bg=C["border"], height=sc(1)).pack(fill="x", side="bottom")
+
+        tabs_content = tk.Frame(tabs_bar, bg=C["surface_dim"], padx=sc(14), pady=sc(6))
+        tabs_content.pack(fill="x")
+
+        tk.Label(
+            tabs_content,
+            text="WORKFLOW STAGES:",
+            font=FONT_MONO_SM,
+            fg=C["text_muted"],
+            bg=C["surface_dim"]
+        ).pack(side="left", padx=(0, sc(8)))
+
+        self.tab_buttons = {}
+        tab_defs = [
+            ("pending", "All Pending", C["primary"]),
+            ("verified", "✓ Verified in Books", C["success_text"]),
+            ("accepted", "🔤 Accepted / Spelling", C["text"]),
+            ("synonym", "⚠️ Synonyms", C["warning"]),
+            ("applied", "✓ Applied", C["success_text"])
+        ]
+
+        for tab_key, label_prefix, accent in tab_defs:
+            btn = tk.Button(
+                tabs_content,
+                text=label_prefix,
+                command=lambda k=tab_key: self._set_category_tab(k),
+                font=FONT_UI,
+                bg=C["surface"],
+                fg=C["text"],
+                relief="flat",
+                bd=0,
+                cursor="hand2",
+                padx=sc(10),
+                pady=sc(3),
+                highlightthickness=1,
+                highlightbackground=C["border"]
+            )
+            btn.pack(side="left", padx=(0, sc(6)))
+            self.tab_buttons[tab_key] = {"btn": btn, "prefix": label_prefix, "accent": accent}
+
+        # 3. Triage Guidance Banner
+        self.tip_frame = tk.Frame(self, bg=C["surface_dim"], padx=sc(16), pady=sc(4))
+        self.tip_frame.pack(fill="x", side="top")
+        tk.Frame(self.tip_frame, bg=C["border"], height=sc(1)).pack(fill="x", side="bottom")
+
+        self.tip_label = tk.Label(
+            self.tip_frame,
+            text="💡 GUIDED TRIAGE: 1. Start with \"✓ Verified in Books\" (100% Safe)  →  2. Review \"Accepted / Spelling\"  →  3. Evaluate \"⚠️ Synonyms\" one-by-one.",
+            font=FONT_MONO_SM,
+            fg=C["text_muted"],
+            bg=C["surface_dim"]
+        )
+        self.tip_label.pack(side="left", pady=sc(2))
+
+        # 4. Inline Toast / Notification Banner (Hidden initially)
+        self.toast_frame = tk.Frame(
+            self,
+            bg=C["success_bg"],
+            highlightbackground=C["success_border"],
+            highlightthickness=1,
+            padx=sc(16),
+            pady=sc(8)
+        )
+        self.toast_label = tk.Label(
+            self.toast_frame,
+            text="",
+            font=FONT_UI_BOLD,
+            fg=C["success_text"],
+            bg=C["success_bg"]
+        )
+        self.toast_label.pack(side="left")
+
+        toast_close = tk.Label(
+            self.toast_frame,
+            text="✕",
+            font=FONT_UI_BOLD,
+            fg=C["success_text"],
+            bg=C["success_bg"],
+            cursor="hand2"
+        )
+        toast_close.pack(side="right")
+        toast_close.bind("<Button-1>", lambda e: self.toast_frame.pack_forget())
+
+        # 5. Bottom Action Bar (Sticky, packed before main_area with fixed height)
+        bottom_bar = tk.Frame(self, bg=C["surface_dim"], height=sc(60))
         bottom_bar.pack(fill="x", side="bottom")
+        bottom_bar.pack_propagate(False)
         tk.Frame(bottom_bar, bg=C["border"], height=sc(1)).pack(side="top", fill="x")
 
-        b_content = tk.Frame(bottom_bar, bg=C["surface_dim"], padx=sc(16), pady=sc(8))
+        b_content = tk.Frame(bottom_bar, bg=C["surface_dim"], padx=sc(16), pady=sc(10))
         b_content.pack(fill="both", expand=True)
 
         # Batch Selection Controls
         self.sel_all_btn = tk.Button(
-            b_content, text="Select All (Batch)", command=self._select_all_batch,
+            b_content, text="Select All", command=self._select_all_batch,
             font=FONT_UI_BOLD, bg=C["surface"], fg=C["text"],
             relief="solid", bd=1, cursor="hand2", padx=sc(10), pady=sc(4)
         )
@@ -312,7 +513,14 @@ class GBIFReviewDialog(tk.Toplevel):
             font=FONT_UI_BOLD, bg=C["surface"], fg=C["text"],
             relief="solid", bd=1, cursor="hand2", padx=sc(10), pady=sc(4)
         )
-        self.sel_page_btn.pack(side="left")
+        self.sel_page_btn.pack(side="left", padx=(0, sc(6)))
+
+        self.sel_verified_btn = tk.Button(
+            b_content, text="🌟 Select Verified Only", command=self._select_verified_only,
+            font=FONT_UI_BOLD, bg=C["surface"], fg=C["text"],
+            relief="solid", bd=1, cursor="hand2", padx=sc(10), pady=sc(4)
+        )
+        self.sel_verified_btn.pack(side="left")
 
         # Summary label
         self.summary_label = tk.Label(
@@ -326,7 +534,7 @@ class GBIFReviewDialog(tk.Toplevel):
 
         # Action Buttons
         cancel_btn = tk.Button(
-            b_content, text="CLOSE", command=self.destroy,
+            b_content, text="CLOSE & FINISH", command=self.destroy,
             font=FONT_UI_BOLD, bg=C["surface"], fg=C["text"],
             relief="solid", bd=1, cursor="hand2", padx=sc(16), pady=sc(6)
         )
@@ -339,7 +547,7 @@ class GBIFReviewDialog(tk.Toplevel):
         )
         self.apply_btn.pack(side="right")
 
-        # 3. Main content area (Split View: Left Sidebar Directory + Right Cards)
+        # 6. Main content area (Split View: Left Sidebar Directory + Right Cards)
         main_area = tk.Frame(self, bg=C["bg"])
         main_area.pack(fill="both", expand=True)
 
@@ -469,29 +677,270 @@ class GBIFReviewDialog(tk.Toplevel):
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.bind("<MouseWheel>", self._on_main_mousewheel)
 
+    def _show_toast(self, message: str):
+        C = self.colors
+        if hasattr(self, "toast_label") and self.toast_label.winfo_exists():
+            self.toast_label.config(text=message)
+            self.toast_frame.pack(fill="x", side="top", after=self.tip_frame, padx=sc(16), pady=(sc(4), 0))
+            self.after(5000, lambda: self.toast_frame.pack_forget() if self.toast_frame.winfo_exists() else None)
+
+    def _set_category_tab(self, tab_key: str):
+        self.category_tab = tab_key
+        self.current_page = 0
+        # Sync status_var for compatibility
+        if tab_key == "verified":
+            self.status_var.set("✓ Verified in Books")
+        elif tab_key == "synonym":
+            self.status_var.set("Synonyms")
+        elif tab_key == "accepted":
+            self.status_var.set("Accepted / Spelling")
+        elif tab_key == "applied":
+            self.status_var.set("Applied")
+        else:
+            self.status_var.set("All")
+
+        self._update_tab_buttons()
+        self._render_current_page()
+
+    def _update_tab_buttons(self):
+        C = self.colors
+        counts = self._get_tab_counts()
+
+        for tab_key, info in self.tab_buttons.items():
+            btn = info["btn"]
+            prefix = info["prefix"]
+            cnt = counts.get(tab_key, 0)
+            btn.config(text=f"{prefix} ({cnt})")
+
+            is_active = (self.category_tab == tab_key)
+            if is_active:
+                btn.config(
+                    bg=C["header_bg"],
+                    fg="#ffffff",
+                    font=FONT_UI_BOLD,
+                    highlightbackground=C["primary"]
+                )
+            else:
+                btn.config(
+                    bg=C["surface"],
+                    fg=C["text"],
+                    font=FONT_UI,
+                    highlightbackground=C["border"]
+                )
+
     def _update_sidebar_item(self, oid: str):
-        """Update a specimen's sidebar badge and accent strip dynamically based on selection."""
+        """Update a specimen's sidebar badge and accent strip dynamically based on selection and applied state."""
         C = self.colors
         if oid in self.specimen_dir_widgets:
             info = self.specimen_dir_widgets[oid]
             tag_lbl = info["tag_lbl"]
             accent_bar = info["accent_bar"]
             status = info["status"]
-            changes = self.oid_to_diff.get(oid, {}).get("changes", [])
+            diff = self.oid_to_diff.get(oid, {})
+            changes = diff.get("changes", [])
             total_cnt = len(changes)
-            sel_cnt = sum(1 for chg in changes if self.selection_state.get((oid, chg["field"]), True))
+            applied_cnt = sum(1 for chg in changes if (str(oid), chg["field"]) in self.applied_changes)
 
+            if applied_cnt == total_cnt and total_cnt > 0:
+                tag_lbl.config(text="✓ APPLIED", fg=C["success_text"])
+                accent_bar.config(bg=C["success"])
+                return
+
+            unapplied_changes = [chg for chg in changes if (str(oid), chg["field"]) not in self.applied_changes]
+            sel_cnt = sum(1 for chg in unapplied_changes if self.selection_state.get((str(oid), chg["field"]), True))
             accent_color = C["warning"] if status == "SYNONYM" else C["success"]
 
-            if sel_cnt == 0:
+            if applied_cnt > 0:
+                tag_lbl.config(text=f"PARTIAL ({applied_cnt}/{total_cnt})", fg=C["warning"])
+                accent_bar.config(bg=C["warning"])
+            elif sel_cnt == 0:
                 tag_lbl.config(text="SKIPPED", fg=C["text_muted"])
                 accent_bar.config(bg=C["border"])
-            elif sel_cnt < total_cnt:
-                tag_lbl.config(text=f"{status.upper()} ({sel_cnt}/{total_cnt})", fg=accent_color)
+            elif sel_cnt < len(unapplied_changes):
+                tag_lbl.config(text=f"{status.upper()} ({sel_cnt}/{len(unapplied_changes)})", fg=accent_color)
                 accent_bar.config(bg=accent_color)
             else:
                 tag_lbl.config(text=status.upper(), fg=accent_color)
                 accent_bar.config(bg=accent_color)
+
+    def _select_card_fields(self, oid: str, mode: str = "all"):
+        diff = self.oid_to_diff.get(oid, {})
+        changes = diff.get("changes", [])
+        for chg in changes:
+            field = chg["field"]
+            key = (str(oid), field)
+            if key in self.applied_changes:
+                continue
+            if mode == "all":
+                val = True
+            elif mode == "none":
+                val = False
+            elif mode == "verified":
+                val = bool(find_book_matches_for_gbif(self.app_state, str(oid), field, chg.get("new", "")))
+            else:
+                val = True
+            self.selection_state[key] = val
+            if key in self.page_field_vars:
+                self.page_field_vars[key].set(val)
+        self._update_sidebar_item(oid)
+        self._update_summary()
+
+    def _apply_single_field(self, oid: str, field: str, old_val: str, new_val: str):
+        with self.app_state.df_lock:
+            if self.app_state.df_reg is None:
+                messagebox.showerror("Error", "No active database loaded.", parent=self)
+                return
+            reg_oid = self._find_reg_oid(oid)
+            if reg_oid is None:
+                messagebox.showerror("Error", f"Specimen #{oid} not found in database.", parent=self)
+                return
+
+            if field in self.app_state.df_reg.columns:
+                self.app_state.df_reg.at[reg_oid, field] = new_val
+
+            prob_changed = []
+            prob_diffs = []
+            df_obs = getattr(self.app_state, "df_obs", None)
+            problem_to_field = self._get_problem_to_field_map()
+            if df_obs is not None and problem_to_field:
+                for pc, mf in problem_to_field.items():
+                    if mf.lower().replace("_", " ").strip() == field.lower().replace("_", " ").strip():
+                        if reg_oid in df_obs.index and pc in df_obs.columns:
+                            val = df_obs.at[reg_oid, pc]
+                            if pd.notna(val) and bool(val):
+                                df_obs.at[reg_oid, pc] = False
+                                prob_changed.append(pc)
+                                prob_diffs.append(f'{pc}: "True" -> "False"')
+
+            ts = datetime.now().isoformat(timespec="seconds")
+            user_name = getpass.getuser()
+            excel_p = getattr(self.app_state, "excel_path", "") or ""
+            out_p = getattr(self.app_state, "output_path", "") or excel_p
+            log_entry = {
+                "Timestamp": ts,
+                "User": user_name,
+                "Action": "GBIF_UPDATE",
+                "ObjectID": str(oid),
+                "Reviewed": "",
+                "ChangedFields": field,
+                "ChangedValues": f'{field}: "{old_val}" -> "{new_val}"',
+                "ProblemsChanged": ", ".join(prob_changed),
+                "ProblemsChangedValues": " | ".join(prob_diffs),
+                "LocationChanged": "",
+                "LocationChangedValues": "",
+                "SourceFile": os.path.basename(excel_p),
+                "OutputFile": os.path.basename(out_p)
+            }
+            if not hasattr(self.app_state, "_log_records") or not self.app_state._log_records:
+                df_log = getattr(self.app_state, "df_log", None)
+                if df_log is not None and not df_log.empty:
+                    self.app_state._log_records = df_log.to_dict(orient="records")
+                else:
+                    self.app_state._log_records = []
+            self.app_state._log_records.append(log_entry)
+            self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+            self.app_state.dirty = True
+
+            self.applied_changes.add((str(oid), field))
+
+        if self.on_applied_callback:
+            try:
+                self.on_applied_callback(1, 1)
+            except Exception:
+                pass
+
+        self._show_toast(f"✓ Applied {field}: '{old_val}' → '{new_val}' for Specimen #{oid}")
+        self._update_tab_buttons()
+        self._render_current_page()
+
+    def _apply_specimen(self, oid: str):
+        diff = self.oid_to_diff.get(oid, {})
+        changes = diff.get("changes", [])
+        to_apply = [
+            chg for chg in changes
+            if (str(oid), chg["field"]) not in self.applied_changes and self.selection_state.get((str(oid), chg["field"]), True)
+        ]
+        if not to_apply:
+            messagebox.showinfo("No Changes Selected", f"No unapplied changes selected for Specimen #{oid}.", parent=self)
+            return
+
+        with self.app_state.df_lock:
+            if self.app_state.df_reg is None:
+                messagebox.showerror("Error", "No active database loaded.", parent=self)
+                return
+            reg_oid = self._find_reg_oid(oid)
+            if reg_oid is None:
+                messagebox.showerror("Error", f"Specimen #{oid} not found in database.", parent=self)
+                return
+
+            changed_fields = []
+            changed_diffs = []
+            prob_changed = []
+            prob_diffs = []
+            df_obs = getattr(self.app_state, "df_obs", None)
+            problem_to_field = self._get_problem_to_field_map()
+
+            for item in to_apply:
+                f = item["field"]
+                new_v = item["new"]
+                old_v = item["old"]
+                if f in self.app_state.df_reg.columns:
+                    self.app_state.df_reg.at[reg_oid, f] = new_v
+                    changed_fields.append(f)
+                    changed_diffs.append(f'{f}: "{old_v}" -> "{new_v}"')
+                    self.applied_changes.add((str(oid), f))
+
+            if df_obs is not None and problem_to_field:
+                for f in changed_fields:
+                    for pc, mf in problem_to_field.items():
+                        if mf.lower().replace("_", " ").strip() == f.lower().replace("_", " ").strip():
+                            if reg_oid in df_obs.index and pc in df_obs.columns:
+                                val = df_obs.at[reg_oid, pc]
+                                if pd.notna(val) and bool(val):
+                                    df_obs.at[reg_oid, pc] = False
+                                    if pc not in prob_changed:
+                                        prob_changed.append(pc)
+                                        prob_diffs.append(f'{pc}: "True" -> "False"')
+
+            if changed_fields or prob_changed:
+                ts = datetime.now().isoformat(timespec="seconds")
+                user_name = getpass.getuser()
+                excel_p = getattr(self.app_state, "excel_path", "") or ""
+                out_p = getattr(self.app_state, "output_path", "") or excel_p
+                log_entry = {
+                    "Timestamp": ts,
+                    "User": user_name,
+                    "Action": "GBIF_UPDATE",
+                    "ObjectID": str(oid),
+                    "Reviewed": "",
+                    "ChangedFields": ", ".join(changed_fields),
+                    "ChangedValues": " | ".join(changed_diffs),
+                    "ProblemsChanged": ", ".join(prob_changed),
+                    "ProblemsChangedValues": " | ".join(prob_diffs),
+                    "LocationChanged": "",
+                    "LocationChangedValues": "",
+                    "SourceFile": os.path.basename(excel_p),
+                    "OutputFile": os.path.basename(out_p)
+                }
+                if not hasattr(self.app_state, "_log_records") or not self.app_state._log_records:
+                    df_log = getattr(self.app_state, "df_log", None)
+                    if df_log is not None and not df_log.empty:
+                        self.app_state._log_records = df_log.to_dict(orient="records")
+                    else:
+                        self.app_state._log_records = []
+                self.app_state._log_records.append(log_entry)
+                self.app_state.df_log = pd.DataFrame(self.app_state._log_records)
+                self.app_state.dirty = True
+
+        if self.on_applied_callback:
+            try:
+                self.on_applied_callback(len(changed_fields), 1)
+            except Exception:
+                pass
+
+        self._show_toast(f"✓ Applied {len(changed_fields)} updates for Specimen #{oid}")
+        self._update_tab_buttons()
+        self._render_current_page()
 
     def _render_current_page(self):
         C = self.colors
@@ -511,6 +960,7 @@ class GBIFReviewDialog(tk.Toplevel):
         filtered = self._get_filtered_results()
         total_items = len(filtered)
         total_pages = max(1, math.ceil(total_items / self.page_size))
+        tab_counts = self._get_tab_counts()
 
         if self.current_page >= total_pages:
             self.current_page = max(0, total_pages - 1)
@@ -521,7 +971,20 @@ class GBIFReviewDialog(tk.Toplevel):
 
         # Update Navigation & Header Labels
         if total_items == 0:
-            self.page_info_label.config(text="NO MATCHING SPECIMENS FOUND.")
+            if tab_counts["pending"] == 0 and tab_counts["applied"] > 0:
+                self.page_info_label.config(text="ALL BATCH RECONCILIATIONS COMPLETED!")
+                # Render completion card
+                comp_card = tk.Frame(self.cards_frame, bg=C["success_bg"], highlightbackground=C["success_border"], highlightthickness=1, padx=sc(24), pady=sc(24))
+                comp_card.pack(fill="x", pady=sc(20))
+                tk.Label(comp_card, text="🎉 ALL SPECIMEN UPDATES APPLIED!", font=FONT_UI_XL, fg=C["success_text"], bg=C["success_bg"]).pack(anchor="w")
+                tk.Label(comp_card, text=f"Successfully resolved and saved changes across {tab_counts['applied']} specimens to your active database and audit log.", font=FONT_UI, fg=C["text"], bg=C["success_bg"]).pack(anchor="w", pady=(sc(6), sc(14)))
+                tk.Button(comp_card, text="CLOSE & FINISH", font=FONT_UI_BOLD, bg=C["success"], fg="#ffffff", relief="flat", bd=0, padx=sc(16), pady=sc(6), command=self.destroy, cursor="hand2").pack(anchor="w")
+            else:
+                self.page_info_label.config(text="NO MATCHING SPECIMENS IN THIS VIEW.")
+                empty_card = tk.Frame(self.cards_frame, bg=C["surface"], highlightbackground=C["border"], highlightthickness=1, padx=sc(20), pady=sc(20))
+                empty_card.pack(fill="x", pady=sc(20))
+                tk.Label(empty_card, text="No specimens match the active filter or search.", font=FONT_UI_BOLD, fg=C["text_muted"], bg=C["surface"]).pack(anchor="w")
+
             self.page_num_label.config(text="Page 0 of 0")
             self.btn_first.config(state="disabled")
             self.btn_prev.config(state="disabled")
@@ -529,7 +992,7 @@ class GBIFReviewDialog(tk.Toplevel):
             self.btn_last.config(state="disabled")
         else:
             self.page_info_label.config(
-                text=f"SHOWING SPECIMENS {start_idx + 1}–{end_idx} OF {total_items} (BATCH TOTAL: {len(self.diff_results)})"
+                text=f"SHOWING SPECIMENS {start_idx + 1}–{end_idx} OF {total_items} (CATEGORY TOTAL: {total_items})"
             )
             self.page_num_label.config(text=f"Page {self.current_page + 1} of {total_pages}")
             self.btn_first.config(state="normal" if self.current_page > 0 else "disabled")
@@ -544,16 +1007,34 @@ class GBIFReviewDialog(tk.Toplevel):
             oid = str(diff.get("oid", ""))
             status = diff.get("status", "ACCEPTED")
             changes = diff.get("changes", [])
+            title_info = self._get_specimen_title_info(diff)
 
-            sel_cnt = sum(1 for chg in changes if self.selection_state.get((oid, chg["field"]), True))
+            applied_chgs = [chg for chg in changes if (oid, chg["field"]) in self.applied_changes]
+            unapplied_chgs = [chg for chg in changes if (oid, chg["field"]) not in self.applied_changes]
+            is_fully_applied = len(applied_chgs) == len(changes) and len(changes) > 0
+            is_partially_applied = len(applied_chgs) > 0 and not is_fully_applied
+
+            sel_cnt = sum(1 for chg in unapplied_chgs if self.selection_state.get((oid, chg["field"]), True))
             accent_color = C["warning"] if status == "SYNONYM" else C["success"]
 
-            if sel_cnt == 0:
+            # Book Matches Count on Card
+            book_matched_fields = [chg for chg in changes if find_book_matches_for_gbif(self.app_state, oid, chg["field"], chg.get("new", ""))]
+            has_books = len(book_matched_fields) > 0
+
+            if is_fully_applied:
+                tag_text = "✓ APPLIED"
+                tag_color = C["success_text"]
+                bar_color = C["success"]
+            elif is_partially_applied:
+                tag_text = f"PARTIAL ({len(applied_chgs)}/{len(changes)})"
+                tag_color = C["warning"]
+                bar_color = C["warning"]
+            elif sel_cnt == 0:
                 tag_text = "SKIPPED"
                 tag_color = C["text_muted"]
                 bar_color = C["border"]
-            elif sel_cnt < len(changes):
-                tag_text = f"{status.upper()} ({sel_cnt}/{len(changes)})"
+            elif sel_cnt < len(unapplied_chgs):
+                tag_text = f"{status.upper()} ({sel_cnt}/{len(unapplied_chgs)})"
                 tag_color = accent_color
                 bar_color = accent_color
             else:
@@ -561,7 +1042,7 @@ class GBIFReviewDialog(tk.Toplevel):
                 tag_color = accent_color
                 bar_color = accent_color
 
-            # --- Left Directory Entry ---
+            # --- Left Directory Entry (2-Line Rich Entry) ---
             f_frame = tk.Frame(self.dir_list, bg=C["surface"], cursor="hand2")
             f_frame.pack(fill="x")
             tk.Frame(f_frame, bg=C["border"], height=sc(1)).pack(fill="x", side="bottom")
@@ -574,9 +1055,26 @@ class GBIFReviewDialog(tk.Toplevel):
             f_content = tk.Frame(f_frame, bg=C["surface"], padx=sc(8), pady=sc(6))
             f_content.pack(side="left", fill="x", expand=True)
 
-            tk.Label(f_content, text=f"#{oid}", font=FONT_MONO, fg=C["text"], bg=C["surface"]).pack(side="left")
-            tk.Label(f_content, text=f"({len(changes)} chg)", font=FONT_MONO_SM, fg=C["text_muted"], bg=C["surface"]).pack(side="left", padx=sc(4))
-            tag_lbl = tk.Label(f_content, text=tag_text, font=FONT_MONO_SM, fg=tag_color, bg=C["surface"])
+            # Row 1: OID & Taxon
+            r1 = tk.Frame(f_content, bg=C["surface"])
+            r1.pack(fill="x")
+
+            tk.Label(r1, text=f"#{oid}", font=FONT_MONO, fg=C["text"], bg=C["surface"]).pack(side="left")
+
+            tax_disp = title_info["curr_tax"]
+            if len(tax_disp) > 20:
+                tax_disp = tax_disp[:18] + "…"
+            tk.Label(r1, text=f"• {tax_disp}", font=FONT_UI_BOLD if not self.is_dark else FONT_UI, fg=C["text"], bg=C["surface"]).pack(side="left", padx=(sc(4), 0))
+
+            if has_books:
+                tk.Label(r1, text="🌟", font=FONT_MONO_SM, fg=C["warning"], bg=C["surface"]).pack(side="right")
+
+            # Row 2: Change Count & Tag
+            r2 = tk.Frame(f_content, bg=C["surface"])
+            r2.pack(fill="x", pady=(sc(2), 0))
+
+            tk.Label(r2, text=f"{len(changes)} chg", font=FONT_MONO_SM, fg=C["text_muted"], bg=C["surface"]).pack(side="left")
+            tag_lbl = tk.Label(r2, text=tag_text, font=FONT_MONO_SM, fg=tag_color, bg=C["surface"])
             tag_lbl.pack(side="right")
 
             self.specimen_dir_widgets[oid] = {
@@ -595,7 +1093,11 @@ class GBIFReviewDialog(tk.Toplevel):
 
             f_frame.bind("<Button-1>", lambda e, f=_scroll_to: f())
             f_content.bind("<Button-1>", lambda e, f=_scroll_to: f())
-            for child in f_content.winfo_children():
+            r1.bind("<Button-1>", lambda e, f=_scroll_to: f())
+            r2.bind("<Button-1>", lambda e, f=_scroll_to: f())
+            for child in r1.winfo_children():
+                child.bind("<Button-1>", lambda e, f=_scroll_to: f())
+            for child in r2.winfo_children():
                 child.bind("<Button-1>", lambda e, f=_scroll_to: f())
 
             self.specimen_frames[oid] = f_frame
@@ -610,30 +1112,92 @@ class GBIFReviewDialog(tk.Toplevel):
             card.pack(fill="x", pady=(0, sc(12)))
             self.item_cards[oid] = card
 
-            # Solid Card Header Bar
+            # Solid Card Header Bar with Rich Taxon Title & Quick Actions
             c_header = tk.Frame(card, bg=C["header_bg"])
             c_header.pack(fill="x")
 
+            hdr_left_box = tk.Frame(c_header, bg=C["header_bg"])
+            hdr_left_box.pack(side="left", padx=sc(12), pady=sc(6))
+
             tk.Label(
-                c_header,
-                text=f"SPECIMEN #{oid}",
+                hdr_left_box,
+                text=title_info["header_title"],
                 font=FONT_UI_BOLD,
                 fg="#ffffff",
                 bg=C["header_bg"]
-            ).pack(side="left", padx=sc(14), pady=sc(8))
+            ).pack(side="left")
+
+            hdr_right_box = tk.Frame(c_header, bg=C["header_bg"])
+            hdr_right_box.pack(side="right", padx=sc(12), pady=sc(6))
+
+            # Quick Card Toggle Chips: [All | Verified | None] & [Apply Specimen]
+            if not is_fully_applied and len(unapplied_chgs) > 0:
+                card_ctrls = tk.Frame(hdr_right_box, bg=C["header_bg"])
+                card_ctrls.pack(side="left", padx=(0, sc(10)))
+
+                btn_all = tk.Button(
+                    card_ctrls, text="All", command=lambda o=oid: self._select_card_fields(o, "all"),
+                    font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["text"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
+                )
+                btn_all.pack(side="left", padx=(0, sc(2)))
+
+                if has_books:
+                    btn_ver = tk.Button(
+                        card_ctrls, text="Verified", command=lambda o=oid: self._select_card_fields(o, "verified"),
+                        font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["success_text"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
+                    )
+                    btn_ver.pack(side="left", padx=(0, sc(2)))
+
+                btn_none = tk.Button(
+                    card_ctrls, text="None", command=lambda o=oid: self._select_card_fields(o, "none"),
+                    font=FONT_MONO_SM, bg=C["surface_dim"], fg=C["text_muted"], relief="flat", bd=0, cursor="hand2", padx=sc(5), pady=sc(1)
+                )
+                btn_none.pack(side="left", padx=(0, sc(6)))
+
+                # Apply This Specimen Button
+                btn_apply_card = tk.Button(
+                    card_ctrls, text="✓ Apply Specimen", command=lambda o=oid: self._apply_specimen(o),
+                    font=FONT_UI_BOLD, bg=C["success"], fg="#ffffff", relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(2)
+                )
+                btn_apply_card.pack(side="left")
+
+            # Book Matches Header Pill
+            if has_books:
+                book_pill_bg = C["success"] if len(book_matched_fields) == len(changes) else C["warning"]
+                book_pill_fg = "#ffffff" if len(book_matched_fields) == len(changes) else "#000000"
+                tk.Label(
+                    hdr_right_box,
+                    text=f"🌟 {len(book_matched_fields)}/{len(changes)} Books",
+                    font=FONT_MONO_SM,
+                    fg=book_pill_fg,
+                    bg=book_pill_bg,
+                    padx=sc(6),
+                    pady=sc(2)
+                ).pack(side="left", padx=(0, sc(6)))
 
             match_type = diff.get("match_type", "MATCH")
-            badge_bg = C["warning"] if status == "SYNONYM" else (C["surface_dim"] if self.is_dark else "#444748")
-            badge_fg = "#000000" if status == "SYNONYM" else "#ffffff"
+            if is_fully_applied:
+                badge_bg = C["success"]
+                badge_fg = "#ffffff"
+                badge_lbl_text = "[✓ ALL APPLIED]"
+            elif is_partially_applied:
+                badge_bg = C["warning"]
+                badge_fg = "#000000"
+                badge_lbl_text = f"[PARTIAL {len(applied_chgs)}/{len(changes)}]"
+            else:
+                badge_bg = C["warning"] if status == "SYNONYM" else (C["surface_dim"] if self.is_dark else "#444748")
+                badge_fg = "#000000" if status == "SYNONYM" else "#ffffff"
+                badge_lbl_text = f"[{status} | {match_type}]"
+
             tk.Label(
-                c_header,
-                text=f"[{status} | {match_type}]",
+                hdr_right_box,
+                text=badge_lbl_text,
                 font=FONT_MONO_SM,
                 fg=badge_fg,
                 bg=badge_bg,
                 padx=sc(8),
                 pady=sc(2)
-            ).pack(side="right", padx=sc(14), pady=sc(6))
+            ).pack(side="left")
 
             # Card Content Body
             card_body = tk.Frame(card, bg=C["surface"], padx=sc(16), pady=sc(12))
@@ -646,6 +1210,7 @@ class GBIFReviewDialog(tk.Toplevel):
                 new_val = str(chg.get("new", ""))
 
                 key = (oid, field)
+                is_field_applied = key in self.applied_changes
                 is_selected = self.selection_state.get(key, True)
 
                 var = tk.BooleanVar(value=is_selected)
@@ -667,7 +1232,7 @@ class GBIFReviewDialog(tk.Toplevel):
                 row_frame = tk.Frame(card_body, bg=C["surface"], pady=sc(4))
                 row_frame.pack(fill="x", pady=(0, sc(8)))
 
-                # Sub-header Row with Checkbox & Domain Badge
+                # Sub-header Row with Checkbox, Confidence Pill, Domain Badge & Inline Apply
                 sub_hdr = tk.Frame(row_frame, bg=C["surface"])
                 sub_hdr.pack(fill="x", pady=(0, sc(4)))
 
@@ -676,18 +1241,54 @@ class GBIFReviewDialog(tk.Toplevel):
                     text=f"FIELD: {field_upper}",
                     variable=var,
                     font=FONT_UI_BOLD,
-                    fg=C["text"],
+                    fg=C["text"] if not is_field_applied else C["text_muted"],
                     bg=C["surface"],
                     activebackground=C["surface"],
                     activeforeground=C["primary"],
                     selectcolor=C["surface"],
-                    cursor="hand2",
+                    cursor="hand2" if not is_field_applied else "arrow",
+                    state="disabled" if is_field_applied else "normal",
                     command=_on_toggle
                 )
                 chk.pack(side="left")
 
+                # Inline Apply Button or Applied Badge on Right of Sub-header
+                btn_box = tk.Frame(sub_hdr, bg=C["surface"])
+                btn_box.pack(side="right")
+
+                if is_field_applied:
+                    tk.Label(
+                        btn_box,
+                        text="✓ APPLIED TO DATABASE",
+                        font=FONT_MONO_SM,
+                        fg=C["success_text"],
+                        bg=C["success_bg"],
+                        padx=sc(6),
+                        pady=sc(2),
+                        highlightthickness=1,
+                        highlightbackground=C["success_border"]
+                    ).pack(side="right", padx=(sc(6), 0))
+                else:
+                    btn_apply_field = tk.Button(
+                        btn_box,
+                        text="✓ Apply Field",
+                        command=lambda o=oid, f=field, ov=old_val, nv=new_val: self._apply_single_field(o, f, ov, nv),
+                        font=FONT_UI_BOLD,
+                        bg=C["surface_dim"],
+                        fg=C["success_text"],
+                        activebackground=C["success_bg"],
+                        relief="solid",
+                        bd=1,
+                        cursor="hand2",
+                        padx=sc(8),
+                        pady=sc(1),
+                        highlightthickness=1,
+                        highlightbackground=C["success_border"]
+                    )
+                    btn_apply_field.pack(side="right", padx=(sc(6), 0))
+
                 tk.Label(
-                    sub_hdr,
+                    btn_box,
                     text=badge_code,
                     font=FONT_MONO_SM,
                     fg="#ffffff",
@@ -749,16 +1350,18 @@ class GBIFReviewDialog(tk.Toplevel):
 
                 sug_box = tk.Frame(
                     sug_col,
-                    bg=C["success_bg"],
-                    highlightbackground=C["success_border"],
+                    bg=C["success_bg"] if not is_field_applied else C["surface_dim"],
+                    highlightbackground=C["success_border"] if not is_field_applied else C["border"],
                     highlightthickness=1,
                     padx=sc(10),
                     pady=sc(8),
-                    cursor="hand2"
+                    cursor="hand2" if not is_field_applied else "arrow"
                 )
                 sug_box.pack(fill="both", expand=True)
 
-                def _toggle_box(k=key, v=var, target_oid=oid):
+                def _toggle_box(k=key, v=var, target_oid=oid, applied=is_field_applied):
+                    if applied:
+                        return
                     v.set(not v.get())
                     self.selection_state[k] = v.get()
                     self._update_sidebar_item(target_oid)
@@ -768,17 +1371,17 @@ class GBIFReviewDialog(tk.Toplevel):
                     sug_box,
                     text=new_val or "[BLANK]",
                     font=FONT_MONO,
-                    fg=C["success_text"],
-                    bg=C["success_bg"],
+                    fg=C["success_text"] if not is_field_applied else C["text_muted"],
+                    bg=C["success_bg"] if not is_field_applied else C["surface_dim"],
                     anchor="w",
-                    cursor="hand2"
+                    cursor="hand2" if not is_field_applied else "arrow"
                 )
                 sug_lbl.pack(side="left", fill="x", expand=True)
 
-                # Check for Historical Book Corroboration
+                # Check for Historical Book Corroboration on this field
                 matching_books = find_book_matches_for_gbif(self.app_state, oid, field, new_val)
                 if matching_books:
-                    book_badge_text = f"✓ In Books ({matching_books[0].replace('Books: ', '')})"
+                    book_badge_text = f"🌟 In Books: {matching_books[0].replace('Books: ', '')}"
                     book_badge = tk.Label(
                         sug_box,
                         text=book_badge_text,
@@ -787,24 +1390,24 @@ class GBIFReviewDialog(tk.Toplevel):
                         bg=C["success_border"],
                         padx=sc(6),
                         pady=sc(1),
-                        cursor="hand2"
+                        cursor="hand2" if not is_field_applied else "arrow"
                     )
                     book_badge.pack(side="right", padx=(sc(6), 0))
                     book_badge.bind("<Button-1>", lambda e, f=_toggle_box: f())
-
-                tag_lbl = tk.Label(
-                    sug_box,
-                    text="[GBIF Match]",
-                    font=FONT_MONO_SM,
-                    fg=C["success_border"],
-                    bg=C["success_bg"],
-                    cursor="hand2"
-                )
-                tag_lbl.pack(side="right")
+                else:
+                    tag_lbl = tk.Label(
+                        sug_box,
+                        text="[GBIF Backbone]",
+                        font=FONT_MONO_SM,
+                        fg=C["success_border"] if not is_field_applied else C["text_muted"],
+                        bg=C["success_bg"] if not is_field_applied else C["surface_dim"],
+                        cursor="hand2" if not is_field_applied else "arrow"
+                    )
+                    tag_lbl.pack(side="right")
+                    tag_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
 
                 sug_box.bind("<Button-1>", lambda e, f=_toggle_box: f())
                 sug_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
-                tag_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
 
         # Scroll to top of cards
         self.canvas.yview_moveto(0)
@@ -853,14 +1456,17 @@ class GBIFReviewDialog(tk.Toplevel):
     def _on_status_filter_changed(self, event=None):
         val = self.status_var.get()
         if "Verified" in val:
-            self.status_filter = "verified"
+            self.category_tab = "verified"
         elif "Synonyms" in val:
-            self.status_filter = "synonym"
+            self.category_tab = "synonym"
         elif "Accepted" in val:
-            self.status_filter = "accepted"
+            self.category_tab = "accepted"
+        elif "Applied" in val:
+            self.category_tab = "applied"
         else:
-            self.status_filter = "all"
+            self.category_tab = "pending"
         self.current_page = 0
+        self._update_tab_buttons()
         self._render_current_page()
 
     def _on_dir_mousewheel(self, event):
@@ -875,7 +1481,7 @@ class GBIFReviewDialog(tk.Toplevel):
         if not hasattr(self, "sel_all_btn") or not self.sel_all_btn.winfo_exists():
             return
         filtered = self._get_filtered_results()
-        is_filtered = (self.status_filter != "all") or bool(self.search_query.strip())
+        is_filtered = (self.category_tab != "pending") or bool(self.search_query.strip())
 
         if is_filtered:
             self.sel_all_btn.config(
@@ -898,9 +1504,11 @@ class GBIFReviewDialog(tk.Toplevel):
 
     def _select_all_batch(self):
         for k in self.selection_state.keys():
-            self.selection_state[k] = True
-        for var in self.page_field_vars.values():
-            var.set(True)
+            if k not in self.applied_changes:
+                self.selection_state[k] = True
+        for (oid, field), var in self.page_field_vars.items():
+            if (oid, field) not in self.applied_changes:
+                var.set(True)
         for oid in self.specimen_dir_widgets.keys():
             self._update_sidebar_item(oid)
         self._update_summary()
@@ -919,7 +1527,9 @@ class GBIFReviewDialog(tk.Toplevel):
         for d in filtered:
             oid = str(d.get("oid", ""))
             for chg in d.get("changes", []):
-                self.selection_state[(oid, chg["field"])] = True
+                key = (oid, chg["field"])
+                if key not in self.applied_changes:
+                    self.selection_state[key] = True
         for (oid, field), var in self.page_field_vars.items():
             var.set(self.selection_state.get((oid, field), True))
         for oid in self.specimen_dir_widgets.keys():
@@ -939,31 +1549,95 @@ class GBIFReviewDialog(tk.Toplevel):
         self._update_summary()
 
     def _select_current_page(self):
-        for k, var in self.page_field_vars.items():
-            self.selection_state[k] = True
-            var.set(True)
+        for (oid, field), var in self.page_field_vars.items():
+            if (oid, field) not in self.applied_changes:
+                self.selection_state[(oid, field)] = True
+                var.set(True)
+        for oid in self.specimen_dir_widgets.keys():
+            self._update_sidebar_item(oid)
+        self._update_summary()
+
+    def _select_verified_only(self):
+        filtered = self._get_filtered_results()
+        for d in filtered:
+            oid = str(d.get("oid", ""))
+            for chg in d.get("changes", []):
+                field = chg["field"]
+                key = (oid, field)
+                if key in self.applied_changes:
+                    continue
+                is_ver = bool(find_book_matches_for_gbif(self.app_state, oid, field, chg.get("new", "")))
+                self.selection_state[key] = is_ver
+        for (oid, field), var in self.page_field_vars.items():
+            var.set(self.selection_state.get((oid, field), False))
         for oid in self.specimen_dir_widgets.keys():
             self._update_sidebar_item(oid)
         self._update_summary()
 
     def _update_summary(self):
-        sel_count = sum(1 for v in self.selection_state.values() if v)
-        total_count = len(self.selection_state)
-        selected_oids = {oid for (oid, f), v in self.selection_state.items() if v}
-        self.summary_label.config(text=f"Selected: {sel_count} / {total_count} field updates ({len(selected_oids)} specimens)")
-        self.apply_btn.config(text=f"APPLY SELECTED UPDATES ({sel_count})")
+        filtered = self._get_filtered_results()
+        filtered_oids = {str(d.get("oid", "")) for d in filtered}
+
+        # Count selected within current filtered view (only unapplied)
+        filt_sel_count = sum(
+            1 for (oid, f), v in self.selection_state.items()
+            if v and oid in filtered_oids and (oid, f) in self.all_changes and (oid, f) not in self.applied_changes
+        )
+        filt_total_count = sum(
+            sum(1 for chg in d.get("changes", []) if (str(d.get("oid", "")), chg["field"]) not in self.applied_changes)
+            for d in filtered
+        )
+        filt_skipped = filt_total_count - filt_sel_count
+
+        # Global unapplied count
+        batch_sel_count = sum(
+            1 for (oid, f), v in self.selection_state.items()
+            if v and (oid, f) in self.all_changes and (oid, f) not in self.applied_changes
+        )
+        batch_total_count = sum(
+            sum(1 for chg in d.get("changes", []) if (str(d.get("oid", "")), chg["field"]) not in self.applied_changes)
+            for d in self.diff_results
+        )
+
+        tab_title = {
+            "pending": "PENDING",
+            "verified": "VERIFIED",
+            "accepted": "SPELLING/ACCEPTED",
+            "synonym": "SYNONYM",
+            "applied": "APPLIED"
+        }.get(self.category_tab, "FILTERED")
+
+        applied_specimens_cnt = sum(1 for d in self.diff_results if self._diff_has_applied_changes(d))
+
+        if self.category_tab == "applied":
+            self.summary_label.config(text=f"Viewing {applied_specimens_cnt} applied specimens ({len(self.applied_changes)} updates recorded)")
+            self.apply_btn.config(text="ALL APPLIED (VIEW ONLY)", state="disabled", bg=self.colors["surface_dim"], fg=self.colors["text_muted"])
+        else:
+            self.summary_label.config(
+                text=f"Filtered: {filt_sel_count}/{filt_total_count} selected ({filt_skipped} skipped)  •  Batch Total: {batch_sel_count}/{batch_total_count} selected"
+            )
+            self.apply_btn.config(
+                text=f"APPLY {filt_sel_count} [{tab_title}] UPDATES (CTRL+A)",
+                state="normal" if filt_sel_count > 0 else "disabled",
+                bg=self.colors["success"] if filt_sel_count > 0 else self.colors["surface_dim"],
+                fg="#ffffff" if filt_sel_count > 0 else self.colors["text_muted"]
+            )
 
     def _apply_selected(self):
+        filtered = self._get_filtered_results()
+        filtered_oids = {str(d.get("oid", "")) for d in filtered}
+
+        # Apply selected changes belonging to the filtered view (unapplied only)
         selected_updates = [
             (oid, self.all_changes[(oid, field)])
             for (oid, field), is_sel in self.selection_state.items()
-            if is_sel and (oid, field) in self.all_changes
+            if is_sel and (oid, field) in self.all_changes and oid in filtered_oids and (oid, field) not in self.applied_changes
         ]
 
         if not selected_updates:
             messagebox.showwarning(
                 "No Changes Selected",
-                "Please select at least one taxonomic update to apply.",
+                "Please select at least one unapplied taxonomic update in the current view to apply.",
                 parent=self
             )
             return
@@ -974,19 +1648,13 @@ class GBIFReviewDialog(tk.Toplevel):
                 return
 
             if not hasattr(self.app_state, "_log_records") or not self.app_state._log_records:
-                if self.app_state.df_log is not None and not self.app_state.df_log.empty:
-                    self.app_state._log_records = self.app_state.df_log.to_dict(orient="records")
+                df_log = getattr(self.app_state, "df_log", None)
+                if df_log is not None and not df_log.empty:
+                    self.app_state._log_records = df_log.to_dict(orient="records")
                 else:
                     self.app_state._log_records = []
 
-            problem_to_field = {}
-            if getattr(self.app_state, "config", None):
-                problems_cfg = self.app_state.config.get("ui_sections", {}).get("problems", [])
-                for p in problems_cfg:
-                    name = p.get("name")
-                    maps_to = p.get("maps_to") or p.get("target")
-                    if name and maps_to and maps_to != "Other" and name != "Other_problem":
-                        problem_to_field[name] = maps_to
+            problem_to_field = self._get_problem_to_field_map()
 
             # Group updates by oid
             by_oid = {}
@@ -998,16 +1666,9 @@ class GBIFReviewDialog(tk.Toplevel):
             user_name = getpass.getuser()
 
             for oid, chg_list in by_oid.items():
-                reg_oid = oid
-                if reg_oid not in self.app_state.df_reg.index:
-                    if str(oid).isdigit() and int(oid) in self.app_state.df_reg.index:
-                        reg_oid = int(oid)
-                    else:
-                        matches = [idx for idx in self.app_state.df_reg.index if str(idx).strip() == str(oid).strip()]
-                        if matches:
-                            reg_oid = matches[0]
-                        else:
-                            continue
+                reg_oid = self._find_reg_oid(oid)
+                if reg_oid is None:
+                    continue
 
                 changed_fields = []
                 changed_diffs = []
@@ -1024,21 +1685,25 @@ class GBIFReviewDialog(tk.Toplevel):
                         changed_fields.append(f)
                         changed_diffs.append(f'{f}: "{old_v}" -> "{new_v}"')
                         applied_count += 1
+                        self.applied_changes.add((str(oid), f))
 
                 # Auto-clear mapped problem flags
-                if self.app_state.df_obs is not None and problem_to_field:
+                df_obs = getattr(self.app_state, "df_obs", None)
+                if df_obs is not None and problem_to_field:
                     for f in changed_fields:
                         for pc, mf in problem_to_field.items():
                             if mf.lower().replace("_", " ").strip() == f.lower().replace("_", " ").strip():
-                                if reg_oid in self.app_state.df_obs.index and pc in self.app_state.df_obs.columns:
-                                    val = self.app_state.df_obs.at[reg_oid, pc]
+                                if reg_oid in df_obs.index and pc in df_obs.columns:
+                                    val = df_obs.at[reg_oid, pc]
                                     if pd.notna(val) and bool(val):
-                                        self.app_state.df_obs.at[reg_oid, pc] = False
+                                        df_obs.at[reg_oid, pc] = False
                                         if pc not in prob_changed:
                                             prob_changed.append(pc)
                                             prob_diffs.append(f'{pc}: "True" -> "False"')
 
                 if changed_fields or prob_changed:
+                    excel_p = getattr(self.app_state, "excel_path", "") or ""
+                    out_p = getattr(self.app_state, "output_path", "") or excel_p
                     log_entry = {
                         "Timestamp": ts,
                         "User": user_name,
@@ -1051,8 +1716,8 @@ class GBIFReviewDialog(tk.Toplevel):
                         "ProblemsChangedValues": " | ".join(prob_diffs),
                         "LocationChanged": "",
                         "LocationChangedValues": "",
-                        "SourceFile": os.path.basename(self.app_state.excel_path or ""),
-                        "OutputFile": os.path.basename(self.app_state.output_path or self.app_state.excel_path or "")
+                        "SourceFile": os.path.basename(excel_p),
+                        "OutputFile": os.path.basename(out_p)
                     }
                     self.app_state._log_records.append(log_entry)
 
@@ -1065,12 +1730,11 @@ class GBIFReviewDialog(tk.Toplevel):
             except Exception:
                 pass
 
-        messagebox.showinfo(
-            "GBIF Updates Applied",
-            f"Successfully applied {applied_count} taxonomic changes across {len(by_oid)} objects.",
-            parent=self.parent
-        )
-        self.destroy()
+        # Show notification toast and stay open for continuous triage
+        self._show_toast(f"✓ Successfully applied {applied_count} changes across {len(by_oid)} specimens to active database.")
+        self._update_tab_buttons()
+        self._render_current_page()
+
 
 
 
