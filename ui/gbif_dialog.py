@@ -291,14 +291,35 @@ class GBIFUpdateDialog(tk.Toplevel):
             cb.pack(side="left", fill="x", expand=True, anchor="w")
             self._bind_mousewheel(cb)
 
-            tk.Label(
+            # Check for Historical Book Corroboration
+            app_state = getattr(self.parent, "app_state", None) or getattr(self.parent, "app", None)
+            oid = getattr(app_state, "current_object_id", None) or getattr(self.parent, "current_object_id", None)
+            from backend.cross_validation import find_book_matches_for_gbif
+            matching_books = find_book_matches_for_gbif(app_state, str(oid or ""), update.get("field", ""), str(update.get("gbif", "")))
+            if matching_books:
+                book_badge_text = f"✓ In Books ({matching_books[0].replace('Books: ', '')})"
+                bk_lbl = tk.Label(
+                    sug_box,
+                    text=book_badge_text,
+                    font=FONT_MONO_SM,
+                    fg="#ffffff",
+                    bg="#3a7d44" if not is_dark else "#2b8a3e",
+                    padx=sc(6),
+                    pady=sc(1)
+                )
+                bk_lbl.pack(side="right", padx=(sc(6), 0))
+                self._bind_mousewheel(bk_lbl)
+
+            tag_lbl = tk.Label(
                 sug_box,
                 text="[GBIF Backbone Match]",
                 font=FONT_MONO_SM,
                 fg="#3a7d44" if not is_dark else "#89b4fa",
                 bg=sug_bg,
                 padx=sc(10)
-            ).pack(side="right")
+            )
+            tag_lbl.pack(side="right")
+            self._bind_mousewheel(tag_lbl)
 
         # 3. Sticky Bottom Footer
         footer = tk.Frame(self, bg=surface_dim, height=sc(48))

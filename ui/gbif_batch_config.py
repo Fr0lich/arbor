@@ -62,7 +62,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         self.main_app = main_app
 
         self.title("Batch GBIF Taxonomy Analysis")
-        self.minsize(sc(580), sc(480))
+        self.minsize(sc(640), sc(540))
         self.transient(parent)
 
         self.cancel_event = threading.Event()
@@ -93,7 +93,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
 
         self._build_ui()
         import utils
-        utils.center_and_fit_toplevel(self, sc(600), sc(520))
+        utils.center_and_fit_toplevel(self, sc(660), sc(580))
         self.lift()
         self.focus_set()
         self.bind("<Return>", lambda e: self._start_analysis())
@@ -127,7 +127,51 @@ class GBIFBatchConfigDialog(tk.Toplevel):
             bg=surface
         ).pack(side="left", padx=sc(16), pady=sc(12))
 
-        # 2. Main content area
+        # 2. Sticky Bottom Footer (Packed before main_area to guarantee bottom pinning)
+        footer = tk.Frame(self, bg=surface_dim, height=sc(48))
+        footer.pack(fill="x", side="bottom")
+        tk.Frame(footer, bg=border, height=sc(1)).pack(side="top", fill="x")
+
+        self.summary_label = tk.Label(
+            footer,
+            text="",
+            font=FONT_MONO,
+            fg=text_muted,
+            bg=surface_dim
+        )
+        self.summary_label.pack(side="left", padx=sc(20), pady=sc(12))
+
+        self.analyze_btn = tk.Button(
+            footer,
+            text="START ANALYSIS →",
+            command=self._start_analysis,
+            font=FONT_UI_BOLD,
+            bg="#3a7d44",
+            fg="#ffffff",
+            relief="flat",
+            bd=0,
+            padx=sc(18),
+            pady=sc(8),
+            cursor="hand2"
+        )
+        self.analyze_btn.pack(side="right", padx=sc(16), pady=sc(6))
+
+        self.cancel_btn = tk.Button(
+            footer,
+            text="CLOSE",
+            command=self._on_cancel,
+            font=FONT_UI_BOLD,
+            bg=surface,
+            fg=text_color,
+            relief="solid",
+            bd=1,
+            padx=sc(16),
+            pady=sc(8),
+            cursor="hand2"
+        )
+        self.cancel_btn.pack(side="right", padx=sc(8), pady=sc(6))
+
+        # 3. Main content area
         main_area = tk.Frame(self, bg=bg)
         main_area.pack(fill="both", expand=True)
 
@@ -318,50 +362,6 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         )
         self.detail_label.pack(anchor="w")
 
-        # 3. Sticky Bottom Footer
-        footer = tk.Frame(self, bg=surface_dim, height=sc(48))
-        footer.pack(fill="x", side="bottom")
-        tk.Frame(footer, bg=border, height=sc(1)).pack(side="top", fill="x")
-
-        self.summary_label = tk.Label(
-            footer,
-            text="",
-            font=FONT_MONO,
-            fg=text_muted,
-            bg=surface_dim
-        )
-        self.summary_label.pack(side="left", padx=sc(20), pady=sc(12))
-
-        self.analyze_btn = tk.Button(
-            footer,
-            text="START ANALYSIS →",
-            command=self._start_analysis,
-            font=FONT_UI_BOLD,
-            bg="#3a7d44",
-            fg="#ffffff",
-            relief="flat",
-            bd=0,
-            padx=sc(18),
-            pady=sc(8),
-            cursor="hand2"
-        )
-        self.analyze_btn.pack(side="right", padx=sc(16), pady=sc(6))
-
-        self.cancel_btn = tk.Button(
-            footer,
-            text="CLOSE",
-            command=self._on_cancel,
-            font=FONT_UI_BOLD,
-            bg=surface,
-            fg=text_color,
-            relief="solid",
-            bd=1,
-            padx=sc(16),
-            pady=sc(8),
-            cursor="hand2"
-        )
-        self.cancel_btn.pack(side="right", padx=sc(8), pady=sc(6))
-
         self._update_scope_summary()
 
     def _update_scope_summary(self):
@@ -437,13 +437,24 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         self.rb_all.config(state="disabled")
         self.rb_filt.config(state="disabled")
         self.rb_sel.config(state="disabled")
-        self.analyze_btn.config(state="disabled", text="ANALYZING...")
+        self.analyze_btn.config(text="ANALYZING...", fg="#ffffff", bg="#245e31", cursor="watch")
 
         self.status_var.set(f"Querying GBIF taxonomy for {len(items)} objects in background...")
         self.pct_var.set("0%")
         self.detail_var.set(f"Starting analysis on {len(items)} objects...")
         self.progress_var.set(0.0)
         self.progress_frame.pack(fill="x", pady=(0, sc(14)))
+        self.update_idletasks()
+
+        # Dynamically ensure window expands height if needed to accommodate progress box
+        try:
+            cur_w = self.winfo_width()
+            cur_h = self.winfo_height()
+            req_h = sc(640)
+            if cur_h < req_h:
+                self.geometry(f"{max(cur_w, sc(660))}x{req_h}")
+        except Exception:
+            pass
 
         def on_progress(completed_taxa, total_taxa, current_name):
             pct = int((completed_taxa / total_taxa) * 100) if total_taxa > 0 else 0

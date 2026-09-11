@@ -379,11 +379,23 @@ class HistoricalConflictResolverWindow:
         self.res_vars[field] = res_var
         
         if unique_vals:
+            from backend.cross_validation import check_gbif_corroboration_for_historical
+            app_state = getattr(self.main_app, "app", None) or getattr(self.main_app, "app_state", None)
+
             for val in unique_vals:
-                sug_frame = tk.Frame(content, bg=COLORS["surface"], highlightbackground=COLORS["border"], highlightthickness=1, cursor="hand2")
+                is_gbif_confirmed = False
+                try:
+                    is_gbif_confirmed = check_gbif_corroboration_for_historical(app_state, self.oid, field, val)
+                except Exception:
+                    pass
+
+                border_color = COLORS["success"] if is_gbif_confirmed else COLORS["border"]
+                sug_frame = tk.Frame(content, bg=COLORS["surface"], highlightbackground=border_color, highlightthickness=1, cursor="hand2")
                 sug_frame.pack(fill="x", pady=(0, sc(8)))
                 
-                sources = values_map.get(val, set())
+                sources = list(values_map.get(val, set()))
+                if is_gbif_confirmed:
+                    sources.append("✓ GBIF Backbone")
                 src_str = f"[{', '.join(sorted(sources))}]" if sources else ""
                 
                 # We need it to be focusable for keyboard nav
