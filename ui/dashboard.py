@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
-from config import sc
+from config import sc, PROBLEM_CATEGORY_THEMES
 from repository import REVIEWED_COLUMN
 
 class DashboardMixin:
@@ -260,30 +260,65 @@ class DashboardMixin:
 
         add_row(c_session, "Problems Observed Today", new_problems_total, bold=new_problems_total > 0, value_color=COLORS["warning"] if new_problems_total > 0 else COLORS["text"])
 
-        # Card 3: Total Problems
-        probs_content = None
+        # Card 3: Total Problems by Category
+        prob_cats = getattr(self.app, "problem_categories", getattr(self, "problem_categories", {}))
+        cat_problem_map = {}
         for prob_col in getattr(self, "problem_columns", []):
             if prob_col in self.app.df_obs.columns:
-                count = int(_get_prob_series(prob_col, include_unknowns=True).sum())
-                if count > 0:
-                    if probs_content is None:
-                        probs_content = create_card("TOTAL PROBLEMS BREAKDOWN")
+                cnt = int(_get_prob_series(prob_col, include_unknowns=True).sum())
+                if cnt > 0:
+                    cat = prob_cats.get(prob_col, "notes")
+                    cat_problem_map.setdefault(cat, []).append((prob_col, cnt))
+
+        if cat_problem_map:
+            probs_content = create_card("TOTAL PROBLEMS BREAKDOWN")
+            sorted_cats = sorted(cat_problem_map.keys(), key=lambda c: PROBLEM_CATEGORY_THEMES.get(c, {}).get("rank", 99))
+            for cat in sorted_cats:
+                theme = PROBLEM_CATEGORY_THEMES.get(cat, {})
+                cat_label = f"{theme.get('icon', '•')} {theme.get('label', cat.title())}"
+                cat_color = theme.get("color", COLORS["error"])
+
+                cat_total = sum(c for _, c in cat_problem_map[cat])
+                cat_header = tk.Frame(probs_content, bg=COLORS["surface"])
+                cat_header.pack(fill="x", pady=(sc(8), sc(2)))
+                tk.Label(cat_header, text=cat_label.upper(), font=FONT_UI_BOLD, fg=cat_color, bg=COLORS["surface"]).pack(side="left")
+                tk.Label(cat_header, text=f"{cat_total} total", font=FONT_MONO_SM, fg=cat_color, bg=COLORS["surface"]).pack(side="right")
+                tk.Frame(probs_content, bg=COLORS["border"], height=1).pack(fill="x", pady=(0, sc(4)))
+
+                for prob_col, count in cat_problem_map[cat]:
                     label = prob_col.replace("_", " ")
-                    add_row(probs_content, label, f"{count}  ({pct(count)})", bold=True, value_color=COLORS["error"])
+                    add_row(probs_content, f"  • {label}", f"{count}  ({pct(count)})", bold=False, value_color=COLORS["text"])
 
         # Card 4: Problems in filtered
         if hasattr(self.app, "active_object_ids") and self.app.active_object_ids:
             filtered_total = len(self.app.active_object_ids)
-            filtered_content = None
+            filtered_cat_map = {}
             for prob_col in getattr(self, "problem_columns", []):
                 if prob_col in self.app.df_obs.columns:
-                    count = int(_get_prob_series(prob_col, self.app.active_object_ids, include_unknowns=True).sum())
-                    if count > 0:
-                        if filtered_content is None:
-                            filtered_content = create_card("PROBLEMS IN CURRENT FILTER")
+                    cnt = int(_get_prob_series(prob_col, self.app.active_object_ids, include_unknowns=True).sum())
+                    if cnt > 0:
+                        cat = prob_cats.get(prob_col, "notes")
+                        filtered_cat_map.setdefault(cat, []).append((prob_col, cnt))
+
+            if filtered_cat_map:
+                filtered_content = create_card("PROBLEMS IN CURRENT FILTER")
+                sorted_cats = sorted(filtered_cat_map.keys(), key=lambda c: PROBLEM_CATEGORY_THEMES.get(c, {}).get("rank", 99))
+                for cat in sorted_cats:
+                    theme = PROBLEM_CATEGORY_THEMES.get(cat, {})
+                    cat_label = f"{theme.get('icon', '•')} {theme.get('label', cat.title())}"
+                    cat_color = theme.get("color", COLORS["error"])
+
+                    cat_total = sum(c for _, c in filtered_cat_map[cat])
+                    cat_header = tk.Frame(filtered_content, bg=COLORS["surface"])
+                    cat_header.pack(fill="x", pady=(sc(8), sc(2)))
+                    tk.Label(cat_header, text=cat_label.upper(), font=FONT_UI_BOLD, fg=cat_color, bg=COLORS["surface"]).pack(side="left")
+                    tk.Label(cat_header, text=f"{cat_total} in filter", font=FONT_MONO_SM, fg=cat_color, bg=COLORS["surface"]).pack(side="right")
+                    tk.Frame(filtered_content, bg=COLORS["border"], height=1).pack(fill="x", pady=(0, sc(4)))
+
+                    for prob_col, count in filtered_cat_map[cat]:
                         label = prob_col.replace("_", " ")
                         pct_filtered = f"{int(count / filtered_total * 100)}%" if filtered_total else "0%"
-                        add_row(filtered_content, label, f"{count}  ({pct_filtered})", bold=True, value_color=COLORS["error"])
+                        add_row(filtered_content, f"  • {label}", f"{count}  ({pct_filtered})", bold=False, value_color=COLORS["text"])
 
         # Card 5: Per floor
         if "Floor" in self.app.df_obs.columns:

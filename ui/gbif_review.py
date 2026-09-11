@@ -69,9 +69,31 @@ class GBIFReviewDialog(tk.Toplevel):
         self.diff_results = diff_results or []
         self.on_applied_callback = on_applied_callback
 
+        is_dark = getattr(self.parent, "dark_mode_active", False) if hasattr(self.parent, "dark_mode_active") else False
+        self.is_dark = is_dark
+        self.colors = {
+            "bg": "#181c19" if is_dark else COLORS["bg"],
+            "surface": "#24273a" if is_dark else COLORS["surface"],
+            "surface_dim": "#1e2030" if is_dark else COLORS["surface_dim"],
+            "border": "#363a4f" if is_dark else COLORS["border"],
+            "text": "#cad3f5" if is_dark else COLORS["text"],
+            "text_muted": "#a5adcb" if is_dark else COLORS["text_muted"],
+            "header_bg": "#1b1b1b" if is_dark else "#2c302e",
+            "primary": "#cad3f5" if is_dark else COLORS["primary"],
+            "success": "#3a7d44",
+            "success_bg": "#122416" if is_dark else "#f0fdf4",
+            "success_border": "#2b8a3e" if is_dark else "#3a7d44",
+            "success_text": "#a6e3a1" if is_dark else "#2b8a3e",
+            "warning": "#f59e0b",
+            "warning_bg": "#332200" if is_dark else "#fffbeb",
+            "error_bg": "#2e1518" if is_dark else "#fef2f2",
+            "error_border": "#802024" if is_dark else "#c93a40",
+            "error_text": "#e06c75" if is_dark else "#c93a40",
+        }
+
         self.title("GBIF Taxonomic Review & Reconciliation")
-        self.configure(bg=COLORS["bg"])
-        self.minsize(sc(800), sc(540))
+        self.configure(bg=self.colors["bg"])
+        self.minsize(sc(880), sc(580))
 
         # Pagination & Filter State
         self.page_size = 25
@@ -101,8 +123,12 @@ class GBIFReviewDialog(tk.Toplevel):
         self._build_ui()
         self._render_current_page()
 
+        self.bind("<Control-a>", lambda e: self._apply_selected())
+        self.bind("<Control-Return>", lambda e: self._apply_selected())
+        self.bind("<Escape>", lambda e: self.destroy())
+
         import utils
-        utils.center_and_fit_toplevel(self, sc(1120), sc(720))
+        utils.center_and_fit_toplevel(self, sc(1160), sc(740))
         self.transient(parent)
         self.lift()
         self.focus_set()
@@ -136,25 +162,27 @@ class GBIFReviewDialog(tk.Toplevel):
         return results
 
     def _build_ui(self):
-        # 1. Header Bar with Title & Search / Status Filters
-        header = tk.Frame(self, bg=COLORS["surface"], height=sc(52))
-        header.pack(fill="x", side="top")
-        tk.Frame(header, bg=COLORS["border"], height=sc(1)).pack(fill="x", side="bottom")
+        C = self.colors
 
-        hdr_left = tk.Frame(header, bg=COLORS["surface"])
+        # 1. Top Header Bar (Full-bleed)
+        header = tk.Frame(self, bg=C["surface"], height=sc(48))
+        header.pack(fill="x", side="top")
+        tk.Frame(header, bg=C["border"], height=sc(1)).pack(fill="x", side="bottom")
+
+        hdr_left = tk.Frame(header, bg=C["surface"])
         hdr_left.pack(side="left", padx=sc(16), pady=sc(10))
 
         tk.Label(
             hdr_left,
-            text="🌿 GBIF TAXONOMIC RECONCILIATION",
+            text="GBIF_TAXONOMIC_RECONCILIATION",
             font=FONT_UI_LG,
-            fg=COLORS["primary"],
-            bg=COLORS["surface"]
+            fg=C["text"],
+            bg=C["surface"]
         ).pack(side="left")
 
         # Search & Status Filter on Right of Header
-        hdr_right = tk.Frame(header, bg=COLORS["surface"])
-        hdr_right.pack(side="right", padx=sc(16), pady=sc(10))
+        hdr_right = tk.Frame(header, bg=C["surface"])
+        hdr_right.pack(side="right", padx=sc(16), pady=sc(8))
 
         # Status filter pills
         syn_count = sum(1 for d in self.diff_results if d.get("status") == "SYNONYM")
@@ -170,7 +198,7 @@ class GBIFReviewDialog(tk.Toplevel):
                 f"Accepted / Spelling ({acc_count})"
             ],
             state="readonly",
-            width=22,
+            width=24,
             font=FONT_UI
         )
         stat_combo.current(0)
@@ -183,50 +211,52 @@ class GBIFReviewDialog(tk.Toplevel):
             hdr_right,
             textvariable=self.search_var,
             font=FONT_UI,
-            bg=COLORS["surface_dim"],
-            fg=COLORS["text"],
+            bg=C["surface_dim"],
+            fg=C["text"],
             relief="flat",
             bd=0,
-            width=20,
+            width=18,
             highlightthickness=1,
-            highlightbackground=COLORS["border"],
-            highlightcolor=COLORS["primary"]
+            highlightbackground=C["border"],
+            highlightcolor=C["primary"]
         )
         self.search_entry.pack(side="right", ipady=sc(3))
         self.search_var.trace_add("write", lambda *args: self._on_search_changed())
 
         tk.Label(
             hdr_right,
-            text="🔍 Search:",
-            font=FONT_UI_BOLD,
-            fg=COLORS["text_muted"],
-            bg=COLORS["surface"]
-        ).pack(side="right", padx=(0, sc(4)))
+            text="SEARCH:",
+            font=FONT_MONO_SM,
+            fg=C["text_muted"],
+            bg=C["surface"]
+        ).pack(side="right", padx=(0, sc(6)))
 
         # 2. Main content area (Split View: Left Sidebar Directory + Right Cards)
-        main_area = tk.Frame(self, bg=COLORS["bg"])
+        main_area = tk.Frame(self, bg=C["bg"])
         main_area.pack(fill="both", expand=True)
 
         # --- Left Sidebar (Specimen Directory) ---
-        sidebar = tk.Frame(main_area, width=sc(260), bg=COLORS["surface_dim"])
+        sidebar = tk.Frame(main_area, width=sc(270), bg=C["surface_dim"])
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
-        tk.Frame(sidebar, bg=COLORS["border"], width=sc(1)).pack(side="right", fill="y")
+        tk.Frame(sidebar, bg=C["border"], width=sc(1)).pack(side="right", fill="y")
 
-        dir_header = tk.Frame(sidebar, bg=COLORS["border"], height=sc(36))
+        dir_header = tk.Frame(sidebar, bg=C["surface_dim"], height=sc(36))
         dir_header.pack(fill="x")
+        tk.Frame(dir_header, bg=C["border"], height=sc(1)).pack(side="bottom", fill="x")
+
         self.dir_title_label = tk.Label(
             dir_header,
             text="PAGE SPECIMENS",
             font=FONT_MONO_SM,
-            fg=COLORS["text_muted"],
-            bg=COLORS["border"]
+            fg=C["text_muted"],
+            bg=C["surface_dim"]
         )
-        self.dir_title_label.pack(side="left", padx=sc(10), pady=sc(8))
+        self.dir_title_label.pack(side="left", padx=sc(12), pady=sc(8))
 
-        self.dir_canvas = tk.Canvas(sidebar, bg=COLORS["surface_dim"], highlightthickness=0)
+        self.dir_canvas = tk.Canvas(sidebar, bg=C["surface_dim"], highlightthickness=0)
         dir_scrollbar = ttk.Scrollbar(sidebar, orient="vertical", command=self.dir_canvas.yview)
-        self.dir_list = tk.Frame(self.dir_canvas, bg=COLORS["surface_dim"])
+        self.dir_list = tk.Frame(self.dir_canvas, bg=C["surface_dim"])
 
         self.dir_list.bind(
             "<Configure>",
@@ -241,75 +271,79 @@ class GBIFReviewDialog(tk.Toplevel):
         self.dir_canvas.bind("<MouseWheel>", self._on_dir_mousewheel)
 
         # --- Right Main Area (Scrollable Cards with Top Pagination) ---
-        right_area = tk.Frame(main_area, bg=COLORS["bg"])
+        right_area = tk.Frame(main_area, bg=C["bg"])
         right_area.pack(side="left", fill="both", expand=True)
 
         # Top Pagination & Context Bar
-        self.ctx_header = tk.Frame(right_area, bg=COLORS["surface"], height=sc(48))
+        self.ctx_header = tk.Frame(right_area, bg=C["surface"], height=sc(48))
         self.ctx_header.pack(fill="x")
-        tk.Frame(self.ctx_header, bg=COLORS["border"], height=sc(1)).pack(side="bottom", fill="x")
+        tk.Frame(self.ctx_header, bg=C["border"], height=sc(1)).pack(side="bottom", fill="x")
 
         self.page_info_label = tk.Label(
             self.ctx_header,
             text="",
-            font=FONT_UI_BOLD,
-            fg=COLORS["primary"],
-            bg=COLORS["surface"]
+            font=FONT_MONO_SM,
+            fg=C["text"],
+            bg=C["surface"]
         )
-        self.page_info_label.pack(side="left", padx=sc(16), pady=sc(10))
+        self.page_info_label.pack(side="left", padx=sc(16), pady=sc(12))
 
         # Pagination controls
-        nav_frame = tk.Frame(self.ctx_header, bg=COLORS["surface"])
-        nav_frame.pack(side="right", padx=sc(16), pady=sc(8))
+        nav_frame = tk.Frame(self.ctx_header, bg=C["surface"])
+        nav_frame.pack(side="right", padx=sc(16), pady=sc(6))
 
         self.btn_first = tk.Button(
             nav_frame, text="⏮", command=self._goto_first_page,
-            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(3)
+            font=FONT_UI_BOLD, bg=C["surface_dim"], fg=C["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(3),
+            highlightthickness=1, highlightbackground=C["border"]
         )
         self.btn_first.pack(side="left", padx=(0, sc(4)))
 
         self.btn_prev = tk.Button(
             nav_frame, text="◀ Prev", command=self._goto_prev_page,
-            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3)
+            font=FONT_UI_BOLD, bg=C["surface_dim"], fg=C["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3),
+            highlightthickness=1, highlightbackground=C["border"]
         )
         self.btn_prev.pack(side="left", padx=(0, sc(8)))
 
         self.page_num_label = tk.Label(
             nav_frame,
             text="Page 1 of 1",
-            font=FONT_UI_BOLD,
-            fg=COLORS["text_muted"],
-            bg=COLORS["surface"]
+            font=FONT_MONO_SM,
+            fg=C["text_muted"],
+            bg=C["surface"]
         )
         self.page_num_label.pack(side="left", padx=sc(4))
 
         self.btn_next = tk.Button(
             nav_frame, text="Next ▶", command=self._goto_next_page,
-            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3)
+            font=FONT_UI_BOLD, bg=C["surface_dim"], fg=C["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3),
+            highlightthickness=1, highlightbackground=C["border"]
         )
         self.btn_next.pack(side="left", padx=(sc(8), sc(4)))
 
         self.btn_last = tk.Button(
             nav_frame, text="⏭", command=self._goto_last_page,
-            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(3)
+            font=FONT_UI_BOLD, bg=C["surface_dim"], fg=C["text"],
+            relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(3),
+            highlightthickness=1, highlightbackground=C["border"]
         )
         self.btn_last.pack(side="left", padx=(0, sc(12)))
 
         # Per-page selector
-        tk.Label(nav_frame, text="Per page:", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface"]).pack(side="left")
+        tk.Label(nav_frame, text="Per page:", font=FONT_MONO_SM, fg=C["text_muted"], bg=C["surface"]).pack(side="left")
         self.page_size_var = tk.StringVar(value=str(self.page_size))
         ps_combo = ttk.Combobox(nav_frame, textvariable=self.page_size_var, values=["25", "50", "100"], state="readonly", width=4, font=FONT_MONO_SM)
         ps_combo.pack(side="left", padx=(sc(4), 0))
         ps_combo.bind("<<ComboboxSelected>>", self._on_page_size_changed)
 
         # Scrollable Canvas for Specimen Cards
-        self.canvas = tk.Canvas(right_area, bg=COLORS["bg"], highlightthickness=0)
+        self.canvas = tk.Canvas(right_area, bg=C["bg"], highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(right_area, orient="vertical", command=self.canvas.yview)
-        self.cards_frame = tk.Frame(self.canvas, bg=COLORS["bg"], padx=sc(18), pady=sc(14))
+        self.cards_frame = tk.Frame(self.canvas, bg=C["bg"], padx=sc(16), pady=sc(14))
 
         self.cards_frame.bind(
             "<Configure>",
@@ -323,33 +357,33 @@ class GBIFReviewDialog(tk.Toplevel):
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.bind("<MouseWheel>", self._on_main_mousewheel)
 
-        # 3. Bottom Action Bar
-        bottom_bar = tk.Frame(self, bg=COLORS["surface"], height=sc(56))
+        # 3. Bottom Action Bar (Sticky)
+        bottom_bar = tk.Frame(self, bg=C["surface_dim"], height=sc(56))
         bottom_bar.pack(fill="x", side="bottom")
-        tk.Frame(bottom_bar, bg=COLORS["border"], height=sc(1)).pack(side="top", fill="x")
+        tk.Frame(bottom_bar, bg=C["border"], height=sc(1)).pack(side="top", fill="x")
 
-        b_content = tk.Frame(bottom_bar, bg=COLORS["surface"], padx=sc(16), pady=sc(10))
+        b_content = tk.Frame(bottom_bar, bg=C["surface_dim"], padx=sc(16), pady=sc(8))
         b_content.pack(fill="both", expand=True)
 
         # Batch Selection Controls
         sel_all_btn = tk.Button(
             b_content, text="Select All (Batch)", command=self._select_all_batch,
-            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(4)
+            font=FONT_UI_BOLD, bg=C["surface"], fg=C["text"],
+            relief="solid", bd=1, cursor="hand2", padx=sc(10), pady=sc(4)
         )
         sel_all_btn.pack(side="left", padx=(0, sc(6)))
 
         desel_all_btn = tk.Button(
             b_content, text="Deselect All", command=self._deselect_all_batch,
-            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(4)
+            font=FONT_UI_BOLD, bg=C["surface"], fg=C["text"],
+            relief="solid", bd=1, cursor="hand2", padx=sc(10), pady=sc(4)
         )
         desel_all_btn.pack(side="left", padx=(0, sc(6)))
 
         sel_page_btn = tk.Button(
             b_content, text="Select Page", command=self._select_current_page,
-            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(4)
+            font=FONT_UI_BOLD, bg=C["surface"], fg=C["text"],
+            relief="solid", bd=1, cursor="hand2", padx=sc(10), pady=sc(4)
         )
         sel_page_btn.pack(side="left")
 
@@ -357,28 +391,30 @@ class GBIFReviewDialog(tk.Toplevel):
         self.summary_label = tk.Label(
             b_content,
             text="",
-            font=FONT_UI_BOLD,
-            fg=COLORS["text_muted"],
-            bg=COLORS["surface"]
+            font=FONT_MONO,
+            fg=C["text_muted"],
+            bg=C["surface_dim"]
         )
-        self.summary_label.pack(side="left", padx=sc(20))
+        self.summary_label.pack(side="left", padx=sc(16))
 
         # Action Buttons
         cancel_btn = tk.Button(
-            b_content, text="Cancel", command=self.destroy,
-            font=FONT_UI_BOLD, bg=COLORS["surface_dim"], fg=COLORS["text"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(16), pady=sc(6)
+            b_content, text="CLOSE", command=self.destroy,
+            font=FONT_UI_BOLD, bg=C["surface"], fg=C["text"],
+            relief="solid", bd=1, cursor="hand2", padx=sc(16), pady=sc(6)
         )
         cancel_btn.pack(side="right", padx=(sc(8), 0))
 
         self.apply_btn = tk.Button(
-            b_content, text="Apply Selected Updates", command=self._apply_selected,
-            font=FONT_UI_BOLD, bg=COLORS["success_border"], fg=COLORS["on_primary"],
-            relief="flat", bd=0, cursor="hand2", padx=sc(20), pady=sc(6)
+            b_content, text="APPLY SELECTED UPDATES (CTRL+A)", command=self._apply_selected,
+            font=FONT_UI_BOLD, bg=C["success"], fg="#ffffff",
+            relief="flat", bd=0, cursor="hand2", padx=sc(18), pady=sc(6)
         )
         self.apply_btn.pack(side="right")
 
     def _render_current_page(self):
+        C = self.colors
+
         # 1. Clear previous page widgets
         for child in self.dir_list.winfo_children():
             child.destroy()
@@ -403,7 +439,7 @@ class GBIFReviewDialog(tk.Toplevel):
 
         # Update Navigation & Header Labels
         if total_items == 0:
-            self.page_info_label.config(text="No matching specimens found.")
+            self.page_info_label.config(text="NO MATCHING SPECIMENS FOUND.")
             self.page_num_label.config(text="Page 0 of 0")
             self.btn_first.config(state="disabled")
             self.btn_prev.config(state="disabled")
@@ -411,7 +447,7 @@ class GBIFReviewDialog(tk.Toplevel):
             self.btn_last.config(state="disabled")
         else:
             self.page_info_label.config(
-                text=f"Showing specimens {start_idx + 1}–{end_idx} of {total_items} (Batch total: {len(self.diff_results)})"
+                text=f"SHOWING SPECIMENS {start_idx + 1}–{end_idx} OF {total_items} (BATCH TOTAL: {len(self.diff_results)})"
             )
             self.page_num_label.config(text=f"Page {self.current_page + 1} of {total_pages}")
             self.btn_first.config(state="normal" if self.current_page > 0 else "disabled")
@@ -419,7 +455,7 @@ class GBIFReviewDialog(tk.Toplevel):
             self.btn_next.config(state="normal" if self.current_page < total_pages - 1 else "disabled")
             self.btn_last.config(state="normal" if self.current_page < total_pages - 1 else "disabled")
 
-        self.dir_title_label.config(text=f"SPECIMENS ({len(page_items)})")
+        self.dir_title_label.config(text=f"PAGE SPECIMENS ({len(page_items)})")
 
         # 3. Populate Directory and Specimen Cards for Current Page
         for diff in page_items:
@@ -427,16 +463,24 @@ class GBIFReviewDialog(tk.Toplevel):
             status = diff.get("status", "ACCEPTED")
             changes = diff.get("changes", [])
 
-            # --- Left Directory Entry ---
-            f_frame = tk.Frame(self.dir_list, bg=COLORS["surface_dim"], cursor="hand2", padx=sc(8), pady=sc(6))
-            f_frame.pack(fill="x", pady=sc(1))
-
-            tag_color = COLORS["warning"] if status == "SYNONYM" else COLORS["success_border"]
+            accent_color = C["warning"] if status == "SYNONYM" else C["success"]
             tag_text = status.upper()
 
-            tk.Label(f_frame, text=f"#{oid}", font=FONT_MONO, fg=COLORS["text"], bg=COLORS["surface_dim"]).pack(side="left")
-            tk.Label(f_frame, text=f"({len(changes)} chg)", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["surface_dim"]).pack(side="left", padx=sc(4))
-            tk.Label(f_frame, text=tag_text, font=FONT_MONO_SM, fg=tag_color, bg=COLORS["surface_dim"]).pack(side="right")
+            # --- Left Directory Entry ---
+            f_frame = tk.Frame(self.dir_list, bg=C["surface"], cursor="hand2")
+            f_frame.pack(fill="x")
+            tk.Frame(f_frame, bg=C["border"], height=sc(1)).pack(fill="x", side="bottom")
+
+            # 4px Left Accent Strip
+            tk.Frame(f_frame, bg=accent_color, width=sc(4)).pack(side="left", fill="y")
+
+            # Content container
+            f_content = tk.Frame(f_frame, bg=C["surface"], padx=sc(8), pady=sc(6))
+            f_content.pack(side="left", fill="x", expand=True)
+
+            tk.Label(f_content, text=f"#{oid}", font=FONT_MONO, fg=C["text"], bg=C["surface"]).pack(side="left")
+            tk.Label(f_content, text=f"({len(changes)} chg)", font=FONT_MONO_SM, fg=C["text_muted"], bg=C["surface"]).pack(side="left", padx=sc(4))
+            tk.Label(f_content, text=tag_text, font=FONT_MONO_SM, fg=accent_color, bg=C["surface"]).pack(side="right")
 
             def _scroll_to(target_oid=oid):
                 if target_oid in self.item_cards:
@@ -446,7 +490,8 @@ class GBIFReviewDialog(tk.Toplevel):
                         self.canvas.yview_moveto(max(0, (y - 10) / self.cards_frame.winfo_height()))
 
             f_frame.bind("<Button-1>", lambda e, f=_scroll_to: f())
-            for child in f_frame.winfo_children():
+            f_content.bind("<Button-1>", lambda e, f=_scroll_to: f())
+            for child in f_content.winfo_children():
                 child.bind("<Button-1>", lambda e, f=_scroll_to: f())
 
             self.specimen_frames[oid] = f_frame
@@ -454,39 +499,41 @@ class GBIFReviewDialog(tk.Toplevel):
             # --- Right Card Frame ---
             card = tk.Frame(
                 self.cards_frame,
-                bg=COLORS["surface"],
-                highlightbackground=COLORS["border"],
-                highlightthickness=1,
-                padx=sc(16),
-                pady=sc(12)
+                bg=C["surface"],
+                highlightbackground=C["border"],
+                highlightthickness=1
             )
             card.pack(fill="x", pady=(0, sc(12)))
             self.item_cards[oid] = card
 
-            # Card Header
-            c_header = tk.Frame(card, bg=COLORS["surface"])
-            c_header.pack(fill="x", pady=(0, sc(8)))
+            # Solid Card Header Bar
+            c_header = tk.Frame(card, bg=C["header_bg"])
+            c_header.pack(fill="x")
 
             tk.Label(
                 c_header,
                 text=f"SPECIMEN #{oid}",
                 font=FONT_UI_BOLD,
-                fg=COLORS["primary"],
-                bg=COLORS["surface"]
-            ).pack(side="left")
+                fg="#ffffff",
+                bg=C["header_bg"]
+            ).pack(side="left", padx=sc(14), pady=sc(8))
 
             match_type = diff.get("match_type", "MATCH")
-            badge_bg = COLORS["warning"] if status == "SYNONYM" else COLORS["surface_dim"]
-            badge_fg = "#000000" if status == "SYNONYM" else COLORS["text_muted"]
+            badge_bg = C["warning"] if status == "SYNONYM" else (C["surface_dim"] if self.is_dark else "#444748")
+            badge_fg = "#000000" if status == "SYNONYM" else "#ffffff"
             tk.Label(
                 c_header,
                 text=f"[{status} | {match_type}]",
                 font=FONT_MONO_SM,
                 fg=badge_fg,
                 bg=badge_bg,
-                padx=sc(6),
+                padx=sc(8),
                 pady=sc(2)
-            ).pack(side="right")
+            ).pack(side="right", padx=sc(14), pady=sc(6))
+
+            # Card Content Body
+            card_body = tk.Frame(card, bg=C["surface"], padx=sc(16), pady=sc(12))
+            card_body.pack(fill="x")
 
             # Field Rows
             for chg in changes:
@@ -504,83 +551,137 @@ class GBIFReviewDialog(tk.Toplevel):
                     self.selection_state[k] = v.get()
                     self._update_summary()
 
-                row_frame = tk.Frame(card, bg=COLORS["surface"], pady=sc(3))
-                row_frame.pack(fill="x", pady=(0, sc(4)))
+                # Determine Domain Badge (TAX / PROV)
+                field_upper = field.upper()
+                badge_code = "TAX"
+                badge_color = "#C62828"
+                if "AUTHOR" in field_upper or "COLLECTOR" in field_upper:
+                    badge_code = "PROV"
+                    badge_color = "#D9A036"
+
+                row_frame = tk.Frame(card_body, bg=C["surface"], pady=sc(4))
+                row_frame.pack(fill="x", pady=(0, sc(8)))
+
+                # Sub-header Row with Checkbox & Domain Badge
+                sub_hdr = tk.Frame(row_frame, bg=C["surface"])
+                sub_hdr.pack(fill="x", pady=(0, sc(4)))
 
                 chk = tk.Checkbutton(
-                    row_frame,
-                    text=field,
+                    sub_hdr,
+                    text=f"FIELD: {field_upper}",
                     variable=var,
                     font=FONT_UI_BOLD,
-                    fg=COLORS["text"],
-                    bg=COLORS["surface"],
-                    activebackground=COLORS["surface"],
-                    activeforeground=COLORS["primary"],
-                    selectcolor=COLORS["surface"],
+                    fg=C["text"],
+                    bg=C["surface"],
+                    activebackground=C["surface"],
+                    activeforeground=C["primary"],
+                    selectcolor=C["surface"],
                     cursor="hand2",
                     command=_on_toggle
                 )
-                chk.pack(anchor="w", pady=(0, sc(2)))
+                chk.pack(side="left")
 
-                # Chips Grid
-                grid_frame = tk.Frame(row_frame, bg=COLORS["surface"], padx=sc(16))
+                tk.Label(
+                    sub_hdr,
+                    text=badge_code,
+                    font=FONT_MONO_SM,
+                    fg="#ffffff",
+                    bg=badge_color,
+                    padx=sc(6),
+                    pady=sc(1)
+                ).pack(side="right")
+
+                # Comparison Grid Frame
+                grid_frame = tk.Frame(row_frame, bg=C["surface"])
                 grid_frame.pack(fill="x")
                 grid_frame.columnconfigure(0, weight=1)
                 grid_frame.columnconfigure(1, weight=1)
 
-                # Database (Old) Chip
-                db_chip = tk.Frame(
-                    grid_frame,
-                    bg=COLORS["error_bg"],
-                    highlightbackground=COLORS["error_border"],
+                # 1. Current Value Container
+                cur_col = tk.Frame(grid_frame, bg=C["surface"])
+                cur_col.grid(row=0, column=0, sticky="nsew", padx=(0, sc(6)))
+
+                tk.Label(
+                    cur_col,
+                    text="CURRENT_VALUE",
+                    font=FONT_MONO_SM,
+                    fg=C["text_muted"],
+                    bg=C["surface"]
+                ).pack(anchor="w", pady=(0, sc(2)))
+
+                cur_box = tk.Frame(
+                    cur_col,
+                    bg=C["surface_dim"],
+                    highlightbackground=C["border"],
                     highlightthickness=1,
                     padx=sc(10),
-                    pady=sc(5)
+                    pady=sc(8)
                 )
-                db_chip.grid(row=0, column=0, sticky="ew", padx=(0, sc(6)))
+                cur_box.pack(fill="both", expand=True)
 
+                cur_disp = old_val if old_val else "[BLANK]"
+                cur_fg = C["text"] if old_val else C["text_muted"]
                 tk.Label(
-                    db_chip,
-                    text="YOUR DATABASE VALUE",
-                    font=FONT_MONO_SM,
-                    fg=COLORS["error_text"],
-                    bg=COLORS["error_bg"]
-                ).pack(anchor="w")
-
-                tk.Label(
-                    db_chip,
-                    text=old_val or "(Empty)",
+                    cur_box,
+                    text=cur_disp,
                     font=FONT_MONO,
-                    fg=COLORS["text"] if old_val else COLORS["text_muted"],
-                    bg=COLORS["error_bg"]
-                ).pack(anchor="w")
+                    fg=cur_fg,
+                    bg=C["surface_dim"],
+                    anchor="w"
+                ).pack(fill="x")
 
-                # GBIF (New) Chip
-                gbif_chip = tk.Frame(
-                    grid_frame,
-                    bg=COLORS["success_bg"],
-                    highlightbackground=COLORS["success_border"],
+                # 2. GBIF Suggestion Container
+                sug_col = tk.Frame(grid_frame, bg=C["surface"])
+                sug_col.grid(row=0, column=1, sticky="nsew", padx=(sc(6), 0))
+
+                tk.Label(
+                    sug_col,
+                    text="GBIF_SUGGESTION",
+                    font=FONT_MONO_SM,
+                    fg=C["text_muted"],
+                    bg=C["surface"]
+                ).pack(anchor="w", pady=(0, sc(2)))
+
+                sug_box = tk.Frame(
+                    sug_col,
+                    bg=C["success_bg"],
+                    highlightbackground=C["success_border"],
                     highlightthickness=1,
                     padx=sc(10),
-                    pady=sc(5)
+                    pady=sc(8),
+                    cursor="hand2"
                 )
-                gbif_chip.grid(row=0, column=1, sticky="ew", padx=(sc(6), 0))
+                sug_box.pack(fill="both", expand=True)
 
-                tk.Label(
-                    gbif_chip,
-                    text="GBIF SUGGESTED VALUE",
-                    font=FONT_MONO_SM,
-                    fg=COLORS["success_text"],
-                    bg=COLORS["success_bg"]
-                ).pack(anchor="w")
+                def _toggle_box(k=key, v=var):
+                    v.set(not v.get())
+                    self.selection_state[k] = v.get()
+                    self._update_summary()
 
-                tk.Label(
-                    gbif_chip,
-                    text=new_val,
+                sug_lbl = tk.Label(
+                    sug_box,
+                    text=new_val or "[BLANK]",
                     font=FONT_MONO,
-                    fg=COLORS["success_text"],
-                    bg=COLORS["success_bg"]
-                ).pack(anchor="w")
+                    fg=C["success_text"],
+                    bg=C["success_bg"],
+                    anchor="w",
+                    cursor="hand2"
+                )
+                sug_lbl.pack(side="left", fill="x", expand=True)
+
+                tag_lbl = tk.Label(
+                    sug_box,
+                    text="[GBIF Match]",
+                    font=FONT_MONO_SM,
+                    fg=C["success_border"],
+                    bg=C["success_bg"],
+                    cursor="hand2"
+                )
+                tag_lbl.pack(side="right")
+
+                sug_box.bind("<Button-1>", lambda e, f=_toggle_box: f())
+                sug_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
+                tag_lbl.bind("<Button-1>", lambda e, f=_toggle_box: f())
 
         # Scroll to top of cards
         self.canvas.yview_moveto(0)

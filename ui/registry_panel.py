@@ -631,21 +631,41 @@ class RegistryPanel:
 
         if is_active_problem:
             hl_color_name = "Default (Red)"
+            has_custom_pref = False
             try:
                 advanced_prefs = config.load_prefs().get("advanced", {})
                 if advanced_prefs.get("enable_problem_highlights", True):
-                    hl_color_name = advanced_prefs.get("problem_highlight_color", "Default (Red)")
+                    pref_val = advanced_prefs.get("problem_highlight_color")
+                    if pref_val and pref_val != "Default (Red)":
+                        hl_color_name = pref_val
+                        has_custom_pref = True
             except Exception:
                 pass
 
-            if "Yellow" in hl_color_name:
-                tint = "#5f5b2e" if is_dark else "#fff9c4"
-            elif "Orange" in hl_color_name:
-                tint = "#5f4520" if is_dark else "#ffe0b2"
-            elif "Blue" in hl_color_name:
-                tint = "#203a5f" if is_dark else "#e3f2fd"
+            if has_custom_pref:
+                if "Yellow" in hl_color_name:
+                    tint = "#5f5b2e" if is_dark else "#fff9c4"
+                elif "Orange" in hl_color_name:
+                    tint = "#5f4520" if is_dark else "#ffe0b2"
+                elif "Blue" in hl_color_name:
+                    tint = "#203a5f" if is_dark else "#e3f2fd"
+                else:
+                    tint = "#5c1e1e" if is_dark else "#ffdad6"
             else:
-                tint = "#5c1e1e" if is_dark else "#ffdad6"
+                prob_cat = ui.problem_categories.get(prob_col, "notes") if hasattr(ui, "problem_categories") else "notes"
+                prob_imp = ui.problem_importances.get(prob_col, "medium") if hasattr(ui, "problem_importances") else "medium"
+                if prob_imp == "low":
+                    tint = "#2d3149" if is_dark else "#f0f4f8"
+                elif prob_cat == "taxonomy":
+                    tint = "#5c1e1e" if is_dark else "#ffdad6"
+                elif prob_cat == "collection":
+                    tint = "#5c461a" if is_dark else "#fff3cd"
+                elif prob_cat == "physical":
+                    tint = "#4e342e" if is_dark else "#efebe9"
+                elif prob_cat == "media":
+                    tint = "#203a5f" if is_dark else "#e3f2fd"
+                else:
+                    tint = "#5c1e1e" if is_dark else "#ffdad6"
             color = tint
         elif field_name == "Species" and genus and not species:
             color = warn_bg

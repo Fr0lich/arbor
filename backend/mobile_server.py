@@ -1137,6 +1137,7 @@ self.addEventListener('fetch', (event) => {
                 "database_name": db_name,
                 "config_name": self.app_state.config_name or "",
                 "ui_sections": ui_sections,
+                "problem_category_themes": getattr(config, "PROBLEM_CATEGORY_THEMES", {}),
                 "image_url_pattern": image_url_pattern,
                 "vocabulary": vocabulary
             })
@@ -1837,6 +1838,8 @@ self.addEventListener('fetch', (event) => {
                             "field": p_info.get("label", p_col),
                             "severity": "warning",
                             "reason": p_info.get("label", p_col),
+                            "category": p_info.get("category", "notes"),
+                            "importance": p_info.get("importance", "medium"),
                             "resolved": False
                         })
 

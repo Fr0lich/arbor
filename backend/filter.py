@@ -18,7 +18,7 @@ class FilterManager:
     def __init__(self):
         pass
 
-    def apply_filter(self, df_reg, reg_dict, obs_dict, history_set, groups, global_mode, not_reviewed_only, location_filters, problem_columns, problem_to_field, unknown_fields, image_mode, df_unvalidated=None, df_log=None, old_taxonomy_query=""):
+    def apply_filter(self, df_reg, reg_dict, obs_dict, history_set, groups, global_mode, not_reviewed_only, location_filters, problem_columns, problem_to_field, unknown_fields, image_mode, df_unvalidated=None, df_log=None, old_taxonomy_query="", problem_categories=None):
         filtered_ids = []
         if df_reg is None:
             return filtered_ids
@@ -60,6 +60,7 @@ class FilterManager:
 
         fast_problem_cache = {}
         include_image_problems = (image_mode == "folder")
+        prob_cat_map = problem_categories or {}
 
         # Combine all group items once, supporting dictionaries and lists with HAS/NOT states
         all_items = []
@@ -151,6 +152,24 @@ class FilterManager:
                     return True
             return False
 
+        def fast_has_category_problem(oid, obs_row, reg_row, target_category):
+            for p in active_prob_cols:
+                cat = prob_cat_map.get(p)
+                if not cat:
+                    if p in ("Genus_Problem", "Species_Problem", "Family_Problem", "Author_Problem", "Item_Name_Problem", "Title_Problem"):
+                        cat = "taxonomy"
+                    elif p in ("Collector_Problem", "Collection_Date_Problem", "Collection_Place_Problem", "Borrower_Problem", "Due_Date_Problem", "Date_Problem"):
+                        cat = "collection"
+                    elif p in ("Box_Label_Problem", "PlantPart_Problem"):
+                        cat = "physical"
+                    elif "Image" in p:
+                        cat = "media"
+                    else:
+                        cat = "notes"
+                if cat == target_category and fast_is_problem_active(oid, p, obs_row, reg_row):
+                    return True
+            return False
+
         def fast_get_cached_problem(oid, obs_row, reg_row):
             if oid not in fast_problem_cache:
                 fast_problem_cache[oid] = fast_has_any_problem(
@@ -174,6 +193,28 @@ class FilterManager:
                 if is_not:
                     return lambda oid, obs, reg: not fast_has_any_problem(oid, obs, reg)
                 return lambda oid, obs, reg: fast_has_any_problem(oid, obs, reg)
+            elif p in ("Any_Taxonomy_Problem", "Has_Taxonomy_Problem"):
+                if is_not:
+                    return lambda oid, obs, reg: not fast_has_category_problem(oid, obs, reg, "taxonomy")
+                return lambda oid, obs, reg: fast_has_category_problem(oid, obs, reg, "taxonomy")
+            elif p in ("Any_Collection_Problem", "Has_Collection_Problem", "Any_Provenance_Problem"):
+                if is_not:
+                    return lambda oid, obs, reg: not fast_has_category_problem(oid, obs, reg, "collection")
+                return lambda oid, obs, reg: fast_has_category_problem(oid, obs, reg, "collection")
+            elif p in ("Any_Storage_Problem", "Has_Storage_Problem", "Any_Physical_Problem"):
+                if is_not:
+                    return lambda oid, obs, reg: not fast_has_category_problem(oid, obs, reg, "physical")
+                return lambda oid, obs, reg: fast_has_category_problem(oid, obs, reg, "physical")
+            elif p in ("Needs_Image_Workflow", "Has_Media_Problem"):
+                def check_media(oid, obs, reg):
+                    if fast_is_problem_active(oid, "Images_Problem", obs, reg):
+                        return True
+                    if image_mode not in ("online", "offline") and bool(obs.get("Images_Missing", False)):
+                        return True
+                    return False
+                if is_not:
+                    return lambda oid, obs, reg: not check_media(oid, obs, reg)
+                return check_media
             elif p in ("Historical_Data", "History"):
                 if is_not:
                     return lambda oid, obs, reg: not fast_has_history(oid)
@@ -202,17 +243,25 @@ class FilterManager:
                 return lambda oid, obs, reg: not str(obs.get("Extra", "")).strip()
             elif p == "Extra_Not_Empty":
                 return lambda oid, obs, reg: bool(str(obs.get("Extra", "")).strip())
-            elif p == "Unknown":
+            elif p in ("Unknown", "Has_Unknown", "Unknown_Values"):
                 def check_unk(oid, obs, reg):
-                    for field in unknown_fields:
-                        raw_val = reg.get(field, "")
-                        is_unk = (
-                            raw_val is None or
-                            (isinstance(raw_val, float) and pd.isna(raw_val)) or
-                            str(raw_val).strip().lower() in ("", "unknown", "?", "ukjent")
-                        )
-                        if is_unk: return True
+                    if unknown_fields:
+                        for field in unknown_fields:
+                            raw_val = reg.get(field, "")
+                            if raw_val is None or (isinstance(raw_val, float) and pd.isna(raw_val)):
+                                return True
+                            s = str(raw_val).strip().lower()
+                            if s in ("", "unknown", "?", "ukjent", "-"):
+                                return True
+                    else:
+                        for raw_val in reg.values():
+                            if raw_val is not None and not (isinstance(raw_val, float) and pd.isna(raw_val)):
+                                s = str(raw_val).strip().lower()
+                                if s in ("unknown", "?", "ukjent", "-"):
+                                    return True
                     return False
+                if is_not:
+                    return lambda oid, obs, reg: not check_unk(oid, obs, reg)
                 return check_unk
             elif p == "Reviewed_With_Problem":
                 return lambda oid, obs, reg: (bool(obs.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs, reg))

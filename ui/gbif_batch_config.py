@@ -1,9 +1,52 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import tkinter.font as tkFont
 import pandas as pd
 import threading
 from typing import List, Dict, Any, Optional
 from config import sc
+
+FONT_UI = ("sans-serif", 10)
+FONT_UI_BOLD = ("sans-serif", 10, "bold")
+FONT_UI_LG = ("sans-serif", 12, "bold")
+FONT_UI_XL = ("sans-serif", 14, "bold")
+FONT_MONO = ("Consolas", 10)
+FONT_MONO_SM = ("Consolas", 8)
+
+_fonts_initialized = False
+def init_fonts():
+    global _fonts_initialized, FONT_UI, FONT_UI_BOLD, FONT_UI_LG, FONT_UI_XL, FONT_MONO, FONT_MONO_SM
+    if _fonts_initialized:
+        return
+    families = tkFont.families()
+    ui_family = "Hanken Grotesk" if "Hanken Grotesk" in families else "Helvetica" if "Helvetica" in families else "Segoe UI" if "Segoe UI" in families else "sans-serif"
+    mono_family = "JetBrains Mono" if "JetBrains Mono" in families else "Consolas" if "Consolas" in families else "Courier New"
+
+    FONT_UI = (ui_family, sc(10))
+    FONT_UI_BOLD = (ui_family, sc(10), "bold")
+    FONT_UI_LG = (ui_family, sc(12), "bold")
+    FONT_UI_XL = (ui_family, sc(14), "bold")
+    FONT_MONO = (mono_family, sc(10))
+    FONT_MONO_SM = (mono_family, sc(8))
+    _fonts_initialized = True
+
+COLORS = {
+    "bg": "#fbfaf8",
+    "surface": "#ffffff",
+    "surface_dim": "#e9ece5",
+    "border": "#d1d1d1",
+    "text": "#2c302e",
+    "text_muted": "#444748",
+    "primary": "#2c302e",
+    "on_primary": "#ffffff",
+    "error": "#c93a40",
+    "error_bg": "#fef2f2",
+    "success": "#3a7d44",
+    "success_bg": "#f0fdf4",
+    "success_border": "#3a7d44",
+    "warning": "#f59e0b",
+    "conflict": "#0284c7",
+}
 
 
 class GBIFBatchConfigDialog(tk.Toplevel):
@@ -14,11 +57,12 @@ class GBIFBatchConfigDialog(tk.Toplevel):
     def __init__(self, parent, main_app):
         super().__init__(parent)
         self.withdraw()  # Prevent premature top-left rendering flicker
+        init_fonts()
         self.parent = parent
         self.main_app = main_app
 
         self.title("Batch GBIF Taxonomy Analysis")
-        self.minsize(sc(540), sc(440))
+        self.minsize(sc(580), sc(480))
         self.transient(parent)
 
         self.cancel_event = threading.Event()
@@ -49,169 +93,199 @@ class GBIFBatchConfigDialog(tk.Toplevel):
 
         self._build_ui()
         import utils
-        utils.center_and_fit_toplevel(self, sc(560), sc(480))
+        utils.center_and_fit_toplevel(self, sc(600), sc(520))
         self.lift()
         self.focus_set()
+        self.bind("<Return>", lambda e: self._start_analysis())
+        self.bind("<Escape>", lambda e: self._on_cancel())
 
     def _build_ui(self):
         is_dark = getattr(self.main_app, "dark_mode_active", False)
-        bg_color = "#181c19" if is_dark else "#fbfaf8"
-        fg_title = "#e8ebe9" if is_dark else "#2c302e"
-        fg_muted = "#a6adc8" if is_dark else "#757d77"
-        border_color = "#2c302e" if is_dark else "#dadada"
-        card_bg = "#111412" if is_dark else "#ffffff"
+        bg = "#181c19" if is_dark else COLORS["bg"]
+        surface = "#24273a" if is_dark else COLORS["surface"]
+        surface_dim = "#1e2030" if is_dark else COLORS["surface_dim"]
+        border = "#363a4f" if is_dark else COLORS["border"]
+        text_color = "#cad3f5" if is_dark else COLORS["text"]
+        text_muted = "#a5adcb" if is_dark else COLORS["text_muted"]
+
         notice_bg = "#122416" if is_dark else "#f0fdf4"
         notice_border = "#3a7d44"
-        notice_fg = "#3a7d44"
+        notice_fg = "#a6e3a1" if is_dark else "#3a7d44"
 
-        btn_primary_bg = "#3a7d44" if is_dark else "#2c302e"
-        btn_sec_bg = card_bg
-        btn_sec_fg = fg_title
-        btn_sec_hover = "#242a25" if is_dark else "#e9ece5"
+        self.configure(bg=bg)
 
-        self.configure(bg=bg_color)
+        # 1. Top Header Bar (Full-bleed)
+        header = tk.Frame(self, bg=surface, height=sc(48))
+        header.pack(fill="x", side="top")
+        tk.Frame(header, bg=border, height=sc(1)).pack(fill="x", side="bottom")
 
-        container = tk.Frame(self, bg=bg_color, padx=sc(20), pady=sc(18))
+        tk.Label(
+            header,
+            text="BATCH_GBIF_TAXONOMY_ANALYSIS",
+            font=FONT_UI_LG,
+            fg=text_color,
+            bg=surface
+        ).pack(side="left", padx=sc(16), pady=sc(12))
+
+        # 2. Main content area
+        main_area = tk.Frame(self, bg=bg)
+        main_area.pack(fill="both", expand=True)
+
+        # Context Header
+        ctx_header = tk.Frame(main_area, bg=surface)
+        ctx_header.pack(fill="x")
+        tk.Frame(ctx_header, bg=border, height=sc(1)).pack(side="bottom", fill="x")
+
+        tk.Label(
+            ctx_header,
+            text="RECONCILE COLLECTION TAXONOMY",
+            font=FONT_UI_XL,
+            fg=text_color,
+            bg=surface
+        ).pack(anchor="w", padx=sc(20), pady=(sc(12), sc(2)))
+
+        tk.Label(
+            ctx_header,
+            text="Query the GBIF Backbone Taxonomy to detect spelling errors, outdated synonyms, and accepted scientific names across your collection.",
+            font=FONT_UI,
+            fg=text_muted,
+            bg=surface,
+            wraplength=sc(540),
+            justify="left"
+        ).pack(anchor="w", padx=sc(20), pady=(0, sc(12)))
+
+        # Central Scrollable/Cards Container
+        container = tk.Frame(main_area, bg=bg, padx=sc(18), pady=sc(14))
         container.pack(fill="both", expand=True)
 
-        # 1. Header & Onboarding
-        hdr_frame = tk.Frame(container, bg=bg_color)
-        hdr_frame.pack(fill="x", pady=(0, sc(12)))
-
-        tk.Label(
-            hdr_frame,
-            text="🌿 Batch GBIF Taxonomy Analysis",
-            font=("Segoe UI", sc(13), "bold"),
-            fg=fg_title,
-            bg=bg_color
-        ).pack(anchor="w")
-
-        tk.Label(
-            hdr_frame,
-            text="Query the Global Biodiversity Information Facility (GBIF) to check for updated\naccepted taxonomy, spelling corrections, and synonym replacements across your collection.",
-            font=("Segoe UI", sc(9.5)),
-            fg=fg_muted,
-            bg=bg_color,
-            justify="left"
-        ).pack(anchor="w", pady=(sc(4), 0))
-
-        # 2. Safety Guarantee Banner
+        # Safety Guarantee Banner
         notice_frame = tk.Frame(
             container,
             bg=notice_bg,
             highlightbackground=notice_border,
             highlightthickness=1,
-            padx=sc(12),
-            pady=sc(8)
+            padx=sc(14),
+            pady=sc(10)
         )
-        notice_frame.pack(fill="x", pady=(0, sc(16)))
+        notice_frame.pack(fill="x", pady=(0, sc(14)))
 
         tk.Label(
             notice_frame,
-            text="🛡️  SAFETY GUARANTEE: Never Auto-Resolved",
-            font=("Segoe UI", sc(9), "bold"),
+            text="🛡️  SAFETY GUARANTEE: Full Review Required",
+            font=FONT_UI_BOLD,
             fg=notice_fg,
             bg=notice_bg
         ).pack(anchor="w")
 
         tk.Label(
             notice_frame,
-            text="No data will be changed automatically. You will be presented with a full\ninteractive review screen to inspect, compare, and select every change before applying.",
-            font=("Segoe UI", sc(8.5)),
-            fg=fg_title,
+            text="No data will be changed automatically. You will be presented with an interactive review screen to inspect, compare, and select every change before applying.",
+            font=FONT_UI,
+            fg=text_color,
             bg=notice_bg,
+            wraplength=sc(520),
             justify="left"
         ).pack(anchor="w", pady=(sc(2), 0))
 
-        # 3. Scope Selection Card
+        # Scope Selection Card
         scope_card = tk.Frame(
             container,
-            bg=card_bg,
-            highlightbackground=border_color,
-            highlightthickness=1,
-            padx=sc(16),
-            pady=sc(12)
+            bg=surface,
+            highlightbackground=border,
+            highlightthickness=1
         )
-        scope_card.pack(fill="x", pady=(0, sc(16)))
+        scope_card.pack(fill="x", pady=(0, sc(14)))
 
+        # Scope Card Header Bar
+        card_hdr = tk.Frame(scope_card, bg="#2c302e" if not is_dark else "#1b1b1b")
+        card_hdr.pack(fill="x")
         tk.Label(
-            scope_card,
+            card_hdr,
             text="SELECT OBJECT SCOPE",
-            font=("Segoe UI", sc(9), "bold"),
-            fg=fg_muted,
-            bg=card_bg
-        ).pack(anchor="w", pady=(0, sc(8)))
+            font=FONT_UI_BOLD,
+            fg="#ffffff",
+            bg="#2c302e" if not is_dark else "#1b1b1b"
+        ).pack(side="left", padx=sc(12), pady=sc(8))
 
-        # Radio Option 1: All
-        self.rb_all = tk.Radiobutton(
-            scope_card,
-            text=f"Check All Objects in Database ({self.all_count} objects)",
-            variable=self.scope_var,
-            value="all",
-            font=("Segoe UI", sc(9.5)),
-            fg=fg_title,
-            bg=card_bg,
-            activebackground=card_bg,
-            activeforeground=fg_title,
-            selectcolor=card_bg,
-            cursor="hand2"
+        scope_body = tk.Frame(scope_card, bg=surface, padx=sc(14), pady=sc(10))
+        scope_body.pack(fill="x")
+
+        def _make_scope_row(parent, val, title, count_text, enabled=True):
+            row = tk.Frame(parent, bg=surface, cursor="hand2" if enabled else "arrow")
+            row.pack(fill="x", pady=sc(4))
+
+            rb = tk.Radiobutton(
+                row,
+                text=title,
+                variable=self.scope_var,
+                value=val,
+                font=FONT_UI_BOLD if val == self.scope_var.get() else FONT_UI,
+                fg=text_color if enabled else text_muted,
+                bg=surface,
+                activebackground=surface,
+                activeforeground=text_color,
+                selectcolor=surface,
+                cursor="hand2" if enabled else "arrow",
+                state="normal" if enabled else "disabled",
+                command=self._update_scope_summary
+            )
+            rb.pack(side="left")
+
+            count_badge = tk.Label(
+                row,
+                text=count_text,
+                font=FONT_MONO_SM,
+                fg=text_muted,
+                bg=surface_dim,
+                padx=sc(6),
+                pady=sc(2)
+            )
+            count_badge.pack(side="right")
+            return rb
+
+        # Radio Options
+        self.rb_filt = _make_scope_row(
+            scope_body,
+            "filtered",
+            "Filtered Objects",
+            f"{self.filtered_count} objects"
         )
-        self.rb_all.pack(anchor="w", pady=sc(3))
 
-        # Radio Option 2: Filtered
-        self.rb_filt = tk.Radiobutton(
-            scope_card,
-            text=f"Check Currently Filtered Objects ({self.filtered_count} objects)",
-            variable=self.scope_var,
-            value="filtered",
-            font=("Segoe UI", sc(9.5)),
-            fg=fg_title,
-            bg=card_bg,
-            activebackground=card_bg,
-            activeforeground=fg_title,
-            selectcolor=card_bg,
-            cursor="hand2"
+        self.rb_sel = _make_scope_row(
+            scope_body,
+            "selected",
+            "Selected Objects",
+            f"{self.selected_count} objects",
+            enabled=(self.selected_count > 0)
         )
-        self.rb_filt.pack(anchor="w", pady=sc(3))
 
-        # Radio Option 3: Selected
-        sel_text = f"Check Selected Objects ({self.selected_count} objects)"
-        self.rb_sel = tk.Radiobutton(
-            scope_card,
-            text=sel_text,
-            variable=self.scope_var,
-            value="selected",
-            font=("Segoe UI", sc(9.5)),
-            fg=fg_title if self.selected_count > 0 else fg_muted,
-            bg=card_bg,
-            activebackground=card_bg,
-            activeforeground=fg_title,
-            selectcolor=card_bg,
-            cursor="hand2" if self.selected_count > 0 else "arrow",
-            state="normal" if self.selected_count > 0 else "disabled"
+        self.rb_all = _make_scope_row(
+            scope_body,
+            "all",
+            "All Database Objects",
+            f"{self.all_count} objects"
         )
-        self.rb_sel.pack(anchor="w", pady=sc(3))
 
-        # 4. Progress Section (Container configured with Progressbar and %)
+        # Progress Section (Hidden initially)
         self.progress_frame = tk.Frame(
             container,
-            bg=card_bg,
-            highlightbackground=border_color,
+            bg=surface,
+            highlightbackground=border,
             highlightthickness=1,
             padx=sc(16),
             pady=sc(12)
         )
 
-        progress_hdr = tk.Frame(self.progress_frame, bg=card_bg)
+        progress_hdr = tk.Frame(self.progress_frame, bg=surface)
         progress_hdr.pack(fill="x", pady=(0, sc(6)))
 
         self.status_var = tk.StringVar(value="")
         self.status_label = tk.Label(
             progress_hdr,
             textvariable=self.status_var,
-            font=("Segoe UI", sc(9.5), "bold"),
+            font=FONT_UI_BOLD,
             fg=notice_fg,
-            bg=card_bg
+            bg=surface
         )
         self.status_label.pack(side="left", anchor="w")
 
@@ -219,13 +293,12 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         self.pct_label = tk.Label(
             progress_hdr,
             textvariable=self.pct_var,
-            font=("Segoe UI", sc(10), "bold"),
-            fg=fg_title,
-            bg=card_bg
+            font=FONT_UI_BOLD,
+            fg=text_color,
+            bg=surface
         )
         self.pct_label.pack(side="right", anchor="e")
 
-        # Progress bar
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_bar = ttk.Progressbar(
             self.progress_frame,
@@ -235,55 +308,71 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         )
         self.progress_bar.pack(fill="x", pady=(0, sc(6)))
 
-        # Sub-status detail label
         self.detail_var = tk.StringVar(value="")
         self.detail_label = tk.Label(
             self.progress_frame,
             textvariable=self.detail_var,
-            font=("Segoe UI", sc(8.5)),
-            fg=fg_muted,
-            bg=card_bg
+            font=FONT_MONO_SM,
+            fg=text_muted,
+            bg=surface
         )
         self.detail_label.pack(anchor="w")
 
-        # 5. Action Buttons
-        self.btn_frame = tk.Frame(container, bg=bg_color)
-        self.btn_frame.pack(fill="x", side="bottom")
+        # 3. Sticky Bottom Footer
+        footer = tk.Frame(self, bg=surface_dim, height=sc(48))
+        footer.pack(fill="x", side="bottom")
+        tk.Frame(footer, bg=border, height=sc(1)).pack(side="top", fill="x")
 
-        self.cancel_btn = tk.Button(
-            self.btn_frame,
-            text="Cancel",
-            command=self._on_cancel,
-            font=("Segoe UI", sc(9.5), "bold"),
-            bg=btn_sec_bg,
-            fg=btn_sec_fg,
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            padx=sc(14),
-            pady=sc(6),
-            highlightthickness=1,
-            highlightbackground=border_color,
-            highlightcolor=border_color
+        self.summary_label = tk.Label(
+            footer,
+            text="",
+            font=FONT_MONO,
+            fg=text_muted,
+            bg=surface_dim
         )
-        self.cancel_btn.pack(side="right", padx=(sc(8), 0))
-        self.cancel_btn.bind("<Enter>", lambda e: self.cancel_btn.config(bg=btn_sec_hover))
-        self.cancel_btn.bind("<Leave>", lambda e: self.cancel_btn.config(bg=btn_sec_bg))
+        self.summary_label.pack(side="left", padx=sc(20), pady=sc(12))
 
         self.analyze_btn = tk.Button(
-            self.btn_frame,
-            text="Analyze Taxonomy →",
+            footer,
+            text="START ANALYSIS →",
             command=self._start_analysis,
-            font=("Segoe UI", sc(9.5), "bold"),
-            bg=btn_primary_bg,
+            font=FONT_UI_BOLD,
+            bg="#3a7d44",
             fg="#ffffff",
             relief="flat",
             bd=0,
-            cursor="hand2",
             padx=sc(18),
-            pady=sc(6)
+            pady=sc(8),
+            cursor="hand2"
         )
-        self.analyze_btn.pack(side="right")
+        self.analyze_btn.pack(side="right", padx=sc(16), pady=sc(6))
+
+        self.cancel_btn = tk.Button(
+            footer,
+            text="CLOSE",
+            command=self._on_cancel,
+            font=FONT_UI_BOLD,
+            bg=surface,
+            fg=text_color,
+            relief="solid",
+            bd=1,
+            padx=sc(16),
+            pady=sc(8),
+            cursor="hand2"
+        )
+        self.cancel_btn.pack(side="right", padx=sc(8), pady=sc(6))
+
+        self._update_scope_summary()
+
+    def _update_scope_summary(self):
+        scope = self.scope_var.get()
+        count = self.all_count
+        if scope == "selected":
+            count = self.selected_count
+        elif scope == "filtered":
+            count = self.filtered_count
+        if hasattr(self, "summary_label") and self.summary_label.winfo_exists():
+            self.summary_label.config(text=f"READY • {count} OBJECT{'S' if count != 1 else ''} TARGETED")
 
     def _on_cancel(self):
         self.cancel_event.set()
@@ -308,7 +397,6 @@ class GBIFBatchConfigDialog(tk.Toplevel):
             messagebox.showinfo("No Objects", "No objects found for the chosen scope.", parent=self)
             return
 
-        # Build items safely from df_reg
         items = []
         df_reg = self.main_app.app.df_reg
         for oid in target_ids:
@@ -349,17 +437,17 @@ class GBIFBatchConfigDialog(tk.Toplevel):
         self.rb_all.config(state="disabled")
         self.rb_filt.config(state="disabled")
         self.rb_sel.config(state="disabled")
-        self.analyze_btn.config(state="disabled", text="Analyzing...")
+        self.analyze_btn.config(state="disabled", text="ANALYZING...")
 
         self.status_var.set(f"Querying GBIF taxonomy for {len(items)} objects in background...")
         self.pct_var.set("0%")
         self.detail_var.set(f"Starting analysis on {len(items)} objects...")
         self.progress_var.set(0.0)
-        self.progress_frame.pack(fill="x", pady=(0, sc(16)), before=self.btn_frame)
+        self.progress_frame.pack(fill="x", pady=(0, sc(14)))
 
         def on_progress(completed_taxa, total_taxa, current_name):
             pct = int((completed_taxa / total_taxa) * 100) if total_taxa > 0 else 0
-            
+
             def do_ui_update():
                 if not self.winfo_exists() or self.cancel_event.is_set():
                     return
@@ -413,4 +501,3 @@ class GBIFBatchConfigDialog(tk.Toplevel):
             diff_results,
             on_applied_callback=main_app_ref._on_gbif_batch_applied
         )
-

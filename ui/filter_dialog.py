@@ -255,20 +255,55 @@ class FilterDialogController:
         if hasattr(ui, "_bind_canvas_mousewheel"):
             ui.root.after(100, lambda: ui._bind_canvas_mousewheel(probs_canvas, _on_prob_scroll))
 
-        p_list = create_group(probs_inner, "Problems & History (Click to cycle: [ ] Ignore -> [✓] Has -> [−] Not)")
-        normal_problems = [p for p in ui.problem_columns if "Image" not in p]
-        for col in normal_problems:
-            make_tristate_row(p_list, col.replace("_", " "), ui.filter_vars.get(col), COLORS["error"])
+        prob_categories = getattr(ui, "problem_categories", {})
 
-        make_tristate_row(p_list, "Any problem (all error flags)", ui.filter_vars.get("Any_Problem"), COLORS["error"])
+        # 1. Taxonomy & Scientific Identity
+        tax_problems = [p for p in ui.problem_columns if prob_categories.get(p) == "taxonomy"]
+        if tax_problems:
+            g_tax = create_group(probs_inner, "🧬 Taxonomy & Scientific Identity")
+            for col in tax_problems:
+                make_tristate_row(g_tax, col.replace("_", " "), ui.filter_vars.get(col), COLORS["error"])
+
+        # 2. Collection Event & Provenance
+        col_problems = [p for p in ui.problem_columns if prob_categories.get(p) == "collection"]
+        if col_problems:
+            g_col = create_group(probs_inner, "📦 Collection Event & Provenance")
+            for col in col_problems:
+                make_tristate_row(g_col, col.replace("_", " "), ui.filter_vars.get(col), "#d9a036")
+
+        # 3. Physical Object & Storage
+        phys_problems = [p for p in ui.problem_columns if prob_categories.get(p) == "physical"]
+        if phys_problems:
+            g_phys = create_group(probs_inner, "🏷️ Physical Object & Storage")
+            for col in phys_problems:
+                bar_col = COLORS["outline"] if "PlantPart" in col else "#795548"
+                make_tristate_row(g_phys, col.replace("_", " "), ui.filter_vars.get(col), bar_col)
+
+        # 4. Other Discrepancies
+        other_problems = [p for p in ui.problem_columns if prob_categories.get(p) not in ("taxonomy", "collection", "physical", "media") and "Image" not in p]
+        if other_problems:
+            g_oth = create_group(probs_inner, "📝 Other Discrepancies")
+            for col in other_problems:
+                make_tristate_row(g_oth, col.replace("_", " "), ui.filter_vars.get(col), COLORS["outline_variant"])
+
+        # Fallback if no categorized problems found
+        if not tax_problems and not col_problems and not phys_problems and not other_problems:
+            p_list = create_group(probs_inner, "Problems Checklist")
+            normal_problems = [p for p in ui.problem_columns if "Image" not in p]
+            for col in normal_problems:
+                make_tristate_row(p_list, col.replace("_", " "), ui.filter_vars.get(col), COLORS["error"])
+
+        # Global Problem & History Filters
+        g_glob = create_group(probs_inner, "Global Aggregates & History")
+        make_tristate_row(g_glob, "Any problem (all error flags)", ui.filter_vars.get("Any_Problem"), COLORS["error"])
 
         if "Historical_Data" in ui.filter_vars:
-            make_tristate_row(p_list, "Historical Data (Has / No History)", ui.filter_vars.get("Historical_Data"), COLORS["surface_tint"])
+            make_tristate_row(g_glob, "Historical Data (Has / No History)", ui.filter_vars.get("Historical_Data"), COLORS["surface_tint"])
 
-        u_list = create_group(probs_inner, "Unknown values")
+        u_list = create_group(probs_inner, "Archival Gaps (Ukjent)")
         if not hasattr(ui, "filter_unknown_var"):
             ui.filter_unknown_var = tk.BooleanVar()
-        make_chk(u_list, "Show objects with unknown fields", ui.filter_unknown_var)
+        make_chk(u_list, "Show objects with settled 'Ukjent' fields", ui.filter_unknown_var, color_bar="#d9a036")
 
         # TAB 3: IMAGES
         tab_imgs = tk.Frame(tab_content_area, bg=COLORS["surface"])

@@ -197,6 +197,152 @@ class ZoomableImagePopup:
 # =====================
 
 
+class ArborDropdownMenu(tk.Frame):
+    """
+    Flat, custom-styled dropdown menu conforming to Arbor design tokens.
+    Replaces raw OS-native Combobox with a unified border, hover effects,
+    and a clean popup list.
+    """
+    def __init__(self, parent, textvariable, values=None, scale=1.0, command=None, colors=None, **kwargs):
+        self.colors = colors or {
+            "bg": "#f2f5f1",
+            "fg": "#2c302e",
+            "outline": "#747878",
+            "hover": "#e9ece5",
+            "menu_bg": "#ffffff",
+            "menu_fg": "#2c302e",
+            "menu_active_bg": "#e9ece5",
+            "menu_active_fg": "#000000",
+            "arrow": "#444748"
+        }
+        self.scale = scale
+        self.var = textvariable
+        self._values = list(values) if values else []
+        self._command = command
+        self._callback = None
+
+        super().__init__(
+            parent,
+            bg=self.colors["bg"],
+            highlightthickness=1,
+            highlightbackground=self.colors["outline"],
+            cursor="hand2",
+            padx=int(8 * scale),
+            pady=int(3 * scale),
+            **kwargs
+        )
+
+        self._lbl = tk.Label(
+            self,
+            text=self.var.get() or (self._values[0] if self._values else ""),
+            bg=self.colors["bg"],
+            fg=self.colors["fg"],
+            font=("Segoe UI", sc(9)),
+            cursor="hand2",
+            anchor="w"
+        )
+        self._lbl.pack(side="left", fill="x", expand=True)
+
+        self._arrow = tk.Label(
+            self,
+            text="▾",
+            bg=self.colors["bg"],
+            fg=self.colors["arrow"],
+            font=("Segoe UI", sc(8)),
+            cursor="hand2"
+        )
+        self._arrow.pack(side="right", padx=(int(6 * scale), 0))
+
+        # Trace variable to keep display label updated
+        self._trace_id = self.var.trace_add("write", self._on_var_changed)
+
+        # Hover & Click bindings
+        for widget in (self, self._lbl, self._arrow):
+            widget.bind("<Enter>", self._on_enter)
+            widget.bind("<Leave>", self._on_leave)
+            widget.bind("<Button-1>", self._show_menu)
+
+        self.bind("<Destroy>", self._on_destroy, add="+")
+
+    def _on_destroy(self, event):
+        if str(event.widget) == str(self):
+            if hasattr(self, "_trace_id") and self._trace_id:
+                try:
+                    self.var.trace_remove("write", self._trace_id)
+                except Exception:
+                    pass
+
+    def _on_enter(self, event=None):
+        hover_bg = self.colors["hover"]
+        self.config(bg=hover_bg)
+        self._lbl.config(bg=hover_bg)
+        self._arrow.config(bg=hover_bg)
+
+    def _on_leave(self, event=None):
+        base_bg = self.colors["bg"]
+        self.config(bg=base_bg)
+        self._lbl.config(bg=base_bg)
+        self._arrow.config(bg=base_bg)
+
+    def _on_var_changed(self, *args):
+        val = self.var.get()
+        self._lbl.config(text=val if val else "")
+
+    def _show_menu(self, event=None):
+        menu = tk.Menu(
+            self,
+            tearoff=0,
+            bg=self.colors["menu_bg"],
+            fg=self.colors["menu_fg"],
+            activebackground=self.colors["menu_active_bg"],
+            activeforeground=self.colors["menu_active_fg"],
+            activeborderwidth=0,
+            relief="solid",
+            bd=1,
+            font=("Segoe UI", sc(9))
+        )
+        for val in self._values:
+            menu.add_command(
+                label=val,
+                command=lambda v=val: self._select_value(v)
+            )
+
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        menu.tk_popup(x, y)
+
+    def _select_value(self, val):
+        self.var.set(val)
+        if self._command:
+            self._command(val)
+        if self._callback:
+            self._callback(None)
+
+    def __setitem__(self, key, value):
+        if key == "values":
+            self.set_values(value)
+        else:
+            super().__setitem__(key, value)
+
+    def __getitem__(self, key):
+        if key == "values":
+            return self._values
+        return super().__getitem__(key)
+
+    def set_values(self, values):
+        self._values = list(values)
+        if self._values and not self.var.get():
+            self.var.set(self._values[0])
+        elif self.var.get():
+            self._lbl.config(text=self.var.get())
+
+    def bind(self, sequence=None, func=None, add=None):
+        if sequence == "<<ComboboxSelected>>":
+            self._callback = func
+        else:
+            super().bind(sequence, func, add=add)
+
+
 class StartupDialog:
     """
     Stitch-styled startup launcher dialog.
@@ -583,19 +729,28 @@ class StartupDialog:
             bg=self.C_CARD,
             fg=self.C_ON_VARIANT,
             font=("Segoe UI", sc(9), "bold")
-        ).pack(side="left", padx=(0, 4))
+        ).pack(side="left", padx=(0, int(6*s)))
 
         db_names = list(DATABASE_CONFIGS.keys())
         if not self.db_var.get() and db_names:
             self.db_var.set(db_names[0])
 
-        self.db_dropdown = ttk.Combobox(
+        self.db_dropdown = ArborDropdownMenu(
             profile_frame,
             textvariable=self.db_var,
             values=db_names,
-            state="readonly",
-            cursor="hand2",
-            width=18
+            scale=s,
+            colors={
+                "bg": self.C_SURFACE_LOW,
+                "fg": self.C_PRIMARY,
+                "outline": self.C_OUTLINE,
+                "hover": self.C_HOVER,
+                "menu_bg": self.C_CARD,
+                "menu_fg": self.C_ON_SURFACE,
+                "menu_active_bg": self.C_HOVER,
+                "menu_active_fg": self.C_PRIMARY,
+                "arrow": self.C_ON_VARIANT,
+            }
         )
         self.db_dropdown.pack(side="left")
 

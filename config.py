@@ -296,64 +296,82 @@ DATABASE_CONFIGS = {
                 {
                     "name": "Genus_Problem",
                     "type": "bool",
-                    "maps_to": "Genus"
+                    "maps_to": "Genus",
+                    "category": "taxonomy",
+                    "importance": "high"
                 },
                 {
                     "name": "Species_Problem",
                     "type": "bool",
-                    "maps_to": "Species"
+                    "maps_to": "Species",
+                    "category": "taxonomy",
+                    "importance": "high"
                 },
                 {
                     "name": "Family_Problem",
                     "type": "bool",
-                    "maps_to": "Family"
+                    "maps_to": "Family",
+                    "category": "taxonomy",
+                    "importance": "high"
                 },
                 {
                     "name": "Author_Problem",
                     "type": "bool",
-                    "maps_to": "Author"
+                    "maps_to": "Author",
+                    "category": "taxonomy",
+                    "importance": "medium"
                 },
 
                 {
                     "name": "PlantPart_Problem",
                     "type": "bool",
-                    "maps_to": "Plant Part"
+                    "maps_to": "Plant Part",
+                    "category": "physical",
+                    "importance": "low"
                 },
 
-                
                 {
                     "name": "Collector_Problem",
                     "type": "bool",
-                    "maps_to": "Collector"
+                    "maps_to": "Collector",
+                    "category": "collection",
+                    "importance": "medium"
                 },
                 {
                     "name": "Collection_Date_Problem",
                     "type": "bool",
-                    "maps_to": "Collection Date"
+                    "maps_to": "Collection Date",
+                    "category": "collection",
+                    "importance": "medium"
                 },
                 {
                     "name": "Collection_Place_Problem",
                     "type": "bool",
-                    "maps_to": "Collection Place"
+                    "maps_to": "Collection Place",
+                    "category": "collection",
+                    "importance": "medium"
                 },
 
                 {
                     "name": "Box_Label_Problem",
                     "type": "bool",
-                    "maps_to": "Box Label"
+                    "maps_to": "Box Label",
+                    "category": "physical",
+                    "importance": "medium"
                 },
 
                 {
                     "name": "Images_Problem",
-                    "type": "bool"
+                    "type": "bool",
+                    "category": "media",
+                    "importance": "workflow"
                 },
                 {
                     "name": "Other_problem",
-                    "type": "bool"
+                    "type": "bool",
+                    "category": "notes",
+                    "importance": "low"
                 }
-
- 
-               
             ],
 
             # -------- UNKNOWN FIELDS --------
@@ -409,10 +427,10 @@ DATABASE_CONFIGS = {
                 {"name": "Stored as", "type": "text"}
             ],
             "problems": [
-                {"name": "Item_Name_Problem", "type": "bool", "maps_to": "Item Name"},
-                {"name": "Borrower_Problem", "type": "bool", "maps_to": "Borrower"},
-                {"name": "Due_Date_Problem", "type": "bool", "maps_to": "Due Date"},
-                {"name": "Other_problem", "type": "bool"}
+                {"name": "Item_Name_Problem", "type": "bool", "maps_to": "Item Name", "category": "taxonomy", "importance": "high"},
+                {"name": "Borrower_Problem", "type": "bool", "maps_to": "Borrower", "category": "collection", "importance": "medium"},
+                {"name": "Due_Date_Problem", "type": "bool", "maps_to": "Due Date", "category": "collection", "importance": "high"},
+                {"name": "Other_problem", "type": "bool", "category": "notes", "importance": "low"}
             ],
             "unknown_fields": []
         }
@@ -447,12 +465,74 @@ DATABASE_CONFIGS = {
                 {"name": "Storage Unit", "type": "text"}
             ],
             "problems": [
-                {"name": "Title_Problem", "type": "bool", "maps_to": "Title"},
-                {"name": "Date_Problem", "type": "bool", "maps_to": "Date"},
-                {"name": "Other_problem", "type": "bool"}
+                {"name": "Title_Problem", "type": "bool", "maps_to": "Title", "category": "taxonomy", "importance": "high"},
+                {"name": "Date_Problem", "type": "bool", "maps_to": "Date", "category": "collection", "importance": "medium"},
+                {"name": "Other_problem", "type": "bool", "category": "notes", "importance": "low"}
             ],
             "unknown_fields": []
         }
+    }
+}
+
+# ==============================================================================
+# PROBLEM CATEGORY THEMES & SEMANTIC METADATA
+# Canonical colors, icons, badges, and priority rankings for workflow domains
+# ==============================================================================
+PROBLEM_CATEGORY_THEMES = {
+    "taxonomy": {
+        "label": "Taxonomy & Scientific Identity",
+        "short_label": "Taxonomy",
+        "icon": "🧬",
+        "badge": "TAX",
+        "color": "#c93a40",
+        "color_dark": "#f28b82",
+        "bg_light": "#fdf2f2",
+        "border": "#c93a40",
+        "rank": 1,
+    },
+    "collection": {
+        "label": "Collection Event & Provenance",
+        "short_label": "Provenance",
+        "icon": "📦",
+        "badge": "PROV",
+        "color": "#d9a036",
+        "color_dark": "#f59e0b",
+        "bg_light": "#fef9e7",
+        "border": "#d9a036",
+        "rank": 2,
+    },
+    "physical": {
+        "label": "Physical Object & Storage",
+        "short_label": "Storage",
+        "icon": "🏷️",
+        "badge": "BOX",
+        "color": "#795548",
+        "color_dark": "#a1887f",
+        "bg_light": "#fbfaf8",
+        "border": "#795548",
+        "rank": 3,
+    },
+    "media": {
+        "label": "Media & Digitization Workflow",
+        "short_label": "Media",
+        "icon": "📷",
+        "badge": "IMG",
+        "color": "#0284c7",
+        "color_dark": "#5ab0e8",
+        "bg_light": "#f0f8ff",
+        "border": "#0284c7",
+        "rank": 4,
+    },
+    "notes": {
+        "label": "Audit Notes & Other Discrepancies",
+        "short_label": "Notes",
+        "icon": "📝",
+        "badge": "NOTE",
+        "color": "#757d77",
+        "color_dark": "#9399b2",
+        "bg_light": "#f2f5f1",
+        "border": "#757d77",
+        "rank": 5,
     }
 }
 

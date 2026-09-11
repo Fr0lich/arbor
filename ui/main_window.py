@@ -292,6 +292,70 @@ class ObjectProgramUI(
             return False   # scan not complete yet
         return oid in sug or str(oid) in sug
 
+    def _get_active_problem_categories(self, oid) -> set:
+        """Return set of active problem category strings for an object, e.g. {'taxonomy', 'collection'}."""
+        if not oid or self.app.df_obs is None:
+            return set()
+
+        categories = set()
+        obs_dict = getattr(self, "_cached_obs_dict", None)
+        obs_row = obs_dict.get(oid) if obs_dict else {}
+        if obs_row is None and str(oid).isdigit():
+            obs_row = obs_dict.get(int(oid), {}) if obs_dict else {}
+
+        reg_dict = getattr(self, "_cached_reg_dict", None)
+        reg_row = reg_dict.get(oid) if reg_dict else {}
+        if reg_row is None and str(oid).isdigit():
+            reg_row = reg_dict.get(int(oid), {}) if reg_dict else {}
+
+        prob_cat_map = getattr(self, "problem_categories", {})
+        prob_imp_map = getattr(self, "problem_importances", {})
+        prob_to_field = getattr(self, "problem_to_field", {})
+
+        default_cats = {
+            "Genus_Problem": "taxonomy",
+            "Species_Problem": "taxonomy",
+            "Family_Problem": "taxonomy",
+            "Author_Problem": "taxonomy",
+            "Collector_Problem": "collection",
+            "Collection_Date_Problem": "collection",
+            "Place_Problem": "collection",
+            "Box_Label_Problem": "physical",
+            "PlantPart_Problem": "physical",
+            "Images_Problem": "media",
+            "Images_Missing": "media",
+        }
+
+        for p_col in getattr(self, "problem_columns", []):
+            cat = prob_cat_map.get(p_col, default_cats.get(p_col, "notes"))
+            imp = prob_imp_map.get(p_col, "medium")
+            val = False
+            if obs_row:
+                val = bool(obs_row.get(p_col, False))
+            elif self.app.df_obs is not None and oid in self.app.df_obs.index and p_col in self.app.df_obs.columns:
+                raw_v = self.app.df_obs.at[oid, p_col]
+                val = bool(raw_v) if not pd.isna(raw_v) else False
+
+            # Check auto-detection if unmapped or missing
+            if not val and p_col in prob_to_field:
+                field = prob_to_field[p_col]
+                raw_val = ""
+                if reg_row:
+                    raw_val = reg_row.get(field, "")
+                elif self.app.df_reg is not None and oid in self.app.df_reg.index and field in self.app.df_reg.columns:
+                    raw_val = self.app.df_reg.at[oid, field]
+                if raw_val is None or (isinstance(raw_val, float) and pd.isna(raw_val)):
+                    raw_str = ""
+                else:
+                    raw_str = str(raw_val).strip()
+                if raw_str == "" and not self.is_unknown(raw_str):
+                    val = True
+
+            if val:
+                categories.add(cat)
+
+        return categories
+
     def save_user_pref(self, key, value):
         import config
         prefs = config.load_prefs()
@@ -802,6 +866,8 @@ class ObjectProgramUI(
         sections = self.app.config["ui_sections"]
 
         self.problem_to_field = {}
+        self.problem_categories = {}
+        self.problem_importances = {}
         self.problem_columns = []
         self.location_columns = []
         self.reg_columns = []
@@ -825,6 +891,8 @@ class ObjectProgramUI(
         for field in sections["problems"]:
             name = field["name"]
             self.problem_columns.append(name)
+            self.problem_categories[name] = field.get("category", "notes")
+            self.problem_importances[name] = field.get("importance", "medium")
 
             if "maps_to" in field and field["maps_to"] and field["maps_to"] != "Other" and name != "Other_problem":
                 self.problem_to_field[name] = field["maps_to"]
@@ -6649,7 +6717,8 @@ class ObjectProgramUI(
             image_mode=self.image_mode,
             df_unvalidated=getattr(self.app, "df_unvalidated", None),
             df_log=getattr(self.app, "df_log", None),
-            old_taxonomy_query=old_tax_query
+            old_taxonomy_query=old_tax_query,
+            problem_categories=getattr(self, "problem_categories", {})
         )
 
         if not matched:

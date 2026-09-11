@@ -582,3 +582,41 @@ def test_gbif_review_dialog_pagination_and_cross_page_selection():
     finally:
         root.destroy()
 
+
+def test_single_specimen_gbif_update_dialog():
+    import tkinter as tk
+    from ui.gbif_dialog import GBIFUpdateDialog
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        updates = [
+            {
+                "field": "Taxonomy (Spelling)",
+                "current": "Quercus robur",
+                "gbif": "Quercus robur L.",
+                "selected": True,
+                "data": {"genus": "Quercus", "species": "robur"}
+            },
+            {
+                "field": "Author",
+                "current": "L.",
+                "gbif": "Linnaeus",
+                "selected": True,
+                "data": {"author": "Linnaeus"}
+            }
+        ]
+
+        dialog = GBIFUpdateDialog(root, updates)
+        assert len(dialog.vars) == 2
+        assert dialog.vars[0].get() is True
+        assert dialog.vars[1].get() is True
+
+        # Deselect second item and apply
+        dialog.vars[1].set(False)
+        dialog.apply()
+
+        assert dialog.result_data == {"genus": "Quercus", "species": "robur"}
+    finally:
+        root.destroy()
+
