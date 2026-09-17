@@ -366,6 +366,13 @@ class DatabaseOpsMixin:
         self.image_scan_progress.configure(value=100)
         self._hide_progress("Ready")
 
+        # Load books if configured during startup dialog
+        if hasattr(self.app, "_startup_books_path") and self.app._startup_books_path:
+            path = self.app._startup_books_path
+            self.app._startup_books_path = None
+            if hasattr(self, "load_books_file_from_path"):
+                self.load_books_file_from_path(path)
+
     def _startup_load_first_and_reveal(self, first_oid):
         """
         During startup: directly call load_object() for the first record so the

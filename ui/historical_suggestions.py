@@ -250,6 +250,9 @@ class HistoricalSuggestionsMixin:
             return
         __import__("config").set_last_dir("last_book_dir", path)
 
+        self.load_books_file_from_path(path)
+
+    def load_books_file_from_path(self, path):
         self._show_progress("Loading Books (Reading sheets)...", 100)
 
         threading.Thread(

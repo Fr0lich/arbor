@@ -405,6 +405,7 @@ class StartupDialog:
         self.db_var           = tk.StringVar()
         self.image_mode       = tk.StringVar(value="folder")
         self.image_folder_var = tk.StringVar()
+        self.books_path_var   = tk.StringVar()
 
         # Pre-populate DB path from last used
         last = _cfg.get_last_dir("last_db_dir")
@@ -587,7 +588,11 @@ class StartupDialog:
         self._build_image_source(body)
         tk.Frame(body, bg=self.C_CARD, height=int(20*s)).pack()  # spacer
 
-        # 3 — Recent Projects
+        # 3 — Historical Books
+        self._build_books_source(body)
+        tk.Frame(body, bg=self.C_CARD, height=int(20*s)).pack()  # spacer
+
+        # 4 — Recent Projects
         self._build_recent_table(body)
 
     # ------------------------------------------------------------------
@@ -897,6 +902,74 @@ class StartupDialog:
                 self._folder_row.pack_forget()
 
     # ------------------------------------------------------------------
+    # Historical Books Section
+    # ------------------------------------------------------------------
+
+    def _build_books_source(self, parent):
+        s = self._scale
+
+        container = tk.Frame(parent, bg=self.C_CARD)
+        container.pack(fill="x")
+
+        self._build_section_header(container, "Historical Data (Books)", status_type="optional")
+
+        row = tk.Frame(container, bg=self.C_CARD)
+        row.pack(fill="x", expand=True)
+
+        entry = tk.Entry(
+            row,
+            textvariable=self.books_path_var,
+            readonlybackground=self.C_SURFACE_LOW,
+            bg=self.C_SURFACE_LOW,
+            fg=self.C_ON_SURFACE,
+            font=("Courier New", sc(10)),
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=self.C_OUTLINE,
+            highlightcolor=self.C_PRIMARY,
+            state="readonly",
+        )
+        entry.pack(side="left", fill="x", expand=True, ipady=int(6*s))
+
+        placeholder = "No books file selected..."
+        def _update_books_ph(*_):
+            val = self.books_path_var.get()
+            if not val:
+                entry.config(state="normal")
+                entry.delete(0, "end")
+                entry.insert(0, placeholder)
+                entry.config(state="readonly", fg=self.C_OUTLINE)
+            else:
+                entry.config(fg=self.C_ON_SURFACE)
+        self.books_path_var.trace_add("write", _update_books_ph)
+
+        # Initial population
+        import config
+        last_book = config.get_last_dir("last_book_dir")
+        if last_book and os.path.isfile(last_book):
+            self.books_path_var.set(last_book)
+        _update_books_ph()
+
+        btn = tk.Button(
+            row,
+            text="…",
+            bg=self.C_HEADER_BG,
+            fg=self.C_ON_VARIANT,
+            font=("Segoe UI", sc(11)),
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            width=3,
+            command=self.browse_books,
+            highlightthickness=1,
+            highlightbackground=self.C_OUTLINE,
+        )
+        btn.pack(side="right", ipady=int(5*s))
+        btn.bind("<Enter>", lambda e: btn.config(bg=self.C_HOVER))
+        btn.bind("<Leave>", lambda e: btn.config(bg=self.C_HEADER_BG))
+
+
+    # ------------------------------------------------------------------
     # Recent Projects table
     # ------------------------------------------------------------------
 
@@ -1158,6 +1231,18 @@ class StartupDialog:
             config.set_last_dir("last_image_dir", folder)
             self.image_folder_var.set(folder)
 
+    def browse_books(self):
+        import config
+        path = filedialog.askopenfilename(
+            title="Select Books Excel file",
+            filetypes=[("Excel files", "*.xlsx")],
+            initialdir=config.get_last_dir("last_book_dir")
+        )
+        if not path:
+            return
+        config.set_last_dir("last_book_dir", path)
+        self.books_path_var.set(path)
+
     def select_recent(self, path):
         """Fill the DB path field from a recent-projects row click."""
         if not os.path.exists(path):
@@ -1246,6 +1331,9 @@ class StartupDialog:
 
         self.image_mode_val = mode
         self.image_folder_val = self.image_folder_var.get()
+
+        books_val = self.books_path_var.get().strip()
+        self.books_path_val = books_val if books_val and books_val != "No books file selected..." else None
 
         # Record in recent files
         add_recent_file(path)
