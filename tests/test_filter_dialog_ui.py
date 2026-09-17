@@ -35,22 +35,18 @@ class DummyUI:
         self.filter_window = None
         self.problem_columns = ["Genus_Problem", "Species_Problem", "Image_Problem"]
         self.filter_vars = {
-            "Reviewed": tk.BooleanVar(),
-            "Not_Reviewed": tk.BooleanVar(),
-            "Reviewed_With_Problem": tk.BooleanVar(),
-            "Problem_With_History": tk.BooleanVar(),
-            "Has_History": tk.BooleanVar(),
-            "Comment_Empty": tk.BooleanVar(),
-            "Comment_Not_Empty": tk.BooleanVar(),
-            "Extra_Empty": tk.BooleanVar(),
-            "Extra_Not_Empty": tk.BooleanVar(),
+            "Reviewed": tk.StringVar(value="Ignore"),
+            "Reviewed_With_Problem": tk.StringVar(value="Ignore"),
+            "Problem_With_History": tk.StringVar(value="Ignore"),
+            "Has_History": tk.StringVar(value="Ignore"),
+            "Has_Comment": tk.StringVar(value="Ignore"),
+            "Has_Location_Comment": tk.StringVar(value="Ignore"),
             "Genus_Problem": tk.StringVar(value="Ignore"),
             "Species_Problem": tk.StringVar(value="Ignore"),
-            "Image_Problem": tk.BooleanVar(),
+            "Image_Problem": tk.StringVar(value="Ignore"),
             "Any_Problem": tk.StringVar(value="Ignore"),
             "Historical_Data": tk.StringVar(value="Ignore"),
-            "Images_Missing": tk.BooleanVar(),
-            "Has_Images": tk.BooleanVar(),
+            "Has_Images": tk.StringVar(value="Ignore"),
         }
         self.filter_location_vars = {}
         self.filter_tabs = {}

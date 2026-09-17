@@ -341,13 +341,13 @@ class TestFilterManager:
     def test_text_and_unknown_filters(self, sample_filter_data):
         df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, unk_fields = sample_filter_data
         fm = FilterManager()
-        # Comment_Not_Empty
+        # Has_Comment (HAS) replaces Comment_Not_Empty
         res = fm.apply_filter(
             df_reg=df_reg,
             reg_dict=reg_dict,
             obs_dict=obs_dict,
             history_set=history_set,
-            groups={"Text": ["Comment_Not_Empty"]},
+            groups={"Text": [("Has_Comment", "HAS")]},
             global_mode="AND",
             not_reviewed_only=False,
             location_filters=("", "", ""),
@@ -423,7 +423,7 @@ class TestFilterManager:
         fm = FilterManager()
         # Object 1: Reviewed=True, History=True
         # Object 4: Reviewed=False, History=True
-        groups = {"Status": ["Problem_With_History", "Not_Reviewed"]}
+        groups = {"Status": [("Problem_With_History", "HAS"), ("Reviewed", "NOT")]}
         res = fm.apply_filter(
             df_reg=df_reg,
             reg_dict=reg_dict,

@@ -918,19 +918,15 @@ class ObjectProgramUI(
         self.filter_vars["Historical_Data"] = tk.StringVar(value="Ignore")
 
         # Status & Boolean filters
-        self.filter_vars["Images_Missing"]        = tk.BooleanVar(value=False)
-        self.filter_vars["Has_Images"]            = tk.BooleanVar(value=False)
-        self.filter_vars["Reviewed"]              = tk.BooleanVar(value=False)
-        self.filter_vars["Not_Reviewed"]          = tk.BooleanVar(value=False)
-        self.filter_vars["Comment_Empty"]         = tk.BooleanVar(value=False)
-        self.filter_vars["Comment_Not_Empty"]     = tk.BooleanVar(value=False)
-        self.filter_vars["Extra_Empty"]           = tk.BooleanVar(value=False)
-        self.filter_vars["Extra_Not_Empty"]       = tk.BooleanVar(value=False)
-        self.filter_vars["Reviewed_With_Problem"] = tk.BooleanVar(value=False)
-        self.filter_vars["Problem_With_History"]  = tk.BooleanVar(value=False)
-        self.filter_vars["Has_History"]           = tk.BooleanVar(value=False)
-        self.filter_vars["Has_Unvalidated"]       = tk.BooleanVar(value=False)
-        self.filter_vars["Search_Old_Taxonomy"]   = tk.BooleanVar(value=False)
+        self.filter_vars["Has_Images"]            = tk.StringVar(value="Ignore")
+        self.filter_vars["Reviewed"]              = tk.StringVar(value="Ignore")
+        self.filter_vars["Has_Comment"]           = tk.StringVar(value="Ignore")
+        self.filter_vars["Has_Location_Comment"]  = tk.StringVar(value="Ignore")
+        self.filter_vars["Reviewed_With_Problem"] = tk.StringVar(value="Ignore")
+        self.filter_vars["Problem_With_History"]  = tk.StringVar(value="Ignore")
+        self.filter_vars["Has_History"]           = tk.StringVar(value="Ignore")
+        self.filter_vars["Has_Unvalidated"]       = tk.StringVar(value="Ignore")
+        self.filter_vars["Search_Old_Taxonomy"]   = tk.StringVar(value="Ignore")
         self.search_old_taxonomy_var              = tk.StringVar(value="")
 
         self.build_sections()
@@ -5306,18 +5302,26 @@ class ObjectProgramUI(
                 s_val = str(val).strip().lower()
                 if s_val in ("has", "not"):
                     problems.append(f"{k}:{s_val}")
-            elif isinstance(v, tk.BooleanVar) and val and k not in ('Images_Missing', 'Has_Images', 'Reviewed', 'Not_Reviewed', 'Problem_With_History', 'Has_History', 'Reviewed_With_Problem'):
+            elif isinstance(v, tk.BooleanVar) and val:
                 problems.append(f"{k}:has")
 
         locations = {k: v.get() for k, v in getattr(self, "filter_location_vars", {}).items() if v.get()}
-        no_image = bool(self.filter_vars.get('Images_Missing') and self.filter_vars.get('Images_Missing').get())
+
+        # Determine status/no_image based on the new string states
+        no_image = False
+        has_img_val = self.filter_vars.get('Has_Images', tk.StringVar()).get().strip().upper()
+        if has_img_val == "NOT":
+            no_image = True
 
         status = "all"
-        if self.filter_vars.get("Not_Reviewed") and self.filter_vars.get("Not_Reviewed").get():
+        rev_val = self.filter_vars.get('Reviewed', tk.StringVar()).get().strip().upper()
+        if rev_val == "NOT":
             status = "pending"
-        elif self.filter_vars.get("Reviewed") and self.filter_vars.get("Reviewed").get():
+        elif rev_val == "HAS":
             status = "reviewed"
-        elif self.filter_vars.get("Problem_With_History") and self.filter_vars.get("Problem_With_History").get():
+
+        hist_val = self.filter_vars.get('Problem_With_History', tk.StringVar()).get().strip().upper()
+        if hist_val == "HAS":
             status = "conflict"
 
         return {
@@ -6591,26 +6595,22 @@ class ObjectProgramUI(
             if isinstance(var, tk.StringVar):
                 s_val = str(val).strip().upper()
                 if s_val in ("HAS", "NOT"):
-                    if key in ["Images_Missing", "Has_Images"]:
+                    if key == "Has_Images":
                         groups["Images"].append((key, s_val))
                     elif key in self.problem_columns and "Image" in key:
                         groups["Images"].append((key, s_val))
+                    elif key in ["Reviewed", "Reviewed_With_Problem", "Problem_With_History", "Has_History", "Has_Unvalidated", "Search_Old_Taxonomy"]:
+                        groups["Status"].append((key, s_val))
+                    elif key in ["Has_Comment", "Has_Location_Comment"]:
+                        groups["Text"].append((key, s_val))
                     else:
                         groups["Problems"][key] = s_val
             elif isinstance(var, tk.BooleanVar) and val:
-                if key in ["Images_Missing", "Has_Images"]:
-                    groups["Images"].append(key)
-                elif key in self.problem_columns:
+                if key in self.problem_columns:
                     if "Image" in key:
                         groups["Images"].append(key)
                     else:
                         groups["Problems"][key] = "HAS"
-                elif key in ["Reviewed", "Not_Reviewed",
-                             "Reviewed_With_Problem", "Problem_With_History", "Has_History",
-                             "Has_Unvalidated", "Search_Old_Taxonomy"]:
-                    groups["Status"].append(key)
-                elif key in ["Comment_Empty", "Comment_Not_Empty", "Extra_Empty", "Extra_Not_Empty"]:
-                    groups["Text"].append(key)
 
         if filter_state["unknown"]:
             groups["Unknown"].append("Unknown")
@@ -7238,11 +7238,11 @@ class ObjectProgramUI(
         if mode == "problems":
             self.filter_vars["Any_Problem"].set("Has")
         elif mode == "images":
-            self.filter_vars["Images_Missing"].set(True)
+            self.filter_vars["Has_Images"].set("Not")
         elif mode == "not_reviewed":
-            self.filter_vars["Not_Reviewed"].set(True)
+            self.filter_vars["Reviewed"].set("Not")
         elif mode == "reviewed_problem":
-            self.filter_vars["Reviewed_With_Problem"].set(True)
+            self.filter_vars["Reviewed_With_Problem"].set("Has")
         elif mode == "has_history":
             self.filter_vars["Historical_Data"].set("Has")
 
