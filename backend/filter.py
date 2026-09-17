@@ -220,28 +220,27 @@ class FilterManager:
                     return lambda oid, obs, reg: not fast_has_history(oid)
                 return lambda oid, obs, reg: fast_has_history(oid)
             elif p == "Has_Images":
-                if image_mode == "online":
-                    return lambda oid, obs, reg: True
-                elif image_mode == "offline":
-                    return lambda oid, obs, reg: False
-                else:
-                    return lambda oid, obs, reg: not bool(obs.get("Images_Missing", False))
-            elif p == "Images_Missing":
-                if image_mode in ("online", "offline"):
-                    return lambda oid, obs, reg: False
-                else:
-                    return lambda oid, obs, reg: bool(obs.get("Images_Missing", False))
+                def check_has_images(oid, obs, reg):
+                    if image_mode == "online":
+                        return True
+                    elif image_mode == "offline":
+                        return False
+                    else:
+                        return not bool(obs.get("Images_Missing", False))
+                if is_not:
+                    return lambda oid, obs, reg: not check_has_images(oid, obs, reg)
+                return check_has_images
             elif p == "Reviewed":
+                if is_not:
+                    return lambda oid, obs, reg: not bool(obs.get(REVIEWED_COLUMN, False))
                 return lambda oid, obs, reg: bool(obs.get(REVIEWED_COLUMN, False))
-            elif p == "Not_Reviewed":
-                return lambda oid, obs, reg: not bool(obs.get(REVIEWED_COLUMN, False))
-            elif p == "Comment_Empty":
-                return lambda oid, obs, reg: not str(reg.get("Comment", "")).strip()
-            elif p == "Comment_Not_Empty":
+            elif p == "Has_Comment":
+                if is_not:
+                    return lambda oid, obs, reg: not bool(str(reg.get("Comment", "")).strip())
                 return lambda oid, obs, reg: bool(str(reg.get("Comment", "")).strip())
-            elif p == "Extra_Empty":
-                return lambda oid, obs, reg: not str(obs.get("Extra", "")).strip()
-            elif p == "Extra_Not_Empty":
+            elif p == "Has_Location_Comment":
+                if is_not:
+                    return lambda oid, obs, reg: not bool(str(obs.get("Extra", "")).strip())
                 return lambda oid, obs, reg: bool(str(obs.get("Extra", "")).strip())
             elif p in ("Unknown", "Has_Unknown", "Unknown_Values"):
                 def check_unk(oid, obs, reg):
@@ -264,14 +263,20 @@ class FilterManager:
                     return lambda oid, obs, reg: not check_unk(oid, obs, reg)
                 return check_unk
             elif p == "Reviewed_With_Problem":
+                if is_not:
+                    return lambda oid, obs, reg: not (bool(obs.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs, reg))
                 return lambda oid, obs, reg: (bool(obs.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs, reg))
             elif p == "Problem_With_History" or p == "Has_History":
                 if is_not:
                     return lambda oid, obs, reg: not fast_has_history(oid)
                 return lambda oid, obs, reg: fast_has_history(oid)
             elif p == "Has_Unvalidated":
+                if is_not:
+                    return lambda oid, obs, reg: not (str(oid) in unval_set or (str(oid).isdigit() and str(int(str(oid))) in unval_set))
                 return lambda oid, obs, reg: (str(oid) in unval_set or (str(oid).isdigit() and str(int(str(oid))) in unval_set))
             elif p == "Search_Old_Taxonomy":
+                if is_not:
+                    return lambda oid, obs, reg: not (str(oid) in old_tax_matched_set or (str(oid).isdigit() and str(int(str(oid))) in old_tax_matched_set))
                 return lambda oid, obs, reg: (str(oid) in old_tax_matched_set or (str(oid).isdigit() and str(int(str(oid))) in old_tax_matched_set))
             else:
                 if is_not:

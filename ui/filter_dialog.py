@@ -207,28 +207,25 @@ class FilterDialogController:
         status_right.pack(side="right", fill="both", expand=True, padx=sc(16), pady=sc(16))
 
         p_status = create_group(status_left, "Processing Status")
-        make_chk(p_status, "Reviewed", ui.filter_vars["Reviewed"], COLORS["secondary"])
-        make_chk(p_status, "Not Reviewed (Pending)", ui.filter_vars["Not_Reviewed"], COLORS["surface_tint"])
-        make_chk(p_status, "Reviewed + Has Problem (REV+ERR)", ui.filter_vars["Reviewed_With_Problem"], COLORS["error"])
-        make_chk(p_status, "Problem + Has History", ui.filter_vars["Problem_With_History"], COLORS["error"])
-        make_chk(p_status, "Has Suggestions from Books", ui.filter_vars["Has_History"], COLORS["outline_variant"])
+        make_tristate_row(p_status, "Reviewed", ui.filter_vars["Reviewed"], COLORS["secondary"])
+        make_tristate_row(p_status, "Reviewed + Has Problem (REV+ERR)", ui.filter_vars["Reviewed_With_Problem"], COLORS["error"])
+        make_tristate_row(p_status, "Problem + Has History", ui.filter_vars["Problem_With_History"], COLORS["error"])
+        make_tristate_row(p_status, "Has Suggestions from Books", ui.filter_vars["Has_History"], COLORS["outline_variant"])
         if "Has_Unvalidated" in ui.filter_vars:
-            make_chk(p_status, "Has Unvalidated Source", ui.filter_vars["Has_Unvalidated"], COLORS["outline_variant"])
+            make_tristate_row(p_status, "Has Unvalidated Source", ui.filter_vars["Has_Unvalidated"], COLORS["outline_variant"])
 
         m_pres = create_group(status_right, "Metadata Presence")
         tk.Label(m_pres, text="Comments", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w")
         tk.Frame(m_pres, bg=COLORS["outline"], height=1).pack(fill="x", pady=sc(4))
-        make_chk(m_pres, "Missing Comment", ui.filter_vars["Comment_Empty"])
-        make_chk(m_pres, "Has Comment", ui.filter_vars["Comment_Not_Empty"])
+        make_tristate_row(m_pres, "Has Comment", ui.filter_vars["Has_Comment"])
 
         tk.Label(m_pres, text="Location Notes", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", pady=(sc(12), 0))
         tk.Frame(m_pres, bg=COLORS["outline"], height=1).pack(fill="x", pady=sc(4))
-        make_chk(m_pres, "No Location Comment", ui.filter_vars["Extra_Empty"])
-        make_chk(m_pres, "Has Location Comment", ui.filter_vars["Extra_Not_Empty"])
+        make_tristate_row(m_pres, "Has Location Comment", ui.filter_vars["Has_Location_Comment"])
 
         if "Search_Old_Taxonomy" in ui.filter_vars:
             t_hist = create_group(status_right, "Taxonomy Audit Log Search")
-            make_chk(t_hist, "Search Old Taxonomy", ui.filter_vars["Search_Old_Taxonomy"], COLORS["surface_tint"])
+            make_tristate_row(t_hist, "Search Old Taxonomy", ui.filter_vars["Search_Old_Taxonomy"], COLORS["surface_tint"])
             if hasattr(ui, "search_old_taxonomy_var"):
                 ent_old_tax = ttk.Entry(t_hist, textvariable=ui.search_old_taxonomy_var)
                 ent_old_tax.pack(fill="x", pady=(sc(4), 0))
@@ -313,13 +310,13 @@ class FilterDialogController:
         img_inner.pack(fill="both", expand=True, padx=sc(16), pady=sc(16))
 
         i_list = create_group(img_inner, "Images Checklist")
-        image_filters = ["Images_Missing", "Has_Images"]
+        image_filters = ["Has_Images"]
         image_problems = [p for p in ui.problem_columns if "Image" in p]
         for col in image_filters + image_problems:
             if col in ui.filter_vars:
                 clean_name = col.replace("_", " ")
                 bar_color = COLORS["error"] if "Missing" in col or "Problem" in col else COLORS["botanical_green"]
-                make_chk(i_list, clean_name, ui.filter_vars[col], bar_color)
+                make_tristate_row(i_list, clean_name, ui.filter_vars[col], bar_color)
 
         # TAB 4: LOCATION
         tab_loc = tk.Frame(tab_content_area, bg=COLORS["surface"])
@@ -568,8 +565,41 @@ class FilterDialogController:
             FilterDialogController.clear_filter(ui, getattr(ui, "filter_window", None), destroy_win=False)
 
             for k, v in preset.get("vars", {}).items():
-                if k in ui.filter_vars:
-                    target_var = ui.filter_vars[k]
+                # Map old preset keys to the new consolidated tri-state ones.
+                mapped_k = k
+                if k == "Images_Missing":
+                    mapped_k = "Has_Images"
+                    # For Images_Missing=True, Has_Images is NOT
+                    # The value below will be inverted if old preset used 'true' or '1'
+                    if str(v).lower() in ("has", "true", "1"):
+                        v = "Not"
+                    elif str(v).lower() in ("not", "false", "-1"):
+                        v = "Has"
+                elif k == "Not_Reviewed":
+                    mapped_k = "Reviewed"
+                    if str(v).lower() in ("has", "true", "1"):
+                        v = "Not"
+                    elif str(v).lower() in ("not", "false", "-1"):
+                        v = "Has"
+                elif k == "Comment_Not_Empty":
+                    mapped_k = "Has_Comment"
+                elif k == "Comment_Empty":
+                    mapped_k = "Has_Comment"
+                    if str(v).lower() in ("has", "true", "1"):
+                        v = "Not"
+                    elif str(v).lower() in ("not", "false", "-1"):
+                        v = "Has"
+                elif k == "Extra_Not_Empty":
+                    mapped_k = "Has_Location_Comment"
+                elif k == "Extra_Empty":
+                    mapped_k = "Has_Location_Comment"
+                    if str(v).lower() in ("has", "true", "1"):
+                        v = "Not"
+                    elif str(v).lower() in ("not", "false", "-1"):
+                        v = "Has"
+
+                if mapped_k in ui.filter_vars:
+                    target_var = ui.filter_vars[mapped_k]
                     if isinstance(target_var, tk.StringVar):
                         if str(v).lower() in ("has", "true", "1"):
                             target_var.set("Has")
