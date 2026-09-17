@@ -167,6 +167,13 @@ class ImageHandlerMixin:
             command=lambda: run_action(self.select_image_folder)
         , cursor="hand2").pack(fill="x", pady=2)
 
+        if self.image_mode == "folder":
+            ttk.Button(
+                frame,
+                text="Load Additional Image Folder...",
+                command=lambda: run_action(self.add_additional_image_folder)
+            , cursor="hand2").pack(fill="x", pady=2)
+
         ttk.Button(
             frame,
             text="Load from Online Repository",
@@ -213,6 +220,21 @@ class ImageHandlerMixin:
             self.load_images(self.app.current_object_id)
 
 
+    def add_additional_image_folder(self):
+        folder = filedialog.askdirectory(title="Select additional image folder")
+        if not folder:
+            return
+
+        self.additional_image_folders = getattr(self, "additional_image_folders", [])
+        if folder not in self.additional_image_folders and folder != getattr(self, "image_folder", None):
+            self.additional_image_folders.append(folder)
+
+        threading.Thread(
+            target=self.build_image_index,
+            args=(self.image_folder,),
+            daemon=True
+        ).start()
+
     def select_image_folder(self):
         folder = filedialog.askdirectory(title="Select image folder", initialdir=__import__("config").get_last_dir("last_image_dir"))
         if not folder:
@@ -220,6 +242,8 @@ class ImageHandlerMixin:
         __import__("config").set_last_dir("last_image_dir", folder)
 
         self.image_folder = folder
+        self.additional_image_folders = getattr(self, "additional_image_folders", [])
+        self.additional_image_folders.clear()
 
         threading.Thread(
             target=self.build_image_index,
@@ -290,12 +314,16 @@ class ImageHandlerMixin:
 
         image_exts = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 
+        folders_to_scan = [folder]
+        if hasattr(self, "additional_image_folders"):
+            folders_to_scan.extend(self.additional_image_folders)
 
 
         files = []
-        for root_dir, _, filenames in os.walk(folder):
-            for fname in filenames:
-                files.append(os.path.join(root_dir, fname))
+        for f in folders_to_scan:
+            for root_dir, _, filenames in os.walk(f):
+                for fname in filenames:
+                    files.append(os.path.join(root_dir, fname))
 
 
 
@@ -682,6 +710,15 @@ class ImageHandlerMixin:
             self._load_image_async(main_path, large=True, target_widget=self.main_image_label)
             self.main_image_label.bind("<Double-Button-1>", lambda e, p=main_path: self.open_image_web(p))
 
+            if hasattr(self, "main_image_title_label") and self.main_image_title_label.winfo_exists():
+                if getattr(self, "additional_image_folders", []):
+                    title_text = f"{os.path.basename(main_path)} ({os.path.basename(os.path.dirname(main_path))})"
+                    self.main_image_title_label.config(text=title_text)
+                    if self.main_image_title_label.winfo_manager() != 'pack':
+                        self.main_image_title_label.pack(side="top", fill="x", pady=(sc(8), 0), before=self.main_image_label)
+                else:
+                    self.main_image_title_label.config(text="")
+
             # 2. Update border highlight/thickness on the existing thumbnail cards
             active_card = None
             for i, card in enumerate(self._thumb_cards):
@@ -739,6 +776,19 @@ class ImageHandlerMixin:
         # Main Large Image Container (Top portion)
         main_image_container = tk.Frame(gallery_container, bg=bg_color)
         main_image_container.pack(side="top", fill="both", expand=True)
+
+        # Title label for main image (initially empty unless multiple folders)
+        self.main_image_title_label = tk.Label(
+            main_image_container,
+            text="",
+            bg=bg_color,
+            fg="#666666",
+            font=("Segoe UI", sc(9))
+        )
+        if getattr(self, "additional_image_folders", []):
+            title_text = f"{os.path.basename(main_path)} ({os.path.basename(os.path.dirname(main_path))})"
+            self.main_image_title_label.config(text=title_text)
+            self.main_image_title_label.pack(side="top", fill="x", pady=(sc(8), 0))
 
         # Centered label for the main large image (initially Loading)
         self.main_image_label = tk.Label(main_image_container, text="Loading image...", bg=bg_color)
@@ -1307,8 +1357,11 @@ class ImageHandlerMixin:
                 )
 
         filename = os.path.basename(path)
+        display_name = filename
+        if getattr(self, "additional_image_folders", []):
+            display_name = f"{filename} ({os.path.basename(os.path.dirname(path))})"
 
-        ttk.Label(container, text=filename).pack()
+        ttk.Label(container, text=display_name).pack()
 
         lbl = ttk.Label(container, image=tk_img)
         lbl.image = tk_img
