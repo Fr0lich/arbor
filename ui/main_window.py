@@ -2288,6 +2288,9 @@ class ObjectProgramUI(
 
     def show_gbif_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
+        if self.app.current_object_id:
+            popup.add_command(label="🔍 Validate Current Specimen", command=self.check_gbif_action)
+            popup.add_separator()
         popup.add_command(label="🌿 Batch Update Taxonomy (GBIF)...", command=self.batch_gbif_update_action)
         popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
@@ -2301,7 +2304,7 @@ class ObjectProgramUI(
 
     def run_gbif_verification_for_current(self):
         """Runs GBIF verification/lookup for the active specimen."""
-        self.show_gbif_dropdown()
+        self.check_gbif_action()
 
     def show_images_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
