@@ -294,7 +294,7 @@ class QuickPeekController:
             matched_oids = set()
             query_parts = query.split()
             for oid, tokens in idx.items():
-                if all(any(q in t for t in tokens) for q in query_parts):
+                if all(q in tokens.get("all", "") for q in query_parts):
                     matched_oids.add(str(oid))
 
             mask = df.index.astype(str).isin(matched_oids)
@@ -455,22 +455,11 @@ class QuickPeekController:
 
         oid = ui.qp_selected_oid
 
-        # Warn user
-        resp = messagebox.askyesno(
-            "Go to Object",
-            f"Loading Object {oid} will clear your current search and filter in the main window.\n\nAre you sure?",
-            parent=win
-        )
+        if hasattr(ui, "_clear_filter_quick"):
+            ui._clear_filter_quick()
 
-        if resp:
-            # Clear filters
-            if hasattr(ui, "_clear_inline_search"):
-                ui._clear_inline_search()
-            if hasattr(ui, "_clear_filter_quick"):
-                ui._clear_filter_quick()
+        # Load object
+        ui.load_object(oid)
 
-            # Load object
-            ui.load_object(oid)
-
-            # Close Quick Peek
-            win.destroy()
+        # Close Quick Peek
+        win.destroy()
