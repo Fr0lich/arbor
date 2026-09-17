@@ -302,6 +302,9 @@ if __name__ == "__main__":
         elif getattr(dialog, "image_mode_val", "online") == "offline":
             ui.enable_offline_mode()
 
+        if hasattr(dialog, "books_path_val") and dialog.books_path_val:
+            app._startup_books_path = dialog.books_path_val
+
         ui.apply_config()
 
         if getattr(app, "_history_cache_pending", False):
