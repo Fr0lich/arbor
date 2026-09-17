@@ -908,6 +908,20 @@ class ImagePanel(ttk.Frame):
             return
 
         paths = self.image_index.get(str(oid), [])
+
+        # Check for combine setting
+        prefs = config.load_prefs() or {}
+        combine = False
+        if hasattr(self.app, "combine_images_var"):
+            combine = self.app.combine_images_var.get()
+        else:
+            combine = prefs.get("combine_local_and_online", False)
+
+        if combine:
+            online_urls = self.build_online_image_urls(oid)
+            if online_urls:
+                paths = paths + online_urls
+
         if self._is_navigating and paths:
             paths = [paths[0]]
 
@@ -962,8 +976,16 @@ class ImagePanel(ttk.Frame):
 
                 with self._pil_cache_lock:
                     if path not in self.original_pil_cache:
-                        pil_img = Image.open(path)
-                        pil_img.load()
+                        if path.startswith("http://") or path.startswith("https://"):
+                            r = self._get_http_session().get(path, timeout=(3, 8))
+                            if r.status_code == 200:
+                                pil_img = Image.open(BytesIO(r.content))
+                                pil_img.load()
+                            else:
+                                raise Exception(f"HTTP {r.status_code}")
+                        else:
+                            pil_img = Image.open(path)
+                            pil_img.load()
                         self.original_pil_cache[path] = pil_img
                         if len(self.original_pil_cache) > MAX_PIL_CACHE:
                             self.original_pil_cache.popitem(last=False)
@@ -1537,8 +1559,16 @@ class ImagePanel(ttk.Frame):
 
             for path in paths_to_load:
                 try:
-                    img = Image.open(path)
-                    img.load()
+                    if path.startswith("http://") or path.startswith("https://"):
+                        r = self._get_http_session().get(path, timeout=(3, 8))
+                        if r.status_code == 200:
+                            img = Image.open(BytesIO(r.content))
+                            img.load()
+                        else:
+                            raise Exception(f"HTTP {r.status_code}")
+                    else:
+                        img = Image.open(path)
+                        img.load()
                     img.thumbnail((max_width, max_height), Image.LANCZOS)
                     self.root.after(0, lambda p=path, im=img: self._cache_preloaded_image(p, im))
                 except Exception:

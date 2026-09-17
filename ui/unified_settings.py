@@ -279,6 +279,9 @@ class UnifiedSettingsWindow:
         self.var_snap_lock = tk.BooleanVar(value=bool(snap_lck))
 
         # Layout & Panels
+        combine_imgs = _get_val("combine_images_var", p.get("combine_local_and_online", False))
+        self.var_combine_images = tk.BooleanVar(value=bool(combine_imgs))
+
         show_lst = _get_val("show_list_var", p.get("show_list", True))
         show_srch = _get_val("show_search_var", p.get("show_search", True))
         show_rg = _get_val("show_reg_var", p.get("show_reg", True))
@@ -674,6 +677,10 @@ class UnifiedSettingsWindow:
 
         # Card 2: Behavior
         card2 = self._create_card(c, "View Display Options")
+        create_toggle_row(card2, "Combine Local and Online Images",
+                          self.var_combine_images,
+                          command=lambda: (_apply_if_dynamic(), self._notify_live("combine_images", self.var_combine_images.get())),
+                          ui_ref=self.app or self)
         create_toggle_row(card2, "View Images as Stack by Default",
                           self.var_image_stack,
                           command=lambda: (_apply_if_dynamic(), self._notify_live("image_stack", self.var_image_stack.get())),
@@ -730,6 +737,7 @@ class UnifiedSettingsWindow:
             "location_2row": self.var_location_2row.get(),
             "show_image_tools": self.var_show_image_tools.get(),
             "show_bulk_edit": self.var_show_bulk_edit.get(),
+            "combine_local_and_online": self.var_combine_images.get(),
             "image_stack": self.var_image_stack.get(),
             "large_reviewed_button": self.var_large_reviewed_btn.get(),
             "snap_lock": self.var_snap_lock.get(),
@@ -786,6 +794,11 @@ class UnifiedSettingsWindow:
                 self.app.show_bulk_edit_var.set(self.var_show_bulk_edit.get())
             if hasattr(self.app, "draft_show_bulk_edit_var"):
                 self.app.draft_show_bulk_edit_var.set(self.var_show_bulk_edit.get())
+
+            if hasattr(self.app, "combine_images_var"):
+                self.app.combine_images_var.set(self.var_combine_images.get())
+            if hasattr(self.app, "draft_combine_images_var"):
+                self.app.draft_combine_images_var.set(self.var_combine_images.get())
 
             if hasattr(self.app, "image_stack_var"):
                 self.app.image_stack_var.set(self.var_image_stack.get())
@@ -913,6 +926,7 @@ class UnifiedSettingsWindow:
             self.var_location_2row.set(layout.get("location_2row", False))
             self.var_show_image_tools.set(layout.get("show_image_tools", True))
             self.var_show_bulk_edit.set(layout.get("show_bulk_edit", True))
+            self.var_combine_images.set(layout.get("combine_local_and_online", False))
             self.var_image_stack.set(layout.get("image_stack", False))
             self.var_large_reviewed_btn.set(layout.get("large_reviewed_button", True))
             self.var_snap_lock.set(layout.get("snap_lock", False))
@@ -966,6 +980,7 @@ class UnifiedSettingsWindow:
                 "location_2row": self.var_location_2row.get(),
                 "show_image_tools": self.var_show_image_tools.get(),
                 "show_bulk_edit": self.var_show_bulk_edit.get(),
+            "combine_local_and_online": self.var_combine_images.get(),
                 "image_stack": self.var_image_stack.get(),
                 "large_reviewed_button": self.var_large_reviewed_btn.get(),
                 "snap_lock": self.var_snap_lock.get(),
@@ -1358,6 +1373,7 @@ class UnifiedSettingsWindow:
         p["location_2row"] = self.var_location_2row.get()
         p["show_image_tools"] = self.var_show_image_tools.get()
         p["show_bulk_edit"] = self.var_show_bulk_edit.get()
+        p["combine_local_and_online"] = self.var_combine_images.get()
         p["image_stack"] = self.var_image_stack.get()
         p["toolbar_buttons"] = {k: v.get() for k, v in self.draft_toolbar_vars.items()}
 
