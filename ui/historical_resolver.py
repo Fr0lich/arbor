@@ -472,6 +472,9 @@ class HistoricalConflictResolverWindow:
                     prob_values=prob_changed_values
                 )
  
+                if hasattr(self.main_app, "object_list") and hasattr(self.main_app.object_list, "refresh_object_card"):
+                    self.main_app.object_list.refresh_object_card(self.oid)
+
                 app_bus.publish(DATABASE_UPDATED)
                 self.update_stats()
                 
@@ -595,6 +598,9 @@ class HistoricalConflictResolverWindow:
                 prob_fields=prob_changed_fields,
                 prob_values=prob_changed_values
             )
+
+        if hasattr(self.main_app, "object_list") and hasattr(self.main_app.object_list, "refresh_object_card"):
+            self.main_app.object_list.refresh_object_card(self.oid)
 
         app_bus.publish(DATABASE_UPDATED)
         self.update_stats()
