@@ -6614,7 +6614,7 @@ class ObjectProgramUI(
 
         return {
             "problems": active_probs,
-            "unknown": self.filter_unknown_var.get() if hasattr(self, "filter_unknown_var") else False,
+
             "mode": getattr(self, "filter_mode", None).get() if hasattr(self, "filter_mode") else "AND",
         }
 
@@ -6631,8 +6631,7 @@ class ObjectProgramUI(
             "Problems": {},
             "Images": [],
             "Status": [],
-            "Text": [],
-            "Unknown": []
+            "Text": []
         }
 
         for key, var in self.filter_vars.items():
@@ -6657,8 +6656,6 @@ class ObjectProgramUI(
                     else:
                         groups["Problems"][key] = "HAS"
 
-        if filter_state["unknown"]:
-            groups["Unknown"].append("Unknown")
 
 
         win.destroy()
@@ -7268,8 +7265,7 @@ class ObjectProgramUI(
                 clean_k = k.replace("_Problem", "").replace("_", " ")
                 active.append(clean_k)
 
-        if getattr(self, "filter_unknown_var", None) and self.filter_unknown_var.get():
-            active.append("Unknown")
+
 
         if hasattr(self, "filter_location_vars"):
             for loc_k, loc_v in self.filter_location_vars.items():
@@ -7539,8 +7535,7 @@ class ObjectProgramUI(
                 v.set("Ignore")
             else:
                 v.set(False)
-        if hasattr(self, "filter_unknown_var"):
-            self.filter_unknown_var.set(False)
+
         self.filter_mode.set("AND")
         if hasattr(self, "filter_location_vars"):
             for v in self.filter_location_vars.values():

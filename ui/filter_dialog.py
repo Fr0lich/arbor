@@ -298,9 +298,8 @@ class FilterDialogController:
             make_tristate_row(g_glob, "Historical Data (Has / No History)", ui.filter_vars.get("Historical_Data"), COLORS["surface_tint"])
 
         u_list = create_group(probs_inner, "Archival Gaps (Ukjent)")
-        if not hasattr(ui, "filter_unknown_var"):
-            ui.filter_unknown_var = tk.BooleanVar()
-        make_chk(u_list, "Show objects with settled 'Ukjent' fields", ui.filter_unknown_var, color_bar="#d9a036")
+        if "Unknown" in ui.filter_vars:
+            make_tristate_row(u_list, "Objects with settled 'Ukjent' fields", ui.filter_vars["Unknown"], color_bar="#d9a036")
 
         # TAB 3: IMAGES
         tab_imgs = tk.Frame(tab_content_area, bg=COLORS["surface"])
@@ -693,8 +692,7 @@ class FilterDialogController:
                 v.set("Ignore")
             else:
                 v.set(False)
-        if hasattr(ui, "filter_unknown_var"):
-            ui.filter_unknown_var.set(False)
+
 
         if hasattr(ui, "filter_mode"):
             ui.filter_mode.set("AND")
