@@ -434,7 +434,7 @@ class GBIFReviewDialog(tk.Toplevel):
         tabs_bar.pack(fill="x", side="top")
         tk.Frame(tabs_bar, bg=C["border"], height=sc(1)).pack(fill="x", side="bottom")
 
-        tabs_content = tk.Frame(tabs_bar, bg=C["surface_dim"], padx=sc(14), pady=sc(6))
+        tabs_content = tk.Frame(tabs_bar, bg=C["surface_dim"], padx=sc(10), pady=sc(4))
         tabs_content.pack(fill="x")
 
         tk.Label(
@@ -443,7 +443,7 @@ class GBIFReviewDialog(tk.Toplevel):
             font=FONT_MONO_SM,
             fg=C["text_muted"],
             bg=C["surface_dim"]
-        ).pack(side="left", padx=(0, sc(8)))
+        ).pack(side="left", padx=(0, sc(6)))
 
         self.tab_buttons = {}
         tab_defs = [
@@ -467,12 +467,12 @@ class GBIFReviewDialog(tk.Toplevel):
                 relief="flat",
                 bd=0,
                 cursor="hand2",
-                padx=sc(10),
-                pady=sc(3),
+                padx=sc(8),
+                pady=sc(2),
                 highlightthickness=1,
                 highlightbackground=C["border"]
             )
-            btn.pack(side="left", padx=(0, sc(6)))
+            btn.pack(side="left", padx=(0, sc(4)))
             self.tab_buttons[tab_key] = {"btn": btn, "prefix": label_prefix, "accent": accent}
 
         # 3. Triage Guidance Banner

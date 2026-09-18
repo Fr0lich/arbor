@@ -230,8 +230,8 @@ class NewDatabaseWizard:
         self.win.transient(self.parent)
 
         import utils
-        utils.center_and_fit_toplevel(self.win, sc(780), sc(690))
-        self.win.minsize(sc(640), sc(540))
+        utils.center_and_fit_toplevel(self.win, sc(820), sc(720))
+        self.win.minsize(sc(720), sc(600))
 
         self.win.bind("<Escape>", lambda e: self._on_cancel())
         self.win.bind("<Control-Return>", lambda e: self._on_next())
@@ -367,7 +367,7 @@ class NewDatabaseWizard:
 
         canvas = tk.Canvas(content_frame, bg=self.colors["card_bg"], highlightthickness=0)
         scrollbar = ttk.Scrollbar(content_frame, orient="vertical", command=canvas.yview)
-        inner = tk.Frame(canvas, bg=self.colors["card_bg"], padx=sc(12), pady=sc(10))
+        inner = tk.Frame(canvas, bg=self.colors["card_bg"], padx=sc(12), pady=sc(16))
 
         inner_id = canvas.create_window((0, 0), window=inner, anchor="nw")
 

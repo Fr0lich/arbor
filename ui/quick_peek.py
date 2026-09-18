@@ -193,6 +193,7 @@ class QuickPeekController:
         go_btn = tk.Button(
             footer, text="Go to Object ➔", font=FONT_LABEL,
             fg=COLORS["on_primary"], bg=COLORS["botanical_green"],
+            disabledforeground="#8b948d",
             bd=0, relief="flat", padx=sc(16), pady=sc(8), cursor="hand2",
             state="disabled",
             command=lambda: QuickPeekController._go_to_object(ui, win, results_listbox)

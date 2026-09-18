@@ -321,7 +321,8 @@ class AdvancedSettingsWindow:
         # Tab Navigation Header
         self.tab_nav = tk.Frame(self.main_container, bg=self.COLORS["surface_container_highest"], height=sc(40))
         self.tab_nav.pack(fill="x", side="top")
-        tk.Frame(self.tab_nav, bg=self.COLORS["outline"], height=1).pack(fill="x", side="bottom")
+        self.tab_nav.pack_propagate(False)
+        tk.Frame(self.main_container, bg=self.COLORS["outline"], height=1).pack(fill="x", side="top")
 
         # Tab Content Area
         self.tab_content_area = tk.Frame(self.main_container, bg=self.COLORS["surface"])
@@ -339,13 +340,13 @@ class AdvancedSettingsWindow:
         right_footer = tk.Frame(self.footer, bg=self.COLORS["surface_container_low"])
         right_footer.pack(side="right", fill="y", padx=sc(16))
 
-        tk.Button(right_footer, text="Save", font=self.FONT_LABEL, fg=self.COLORS["on_primary"], 
-                  bg=self.COLORS["primary"], bd=1, relief="solid", padx=sc(16), pady=sc(4), 
-                  cursor="hand2", command=self.save_settings).pack(side="left", padx=sc(8), pady=sc(12))
-
         tk.Button(right_footer, text="Cancel", font=self.FONT_LABEL, fg=self.COLORS["on_surface"], 
                   bg=self.COLORS["surface"], bd=1, relief="solid", padx=sc(16), pady=sc(4), 
                   cursor="hand2", command=self.win.destroy).pack(side="left", padx=sc(8), pady=sc(12))
+
+        tk.Button(right_footer, text="Save", font=self.FONT_LABEL, fg=self.COLORS["on_primary"], 
+                  bg=self.COLORS["primary"], bd=1, relief="solid", padx=sc(16), pady=sc(4), 
+                  cursor="hand2", command=self.save_settings).pack(side="left", padx=sc(8), pady=sc(12))
 
         # Dynamically build tabs and content from schema
         self.build_tabs()

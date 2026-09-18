@@ -142,8 +142,11 @@ class BulkEditWindow:
         self.bulk_vars = {}
         self.bulk_enable_vars = {}
 
+        self.inner_edit.columnconfigure(0, weight=0)
+        self.inner_edit.columnconfigure(1, weight=1)
+
         row = 0
-        
+
         # Add Registration Fields
         tk.Label(self.inner_edit, text="Registration", font=("Hanken Grotesk", sc(10), "bold"), bg="#ffffff", fg="#000000").grid(row=row, column=0, columnspan=3, sticky="w", pady=(sc(10), sc(5)))
         row += 1
@@ -160,12 +163,20 @@ class BulkEditWindow:
             self.bulk_enable_vars[name] = enable_var
             self.bulk_vars[name] = val_var
 
-            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var, cursor="hand2").grid(row=row, column=0, sticky="w", padx=sc(5))
+            tk.Checkbutton(
+                self.inner_edit, text=name, variable=enable_var,
+                bg="#ffffff", activebackground="#ffffff", selectcolor="#ffffff", fg="#2c302e",
+                font=("Hanken Grotesk", sc(9.5)), cursor="hand2"
+            ).grid(row=row, column=0, sticky="w", padx=sc(5), pady=sc(2))
             
             if ftype == "choice":
                 ttk.Combobox(self.inner_edit, textvariable=val_var, values=field.get("choices", []), cursor="hand2").grid(row=row, column=1, sticky="ew", padx=sc(5))
             elif ftype == "checkbox":
-                ttk.Checkbutton(self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False", cursor="hand2").grid(row=row, column=1, sticky="w", padx=sc(5))
+                tk.Checkbutton(
+                    self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False",
+                    bg="#ffffff", activebackground="#ffffff", selectcolor="#ffffff", fg="#2c302e",
+                    font=("Hanken Grotesk", sc(9.5)), cursor="hand2"
+                ).grid(row=row, column=1, sticky="w", padx=sc(5))
             else:
                 tk.Entry(
                     self.inner_edit, textvariable=val_var,
@@ -193,12 +204,20 @@ class BulkEditWindow:
             self.bulk_enable_vars[name] = enable_var
             self.bulk_vars[name] = val_var
 
-            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var, cursor="hand2").grid(row=row, column=0, sticky="w", padx=sc(5))
+            tk.Checkbutton(
+                self.inner_edit, text=name, variable=enable_var,
+                bg="#ffffff", activebackground="#ffffff", selectcolor="#ffffff", fg="#2c302e",
+                font=("Hanken Grotesk", sc(9.5)), cursor="hand2"
+            ).grid(row=row, column=0, sticky="w", padx=sc(5), pady=sc(2))
             
             if ftype == "choice":
                 ttk.Combobox(self.inner_edit, textvariable=val_var, values=field.get("choices", []), cursor="hand2").grid(row=row, column=1, sticky="ew", padx=sc(5))
             elif ftype == "checkbox":
-                ttk.Checkbutton(self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False", cursor="hand2").grid(row=row, column=1, sticky="w", padx=sc(5))
+                tk.Checkbutton(
+                    self.inner_edit, text="Enable", variable=val_var, onvalue="True", offvalue="False",
+                    bg="#ffffff", activebackground="#ffffff", selectcolor="#ffffff", fg="#2c302e",
+                    font=("Hanken Grotesk", sc(9.5)), cursor="hand2"
+                ).grid(row=row, column=1, sticky="w", padx=sc(5))
             else:
                 tk.Entry(
                     self.inner_edit, textvariable=val_var,
@@ -224,7 +243,11 @@ class BulkEditWindow:
             self.bulk_enable_vars[name] = enable_var
             self.bulk_vars[name] = val_var
             
-            ttk.Checkbutton(self.inner_edit, text=name, variable=enable_var, cursor="hand2").grid(row=row, column=0, sticky="w", padx=sc(5))
+            tk.Checkbutton(
+                self.inner_edit, text=name, variable=enable_var,
+                bg="#ffffff", activebackground="#ffffff", selectcolor="#ffffff", fg="#2c302e",
+                font=("Hanken Grotesk", sc(9.5)), cursor="hand2"
+            ).grid(row=row, column=0, sticky="w", padx=sc(5), pady=sc(2))
             cb = ttk.Combobox(self.inner_edit, textvariable=val_var, values=["True", "False"], state="readonly", width=8, cursor="hand2")
             cb.grid(row=row, column=1, sticky="w", padx=sc(5))
             row += 1

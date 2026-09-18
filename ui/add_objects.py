@@ -249,8 +249,8 @@ class AddObjectsWizard:
         spin.pack(side="left", padx=sc(8))
 
         tk.Button(
-            auto_row, text="Generate", font=("Hanken Grotesk", sc(9)),
-            bg=self.colors["select_bg"], fg=self.colors["select_fg"], relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(2),
+            auto_row, text="Generate", font=("Hanken Grotesk", sc(9), "bold"),
+            bg=self.colors["primary"], fg=self.colors["on_primary"], relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3),
             command=self._generate_auto_ids
         ).pack(side="left")
 
@@ -267,8 +267,8 @@ class AddObjectsWizard:
         man_ent.pack(fill="x", pady=(0, sc(8)))
 
         tk.Button(
-            manual_card, text="Add IDs", font=("Hanken Grotesk", sc(9)),
-            bg=self.colors["select_bg"], fg=self.colors["select_fg"], relief="flat", bd=0, cursor="hand2", padx=sc(8), pady=sc(2),
+            manual_card, text="+ Add IDs", font=("Hanken Grotesk", sc(9), "bold"),
+            bg=self.colors["primary"], fg=self.colors["on_primary"], relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3),
             command=self._add_manual_ids
         ).pack(anchor="e")
 
@@ -421,7 +421,7 @@ class AddObjectsWizard:
                 var = tk.StringVar()
                 self.field_vars[name] = var
 
-                tk.Label(self.inner_form, text=name, font=("Inter", sc(9.5)), bg=self.colors["card_bg"], fg=self.colors["on_surface_variant"], width=sc(15), anchor="w").grid(row=row, column=0, sticky="w", padx=sc(4), pady=sc(4))
+                tk.Label(self.inner_form, text=name, font=("Inter", sc(9.5)), bg=self.colors["card_bg"], fg=self.colors["on_surface_variant"], width=22, anchor="w").grid(row=row, column=0, sticky="w", padx=sc(4), pady=sc(4))
 
                 if ftype == "choice":
                     choices = [""] + field.get("choices", [])

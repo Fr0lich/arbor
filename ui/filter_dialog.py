@@ -45,7 +45,7 @@ class FilterDialogController:
         win = tk.Toplevel(ui.root)
         ui.filter_window = win
         win.title("Filter objects")
-        win.geometry(f"{sc(800)}x{sc(600)}")
+        win.geometry(f"{sc(820)}x{sc(650)}")
         win.configure(bg=COLORS["surface"])
         win.bind("<Destroy>", lambda e: setattr(ui, "filter_window", None) if e.widget == win else None)
         win.bind("<Escape>", lambda e: win.destroy())
@@ -84,7 +84,8 @@ class FilterDialogController:
 
         tab_nav = tk.Frame(main_container, bg=COLORS["surface_container_highest"], height=sc(40))
         tab_nav.pack(fill="x", side="top")
-        tk.Frame(tab_nav, bg=COLORS["outline"], height=1).pack(fill="x", side="bottom")
+        tab_nav.pack_propagate(False)
+        tk.Frame(main_container, bg=COLORS["outline"], height=1).pack(fill="x", side="top")
 
         tab_content_area = tk.Frame(main_container, bg=COLORS["surface"])
         tab_content_area.pack(fill="both", expand=True)
@@ -162,7 +163,7 @@ class FilterDialogController:
             lbl = tk.Label(f, text=text, font=FONT_DATA, fg=COLORS["on_surface"], bg=COLORS["surface"], cursor="hand2")
             lbl.pack(side="left", padx=(0, sc(8)))
 
-            badge = tk.Label(f, text="IGNORE", font=("JetBrains Mono", sc(9), "bold"), fg=COLORS["outline"], bg=COLORS["surface_container_low"], padx=sc(6), pady=sc(1), relief="flat")
+            badge = tk.Label(f, text="IGNORE", font=("JetBrains Mono", sc(9), "bold"), fg=COLORS["outline"], bg=COLORS["surface_container_low"], width=9, padx=sc(6), pady=sc(1), relief="flat")
             badge.pack(side="right", padx=sc(4))
 
             def update_visual():

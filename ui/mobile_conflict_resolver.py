@@ -47,7 +47,19 @@ class MobileConflictResolverWindow:
         tk.Label(header, text="MOBILE CONFLICT RESOLVER", font=FONT_UI_LG,
                  fg=COLORS["primary"], bg=COLORS["surface"]).pack(side="left", padx=sc(16), pady=sc(12))
 
-        # Main content area
+        # Footer (packed first to guarantee bottom pinning)
+        footer = tk.Frame(self.win, bg=COLORS["surface_dim"], height=sc(52))
+        footer.pack(fill="x", side="bottom")
+        footer.pack_propagate(False)
+        tk.Frame(footer, bg=COLORS["border"], height=sc(1)).pack(side="top", fill="x")
+
+        btn_apply = tk.Button(footer, text="APPLY SELECTIONS", font=FONT_UI_BOLD, fg=COLORS["on_success"], bg=COLORS["success"], relief="flat", bd=0, padx=sc(16), pady=sc(6), command=self.apply, cursor="hand2")
+        btn_apply.pack(side="right", padx=sc(16), pady=sc(8))
+
+        btn_close = tk.Button(footer, text="CANCEL", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(16), pady=sc(6), command=self.win.destroy, cursor="hand2")
+        btn_close.pack(side="right", padx=sc(8), pady=sc(8))
+
+        # 2. Main content area
         main_area = tk.Frame(self.win, bg=COLORS["bg"])
         main_area.pack(fill="both", expand=True)
 
@@ -96,20 +108,6 @@ class MobileConflictResolverWindow:
         # Cards
         for conflict in self.conflicts:
             self.create_card(conflict)
-
-        # Footer
-        footer = tk.Frame(self.win, bg=COLORS["surface_dim"], height=sc(48))
-        footer.pack(fill="x", side="bottom")
-        tk.Frame(footer, bg=COLORS["border"],
-                 height=sc(1)).pack(side="top", fill="x")
-
-        btn_apply = tk.Button(footer, text="APPLY SELECTIONS", font=FONT_UI_BOLD, fg=COLORS["on_success"], bg=COLORS["success"], relief="flat", bd=0, padx=sc(
-            16), pady=sc(8), command=self.apply, cursor="hand2")
-        btn_apply.pack(side="right", padx=sc(16), pady=sc(6))
-
-        btn_close = tk.Button(footer, text="CANCEL", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(
-            16), pady=sc(8), command=self.win.destroy, cursor="hand2")
-        btn_close.pack(side="right", padx=sc(8), pady=sc(6))
 
         def _cleanup(event=None):
             if event and event.widget != self.win:

@@ -87,60 +87,43 @@ def open_ignored_words_editor(ui):
     win.bind("<Escape>", lambda e: win.destroy())
 
     is_dark = getattr(ui, "dark_mode_active", False)
-    bg_color = "#181c19" if is_dark else "#f0f0f0"
-    fg_color = "#e8ebe9" if is_dark else "black"
-    field_bg = "#212622" if is_dark else "white"
-    border_color = "#313244" if is_dark else "#d0d0d0"
+    bg_color = "#181c19" if is_dark else "#fbfaf8"
+    header_bg = "#212622" if is_dark else "#f2f5f1"
+    fg_color = "#e8ebe9" if is_dark else "#2c302e"
+    muted_fg = "#bac2de" if is_dark else "#444748"
+    field_bg = "#212622" if is_dark else "#ffffff"
+    border_color = "#45475a" if is_dark else "#d1d1d1"
+    primary_btn_bg = "#a6e3a1" if is_dark else "#2c302e"
+    primary_btn_fg = "#181c19" if is_dark else "#ffffff"
 
     win.configure(background=bg_color)
     win.title("Configure Ignored Words")
-    utils.center_and_fit_toplevel(win, 500, 550)
+    utils.center_and_fit_toplevel(win, sc(520), sc(560))
 
-    title_lbl = ttk.Label(win, text="Suggestions Filter: Ignored Words", font=("Segoe UI", sc(12), "bold"))
-    title_lbl.pack(anchor="w", padx=15, pady=(15, 5))
+    # Header
+    header = tk.Frame(win, bg=header_bg, height=sc(56))
+    header.pack(fill="x", side="top")
+    header.pack_propagate(False)
+    tk.Frame(header, bg=border_color, height=1).pack(fill="x", side="bottom")
 
-    desc_lbl = ttk.Label(
-        win,
-        text="Suggestions matching these words/phrases will be omitted in comparison.\nEnter one word or phrase per line.",
-        font=("Segoe UI", sc(9))
-    )
-    desc_lbl.pack(anchor="w", padx=15, pady=(0, 10))
+    tk.Label(
+        header, text="Suggestions Filter: Ignored Words",
+        font=("Hanken Grotesk", sc(12), "bold"), bg=header_bg, fg=fg_color
+    ).pack(anchor="w", padx=sc(16), pady=(sc(8), 0))
 
-    text_frame = ttk.Frame(win)
-    text_frame.pack(fill="both", expand=True, padx=15, pady=5)
+    tk.Label(
+        header,
+        text="Suggestions matching these words/phrases will be omitted in comparison.",
+        font=("Inter", sc(8.5)), bg=header_bg, fg=muted_fg
+    ).pack(anchor="w", padx=sc(16))
 
-    text_scroll = ttk.Scrollbar(text_frame)
-    text_scroll.pack(side="right", fill="y")
-
-    text_area = tk.Text(
-        text_frame,
-        yscrollcommand=text_scroll.set,
-        font=("Segoe UI", sc(10)),
-        background=field_bg,
-        foreground=fg_color,
-        insertbackground=fg_color,
-        highlightbackground=border_color,
-        bd=1,
-        relief="solid"
-    )
-    text_area.pack(side="left", fill="both", expand=True)
-    text_scroll.config(command=text_area.yview)
-
-    text_area.insert("1.0", "\n".join(ui.ignored_words))
-
-    vars_frame = ttk.Frame(win)
-    vars_frame.pack(fill="x", padx=15, pady=10)
+    # Footer (packed first to guarantee visibility at bottom)
+    btn_frame = tk.Frame(win, bg=header_bg, height=sc(52))
+    btn_frame.pack(fill="x", side="bottom")
+    btn_frame.pack_propagate(False)
+    tk.Frame(btn_frame, bg=border_color, height=1).pack(fill="x", side="top")
 
     local_vars_var = tk.BooleanVar(value=ui.ignored_words_variations.get())
-    cb = ttk.Checkbutton(
-        vars_frame, cursor="hand2",
-        text="Include variations (ignore capitalization, punctuation, extra spacing)",
-        variable=local_vars_var
-    )
-    cb.pack(anchor="w")
-
-    btn_frame = ttk.Frame(win, padding=10)
-    btn_frame.pack(fill="x", side="bottom")
 
     def on_save():
         content = text_area.get("1.0", tk.END).strip()
@@ -159,5 +142,50 @@ def open_ignored_words_editor(ui):
 
         win.destroy()
 
-    ttk.Button(btn_frame, text="Save", command=on_save, cursor="hand2").pack(side="right", padx=5)
-    ttk.Button(btn_frame, text="Cancel", command=win.destroy, cursor="hand2").pack(side="left", padx=5)
+    tk.Button(
+        btn_frame, text="Cancel", command=win.destroy,
+        font=("Hanken Grotesk", sc(9.5)), bg=field_bg, fg=fg_color,
+        relief="solid", bd=1, cursor="hand2", padx=sc(14), pady=sc(4)
+    ).pack(side="left", padx=sc(16), pady=sc(8))
+
+    tk.Button(
+        btn_frame, text="Save Settings", command=on_save,
+        font=("Hanken Grotesk", sc(9.5), "bold"), bg=primary_btn_bg, fg=primary_btn_fg,
+        relief="flat", bd=0, cursor="hand2", padx=sc(16), pady=sc(5)
+    ).pack(side="right", padx=sc(16), pady=sc(8))
+
+    # Variations Checkbox Row (above footer)
+    vars_frame = tk.Frame(win, bg=bg_color)
+    vars_frame.pack(fill="x", side="bottom", padx=sc(16), pady=sc(8))
+
+    cb = tk.Checkbutton(
+        vars_frame, cursor="hand2",
+        text="Include variations (ignore capitalization, punctuation, extra spacing)",
+        variable=local_vars_var, font=("Inter", sc(9)),
+        bg=bg_color, fg=fg_color, activebackground=bg_color, selectcolor=field_bg
+    )
+    cb.pack(anchor="w")
+
+    # Scrollable Text Area
+    text_frame = tk.Frame(win, bg=bg_color)
+    text_frame.pack(fill="both", expand=True, padx=sc(16), pady=(sc(10), 0))
+
+    text_scroll = ttk.Scrollbar(text_frame)
+    text_scroll.pack(side="right", fill="y")
+
+    text_area = tk.Text(
+        text_frame,
+        yscrollcommand=text_scroll.set,
+        font=("JetBrains Mono", sc(10)),
+        background=field_bg,
+        foreground=fg_color,
+        insertbackground=fg_color,
+        highlightbackground=border_color,
+        highlightcolor=primary_btn_bg,
+        highlightthickness=1,
+        bd=0
+    )
+    text_area.pack(side="left", fill="both", expand=True)
+    text_scroll.config(command=text_area.yview)
+
+    text_area.insert("1.0", "\n".join(ui.ignored_words))

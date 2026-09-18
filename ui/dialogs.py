@@ -425,8 +425,8 @@ class StartupDialog:
         self.win.update_idletasks()
         import utils
 
-        w = int(640 * self._scale)
-        h = int(640 * self._scale)
+        w = int(660 * self._scale)
+        h = int(700 * self._scale)
 
         self.win.geometry(f"{w}x{h}")
         utils.center_and_fit_toplevel(self.win, w, h)
@@ -1067,7 +1067,7 @@ class StartupDialog:
             font=("Segoe UI", sc(9), "bold"),
             anchor="e"
         )
-        self.ready_status_label.pack(side="top", fill="x", pady=(0, int(4*s)))
+        self.ready_status_label.pack(side="top", fill="x", pady=(int(2*s), int(6*s)))
 
         # Progress bar (hidden by default)
         self.progress_var = tk.DoubleVar()
@@ -1091,7 +1091,7 @@ class StartupDialog:
         )
         self.help_btn.pack(side="left", padx=(0, 10))
         self.help_btn.bind("<Enter>", lambda e: self.help_btn.config(bg=self.C_HOVER))
-        self.help_btn.bind("<Leave>", lambda e: self.help_btn.config(bg=self.C_FOOTER_BG))
+        self.help_btn.bind("<Leave>", lambda e: self.help_btn.config(bg=self.C_CARD))
 
         # Status label for loading messages
         self.status_label = tk.Label(

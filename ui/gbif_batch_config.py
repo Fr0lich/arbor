@@ -93,7 +93,7 @@ class GBIFBatchConfigDialog(tk.Toplevel):
 
         self._build_ui()
         import utils
-        utils.center_and_fit_toplevel(self, sc(720), sc(680))
+        utils.center_and_fit_toplevel(self, sc(720), sc(720))
         self.lift()
         self.focus_set()
         self.bind("<Return>", lambda e: self._start_analysis())

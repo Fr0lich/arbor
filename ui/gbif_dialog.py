@@ -130,17 +130,15 @@ class GBIFUpdateDialog(tk.Toplevel):
 
             sel_all_btn = tk.Button(
                 act_bar, text="Select All", command=self._select_all,
-                font=FONT_UI_BOLD, bg=surface_dim, fg=text_color,
-                relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3),
-                highlightthickness=1, highlightbackground=border
+                font=FONT_UI_BOLD, bg=surface, fg=text_color,
+                relief="solid", bd=1, cursor="hand2", padx=sc(10), pady=sc(3)
             )
             sel_all_btn.pack(side="left", padx=(0, sc(6)))
 
             desel_all_btn = tk.Button(
                 act_bar, text="Deselect All", command=self._deselect_all,
-                font=FONT_UI_BOLD, bg=surface_dim, fg=text_color,
-                relief="flat", bd=0, cursor="hand2", padx=sc(10), pady=sc(3),
-                highlightthickness=1, highlightbackground=border
+                font=FONT_UI_BOLD, bg=surface, fg=text_color,
+                relief="solid", bd=1, cursor="hand2", padx=sc(10), pady=sc(3)
             )
             desel_all_btn.pack(side="left")
 

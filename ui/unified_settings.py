@@ -191,7 +191,7 @@ class UnifiedSettingsWindow:
             left, text="Application Settings", font=self.FONT_HEADLINE,
             fg=self.COLORS["primary"], bg=self.COLORS["surface_container_low"]
         )
-        title_lbl.pack(side="left", pady=(sc(6), 0), anchor="w")
+        title_lbl.pack(side="top", pady=(sc(6), 0), anchor="w")
 
         sub_lbl = tk.Label(
             left, text="Configure system preferences, workspace layout, theme options, and focus modes",
@@ -942,7 +942,11 @@ class UnifiedSettingsWindow:
                 self._push_layout_to_app()
             messagebox.showinfo("Layout Loaded", f"Layout '{name}' applied.", parent=self.win)
 
-        ttk.Button(r1, text="Load", width=8, command=_load_layout, cursor="hand2").pack(side="left", padx=2)
+        tk.Button(
+            r1, text="Load", font=self.FONT_DATA, fg=self.COLORS["on_surface"],
+            bg=self.COLORS["surface"], bd=1, relief="solid", padx=sc(8), pady=sc(2),
+            cursor="hand2", command=_load_layout
+        ).pack(side="left", padx=sc(4))
 
         def _delete_layout():
             name = cb_layout.get()
@@ -955,7 +959,11 @@ class UnifiedSettingsWindow:
                 _refresh_layouts()
                 cb_layout.set("")
 
-        ttk.Button(r1, text="Delete", width=8, command=_delete_layout, cursor="hand2").pack(side="left", padx=2)
+        tk.Button(
+            r1, text="Delete", font=self.FONT_DATA, fg=self.COLORS["error"],
+            bg=self.COLORS["surface"], bd=1, relief="solid", padx=sc(8), pady=sc(2),
+            cursor="hand2", command=_delete_layout
+        ).pack(side="left", padx=sc(4))
 
         r2 = tk.Frame(card1, bg=self.COLORS["card_bg"])
         r2.pack(fill="x", pady=sc(6))
@@ -980,7 +988,7 @@ class UnifiedSettingsWindow:
                 "location_2row": self.var_location_2row.get(),
                 "show_image_tools": self.var_show_image_tools.get(),
                 "show_bulk_edit": self.var_show_bulk_edit.get(),
-            "combine_local_and_online": self.var_combine_images.get(),
+                "combine_local_and_online": self.var_combine_images.get(),
                 "image_stack": self.var_image_stack.get(),
                 "large_reviewed_button": self.var_large_reviewed_btn.get(),
                 "snap_lock": self.var_snap_lock.get(),
@@ -1008,7 +1016,11 @@ class UnifiedSettingsWindow:
             messagebox.showinfo("Preset Saved",
                                 f"Layout preset '{name}' saved successfully!", parent=self.win)
 
-        ttk.Button(r2, text="Save Preset", width=12, command=_save_layout, cursor="hand2").pack(side="left")
+        tk.Button(
+            r2, text="Save Preset", font=self.FONT_DATA, fg=self.COLORS["on_primary"],
+            bg=self.COLORS["secondary"], bd=0, relief="flat", padx=sc(10), pady=sc(3),
+            cursor="hand2", command=_save_layout
+        ).pack(side="left")
 
         r3 = tk.Frame(card1, bg=self.COLORS["card_bg"])
         r3.pack(fill="x", pady=sc(4))
@@ -1031,10 +1043,19 @@ class UnifiedSettingsWindow:
                         config.save_prefs(p)
                 _refresh_layouts()
 
-        ttk.Button(r3, text="Set Current as Startup Default", width=30,
-                   command=_set_startup_default, cursor="hand2").pack(side="left", padx=(0, sc(4)))
-        ttk.Button(r3, text="Reset to Factory", width=16,
-                   command=_reset_factory, cursor="hand2").pack(side="left")
+        tk.Button(
+            r3, text="Set Current as Startup Default", font=self.FONT_DATA,
+            fg=self.COLORS["on_surface"], bg=self.COLORS["surface"], bd=1,
+            relief="solid", padx=sc(10), pady=sc(3), cursor="hand2",
+            command=_set_startup_default
+        ).pack(side="left", padx=(0, sc(6)))
+
+        tk.Button(
+            r3, text="Reset to Factory", font=self.FONT_DATA,
+            fg=self.COLORS["on_surface_variant"], bg=self.COLORS["surface"], bd=1,
+            relief="solid", padx=sc(10), pady=sc(3), cursor="hand2",
+            command=_reset_factory
+        ).pack(side="left")
 
         # ── Focus Presets ──
         card2 = self._create_card(c, "Focus Presets Manager")
@@ -1087,8 +1108,17 @@ class UnifiedSettingsWindow:
                 _refresh_focus()
                 cb_focus.set("")
 
-        ttk.Button(rf1, text="Load", width=8, command=_load_focus, cursor="hand2").pack(side="left", padx=2)
-        ttk.Button(rf1, text="Delete", width=8, command=_delete_focus, cursor="hand2").pack(side="left", padx=2)
+        tk.Button(
+            rf1, text="Load", font=self.FONT_DATA, fg=self.COLORS["on_surface"],
+            bg=self.COLORS["surface"], bd=1, relief="solid", padx=sc(8), pady=sc(2),
+            cursor="hand2", command=_load_focus
+        ).pack(side="left", padx=sc(4))
+
+        tk.Button(
+            rf1, text="Delete", font=self.FONT_DATA, fg=self.COLORS["error"],
+            bg=self.COLORS["surface"], bd=1, relief="solid", padx=sc(8), pady=sc(2),
+            cursor="hand2", command=_delete_focus
+        ).pack(side="left", padx=sc(4))
 
         rf2 = tk.Frame(card2, bg=self.COLORS["card_bg"])
         rf2.pack(fill="x", pady=sc(6))
@@ -1115,7 +1145,11 @@ class UnifiedSettingsWindow:
             messagebox.showinfo("Preset Saved",
                                 f"Focus preset '{name}' saved!", parent=self.win)
 
-        ttk.Button(rf2, text="Save Preset", width=12, command=_save_focus, cursor="hand2").pack(side="left")
+        tk.Button(
+            rf2, text="Save Preset", font=self.FONT_DATA, fg=self.COLORS["on_primary"],
+            bg=self.COLORS["secondary"], bd=0, relief="flat", padx=sc(10), pady=sc(3),
+            cursor="hand2", command=_save_focus
+        ).pack(side="left")
 
     # ── TAB 6: ADVANCED ──────────────────────────────────────────────────────
     def _build_tab_advanced(self):

@@ -132,17 +132,17 @@ class NavigationBar:
 
         # --- Right side: status indicators ---
         status_container = ttk.Frame(nav_bar)
-        status_container.pack(side="right", fill="y", padx=(0, 16))
+        status_container.pack(side="right", fill="y", padx=(0, sc(16)))
 
         # Online status dot + label
         status_dot_frame = ttk.Frame(status_container)
         status_dot_frame.pack(anchor="center", side="right")
-        app._online_dot = tk.Canvas(status_dot_frame, width=8, height=8,
+        app._online_dot = tk.Canvas(status_dot_frame, width=sc(8), height=sc(8),
                                      highlightthickness=0, bg=nav_bar_bg)
-        app._online_dot.create_oval(1, 1, 7, 7, fill="#3a7d44", outline="")
-        app._online_dot.pack(side="left", padx=(0, 4))
+        app._online_dot.create_oval(1, 1, sc(7), sc(7), fill="#3a7d44", outline="")
+        app._online_dot.pack(side="left", padx=(0, sc(4)))
         tk.Label(status_dot_frame, text="STATUS: ONLINE", bg=nav_bar_bg,
-                 fg="#444748", font=("Courier New", sc(9))).pack(side="left")
+                 fg="#444748", font=("JetBrains Mono", sc(8.5))).pack(side="left")
 
         # Data status badge (saved / unsaved)
         app.data_status = tk.Label(
@@ -151,7 +151,7 @@ class NavigationBar:
             bg=nav_bar_bg,
             font=("Segoe UI", sc(9), "bold")
         )
-        app.data_status.pack(side="right", padx=(0, 8))
+        app.data_status.pack(side="right", padx=(0, sc(8)))
 
         # System status (loading messages etc.)
         real_system_status = ttk.Label(

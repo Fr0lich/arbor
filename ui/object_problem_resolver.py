@@ -999,7 +999,7 @@ class ProblemQueueDialog(tk.Toplevel):
         self.grab_set()
 
         import utils
-        utils.center_and_fit_toplevel(self, sc(500), sc(420))
+        utils.center_and_fit_toplevel(self, sc(520), sc(490))
 
         self.scope_var = tk.StringVar(value="filtered")
         self.cat_taxonomy_var = tk.BooleanVar(value=True)
@@ -1014,16 +1014,29 @@ class ProblemQueueDialog(tk.Toplevel):
         # Header
         header = tk.Frame(self, bg=COLORS["surface"], height=sc(44))
         header.pack(fill="x", side="top")
+        header.pack_propagate(False)
         tk.Frame(header, bg=COLORS["border"], height=sc(1)).pack(fill="x", side="bottom")
         tk.Label(header, text="BATCH_PROBLEM_QUEUE", font=FONT_UI_LG, fg=COLORS["primary"], bg=COLORS["surface"]).pack(side="left", padx=sc(16), pady=sc(10))
 
-        content = tk.Frame(self, bg=COLORS["bg"], padx=sc(20), pady=sc(16))
+        # Footer (packed first to guarantee visibility)
+        footer = tk.Frame(self, bg=COLORS["surface_dim"], height=sc(52))
+        footer.pack(fill="x", side="bottom")
+        footer.pack_propagate(False)
+        tk.Frame(footer, bg=COLORS["border"], height=sc(1)).pack(side="top", fill="x")
+
+        self.btn_confirm = tk.Button(footer, text="OPEN QUEUE", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), pady=sc(6), command=self._on_confirm, cursor="hand2")
+        self.btn_confirm.pack(side="right", padx=sc(16), pady=sc(8))
+
+        btn_cancel = tk.Button(footer, text="CANCEL", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(14), pady=sc(6), command=self.destroy, cursor="hand2")
+        btn_cancel.pack(side="right", padx=sc(8), pady=sc(8))
+
+        content = tk.Frame(self, bg=COLORS["bg"], padx=sc(20), pady=sc(14))
         content.pack(fill="both", expand=True)
 
         # 1. Scope Selection
         tk.Label(content, text="SCOPE", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["bg"]).pack(anchor="w", pady=(0, sc(4)))
         scope_box = tk.Frame(content, bg=COLORS["surface"], highlightbackground=COLORS["border"], highlightthickness=1, padx=sc(12), pady=sc(8))
-        scope_box.pack(fill="x", pady=(0, sc(14)))
+        scope_box.pack(fill="x", pady=(0, sc(12)))
 
         tk.Radiobutton(scope_box, text="All currently filtered objects in view", variable=self.scope_var, value="filtered", font=FONT_UI, bg=COLORS["surface"], activebackground=COLORS["surface"], command=self._update_matching_count).pack(anchor="w", pady=sc(2))
         
@@ -1040,7 +1053,7 @@ class ProblemQueueDialog(tk.Toplevel):
         # 2. Problem Categories
         tk.Label(content, text="PROBLEM CATEGORIES TO INCLUDE", font=FONT_MONO_SM, fg=COLORS["text_muted"], bg=COLORS["bg"]).pack(anchor="w", pady=(0, sc(4)))
         cat_box = tk.Frame(content, bg=COLORS["surface"], highlightbackground=COLORS["border"], highlightthickness=1, padx=sc(12), pady=sc(8))
-        cat_box.pack(fill="x", pady=(0, sc(14)))
+        cat_box.pack(fill="x", pady=(0, sc(12)))
 
         row1 = tk.Frame(cat_box, bg=COLORS["surface"])
         row1.pack(fill="x", pady=sc(2))
@@ -1060,18 +1073,7 @@ class ProblemQueueDialog(tk.Toplevel):
 
         # 3. Match count label
         self.count_label = tk.Label(content, text="0 objects with matching problems", font=FONT_MONO, fg=COLORS["primary"], bg=COLORS["bg"])
-        self.count_label.pack(anchor="w", pady=(0, sc(8)))
-
-        # Footer
-        footer = tk.Frame(self, bg=COLORS["surface_dim"], height=sc(48))
-        footer.pack(fill="x", side="bottom")
-        tk.Frame(footer, bg=COLORS["border"], height=sc(1)).pack(side="top", fill="x")
-
-        self.btn_confirm = tk.Button(footer, text="OPEN QUEUE", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), pady=sc(8), command=self._on_confirm, cursor="hand2")
-        self.btn_confirm.pack(side="right", padx=sc(16), pady=sc(6))
-
-        btn_cancel = tk.Button(footer, text="CANCEL", font=FONT_UI_BOLD, fg=COLORS["text"], bg=COLORS["surface"], relief="solid", bd=1, padx=sc(14), pady=sc(8), command=self.destroy, cursor="hand2")
-        btn_cancel.pack(side="right", padx=sc(8), pady=sc(6))
+        self.count_label.pack(anchor="w", pady=(0, sc(4)))
 
     def _get_matching_oids(self) -> list:
         app_obj = getattr(self.main_app, "app", self.main_app)
