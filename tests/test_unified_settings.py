@@ -428,7 +428,7 @@ def test_auto_resolve_conflicts_in_historical_resolver(tk_root, tmp_path, monkey
     config.save_prefs(p)
 
     import pandas as pd
-    from ui.historical_resolver import HistoricalConflictResolverWindow
+    from ui.object_problem_resolver import ObjectProblemResolver as HistoricalConflictResolverWindow
 
     class MockHistoricalApp:
         def __init__(self):

@@ -220,7 +220,20 @@ class ImagePanel(ttk.Frame):
         """Lazy-initialize shared requests.Session to avoid network startup overhead in offline mode."""
         if self.http is None:
             import requests
-            self.http = requests.Session()
+            from requests.adapters import HTTPAdapter
+            from urllib3.util import Retry
+
+            session = requests.Session()
+            retries = Retry(
+                total=3,
+                backoff_factor=0.5,
+                status_forcelist=[429, 500, 502, 503, 504],
+                raise_on_status=False
+            )
+            adapter = HTTPAdapter(max_retries=retries)
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+            self.http = session
         return self.http
 
     # -------------------------------------------------------------------------
@@ -978,11 +991,13 @@ class ImagePanel(ttk.Frame):
                     if path not in self.original_pil_cache:
                         if path.startswith("http://") or path.startswith("https://"):
                             r = self._get_http_session().get(path, timeout=(3, 8))
+                            if token != getattr(self, "_image_load_token", 0):
+                                return
                             if r.status_code == 200:
                                 pil_img = Image.open(BytesIO(r.content))
                                 pil_img.load()
                             else:
-                                raise Exception(f"HTTP {r.status_code}")
+                                return
                         else:
                             pil_img = Image.open(path)
                             pil_img.load()
@@ -1045,14 +1060,15 @@ class ImagePanel(ttk.Frame):
 
                 self.root.after(0, callback)
             except Exception as e:
-                from utils import debug_error
-                debug_error("_load_image_async worker", str(e))
+                if "HTTP" not in str(e):
+                    from utils import debug_error
+                    debug_error("_load_image_async worker", str(e))
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _load_online_images_worker(self, urls, token):
         def try_load(url, attempts=2):
-            for _ in range(attempts):
+            for attempt in range(attempts):
                 if token != self._image_load_token:
                     return None
                 try:
@@ -1061,7 +1077,11 @@ class ImagePanel(ttk.Frame):
                         img = Image.open(BytesIO(r.content))
                         img.load()
                         return img
-                    return None
+                    elif r.status_code == 429 and attempt + 1 < attempts:
+                        import time
+                        time.sleep(0.5)
+                    else:
+                        return None
                 except Exception:
                     pass
             return None
@@ -1565,7 +1585,7 @@ class ImagePanel(ttk.Frame):
                             img = Image.open(BytesIO(r.content))
                             img.load()
                         else:
-                            raise Exception(f"HTTP {r.status_code}")
+                            continue
                     else:
                         img = Image.open(path)
                         img.load()

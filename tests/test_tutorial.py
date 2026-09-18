@@ -84,7 +84,7 @@ class TestTutorial(unittest.TestCase):
             })()
         })()
         
-        from ui.historical_resolver import HistoricalConflictResolverWindow
+        from ui.object_problem_resolver import ObjectProblemResolver as HistoricalConflictResolverWindow
         # Instantiate window with minimal suggestions
         win_inst = HistoricalConflictResolverWindow(mock_app, "123", {"field1": {}})
         

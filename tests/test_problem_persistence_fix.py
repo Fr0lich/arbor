@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import tkinter as tk
 from ui.main_window import ObjectProgramUI
-from ui.historical_resolver import HistoricalConflictResolverWindow
+from ui.object_problem_resolver import ObjectProblemResolver as HistoricalConflictResolverWindow
 from ui.widgets import TreeviewListboxWrapper
 from ui.image_panel import ImagePanel
 from unittest.mock import MagicMock

@@ -3,7 +3,7 @@ import tkinter as tk
 import pandas as pd
 from unittest.mock import MagicMock, patch
 from models import AppState
-from ui.historical_resolver import HistoricalConflictResolverWindow
+from ui.object_problem_resolver import ObjectProblemResolver as HistoricalConflictResolverWindow
 from ui.main_window import ObjectProgramUI
 import config
 

@@ -536,11 +536,13 @@ class ImageHandlerMixin:
                 if path not in self.original_pil_cache:
                     if path.startswith("http://") or path.startswith("https://"):
                         r = self._get_http_session().get(path, timeout=(3, 8))
+                        if token != getattr(self, "_image_load_token", 0):
+                            return
                         if r.status_code == 200:
                             pil_img = Image.open(BytesIO(r.content))
                             pil_img.load()
                         else:
-                            raise Exception(f"HTTP {r.status_code}")
+                            return
                     else:
                         pil_img = Image.open(path)
                         pil_img.load()  # Force eager load to avoid assertion/truncation errors
@@ -562,11 +564,12 @@ class ImageHandlerMixin:
                 else:
                     resample_filter = Image.LANCZOS
 
-                # Apply rotation
+                # Apply rotation if active and in large view
                 if large and rot != 0:
                     img = img.rotate(rot, expand=True)
 
                 if large:
+                    # Dynamically calculate maximum display bounds based on current frame size
                     max_width = int(width * 0.95 * zoom)
                     max_height = int(canvas_h * 0.85 * zoom)
 
@@ -608,8 +611,9 @@ class ImageHandlerMixin:
 
                 self.root.after(0, callback)
             except Exception as e:
-                from utils import debug_error
-                debug_error("_load_image_async worker", str(e))
+                if "HTTP" not in str(e):
+                    from utils import debug_error
+                    debug_error("_load_image_async worker", str(e))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1048,7 +1052,7 @@ class ImageHandlerMixin:
                     pil_img = Image.open(BytesIO(r.content))
                     pil_img.load()
                 else:
-                    raise Exception(f"HTTP {r.status_code}")
+                    return None
             else:
                 pil_img = Image.open(path)
                 pil_img.load()  # Force eager load to avoid assertion/truncation errors
@@ -1148,9 +1152,11 @@ class ImageHandlerMixin:
                         img = Image.open(BytesIO(r.content))
                         img.load()
                         return img
-                    # P1-H: Non-200 on first attempt almost never recovers;
-                    # stop retrying immediately to save time.
-                    return None
+                    elif r.status_code == 429 and _ + 1 < attempts:
+                        import time
+                        time.sleep(0.5)
+                    else:
+                        return None
                 except Exception:
                     # Connection errors (e.g. RemoteDisconnected) are expected when
                     # an image URL does not exist — silently skip to the next attempt.
@@ -1167,51 +1173,55 @@ class ImageHandlerMixin:
 
             img = try_load(url, attempts=2)
 
-
             if img is None:
                 continue
 
+            # Check token again after the network call
+            if token != self._image_load_token:
+                return
 
             self._display_online_image(img, url, token)
             loaded_any = True
 
-
         if not loaded_any:
-            self.root.after(
-                0,
-                self._show_no_images_online
-            )
+            self.root.after(0, self._show_no_images_online)
+
+
+    def _show_no_images_online(self):
+        self.images_missing_label.config(text="No online images found", foreground="#c93a40")
+        if self.app.current_object_id:
+            self.render_specimen_summary_hub(self.app.current_object_id)
 
 
     def _display_online_image(self, img, url, token):
-
+        # Always check the token before doing any UI updates or caching
         if token != self._image_load_token:
             return
 
-        # Cache original online image
+        # Cache the downloaded original PIL image
         if url not in self.original_pil_cache:
             self.original_pil_cache[url] = img.copy()
             if len(self.original_pil_cache) > 40:
                 self.original_pil_cache.popitem(last=False)
 
+        # Apply rotation if active
         pil_img = self.original_pil_cache[url].copy()
-
-        # Apply rotation
         if self.image_rotation_angle != 0:
             pil_img = pil_img.rotate(self.image_rotation_angle, expand=True)
 
         self.root.update_idletasks()
         available_width = self.image_canvas.winfo_width()
 
+        # Fallback if UI is not yet rendered
         if available_width < 300:
             available_width = 800
 
+        # Scale down to fit the window with some padding
         max_width = int(available_width * 0.98 * self.image_zoom_factor)
         max_height = int(self.root.winfo_height() * 0.9 * self.image_zoom_factor)
-
         pil_img.thumbnail((max_width, max_height), Image.LANCZOS)
 
-
+        # Schedule UI creation on the main thread
         self.root.after(
             0,
             lambda im=pil_img, u=url, t=token: self._create_online_image(im, u, t)
@@ -1219,51 +1229,51 @@ class ImageHandlerMixin:
 
 
     def _create_online_image(self, pil_img, url, token):
+        # Always check the token before creating UI elements
         if token != self._image_load_token:
             return
 
         tk_img = ImageTk.PhotoImage(pil_img)
-
         container = ttk.Frame(self.image_container)
-        container.pack(pady=8)
+        container.pack(pady=10, padx=10)
 
-        ttk.Label(container, text=os.path.basename(url)).pack()
+        # Large image display
+        img_label = ttk.Label(container, image=tk_img)
+        img_label.image = tk_img
+        img_label.pack()
 
-        lbl = ttk.Label(container, image=tk_img)
-        lbl.image = tk_img
-        lbl.pack()
+        # Bind zoom and pan gestures to large image
+        self._bind_zoom_and_pan(img_label)
 
-
-        lbl.bind("<Enter>", lambda e: container.configure(style="Hover.TFrame"))
-        lbl.bind("<Leave>", lambda e: container.configure(style="TFrame"))
-
-        # Click drag release panning & popup integration
-        lbl.bind("<ButtonPress-1>", self._on_pan_start)
-        lbl.bind("<B1-Motion>", self._on_pan_drag)
-        lbl.bind(
-            "<ButtonRelease-1>",
-            lambda e, im=tk_img, u=url: self._on_pan_release(
-                e,
-                lambda ev: self.open_image_popup(im, source=u, is_online=True)
-            )
+        # URL label with click-to-open and context menu
+        url_label = ttk.Label(
+            container,
+            text=url,
+            font=("Segoe UI", 9, "underline"),
+            foreground="#4a90e2",
+            cursor="hand2"
         )
+        url_label.pack(pady=(4, 0))
+        url_label.bind("<Button-1>", lambda e, u=url: self._open_image_url(u))
+        self._bind_url_context_menu(url_label, url)
 
 
-        lbl.bind("<Double-Button-1>", lambda e, u=url: __import__('webbrowser').open(u))
-
-
-    def _load_images_worker(self, paths, token):
-        self._image_total = len(paths)
-        loaded_any = False
+    def _load_image_stack(self, paths, token):
 
         for path in paths:
+
             if token != self._image_load_token:
                 return
 
             try:
-                if path in self.image_cache:
-                    self.image_cache.move_to_end(path)
-                    tk_img = self.image_cache[path]
+                # Prioritise the pre-load cache
+                if path in self.preload_cache:
+                    pil_img = self.preload_cache[path]
+
+                    if self.image_rotation_angle != 0:
+                        pil_img = pil_img.rotate(self.image_rotation_angle, expand=True)
+
+                    tk_img = ImageTk.PhotoImage(pil_img)
 
                     self.root.after(
                         0,
@@ -1278,7 +1288,7 @@ class ImageHandlerMixin:
                             img = Image.open(BytesIO(r.content))
                             img.load()
                         else:
-                            raise Exception(f"HTTP {r.status_code}")
+                            return
                     else:
                         img = Image.open(path)
                         img.load()
@@ -1290,36 +1300,23 @@ class ImageHandlerMixin:
                     if available_width < 300:
                         available_width = 800
 
-                    col_width = available_width // 2
-                    if hasattr(self, "_image_mode_large_first") and self._image_mode_large_first:
-                        if path == paths[0]:
+                    # Vi skalerer ned så bildet passer bredden med litt luft
+                    max_width = int(available_width * 0.98 * self.image_zoom_factor)
+                    max_height = int(self.root.winfo_height() * 0.9 * self.image_zoom_factor)
 
-                            max_width = int(available_width * 0.95)
-                        else:
-
-                            max_width = int((available_width / 2) * 0.9)
-                    else:
-                        max_width = int((available_width / 2) * 0.95)
-
-                    max_height = int(self.root.winfo_height() * 0.85)
+                    if self.image_rotation_angle != 0:
+                        img = img.rotate(self.image_rotation_angle, expand=True)
 
                     img.thumbnail((max_width, max_height), Image.LANCZOS)
+                    tk_img = ImageTk.PhotoImage(img)
 
                     self.root.after(
                         0,
-                        lambda im=img.copy(), p=path, t=token: self._create_tk_image(im, p, t)
+                        lambda im=tk_img, p=path, t=token: self._add_image_to_ui(im, p, t)
                     )
 
-                loaded_any = True
-
             except Exception as e:
-                self.root.after(0, lambda err=e: messagebox.showerror("Image error", str(err)))
-
-        if not loaded_any and token == self._image_load_token:
-            self.root.after(
-                0,
-                self._show_no_images_local
-            )
+                pass
 
 
     def _create_tk_image(self, pil_img, path, token):
@@ -1469,7 +1466,7 @@ class ImageHandlerMixin:
                             img = Image.open(BytesIO(r.content))
                             img.load()
                         else:
-                            raise Exception(f"HTTP {r.status_code}")
+                            continue
                     else:
                         img = Image.open(path)
                         img.load()

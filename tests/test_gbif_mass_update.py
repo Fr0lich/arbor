@@ -428,7 +428,7 @@ def test_gbif_toolbar_button_and_dropdown():
 
             # Ensure batch update and rollback were added as commands
             added_labels = [call.kwargs.get("label") for call in mock_menu_instance.add_command.call_args_list]
-            assert any("Batch Update Taxonomy" in str(l) for l in added_labels)
+            assert any(("Run GBIF Taxonomy Check" in str(l) or "Batch Update Taxonomy" in str(l)) for l in added_labels)
             assert any("Revert Latest GBIF" in str(l) for l in added_labels)
     finally:
         root.destroy()

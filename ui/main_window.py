@@ -849,7 +849,20 @@ class ObjectProgramUI(
         """
         if self.http is None:
             import requests
-            self.http = requests.Session()
+            from requests.adapters import HTTPAdapter
+            from urllib3.util import Retry
+
+            session = requests.Session()
+            retries = Retry(
+                total=3,
+                backoff_factor=0.5,
+                status_forcelist=[429, 500, 502, 503, 504],
+                raise_on_status=False
+            )
+            adapter = HTTPAdapter(max_retries=retries)
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+            self.http = session
         return self.http
 
     def apply_config(self):
@@ -1288,13 +1301,11 @@ class ObjectProgramUI(
                  mb.showinfo("GBIF Check", f"Match found (Type: {result.get('matchType')}). No significant updates available.", parent=self.root)
             return
 
-        # Show custom dialog
-        from ui.gbif_dialog import GBIFUpdateDialog
-        dialog = GBIFUpdateDialog(self.root, updates_available)
-        self.root.wait_window(dialog)
-
-        if dialog.result_data:
-            self._apply_gbif_update(dialog.result_data, old_genus, old_species, old_author, old_family)
+        # Show ObjectProblemResolver
+        from ui.object_problem_resolver import ObjectProblemResolver
+        oid = str(getattr(self.app, "current_object_id", ""))
+        suggestions = self.collect_historical_suggestions(oid) if hasattr(self, "collect_historical_suggestions") else None
+        ObjectProblemResolver(self, oid, suggestions)
 
     def _apply_gbif_update(self, result, old_genus, old_species, old_author, old_family):
         if not result:
@@ -2278,7 +2289,9 @@ class ObjectProgramUI(
         popup.add_command(label="Load Books", command=self.load_books_file)
         popup.add_command(label="Load earlier databases", command=self.load_historical_databases)
         popup.add_separator()
-        popup.add_command(label="🌿 Batch Update Taxonomy (GBIF)...", command=self.batch_gbif_update_action)
+        popup.add_command(label="Process Objects with Problems...", command=self.open_problem_queue_dialog)
+        popup.add_separator()
+        popup.add_command(label="🌿 Run GBIF Taxonomy Check...", command=self.batch_gbif_update_action)
         popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
@@ -2287,9 +2300,18 @@ class ObjectProgramUI(
         if self.app.current_object_id:
             popup.add_command(label="🔍 Validate Current Specimen", command=self.check_gbif_action)
             popup.add_separator()
-        popup.add_command(label="🌿 Batch Update Taxonomy (GBIF)...", command=self.batch_gbif_update_action)
+        popup.add_command(label="🌿 Run GBIF Taxonomy Check...", command=self.batch_gbif_update_action)
         popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def open_problem_queue_dialog(self):
+        """Opens ProblemQueueDialog for batch resolution scoping."""
+        if self.app.df_reg is None or self.app.df_reg.empty:
+            messagebox.showinfo("No Database", "Please load a database before resolving problems.")
+            return
+
+        from ui.object_problem_resolver import ProblemQueueDialog
+        ProblemQueueDialog(self.root, self)
 
     def open_historical_resolver_for_current(self):
         """Opens Historical Conflict Resolver for the active specimen."""
@@ -3875,9 +3897,29 @@ class ObjectProgramUI(
         hist_btn.bind("<Enter>", lambda e: hist_btn.config(bg=btn_sec_hover))
         hist_btn.bind("<Leave>", lambda e: hist_btn.config(bg=btn_sec_bg))
 
+        prob_btn = tk.Button(
+            frame,
+            text="Process Objects with Problems...",
+            command=lambda: run_cmd(self.open_problem_queue_dialog),
+            font=("Segoe UI", sc(9.5), "bold"),
+            bg=btn_sec_bg,
+            fg=btn_sec_fg,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            padx=sc(12),
+            pady=sc(7),
+            highlightthickness=1,
+            highlightbackground=border_color,
+            highlightcolor=border_color
+        )
+        prob_btn.pack(fill="x", pady=(0, sc(8)))
+        prob_btn.bind("<Enter>", lambda e: prob_btn.config(bg=btn_sec_hover))
+        prob_btn.bind("<Leave>", lambda e: prob_btn.config(bg=btn_sec_bg))
+
         gbif_btn = tk.Button(
             frame,
-            text="🌿 Batch Update Taxonomy (GBIF)...",
+            text="🌿 Run GBIF Taxonomy Check...",
             command=lambda: run_cmd(self.batch_gbif_update_action),
             font=("Segoe UI", sc(9.5), "bold"),
             bg=btn_sec_bg,
@@ -6997,10 +7039,16 @@ class ObjectProgramUI(
         items = [
             {"label": "Mark Selected as Reviewed", "command": lambda: self._context_set_reviewed(True)},
             {"label": "Mark Selected as Not Reviewed", "command": lambda: self._context_set_reviewed(False)},
+        ]
+
+        if len(current_selection) > 1:
+            items.append({"label": "Resolve Problems", "command": self._context_resolve_problems})
+
+        items.extend([
             {"separator": True},
             {"label": "Copy Accession ID", "command": self._context_copy_accession_id},
             {"label": "📱 Push to Phone", "command": self.push_current_to_phone, "state": push_state},
-        ]
+        ])
 
         advanced_prefs = config.load_prefs().get("advanced", {})
         if advanced_prefs.get("enable_bulk_editor", False):
@@ -7060,6 +7108,13 @@ class ObjectProgramUI(
         current_oid = self.app.current_object_id
         if current_oid in selection:
             self.load_object(current_oid)
+
+    def _context_resolve_problems(self):
+        selection = [str(x) for x in self.object_list.selection()]
+        if len(selection) > 1:
+            from ui.object_problem_resolver import ObjectProblemResolver
+            suggestions = self.collect_historical_suggestions(selection[0]) if hasattr(self, "collect_historical_suggestions") else None
+            ObjectProblemResolver(self, selection, suggestions)
 
     def refresh_list(self):
         self.object_list.delete(0, tk.END)

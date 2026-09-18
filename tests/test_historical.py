@@ -180,7 +180,7 @@ def test_collect_historical_suggestions_ignored_words():
 def test_historical_resolver_logging():
     import tkinter as tk
     from unittest.mock import MagicMock, patch
-    from ui.historical_resolver import HistoricalConflictResolverWindow
+    from ui.object_problem_resolver import ObjectProblemResolver as HistoricalConflictResolverWindow
 
     root = tk.Tk()
     try:

@@ -1,3 +1,4 @@
+# DEPRECATED — functionality absorbed into ui/object_problem_resolver.py
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont

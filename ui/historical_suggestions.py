@@ -230,8 +230,8 @@ class HistoricalSuggestionsMixin:
             self.history_indicator_label.config(text=f"Suggestions available ({active_count} active problem(s))", foreground="blue")
         else:
             self.history_indicator_label.config(text=" Suggestions available", foreground="gray")
-        from ui.historical_resolver import HistoricalConflictResolverWindow
-        HistoricalConflictResolverWindow(self, oid, suggestions)
+        from ui.object_problem_resolver import ObjectProblemResolver
+        ObjectProblemResolver(self, oid, suggestions)
 
 
     def load_books_file(self):
@@ -473,27 +473,72 @@ class HistoricalSuggestionsMixin:
             self.history_indicator_label.config(text="")
 
 
-    def update_history_button_state(self):
-
-        if not hasattr(self, "next_history_btn"):
+    def process_remaining_problems(self):
+        if not getattr(self.app, "active_object_ids", None):
             return
 
-        has_data = bool(self.app.historical_dbs)
+        ids = list(self.app.active_object_ids)
+        current_oid = getattr(self.app, "current_object_id", None)
+        start_idx = 0
+        if current_oid and current_oid in ids:
+            start_idx = ids.index(current_oid)
 
-        if has_data:
-            self.next_history_btn.config(
-                state="normal",
-                text="Next Problem with Historical Data"
-            )
-        else:
-            self.next_history_btn.config(
-                state="disabled",
-                text="No Historical Data Loaded"
-            )
+        ordered_ids = ids[start_idx:] + ids[:start_idx]
+        matching_oids = []
+        obs_dict = self._get_obs_dict() if hasattr(self, "_get_obs_dict") else {}
+        has_sug_set = getattr(self, "_has_suggestions_set", None) or set()
+        df_obs = getattr(self.app, "df_obs", None)
+        prob_cols = list(getattr(self, "problem_to_field", {}).keys())
 
+        for oid in ordered_ids:
+            s_oid = str(oid)
+            has_sug = (oid in has_sug_set) or (s_oid in has_sug_set) or (s_oid.isdigit() and int(s_oid) in has_sug_set)
+            if has_sug:
+                if s_oid not in matching_oids:
+                    matching_oids.append(s_oid)
+                continue
 
-            if hasattr(self, "status"):
-                self.system_status.config(
-                    text="Load Books or previous databases to enable historical navigation"
+            obs_row = obs_dict.get(oid)
+            if obs_row is None and s_oid.isdigit():
+                obs_row = obs_dict.get(int(s_oid))
+            if obs_row is None and df_obs is not None:
+                if oid in df_obs.index:
+                    obs_row = df_obs.loc[oid].to_dict()
+                elif s_oid.isdigit() and int(s_oid) in df_obs.index:
+                    obs_row = df_obs.loc[int(s_oid)].to_dict()
+
+            if obs_row:
+                has_prob = any(bool(obs_row.get(col, False)) for col in prob_cols)
+                if has_prob and s_oid not in matching_oids:
+                    matching_oids.append(s_oid)
+
+        if matching_oids:
+            from ui.object_problem_resolver import ObjectProblemResolver
+            ObjectProblemResolver(self, matching_oids)
+
+    def update_history_button_state(self):
+
+        if hasattr(self, "next_history_btn"):
+            has_data = bool(self.app.historical_dbs)
+            if has_data:
+                self.next_history_btn.config(
+                    state="normal",
+                    text="Next Problem with Historical Data"
                 )
+            else:
+                self.next_history_btn.config(
+                    state="disabled",
+                    text="No Historical Data Loaded"
+                )
+
+        if hasattr(self, "process_problems_btn"):
+            has_active = bool(getattr(self.app, "active_object_ids", []))
+            self.process_problems_btn.config(
+                state="normal" if has_active else "disabled"
+            )
+
+        if hasattr(self, "status") and not bool(self.app.historical_dbs):
+            self.system_status.config(
+                text="Load Books or previous databases to enable historical navigation"
+            )
 
