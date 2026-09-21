@@ -16,6 +16,9 @@ Welcome, Agent. This file is your master router. Before you begin any task, you 
 * **Need to Understand Architecture or Core App Features?**
   * 👉 Read **`documentation/agent/codebase_guide.md`** and **`documentation/agent/feature_catalog.md`**.
 
+* **Working on Interactive Tutorials or User Onboarding?**
+  * 👉 Read **`documentation/agent/TUTORIAL_GUIDE.md`** (CRITICAL). This contains strict rules for sandboxing, action-driven stepping, operational copy, and modular organization.
+
 * **Looking for Past Code Reviews or Optimizations?**
   * 👉 Read **`documentation/agent/CODE_REVIEW.md`**.
 

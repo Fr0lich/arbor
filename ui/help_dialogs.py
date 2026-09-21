@@ -135,22 +135,22 @@ def open_help_window(ui):
         win.destroy()
         cmd()
 
-    def start_main_tutorial():
-        from ui.tutorial import TutorialManager
-        TutorialManager().start_tutorial("main_tutorial", ui.root, force=True)
+    def start_review_tut():
+        from ui.tutorials import start_review_tutorial
+        start_review_tutorial(ui)
 
-    def start_startup_tutorial():
-        from ui.tutorial import TutorialManager
-        TutorialManager().start_tutorial("startup_tutorial", ui.root, force=True)
+    def start_discrepancy_tut():
+        from ui.tutorials import start_discrepancy_tutorial
+        start_discrepancy_tutorial(ui)
 
-    def start_hr_tutorial():
-        from ui.tutorial import TutorialManager
-        TutorialManager().start_tutorial("historical_resolver", ui.root, force=True)
+    def start_database_tut():
+        from ui.tutorials import start_database_tutorial
+        start_database_tutorial(ui)
 
     options = [
-        ("Interactive Tutorial", "Guided walkthrough of the main workspace.", start_main_tutorial),
-        ("Startup Tutorial", "Guided walkthrough of the welcome screen.", start_startup_tutorial),
-        ("Conflict Resolver Tutorial", "Guided walkthrough of the Historical Conflict Resolver.", start_hr_tutorial),
+        ("Tutorial: Reviewing", "Interactive walkthrough: inspecting and verifying objects.", start_review_tut),
+        ("Tutorial: Conflicts", "Interactive walkthrough: historical & GBIF discrepancies.", start_discrepancy_tut),
+        ("Tutorial: Databases", "Interactive walkthrough: creating databases & new objects.", start_database_tut),
         ("User Guide", "Complete guide and detailed documentation.", lambda: show_main_help(ui.root)),
         ("Keyboard Shortcuts", "HUD cheat sheet for all keys and navigation.", lambda: show_shortcuts(ui)),
         ("Quick Start", "Basic shortcuts and workflow summary.", show_quick_help),
