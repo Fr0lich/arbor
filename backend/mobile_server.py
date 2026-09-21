@@ -2759,13 +2759,12 @@ INDEX_TEMPLATE = """
           <!-- Photo Container -->
           <div
             id="photoMainContainer"
-            onclick="openFullscreenPhoto()"
-            class="relative w-full h-52 bg-ink/5 rounded-[2px] border border-bordercol overflow-hidden cursor-pointer group flex items-center justify-center"
+            onclick="loadInitialPhoto()"
+            class="relative w-full h-16 bg-ink/5 rounded-[2px] border border-bordercol overflow-hidden cursor-pointer group flex items-center justify-center transition-all duration-300"
           >
-            <div id="photoPlaceholder" class="p-6 text-center text-xs text-ink-muted flex flex-col items-center gap-1.5">
-              <span class="text-2xl">📷</span>
-              <p class="font-semibold text-fern">Tap to Load Specimen Plate</p>
-              <p class="text-[10px] text-ink-faint">Direct CDN stream</p>
+            <div id="photoPlaceholder" class="p-2 text-center text-xs text-ink-muted flex flex-col items-center gap-0.5">
+              <span class="text-xl">📷</span>
+              <p class="font-semibold text-fern" id="photoPlaceholderText">Tap to Load Archival Scans</p>
             </div>
             <img
               id="specimenImg"
@@ -4833,20 +4832,29 @@ INDEX_TEMPLATE = """
         const specimenImg = document.getElementById('specimenImg');
         const watermark = document.getElementById('photoWatermark');
 
+        // Reset to collapsed state
+        mainContainer.classList.remove('h-52');
+        mainContainer.classList.add('h-16');
+        mainContainer.setAttribute('onclick', 'loadInitialPhoto()');
+        const placeholderText = document.getElementById('photoPlaceholderText');
+
         if (photoUrls.length > 0) {
           currentPhotoIdx = 0;
-          specimenImg.src = photoUrls[0];
-          placeholder.classList.add('hidden');
-          specimenImg.classList.remove('hidden');
-          watermark.classList.remove('hidden');
+          placeholder.innerHTML = `
+            <span class="text-xl">📷</span>
+            <p class="font-semibold text-fern" id="photoPlaceholderText">Tap to Load ${photoUrls.length} Archival Scan${photoUrls.length > 1 ? 's' : ''}</p>
+          `;
+          placeholder.classList.remove('hidden');
+          specimenImg.classList.add('hidden');
+          watermark.classList.add('hidden');
           mainContainer.classList.add('cursor-pointer');
           mainContainer.classList.remove('cursor-default');
-          renderPhotoThumbnails();
+          const strip = document.getElementById('photoThumbStrip');
+          if (strip) { strip.classList.add('hidden'); strip.innerHTML = ''; }
         } else {
           placeholder.innerHTML = `
-            <span class="text-2xl text-ink-faint">📷</span>
-            <p class="font-sans text-xs font-semibold text-ink-muted">No Archival Scans Attached</p>
-            <p class="font-mono text-[10px] text-ink-faint">Attach images in desktop catalog</p>
+            <span class="text-xl text-ink-faint">📷</span>
+            <p class="font-sans text-[11px] font-semibold text-ink-muted">No Archival Scans Attached</p>
           `;
           placeholder.classList.remove('hidden');
           specimenImg.classList.add('hidden');
@@ -5071,7 +5079,7 @@ INDEX_TEMPLATE = """
           fieldsHtml += renderFieldInput(fDef, val, 'registration', record);
         });
 
-        const isOpen = (grpProbCount > 0 || grpUknCount > 0 || gIdx <= 1);
+        const isOpen = (grpProbCount > 0 || grpUknCount > 0);
 
         let badgesHtml = '';
         if (grpProbCount > 0) {
@@ -5120,7 +5128,7 @@ INDEX_TEMPLATE = """
           locFieldsHtml += renderFieldInput(fDef, val, 'observation', record);
         });
 
-        const isLocOpen = (locProbCount > 0 || locUknCount > 0 || true);
+        const isLocOpen = (locProbCount > 0 || locUknCount > 0);
 
         let locBadgesHtml = '';
         if (locProbCount > 0) {
@@ -6184,6 +6192,25 @@ INDEX_TEMPLATE = """
           <img src="${url}" alt="Thumbnail ${idx + 1}" class="w-full h-full object-cover" />
         </button>
       `).join('');
+    }
+
+    function loadInitialPhoto() {
+      if (!photoUrls || photoUrls.length === 0) return;
+      const mainContainer = document.getElementById('photoMainContainer');
+      const placeholder = document.getElementById('photoPlaceholder');
+      const specimenImg = document.getElementById('specimenImg');
+
+      mainContainer.classList.remove('h-16');
+      mainContainer.classList.add('h-52');
+      mainContainer.setAttribute('onclick', 'openFullscreenPhoto()');
+
+      placeholder.innerHTML = `
+        <span class="text-2xl text-ink-faint animate-spin-slow">⏳</span>
+        <p class="font-semibold text-fern">Loading...</p>
+      `;
+
+      specimenImg.src = photoUrls[0];
+      renderPhotoThumbnails();
     }
 
     function selectSpecimenPhoto(idx) {
