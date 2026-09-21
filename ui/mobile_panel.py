@@ -64,6 +64,7 @@ class MobilePanel:
         self.local_url_with_token = ""
         self.public_url_with_token = ""
         self.current_qr_mode = "public"  # public tunnel is the default
+        self.ui_version_choice = tk.StringVar(value="v2")
 
         self._build_ui()
 
@@ -233,6 +234,57 @@ class MobilePanel:
         )
         self.btn_prov_pinggy.pack(side="right", expand=True, fill="x", padx=(1, 0))
 
+        # Interface Version Section
+        self.version_frame = tk.Frame(setup_card, bg="#fbfbf9")
+        self.version_frame.pack(fill="x", pady=(15, 0))
+
+        tk.Label(
+            self.version_frame,
+            text="Interface Version:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#fbfbf9",
+            fg="#1b4332",
+        ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            self.version_frame,
+            text="V2 Tabbed optimizes physical location and discrepancy resolution.",
+            font=("Segoe UI", 8),
+            bg="#fbfbf9",
+            fg="#5a655e",
+        ).pack(anchor="w", pady=(0, 6))
+
+        version_btn_frame = tk.Frame(self.version_frame, bg="#ffffff")
+        version_btn_frame.pack(fill="x", pady=(0, 4))
+
+        self.btn_ver_v2 = tk.Button(
+            version_btn_frame,
+            text="📑 V2 Tabbed (New)",
+            font=("Segoe UI", 9, "bold"),
+            bg="#1b4332",
+            fg="white",
+            relief="flat",
+            padx=4,
+            pady=4,
+            command=lambda: self._switch_ui_version("v2"),
+            cursor="hand2",
+        )
+        self.btn_ver_v2.pack(side="left", expand=True, fill="x", padx=(0, 1))
+
+        self.btn_ver_v1 = tk.Button(
+            version_btn_frame,
+            text="📄 V1 Classic",
+            font=("Segoe UI", 9),
+            bg="#e0e3df",
+            fg="#333",
+            relief="flat",
+            padx=4,
+            pady=4,
+            command=lambda: self._switch_ui_version("v1"),
+            cursor="hand2",
+        )
+        self.btn_ver_v1.pack(side="right", expand=True, fill="x", padx=(1, 0))
+
         self.start_btn = ttk.Button(
             self.setup_frame,
             text="▶ Start Mobile Session",
@@ -365,6 +417,41 @@ class MobilePanel:
         )
         self.tunnel_lbl.pack(anchor="w", pady=(4, 0))
 
+        # Active Version Toggle
+        active_ver_row = tk.Frame(info, bg="#fbfbf9")
+        active_ver_row.pack(fill="x", pady=(4, 0))
+        tk.Label(
+            active_ver_row, text="UI Version: ", font=("Segoe UI", 8, "bold"), bg="#fbfbf9", fg="#1b4332"
+        ).pack(side="left")
+        
+        self.btn_active_ver_v2 = tk.Button(
+            active_ver_row,
+            text="V2 Tabbed",
+            font=("Segoe UI", 7, "bold"),
+            bg="#1b4332",
+            fg="white",
+            relief="flat",
+            padx=4,
+            pady=1,
+            command=lambda: self._switch_ui_version("v2"),
+            cursor="hand2",
+        )
+        self.btn_active_ver_v2.pack(side="left", padx=(2, 1))
+
+        self.btn_active_ver_v1 = tk.Button(
+            active_ver_row,
+            text="V1 Classic",
+            font=("Segoe UI", 7),
+            bg="#e0e3df",
+            fg="#333",
+            relief="flat",
+            padx=4,
+            pady=1,
+            command=lambda: self._switch_ui_version("v1"),
+            cursor="hand2",
+        )
+        self.btn_active_ver_v1.pack(side="left", padx=1)
+
         # Link to main window's simultaneous edit toggle if it exists
         if hasattr(self.parent.master, "parent_ui") and hasattr(self.parent.master.parent_ui, "simultaneous_edit_var"):
             simul_cb = ttk.Checkbutton(
@@ -471,8 +558,10 @@ class MobilePanel:
         # Populate PIN and local URL (kept as LAN fallback)
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
+        ver = self.ui_version_choice.get()
+        v_path = "/v2" if ver == "v2" else "/"
         self.local_url_with_token = (
-            f"http://{local_ip}:{self.server.port}/?token={self.server.session_token}"
+            f"http://{local_ip}:{self.server.port}{v_path}?token={self.server.session_token}"
         )
 
         # Update DB info label
@@ -620,6 +709,52 @@ class MobilePanel:
         except Exception:
             pass
 
+    def _switch_ui_version(self, version):
+        if not self._is_alive():
+            return
+        self.ui_version_choice.set(version)
+        try:
+            # Update Setup buttons if present
+            if hasattr(self, 'btn_ver_v2') and hasattr(self, 'btn_ver_v1'):
+                if version == "v2":
+                    self.btn_ver_v2.config(
+                        bg="#1b4332", fg="white", font=("Segoe UI", 9, "bold"))
+                    self.btn_ver_v1.config(
+                        bg="#e0e3df", fg="#333", font=("Segoe UI", 9))
+                else:
+                    self.btn_ver_v1.config(
+                        bg="#1b4332", fg="white", font=("Segoe UI", 9, "bold"))
+                    self.btn_ver_v2.config(
+                        bg="#e0e3df", fg="#333", font=("Segoe UI", 9))
+
+            # Update Active screen buttons if present
+            if hasattr(self, 'btn_active_ver_v2') and hasattr(self, 'btn_active_ver_v1'):
+                if version == "v2":
+                    self.btn_active_ver_v2.config(
+                        bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+                    self.btn_active_ver_v1.config(
+                        bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+                else:
+                    self.btn_active_ver_v1.config(
+                        bg="#1b4332", fg="white", font=("Segoe UI", 7, "bold"))
+                    self.btn_active_ver_v2.config(
+                        bg="#e0e3df", fg="#333", font=("Segoe UI", 7))
+
+            if self.server:
+                local_ip = get_local_ip()
+                v_path = "/v2" if version == "v2" else "/"
+                self.local_url_with_token = (
+                    f"http://{local_ip}:{self.server.port}{v_path}?token={self.server.session_token}"
+                )
+                if self.tunnel and getattr(self.tunnel, 'public_url', None):
+                    clean_url = self.tunnel.public_url.rstrip("/")
+                    self.public_url_with_token = f"{clean_url}{v_path}?token={self.server.session_token}"
+
+                self.switch_qr(self.current_qr_mode)
+                self.log(f"Switched mobile interface to {version.upper()} ({'V2 Tabbed' if version == 'v2' else 'V1 Classic'})")
+        except Exception:
+            pass
+
     def switch_qr(self, mode):
         """Toggle the QR code between local and public URL."""
         if not self._is_alive():
@@ -667,7 +802,10 @@ class MobilePanel:
             if not self._is_alive():
                 return
             try:
-                self.public_url_with_token = f"{url}?token={self.server.session_token}"
+                ver = self.ui_version_choice.get()
+                v_path = "/v2" if ver == "v2" else "/"
+                clean_url = url.rstrip("/")
+                self.public_url_with_token = f"{clean_url}{v_path}?token={self.server.session_token}"
                 self.status_dot.config(fg="#2e7d32")
                 self.status_lbl.config(
                     text="🟢 Public Tunnel Live & Secure", fg="#1b4332")

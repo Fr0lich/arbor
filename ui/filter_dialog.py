@@ -299,6 +299,10 @@ class FilterDialogController:
         u_list = create_group(probs_inner, "Archival Gaps (Ukjent)")
         if "Unknown" in ui.filter_vars:
             make_tristate_row(u_list, "Any settled 'Ukjent' field", ui.filter_vars["Unknown"], color_bar="#d9a036")
+        if "Needs_ICEDIG_Review" in ui.filter_vars:
+            make_tristate_row(u_list, "Needs ICEDIG Review", ui.filter_vars["Needs_ICEDIG_Review"], color_bar="#d9a036")
+        if "Has_ICEDIG_Code" in ui.filter_vars:
+            make_tristate_row(u_list, "Has ICEDIG Code", ui.filter_vars["Has_ICEDIG_Code"], color_bar="#3a7d44")
 
         if hasattr(ui, "unknown_columns"):
             for col in ui.unknown_columns:

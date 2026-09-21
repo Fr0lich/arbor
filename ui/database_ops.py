@@ -476,9 +476,8 @@ class DatabaseOpsMixin:
                         if field and field in df_reg.columns:
                             raw_vals = df_reg[field]
                             is_missing = raw_vals.isna() | (raw_vals.astype(str).str.strip() == "")
-                            # PERFORMANCE OPTIMIZATION (Bolt): Replaced slow row-by-row .apply(self.is_unknown)
-                            # with vectorized Pandas .isin() running entirely in C, speeding up load times.
-                            is_unknown = raw_vals.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
+                            from config import ALL_UNKNOWN_TOKENS as _AUT
+                            is_unknown = raw_vals.astype(str).str.strip().str.lower().isin(_AUT)
                             auto_val = is_missing & ~is_unknown
 
                     has_prob_series |= (obs_val | auto_val)
@@ -540,7 +539,8 @@ class DatabaseOpsMixin:
         df_obs = self.app.df_obs
 
         # Get unknown values matching is_unknown logic
-        unknown_vals = ("ukjent", "unknown", "?", "-")
+        from config import ALL_UNKNOWN_TOKENS as _AUT
+        unknown_vals = _AUT
 
         updated_oids = set()
 

@@ -450,6 +450,12 @@ def test_status_flags_and_six_tier_badge_parity():
     assert is_unknown("") is False
     assert is_unknown(None) is False
     assert is_unknown("Pinus") is False
+    # ICEDIG D4.1 codes must also be treated as unknown
+    assert is_unknown("unknown:missing") is True
+    assert is_unknown("unknown:indecipherable") is True
+    assert is_unknown("unknown:undigitized") is True
+    assert is_unknown("withheld") is True
+    assert is_unknown("UNKNOWN:MISSING") is True   # case-insensitive
 
     # 2. Build test objects representing each priority tier & isolation rules
     app = AppState()
@@ -1163,6 +1169,72 @@ def test_mobile_tristate_problem_and_history_filtering(mock_app_state):
     ids_comb = [o["id"] for o in res_comb.json["objects"]]
     assert "1024" not in ids_comb
     assert "1025" not in ids_comb
+
+
+def test_v2_route_rendering_and_cache_headers(mock_app_state):
+    server = MobileServer(mock_app_state, port=5110)
+    client = server.flask_app.test_client()
+
+    # 1. Hit GET /v2 with valid token param
+    res = client.get(f'/v2?token={server.session_token}')
+    assert res.status_code == 200
+    assert "text/html" in res.content_type
+    html = res.get_data(as_text=True)
+    assert "Arbor Companion" in html
+    assert 'id="tabContentLocation"' in html
+    assert 'id="tabContentDetails"' in html
+    assert 'id="tabContentProblems"' in html
+    assert 'id="tabBtnLocation"' in html
+    assert 'id="tabBtnDetails"' in html
+    assert 'id="tabBtnProblems"' in html
+    assert 'switchDetailTab' in html
+    assert res.headers.get("Cache-Control") == "no-cache, no-store, must-revalidate, max-age=0"
+    assert res.headers.get("Pragma") == "no-cache"
+
+    # 2. Unauthenticated request without PIN should auto-create session or redirect if PIN set
+    server.is_pin_required = lambda: True
+    client_unauth = server.flask_app.test_client()
+    unauth_res = client_unauth.get('/v2')
+    # Should redirect to login when PIN is required and not authenticated
+    assert unauth_res.status_code == 302
+    assert "/login" in unauth_res.headers.get("Location", "")
+
+
+def test_mobile_panel_version_toggle(mock_app_state):
+    import tkinter as tk
+    from ui.mobile_panel import MobilePanel
+    root = tk.Tk()
+    root.withdraw()
+
+    panel = MobilePanel(
+        parent=root,
+        app_state=mock_app_state,
+        root_tk=root,
+        port=5111,
+    )
+
+    try:
+        # Default should be v2
+        assert panel.ui_version_choice.get() == "v2"
+
+        # Start services (populates URLs)
+        panel._start_services()
+        assert "/v2?token=" in panel.local_url_with_token
+
+        # Switch to v1
+        panel._switch_ui_version("v1")
+        assert panel.ui_version_choice.get() == "v1"
+        assert "/v2?token=" not in panel.local_url_with_token
+        assert f":{panel.server.port}/?token=" in panel.local_url_with_token
+
+        # Switch back to v2
+        panel._switch_ui_version("v2")
+        assert panel.ui_version_choice.get() == "v2"
+        assert "/v2?token=" in panel.local_url_with_token
+    finally:
+        panel.stop()
+        root.destroy()
+
 
 
 

@@ -159,6 +159,28 @@ class TestCategoryFilterEvaluators:
         assert "2" not in res  # Ukjent properly suppressed as actionable problem
         assert "4" in res
 
+        # Also verify ICEDIG code "unknown:missing" suppresses collection problem
+        df_reg_icedig = df_reg.copy()
+        df_reg_icedig.at["4", "Collector"] = "unknown:missing"
+        df_reg_icedig.at["4", "Collection_Date"] = "unknown:indecipherable"
+        reg_dict_icedig = df_reg_icedig.to_dict(orient="index")
+        res_icedig = fm.apply_filter(
+            df_reg=df_reg_icedig,
+            reg_dict=reg_dict_icedig,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups={"Problems": ["Has_Collection_Problem"]},
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            problem_categories=prob_cats,
+            unknown_to_field=unk_fields,
+            image_mode="folder"
+        )
+        assert "4" not in res_icedig
+
     def test_filter_has_storage_problem(self, specimen_dataset):
         df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, prob_cats, unk_fields = specimen_dataset
         fm = FilterManager()

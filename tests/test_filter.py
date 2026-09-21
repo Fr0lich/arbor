@@ -376,6 +376,86 @@ class TestFilterManager:
         )
         assert res_unk == ["2"]
 
+    def test_icedig_unknown_suppression_and_filters(self, sample_filter_data):
+        df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, unk_fields = sample_filter_data
+        fm = FilterManager()
+
+        # Update object 2 to 'unknown:missing' (ICEDIG) and object 4 to 'ukjent' (legacy)
+        df_reg_icedig = df_reg.copy()
+        df_reg_icedig.at["2", "Collector"] = "unknown:missing"
+        df_reg_icedig.at["4", "Collector"] = "ukjent"
+        reg_dict_icedig = df_reg_icedig.to_dict(orient="index")
+
+        # 1. Unknown filter should match both legacy ('ukjent' on obj 4) and ICEDIG ('unknown:missing' on obj 2)
+        res_unk = fm.apply_filter(
+            df_reg=df_reg_icedig,
+            reg_dict=reg_dict_icedig,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups={"Unknown": ["Unknown"]},
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            unknown_to_field=unk_fields,
+            image_mode="folder"
+        )
+        assert set(res_unk) == {"2", "4"}
+
+        # 2. Needs_ICEDIG_Review should ONLY match legacy unknown ('ukjent' on obj 4)
+        res_needs_review = fm.apply_filter(
+            df_reg=df_reg_icedig,
+            reg_dict=reg_dict_icedig,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups={"Unknown": ["Needs_ICEDIG_Review"]},
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            unknown_to_field=unk_fields,
+            image_mode="folder"
+        )
+        assert res_needs_review == ["4"]
+
+        # 3. Has_ICEDIG_Code should ONLY match precision ICEDIG code ('unknown:missing' on obj 2)
+        res_has_icedig = fm.apply_filter(
+            df_reg=df_reg_icedig,
+            reg_dict=reg_dict_icedig,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups={"Unknown": ["Has_ICEDIG_Code"]},
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            unknown_to_field=unk_fields,
+            image_mode="folder"
+        )
+        assert res_has_icedig == ["2"]
+
+        # 4. ICEDIG codes suppress problem flag detection (Collector_Problem should NOT be active for obj 2)
+        res_prob = fm.apply_filter(
+            df_reg=df_reg_icedig,
+            reg_dict=reg_dict_icedig,
+            obs_dict=obs_dict,
+            history_set=history_set,
+            groups={"Problems": ["Collector_Problem"]},
+            global_mode="AND",
+            not_reviewed_only=False,
+            location_filters=("", "", ""),
+            problem_columns=prob_cols,
+            problem_to_field=prob_to_field,
+            unknown_to_field=unk_fields,
+            image_mode="folder"
+        )
+        assert "2" not in res_prob
+        assert "4" not in res_prob  # Also suppressed by 'ukjent'
+        assert "3" in res_prob      # Empty string collector is a problem
+
     def ignored_test_problem_with_history_filter(self, sample_filter_data):
         df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, unk_fields = sample_filter_data
         fm = FilterManager()

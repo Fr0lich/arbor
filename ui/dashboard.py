@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pandas as pd
-from config import sc, PROBLEM_CATEGORY_THEMES
+from config import sc, PROBLEM_CATEGORY_THEMES, ALL_UNKNOWN_TOKENS
 from repository import REVIEWED_COLUMN
 
 class DashboardMixin:
@@ -134,7 +134,7 @@ class DashboardMixin:
                 if field and field != "Other" and field in self.app.df_reg.columns:
                     reg_s = self.app.df_reg[field].reindex(self.app.df_reg.index, fill_value="")
                     is_missing = reg_s.isna() | (reg_s.astype(str).str.strip() == "")
-                    is_unknown = reg_s.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
+                    is_unknown = reg_s.astype(str).str.strip().str.lower().isin(ALL_UNKNOWN_TOKENS)
 
             # 1. Unknown issues: The field is explicitly marked as unknown
             mask_unknown |= is_unknown
@@ -167,7 +167,7 @@ class DashboardMixin:
                 if field and field != "Other" and field in self.app.df_reg.columns:
                     reg_s = self.app.df_reg[field].reindex(idx, fill_value="")
                     is_missing = reg_s.isna() | (reg_s.astype(str).str.strip() == "")
-                    is_unknown = reg_s.astype(str).str.strip().str.lower().isin(["ukjent", "unknown", "?", "-"])
+                    is_unknown = reg_s.astype(str).str.strip().str.lower().isin(ALL_UNKNOWN_TOKENS)
                     if include_unknowns:
                         obs_s |= (is_missing | is_unknown)
                     else:

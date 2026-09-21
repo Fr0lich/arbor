@@ -6,6 +6,51 @@ from utils import debug_error
 from ui.state import app_bus, PROBLEM_STATE_CHANGED
 
 
+def _bind_icedig_context_menu(ui, widget, field_name):
+    """Bind right-click ICEDIG status menu to a registration Entry widget."""
+    from ui.context_menu import ContextMenuManager
+    import config
+    def _build_menu(event):
+        # Only show menu if current value is a known unknown token
+        current_val = ui.reg_vars.get(field_name, tk.StringVar()).get().strip().lower()
+        if current_val not in config.ALL_UNKNOWN_TOKENS:
+            return None  # Don't show menu for real data
+        items = []
+        # Submenu items — one per ICEDIG code
+        submenu_items = []
+        for code, label in config.ICEDIG_CODE_LABELS.items():
+            _code = code  # closure capture
+            submenu_items.append({
+                "label": label,
+                "command": lambda c=_code: _apply_icedig_code(ui, field_name, c),
+                "state": "normal" if current_val != c else "disabled",
+            })
+        items.append({
+            "label": "Set ICEDIG status",
+            "submenu": submenu_items,
+            "state": "normal",
+        })
+        items.append({"separator": True})
+        items.append({
+            "label": 'Clear (restore to "unknown")',
+            "command": lambda: _apply_icedig_code(ui, field_name, "unknown"),
+            "state": "normal" if current_val in config.ICEDIG_UNKNOWN_CODES else "disabled",
+        })
+        return items
+    ContextMenuManager.bind(widget, _build_menu)
+
+def _apply_icedig_code(ui, field_name, code):
+    """Write an ICEDIG code (or 'unknown') into a registration field and commit."""
+    var = ui.reg_vars.get(field_name)
+    if var is None:
+        return
+    var.set(code)
+    ui.commit_current_object()
+    # Refresh the field background so the amber tint updates immediately
+    from ui.registry_panel import RegistryPanel
+    RegistryPanel.refresh_field_background(ui, field_name)
+
+
 class RegistryPanel:
     """Manager and builder for the Specimen Registration cards and fields form."""
 
@@ -342,6 +387,9 @@ class RegistryPanel:
 
                     if field.get("readonly"):
                         widget.configure(state="disabled")
+
+                if ftype not in ("multiline", "checkbox", "choice") and not field.get("readonly"):
+                    _bind_icedig_context_menu(ui, widget, name)
 
                 ui.reg_entries[name] = widget
                 ui.reg_entry_list.append(widget)

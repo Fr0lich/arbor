@@ -1,5 +1,6 @@
 import pandas as pd
 from repository import REVIEWED_COLUMN
+from config import ALL_UNKNOWN_TOKENS
 
 def _get_location_str(val):
     if val is None or val == "" or (isinstance(val, float) and pd.isna(val)):
@@ -12,7 +13,7 @@ def _is_unknown(val):
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return True
     s = str(val).strip().lower()
-    return s in ("", "unknown", "?", "ukjent")
+    return s in ("", *ALL_UNKNOWN_TOKENS)
 
 class FilterManager:
     def __init__(self):
@@ -128,7 +129,7 @@ class FilterManager:
                 else:
                     raw_str = str(raw_val).strip()
 
-                is_explicitly_unknown = raw_str.lower() in ("unknown", "?", "ukjent", "-")
+                is_explicitly_unknown = raw_str.lower() in ALL_UNKNOWN_TOKENS
 
                 # If explicit unknown, it NEVER counts as a problem (overriding manual checkboxes).
                 if is_explicitly_unknown:
@@ -253,7 +254,7 @@ class FilterManager:
                             raw_val = reg.get(field, "")
                             if raw_val is not None and not (isinstance(raw_val, float) and pd.isna(raw_val)):
                                 s = str(raw_val).strip().lower()
-                                if s in ("unknown", "?", "ukjent", "-"):
+                                if s in ALL_UNKNOWN_TOKENS:
                                     return True
                     return False
                 if is_not:
@@ -266,12 +267,45 @@ class FilterManager:
                         raw_val = reg.get(field, "")
                         if raw_val is not None and not (isinstance(raw_val, float) and pd.isna(raw_val)):
                             s = str(raw_val).strip().lower()
-                            if s in ("unknown", "?", "ukjent", "-"):
+                            if s in ALL_UNKNOWN_TOKENS:
                                 return True
                     return False
                 if is_not:
                     return lambda oid, obs, reg: not check_specific_unk(oid, obs, reg)
                 return check_specific_unk
+            elif p in ("Needs_ICEDIG_Review", "Has_Legacy_Unknown"):
+                # Matches objects where a tracked field still has a legacy ambiguous token
+                # (i.e., NOT yet assigned an ICEDIG precision code)
+                from config import LEGACY_UNKNOWN_TOKENS as _LEGACY
+                def check_needs_review(oid, obs, reg):
+                    if unknown_to_field:
+                        fields_to_check = unknown_to_field.values() if isinstance(unknown_to_field, dict) else unknown_to_field
+                        for field in fields_to_check:
+                            raw_val = reg.get(field, "")
+                            if raw_val is not None and not (isinstance(raw_val, float) and pd.isna(raw_val)):
+                                s = str(raw_val).strip().lower()
+                                if s in _LEGACY:
+                                    return True
+                    return False
+                if is_not:
+                    return lambda oid, obs, reg: not check_needs_review(oid, obs, reg)
+                return check_needs_review
+            elif p in ("Has_ICEDIG_Code", "ICEDIG_Unknown"):
+                # Matches objects where a tracked field has been assigned any ICEDIG precision code
+                from config import ICEDIG_UNKNOWN_CODES as _ICEDIG
+                def check_has_icedig(oid, obs, reg):
+                    if unknown_to_field:
+                        fields_to_check = unknown_to_field.values() if isinstance(unknown_to_field, dict) else unknown_to_field
+                        for field in fields_to_check:
+                            raw_val = reg.get(field, "")
+                            if raw_val is not None and not (isinstance(raw_val, float) and pd.isna(raw_val)):
+                                s = str(raw_val).strip().lower()
+                                if s in _ICEDIG:
+                                    return True
+                    return False
+                if is_not:
+                    return lambda oid, obs, reg: not check_has_icedig(oid, obs, reg)
+                return check_has_icedig
             elif p == "Has_History":
                 if is_not:
                     return lambda oid, obs, reg: not fast_has_history(oid)

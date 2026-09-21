@@ -13,6 +13,27 @@ import os
 import json
 import sys
 from datetime import datetime
+# =====================
+# ICEDIG D4.1 UNKNOWN VALUE STANDARDS
+# =====================
+# Legacy ambiguous tokens (still valid but imprecise)
+LEGACY_UNKNOWN_TOKENS: frozenset = frozenset({"unknown", "ukjent", "?", "-"})
+# Precision ICEDIG D4.1 codes
+ICEDIG_UNKNOWN_CODES: frozenset = frozenset({
+    "unknown:missing",
+    "unknown:indecipherable",
+    "unknown:undigitized",
+    "withheld",
+})
+# Combined set: all tokens that mean "this field is intentionally unknown"
+ALL_UNKNOWN_TOKENS: frozenset = LEGACY_UNKNOWN_TOKENS | ICEDIG_UNKNOWN_CODES
+# Human-readable labels for each ICEDIG code (used in context menus and tooltips)
+ICEDIG_CODE_LABELS: dict = {
+    "unknown:missing":        "unknown:missing  (blank on original label)",
+    "unknown:indecipherable": "unknown:indecipherable  (illegible on label)",
+    "unknown:undigitized":    "unknown:undigitized  (skipped during digitisation)",
+    "withheld":               "withheld  (known but intentionally hidden)",
+}
 
 def get_system_theme():
     """Detect platform and return system theme name."""

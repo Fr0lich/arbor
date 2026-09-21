@@ -942,6 +942,8 @@ class ObjectProgramUI(
         self.filter_vars["Any_Problem"] = tk.StringVar(value="Ignore")
         self.filter_vars["Historical_Data"] = tk.StringVar(value="Ignore")
         self.filter_vars["Unknown"] = tk.StringVar(value="Ignore")
+        self.filter_vars["Needs_ICEDIG_Review"] = tk.StringVar(value="Ignore")
+        self.filter_vars["Has_ICEDIG_Code"] = tk.StringVar(value="Ignore")
 
         # Status & Boolean filters
         self.filter_vars["Has_Images"]            = tk.StringVar(value="Ignore")
@@ -6121,6 +6123,7 @@ class ObjectProgramUI(
 
 
     def is_unknown(self, value):
+        from config import ALL_UNKNOWN_TOKENS
         if value is None:
             return False
 
@@ -6129,7 +6132,7 @@ class ObjectProgramUI(
         if not v:
             return False
 
-        return v in ("ukjent", "unknown", "?", "-")
+        return v in ALL_UNKNOWN_TOKENS
 
 
 

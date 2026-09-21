@@ -69,6 +69,10 @@ SETTING_INFO_TEXTS = {
         "Enforces strict data format checks before committing edits or navigating away, "
         "rather than solely applying visual warning tints."
     ),
+    "require_mobile_pin": (
+        "Require security PIN authentication for mobile devices connecting via Mobile Companion. "
+        "When disabled, mobile devices are immediately granted a session without entering a PIN."
+    ),
 }
 
 
@@ -357,6 +361,7 @@ class UnifiedSettingsWindow:
         self.var_strict_validation = tk.BooleanVar(value=p.get("strict_input_validation", False))
         self.var_enable_gbif = tk.BooleanVar(value=p.get("enable_gbif", False))
         self.var_gbif_max_workers = tk.IntVar(value=int(p.get("gbif_max_workers", 5)))
+        self.var_require_mobile_pin = tk.BooleanVar(value=p.get("require_mobile_pin", True))
 
         # Toolbar draft vars
         self.draft_toolbar_vars = {}
@@ -1190,6 +1195,8 @@ class UnifiedSettingsWindow:
         create_toggle_row(card2, "Auto-resolve Conflicts", self.var_auto_resolve, ui_ref=self.app or self)
         create_toggle_row(card2, "Strict Input Validation", self.var_strict_validation,
                           ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["strict_input_validation"])
+        create_toggle_row(card2, "Require PIN for Mobile Companion", self.var_require_mobile_pin,
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["require_mobile_pin"])
         tk.Label(card2,
                  text="⚠ Some experimental features require an application restart.",
                  font=self.FONT_SUBTITLE, fg=self.COLORS["search_orange"],
@@ -1434,6 +1441,7 @@ class UnifiedSettingsWindow:
         p["enable_focus_mode_toggle"] = new_focus_toggle
         p["auto_resolve_conflicts"] = self.var_auto_resolve.get()
         p["strict_input_validation"] = self.var_strict_validation.get()
+        p["require_mobile_pin"] = self.var_require_mobile_pin.get()
         p["enable_gbif"] = self.var_enable_gbif.get()
         try:
             p["gbif_max_workers"] = int(self.var_gbif_max_workers.get())
@@ -1449,6 +1457,7 @@ class UnifiedSettingsWindow:
         adv["image_url_pattern_override"] = p["image_url_pattern_override"]
         adv["enable_bulk_editor"] = p["enable_bulk_editor"]
         adv["enable_focus_mode_toggle"] = p["enable_focus_mode_toggle"]
+        adv["require_mobile_pin"] = p["require_mobile_pin"]
         adv["enable_gbif"] = p["enable_gbif"]
         adv["gbif_max_workers"] = p["gbif_max_workers"]
         adv["enable_excel_import_backup"] = p["enable_excel_import_backup"]
