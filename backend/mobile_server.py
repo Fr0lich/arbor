@@ -1476,10 +1476,14 @@ self.addEventListener('fetch', (event) => {
                             field = problem_to_field[prob_col]
                             if field in df_reg.columns:
                                 raw_vals = df_reg[field].reindex(indices)
-                                is_missing = raw_vals.isna() | (_clean_series(raw_vals) == "")
                                 is_explicitly_unknown = _is_unknown_series(raw_vals)
-                                auto_mask = is_missing & ~is_explicitly_unknown
-                                return obs_mask | auto_mask
+                                is_missing = raw_vals.isna() | (_clean_series(raw_vals) == "")
+
+                                # Overwrite observation mask directly to ensure explicitly unknown is NEVER a problem
+                                auto_mask = is_missing
+                                result_mask = obs_mask | auto_mask
+                                result_mask = result_mask & ~is_explicitly_unknown
+                                return result_mask
 
                         return obs_mask
 
@@ -1506,6 +1510,27 @@ self.addEventListener('fetch', (event) => {
                                 matched_indices = matched_indices[~any_prob_mask]
                             else:
                                 matched_indices = matched_indices[any_prob_mask]
+
+                        elif "_Unknown" in p_name or p_name == "Unknown":
+                            field_name = p_name.replace("_Unknown", "")
+                            if field_name == "Unknown":
+                                # Global unknown
+                                unk_mask = pd.Series(False, index=matched_indices)
+                                for col in df_reg.columns:
+                                    if str(col).lower() not in ("objectid", "id"):
+                                        unk_mask |= _is_unknown_series(df_reg[col].reindex(matched_indices))
+                            else:
+                                # Try mapped field
+                                target_field = problem_to_field.get(field_name + "_Problem", field_name)
+                                if target_field in df_reg.columns:
+                                    unk_mask = _is_unknown_series(df_reg[target_field].reindex(matched_indices))
+                                else:
+                                    unk_mask = pd.Series(False, index=matched_indices)
+
+                            if is_not:
+                                matched_indices = matched_indices[~unk_mask]
+                            else:
+                                matched_indices = matched_indices[unk_mask]
 
                         else:
                             prob_mask = get_problem_mask(p_name, matched_indices)

@@ -209,8 +209,6 @@ class FilterDialogController:
 
         p_status = create_group(status_left, "Processing Status")
         make_tristate_row(p_status, "Reviewed", ui.filter_vars["Reviewed"], COLORS["secondary"])
-        make_tristate_row(p_status, "Reviewed + Has Problem (REV+ERR)", ui.filter_vars["Reviewed_With_Problem"], COLORS["error"])
-        make_tristate_row(p_status, "Problem + Has History", ui.filter_vars["Problem_With_History"], COLORS["error"])
         make_tristate_row(p_status, "Has Suggestions from Books", ui.filter_vars["Has_History"], COLORS["outline_variant"])
         if "Has_Unvalidated" in ui.filter_vars:
             make_tristate_row(p_status, "Has Unvalidated Source", ui.filter_vars["Has_Unvalidated"], COLORS["outline_variant"])
@@ -300,7 +298,13 @@ class FilterDialogController:
 
         u_list = create_group(probs_inner, "Archival Gaps (Ukjent)")
         if "Unknown" in ui.filter_vars:
-            make_tristate_row(u_list, "Objects with settled 'Ukjent' fields", ui.filter_vars["Unknown"], color_bar="#d9a036")
+            make_tristate_row(u_list, "Any settled 'Ukjent' field", ui.filter_vars["Unknown"], color_bar="#d9a036")
+
+        if hasattr(ui, "unknown_columns"):
+            for col in ui.unknown_columns:
+                if col in ui.filter_vars:
+                    clean_name = col.replace("_Unknown", " Unknown").replace("_", " ")
+                    make_tristate_row(u_list, clean_name, ui.filter_vars[col], color_bar="#d9a036")
 
         # TAB 3: IMAGES
         tab_imgs = tk.Frame(tab_content_area, bg=COLORS["surface"])

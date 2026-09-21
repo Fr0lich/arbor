@@ -882,13 +882,13 @@ class ObjectProgramUI(
         self.problem_categories = {}
         self.problem_importances = {}
         self.problem_columns = []
+
+        self.unknown_columns = []
+        self.unknown_to_field = {}
+
         self.location_columns = []
         self.reg_columns = []
         self.choice_fields = set()
-
-        self.unknown_fields = [
-            u["maps_to"] for u in sections.get("unknown_fields", [])
-        ]
 
         # REG
         for field in sections["registration"]:
@@ -900,7 +900,7 @@ class ObjectProgramUI(
         for field in sections["location"]:
             self.location_columns.append(field["name"])
 
-        # PROBLEMS
+        # PROBLEMS & UNKNOWNS
         for field in sections["problems"]:
             name = field["name"]
             self.problem_columns.append(name)
@@ -910,8 +910,16 @@ class ObjectProgramUI(
             if "maps_to" in field and field["maps_to"] and field["maps_to"] != "Other" and name != "Other_problem":
                 self.problem_to_field[name] = field["maps_to"]
 
+                # Dynamically generate an Unknown column for this mapped field
+                unknown_name = name.replace("_Problem", "_Unknown")
+                if "_Unknown" not in unknown_name:
+                    unknown_name = name + "_Unknown"
+
+                self.unknown_columns.append(unknown_name)
+                self.unknown_to_field[unknown_name] = field["maps_to"]
+
         # filter (som før)
-        self.filter_problems = self.problem_columns + [
+        self.filter_problems = self.problem_columns + self.unknown_columns + [
             "Images_Missing",
             "Has_Images",
             "Reviewed",
@@ -926,17 +934,19 @@ class ObjectProgramUI(
         for col in self.problem_columns:
             self.filter_vars[col] = tk.StringVar(value="Ignore")
 
+        for col in self.unknown_columns:
+            self.filter_vars[col] = tk.StringVar(value="Ignore")
+
         # Tri-state problem and history filters
         self.filter_vars["Any_Problem"] = tk.StringVar(value="Ignore")
         self.filter_vars["Historical_Data"] = tk.StringVar(value="Ignore")
+        self.filter_vars["Unknown"] = tk.StringVar(value="Ignore")
 
         # Status & Boolean filters
         self.filter_vars["Has_Images"]            = tk.StringVar(value="Ignore")
         self.filter_vars["Reviewed"]              = tk.StringVar(value="Ignore")
         self.filter_vars["Has_Comment"]           = tk.StringVar(value="Ignore")
         self.filter_vars["Has_Location_Comment"]  = tk.StringVar(value="Ignore")
-        self.filter_vars["Reviewed_With_Problem"] = tk.StringVar(value="Ignore")
-        self.filter_vars["Problem_With_History"]  = tk.StringVar(value="Ignore")
         self.filter_vars["Has_History"]           = tk.StringVar(value="Ignore")
         self.filter_vars["Has_Unvalidated"]       = tk.StringVar(value="Ignore")
         self.filter_vars["Search_Old_Taxonomy"]   = tk.StringVar(value="Ignore")
@@ -5365,10 +5375,6 @@ class ObjectProgramUI(
         elif rev_val == "HAS":
             status = "reviewed"
 
-        hist_val = self.filter_vars.get('Problem_With_History', tk.StringVar()).get().strip().upper()
-        if hist_val == "HAS":
-            status = "conflict"
-
         return {
             "q": query,
             "status": status,
@@ -6643,10 +6649,12 @@ class ObjectProgramUI(
                         groups["Images"].append((key, s_val))
                     elif key in self.problem_columns and "Image" in key:
                         groups["Images"].append((key, s_val))
-                    elif key in ["Reviewed", "Reviewed_With_Problem", "Problem_With_History", "Has_History", "Has_Unvalidated", "Search_Old_Taxonomy"]:
+                    elif key in ["Reviewed", "Has_History", "Has_Unvalidated", "Search_Old_Taxonomy", "Unknown"]:
                         groups["Status"].append((key, s_val))
                     elif key in ["Has_Comment", "Has_Location_Comment"]:
                         groups["Text"].append((key, s_val))
+                    elif key in self.unknown_columns:
+                        groups["Status"].append((key, s_val))
                     else:
                         groups["Problems"][key] = s_val
             elif isinstance(var, tk.BooleanVar) and val:
@@ -6655,6 +6663,8 @@ class ObjectProgramUI(
                         groups["Images"].append(key)
                     else:
                         groups["Problems"][key] = "HAS"
+                elif key in self.unknown_columns:
+                    groups["Status"].append((key, "HAS"))
 
 
 
@@ -6703,7 +6713,7 @@ class ObjectProgramUI(
             location_filters=(building_filter, floor_filter, cabinet_filter),
             problem_columns=self.problem_columns,
             problem_to_field=self.problem_to_field,
-            unknown_fields=self.unknown_fields,
+            unknown_to_field=self.unknown_to_field,
             image_mode=self.image_mode,
             df_unvalidated=getattr(self.app, "df_unvalidated", None),
             df_log=getattr(self.app, "df_log", None),
@@ -7295,8 +7305,6 @@ class ObjectProgramUI(
             self.filter_vars["Has_Images"].set("Not")
         elif mode == "not_reviewed":
             self.filter_vars["Reviewed"].set("Not")
-        elif mode == "reviewed_problem":
-            self.filter_vars["Reviewed_With_Problem"].set("Has")
         elif mode == "has_history":
             self.filter_vars["Historical_Data"].set("Has")
 

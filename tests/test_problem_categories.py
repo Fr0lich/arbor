@@ -106,9 +106,9 @@ class TestCategoryFilterEvaluators:
             "Images_Problem": "media",
             "Images_Missing": "media",
         }
-        unknown_fields = ["Collector", "Collection_Date"]
+        unknown_to_field = ["Collector", "Collection_Date"]
 
-        return df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, prob_categories, unknown_fields
+        return df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, prob_categories, unknown_to_field
 
     def test_filter_has_taxonomy_problem(self, specimen_dataset):
         df_reg, reg_dict, obs_dict, history_set, prob_cols, prob_to_field, prob_cats, unk_fields = specimen_dataset
@@ -127,7 +127,7 @@ class TestCategoryFilterEvaluators:
             problem_columns=prob_cols,
             problem_to_field=prob_to_field,
             problem_categories=prob_cats,
-            unknown_fields=unk_fields,
+            unknown_to_field=unk_fields,
             image_mode="folder"
         )
         assert "3" in res
@@ -153,7 +153,7 @@ class TestCategoryFilterEvaluators:
             problem_columns=prob_cols,
             problem_to_field=prob_to_field,
             problem_categories=prob_cats,
-            unknown_fields=unk_fields,
+            unknown_to_field=unk_fields,
             image_mode="folder"
         )
         assert "2" not in res  # Ukjent properly suppressed as actionable problem
@@ -176,7 +176,7 @@ class TestCategoryFilterEvaluators:
             problem_columns=prob_cols,
             problem_to_field=prob_to_field,
             problem_categories=prob_cats,
-            unknown_fields=unk_fields,
+            unknown_to_field=unk_fields,
             image_mode="folder"
         )
         assert res == ["4"]
@@ -198,7 +198,7 @@ class TestCategoryFilterEvaluators:
             problem_columns=prob_cols,
             problem_to_field=prob_to_field,
             problem_categories=prob_cats,
-            unknown_fields=unk_fields,
+            unknown_to_field=unk_fields,
             image_mode="folder"
         )
         assert "2" in res
