@@ -18,7 +18,7 @@ class FilterManager:
     def __init__(self):
         pass
 
-    def apply_filter(self, df_reg, reg_dict, obs_dict, history_set, groups, global_mode, not_reviewed_only, location_filters, problem_columns, problem_to_field, unknown_fields, image_mode, df_unvalidated=None, df_log=None, old_taxonomy_query="", problem_categories=None):
+    def apply_filter(self, df_reg, reg_dict, obs_dict, history_set, groups, global_mode, not_reviewed_only, location_filters, problem_columns, problem_to_field, unknown_to_field, image_mode, df_unvalidated=None, df_log=None, old_taxonomy_query="", problem_categories=None):
         filtered_ids = []
         if df_reg is None:
             return filtered_ids
@@ -128,12 +128,14 @@ class FilterManager:
                 else:
                     raw_str = str(raw_val).strip()
 
-                is_missing = (raw_str == "")
-                if not is_missing:
-                    return obs_val
-
                 is_explicitly_unknown = raw_str.lower() in ("unknown", "?", "ukjent", "-")
-                auto_val = is_missing and not is_explicitly_unknown
+
+                # If explicit unknown, it NEVER counts as a problem (overriding manual checkboxes).
+                if is_explicitly_unknown:
+                    return False
+
+                is_missing = (raw_str == "")
+                auto_val = is_missing
 
             return obs_val or auto_val
 
@@ -244,16 +246,11 @@ class FilterManager:
                 return lambda oid, obs, reg: bool(str(obs.get("Extra", "")).strip())
             elif p in ("Unknown", "Has_Unknown", "Unknown_Values"):
                 def check_unk(oid, obs, reg):
-                    if unknown_fields:
-                        for field in unknown_fields:
+                    if unknown_to_field:
+                        # Handle both list (legacy tests) and dict formats
+                        fields_to_check = unknown_to_field.values() if isinstance(unknown_to_field, dict) else unknown_to_field
+                        for field in fields_to_check:
                             raw_val = reg.get(field, "")
-                            if raw_val is None or (isinstance(raw_val, float) and pd.isna(raw_val)):
-                                return True
-                            s = str(raw_val).strip().lower()
-                            if s in ("", "unknown", "?", "ukjent", "-"):
-                                return True
-                    else:
-                        for raw_val in reg.values():
                             if raw_val is not None and not (isinstance(raw_val, float) and pd.isna(raw_val)):
                                 s = str(raw_val).strip().lower()
                                 if s in ("unknown", "?", "ukjent", "-"):
@@ -262,11 +259,20 @@ class FilterManager:
                 if is_not:
                     return lambda oid, obs, reg: not check_unk(oid, obs, reg)
                 return check_unk
-            elif p == "Reviewed_With_Problem":
+            elif "_Unknown" in p:
+                field = unknown_to_field.get(p)
+                def check_specific_unk(oid, obs, reg):
+                    if field:
+                        raw_val = reg.get(field, "")
+                        if raw_val is not None and not (isinstance(raw_val, float) and pd.isna(raw_val)):
+                            s = str(raw_val).strip().lower()
+                            if s in ("unknown", "?", "ukjent", "-"):
+                                return True
+                    return False
                 if is_not:
-                    return lambda oid, obs, reg: not (bool(obs.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs, reg))
-                return lambda oid, obs, reg: (bool(obs.get(REVIEWED_COLUMN, False)) and fast_get_cached_problem(oid, obs, reg))
-            elif p == "Problem_With_History" or p == "Has_History":
+                    return lambda oid, obs, reg: not check_specific_unk(oid, obs, reg)
+                return check_specific_unk
+            elif p == "Has_History":
                 if is_not:
                     return lambda oid, obs, reg: not fast_has_history(oid)
                 return lambda oid, obs, reg: fast_has_history(oid)
