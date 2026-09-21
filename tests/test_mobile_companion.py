@@ -1184,10 +1184,15 @@ def test_v2_route_rendering_and_cache_headers(mock_app_state):
     assert 'id="tabContentLocation"' in html
     assert 'id="tabContentDetails"' in html
     assert 'id="tabContentProblems"' in html
+    assert 'id="problemResolverContainer"' in html
+    assert 'id="historicalConflictsContainer"' in html
     assert 'id="tabBtnLocation"' in html
     assert 'id="tabBtnDetails"' in html
     assert 'id="tabBtnProblems"' in html
     assert 'switchDetailTab' in html
+    assert 'fixProblemInline' in html
+    assert 'applyHistoricalAndFix' in html
+    assert 'renderHistoricalConflicts' in html
     assert res.headers.get("Cache-Control") == "no-cache, no-store, must-revalidate, max-age=0"
     assert res.headers.get("Pragma") == "no-cache"
 

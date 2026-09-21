@@ -7296,13 +7296,13 @@ INDEX_TEMPLATE_V2 = """
             </div>
           </div>
 
-          <!-- Problem Discrepancies Card -->
-          <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3">
+          <!-- Section 1: Active Problem & Discrepancy Resolvers -->
+          <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
             <div class="flex items-center justify-between border-b border-tonal2 pb-2">
               <div class="flex items-center gap-2">
                 <span class="text-ember font-bold text-sm">⚑</span>
                 <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
-                  Flagged Problems & Issues
+                  Flagged Issues & Problem Fields
                 </h3>
               </div>
               <button
@@ -7315,14 +7315,41 @@ INDEX_TEMPLATE_V2 = """
               </button>
             </div>
 
-            <!-- Active Discrepancies List -->
-            <div id="activeDiscrepanciesList" class="space-y-2">
-              <!-- Discrepancy items injected dynamically -->
+            <!-- Problem Cards Injected Dynamically by renderProblemsTab() -->
+            <div id="problemResolverContainer" class="space-y-3">
+              <!-- Rendered dynamically -->
             </div>
 
-            <!-- Problem Flags Quick-Toggle Grid -->
-            <div id="problemFlagsGrid" class="pt-2 border-t border-tonal2 space-y-2">
+            <!-- Legacy Discrepancies List (hidden helper container) -->
+            <div id="activeDiscrepanciesList" class="hidden"></div>
+          </div>
+
+          <!-- Section 2: Historical Archive Comparisons & Data Resolver -->
+          <div id="historicalSectionCard" class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
+            <div class="flex items-center justify-between border-b border-tonal2 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-fern font-bold text-sm">📜</span>
+                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
+                  Historical Archive Comparisons
+                </h3>
+              </div>
+              <span id="histConflictBadge" class="font-mono text-[10px] text-ink-muted bg-tonal1 border border-tonal3 px-1.5 py-0.2 rounded-[2px]">
+                0 comparisons
+              </span>
+            </div>
+
+            <!-- Historical comparison cards injected by renderHistoricalConflicts() -->
+            <div id="historicalConflictsContainer" class="space-y-2.5">
+              <p class="text-xs text-ink-faint italic py-1">No historical archive data loaded for this specimen.</p>
+            </div>
+          </div>
+
+          <!-- Section 3: Problem Flags Quick-Toggle Grid -->
+          <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
+            <div class="border-b border-tonal2 pb-2">
               <p class="font-mono text-[10px] uppercase font-bold text-ink-muted">Quick Problem Toggles:</p>
+            </div>
+            <div id="problemFlagsGrid" class="pt-1 space-y-2">
               <div id="problemTogglesContainer" class="grid grid-cols-2 gap-2 text-xs">
                 <!-- Checkboxes dynamically generated from ui_sections.problems -->
               </div>
@@ -7895,6 +7922,9 @@ INDEX_TEMPLATE_V2 = """
             // Unhide the toggle button since there is history available
             toggleBtn.classList.remove('hidden');
         }
+    }
+        if (typeof renderProblemsTab === 'function' && currentRecord) renderProblemsTab(currentRecord);
+        if (typeof renderHistoricalConflicts === 'function' && currentRecord) renderHistoricalConflicts(currentRecord);
     }
 
     function toggleHistoryContainer(field) {
@@ -10378,32 +10408,12 @@ INDEX_TEMPLATE_V2 = """
     // DISCREPANCY & PROBLEM TOGGLES
     // ==========================================
     function renderDiscrepancies(record) {
-      const listContainer = document.getElementById('activeDiscrepanciesList');
-      const togglesContainer = document.getElementById('problemTogglesContainer');
-
-      const issues = record.flagged_issues || [];
-      if (issues.length === 0) {
-        listContainer.innerHTML = `<p class="text-xs text-ink-faint italic">No active discrepancies flagged for this specimen.</p>`;
-      } else {
-        listContainer.innerHTML = issues.map((iss, idx) => `
-          <div class="bg-ember-light border border-ember-border p-2.5 rounded-[2px] flex items-start justify-between gap-2 text-xs">
-            <div>
-              <span class="font-bold text-ember-dark">${iss.field || 'General'}:</span>
-              <p class="text-ember-dark mt-0.5">${iss.reason || 'Flagged problem'}</p>
-            </div>
-            <button
-              type="button"
-              onclick="resolveDiscrepancy('${iss.id}')"
-              class="min-h-[44px] px-3 py-1.5 bg-surface hover:bg-ember-light border border-ember-border text-ember-dark font-bold text-xs rounded-[2px] shrink-0 touch-target-min touch-press flex items-center justify-center"
-            >
-              Resolve
-            </button>
-          </div>
-        `).join('');
-      }
+      renderProblemsTab(record);
+      renderHistoricalConflicts(record);
 
       // Quick Toggles from ui_sections.problems
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+      const togglesContainer = document.getElementById('problemTogglesContainer');
+      if (togglesContainer && activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
         const probs = activeSchema.ui_sections.problems;
         togglesContainer.innerHTML = probs.map(p => {
           const pName = p.name;
@@ -10425,7 +10435,355 @@ INDEX_TEMPLATE_V2 = """
       }
     }
 
-    function populateDiscrepancyFields() {
+    function renderProblemsTab(record) {
+      const container = document.getElementById('problemResolverContainer');
+      if (!container) return;
+      if (!record) {
+        container.innerHTML = '<p class="text-xs text-ink-faint italic py-1">No specimen selected.</p>';
+        return;
+      }
+
+      const issues = record.flagged_issues || [];
+      const problemFields = [];
+      const seenFields = new Set();
+
+      // 1. Add flagged issues
+      issues.forEach(iss => {
+        if (!iss.resolved) {
+          const fName = iss.field || 'General';
+          seenFields.add(fName);
+          problemFields.push({
+            field: fName,
+            section: (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.registration && activeSchema.ui_sections.registration.some(f => f.name === fName)) ? 'registration' : 'observation',
+            type: 'flagged_issue',
+            issueId: iss.id,
+            reason: iss.reason || 'Flagged problem'
+          });
+        }
+      });
+
+      // 2. Add schema problem fields
+      if (activeSchema && activeSchema.ui_sections) {
+        const regFields = activeSchema.ui_sections.registration || [];
+        const locFields = activeSchema.ui_sections.location || [];
+
+        regFields.forEach(f => {
+          if (!seenFields.has(f.name)) {
+            const val = (record.registration && record.registration[f.name] !== undefined) ? record.registration[f.name] : '';
+            const isProb = isFieldProblemActive(f.name, 'registration', record);
+            const isUkn = isValueUnknown(val);
+            if (isProb || isUkn) {
+              seenFields.add(f.name);
+              problemFields.push({
+                field: f.name,
+                section: 'registration',
+                type: isProb ? 'active_problem' : 'unknown_value',
+                issueId: null,
+                reason: isProb ? 'Problem flag active' : 'Unknown / Missing value'
+              });
+            }
+          }
+        });
+
+        locFields.forEach(f => {
+          if (!seenFields.has(f.name)) {
+            const val = (record.observation && record.observation[f.name] !== undefined) ? record.observation[f.name] : '';
+            const isProb = isFieldProblemActive(f.name, 'observation', record);
+            const isUkn = isValueUnknown(val);
+            if (isProb || isUkn) {
+              seenFields.add(f.name);
+              problemFields.push({
+                field: f.name,
+                section: 'observation',
+                type: isProb ? 'active_problem' : 'unknown_value',
+                issueId: null,
+                reason: isProb ? 'Problem flag active' : 'Unknown / Missing value'
+              });
+            }
+          }
+        });
+      }
+
+      if (problemFields.length === 0) {
+        container.innerHTML = `
+          <div class="p-3 bg-fern-light/30 border border-fern/30 rounded-[2px] flex items-center gap-2 text-xs font-sans text-fern-dark">
+            <span class="text-sm font-bold">✓</span>
+            <span class="font-medium">No active problems or flagged issues found for this specimen.</span>
+          </div>
+        `;
+        return;
+      }
+
+      let cardsHtml = '';
+      problemFields.forEach(p => {
+        const fName = p.field;
+        const fClean = fName.replace(/[^a-zA-Z0-9_]/g, '_');
+        let currentVal = '';
+        if (p.section === 'registration' && record.registration && record.registration[fName] !== undefined) {
+          currentVal = record.registration[fName];
+        } else if (record.observation && record.observation[fName] !== undefined) {
+          currentVal = record.observation[fName];
+        }
+        const currentValStr = (currentVal !== null && currentVal !== undefined && String(currentVal).trim() !== '') ? String(currentVal) : '[BLANK]';
+        const escapedCurrentVal = String(currentVal || '').replace(/"/g, '&quot;');
+
+        // Check if historical suggestions exist for this field
+        let histSuggestionsHtml = '';
+        if (historicalData && historicalData[fName] && Object.keys(historicalData[fName]).length > 0) {
+          const suggestions = historicalData[fName];
+          let sugItems = '';
+          for (const [sugVal, sources] of Object.entries(suggestions)) {
+            const encodedVal = sugVal.replace(/'/g, "\'").replace(/"/g, '&quot;');
+            const sourceStr = sources.join(', ');
+            sugItems += `
+              <div class="p-2 bg-surface border border-bordercol rounded-[2px] flex items-center justify-between gap-2 text-xs">
+                <div class="min-w-0 flex-1">
+                  <span class="font-mono font-bold text-fern-dark">${encodedVal}</span>
+                  <p class="text-[10px] text-ink-muted">Source: <span class="font-medium text-ink">${sourceStr}</span></p>
+                </div>
+                <button
+                  type="button"
+                  onclick="applyHistoricalAndFix('${fName}', '${encodedVal}', '${p.issueId || ''}')"
+                  class="min-h-[36px] px-3 py-1 bg-fern hover:bg-fern-dark text-white font-bold text-xs rounded-[2px] shadow-xs shrink-0 touch-target-min touch-press"
+                  title="Apply historical value & fix problem"
+                >
+                  Apply Fix
+                </button>
+              </div>
+            `;
+          }
+
+          histSuggestionsHtml = `
+            <div class="pt-2 border-t border-tonal2 space-y-1.5">
+              <p class="font-mono text-[10px] uppercase font-bold text-ink-muted flex items-center gap-1">
+                <span>📜</span><span>Historical Suggestions:</span>
+              </p>
+              <div class="space-y-1.5">
+                ${sugItems}
+              </div>
+            </div>
+          `;
+        }
+
+        cardsHtml += `
+          <div class="bg-surface border-2 border-ember-border/80 rounded-[2px] p-3 space-y-2.5 shadow-2xs">
+            <!-- Header -->
+            <div class="flex items-start justify-between gap-2 border-b border-tonal2 pb-2">
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${fName}</span>
+                  <span class="px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold ${p.type === 'unknown_value' ? 'bg-[#FBC02D] text-[#2c302e]' : 'bg-[#C62828] text-white'}">
+                    ${p.type === 'unknown_value' ? '?' : '⚠'} ${p.reason}
+                  </span>
+                </div>
+                <p class="text-xs font-mono text-ink-muted mt-0.5">Current: <span class="font-semibold text-ink">${currentValStr}</span></p>
+              </div>
+              <button
+                type="button"
+                onclick="${p.issueId ? `resolveDiscrepancy('${p.issueId}')` : `toggleFieldProblem('${fName}')`}"
+                class="text-[11px] font-medium text-ink-muted hover:text-ember px-2 py-1 rounded-[2px] border border-bordercol hover:bg-tonal1 transition-colors touch-target-min"
+                title="Dismiss flag without changing value"
+              >
+                Dismiss
+              </button>
+            </div>
+
+            <!-- Inline Direct Fix Editor -->
+            <div class="space-y-1.5">
+              <label class="block font-mono text-[10px] uppercase font-bold text-ink-muted">Fix / Correct Value:</label>
+              <div class="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  id="fix_input_${fClean}"
+                  value="${escapedCurrentVal}"
+                  placeholder="Enter corrected value..."
+                  class="flex-1 bg-surface border border-bordercol rounded-[2px] px-2.5 py-2 text-xs font-mono text-ink outline-none focus:border-fern focus:ring-1 focus:ring-fern"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();fixProblemInline('${fName}', '${p.section}', '${p.issueId || ''}');}"
+                />
+                <button
+                  type="button"
+                  onclick="fixProblemInline('${fName}', '${p.section}', '${p.issueId || ''}')"
+                  class="min-h-[38px] px-3.5 py-2 bg-fern hover:bg-fern-dark text-white font-bold text-xs rounded-[2px] shadow-xs shrink-0 touch-target-min touch-press flex items-center gap-1"
+                >
+                  <span>✓</span>
+                  <span>Save Fix</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Historical Suggestions if available -->
+            ${histSuggestionsHtml}
+          </div>
+        `;
+      });
+
+      container.innerHTML = cardsHtml;
+    }
+
+    function renderHistoricalConflicts(record) {
+      const container = document.getElementById('historicalConflictsContainer');
+      const badge = document.getElementById('histConflictBadge');
+      if (!container) return;
+
+      if (!historicalData || Object.keys(historicalData).length === 0) {
+        container.innerHTML = '<p class="text-xs text-ink-faint italic py-1">No historical archive records found for this specimen.</p>';
+        if (badge) badge.textContent = '0 comparisons';
+        return;
+      }
+
+      let count = 0;
+      let itemsHtml = '';
+
+      for (const [field, valuesMap] of Object.entries(historicalData)) {
+        if (!valuesMap || Object.keys(valuesMap).length === 0) continue;
+        count++;
+
+        let currentVal = '';
+        if (record && record.registration && record.registration[field] !== undefined) {
+          currentVal = record.registration[field];
+        } else if (record && record.observation && record.observation[field] !== undefined) {
+          currentVal = record.observation[field];
+        }
+        const currentValStr = (currentVal !== null && currentVal !== undefined && String(currentVal).trim() !== '') ? String(currentVal) : '[BLANK]';
+
+        let sugHtml = '';
+        for (const [histVal, sources] of Object.entries(valuesMap)) {
+          const encodedVal = histVal.replace(/'/g, "\'").replace(/"/g, '&quot;');
+          const sourceStr = sources.join(', ');
+          const isMatching = String(currentVal).trim() === String(histVal).trim();
+
+          sugHtml += `
+            <div class="p-2.5 bg-surface border rounded-[2px] flex items-center justify-between gap-2 text-xs ${isMatching ? 'border-fern/50 bg-fern-light/20' : 'border-bordercol'}">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono font-bold ${isMatching ? 'text-fern-dark' : 'text-ink'}">${encodedVal}</span>
+                  ${isMatching ? '<span class="text-[10px] text-fern-dark font-medium bg-fern/10 px-1 py-0.2 rounded-[2px]">Matches Current</span>' : ''}
+                </div>
+                <p class="text-[10px] text-ink-muted mt-0.5">Sources: <span class="font-mono">${sourceStr}</span></p>
+              </div>
+              ${!isMatching ? `
+                <button
+                  type="button"
+                  onclick="applyHistoricalAndFix('${field}', '${encodedVal}', '')"
+                  class="min-h-[36px] px-3 py-1.5 bg-tonal1 hover:bg-fern hover:text-white border border-bordercol hover:border-fern text-ink font-bold text-xs rounded-[2px] transition-colors shrink-0 touch-target-min touch-press"
+                  title="Accept historical value into active database"
+                >
+                  Accept
+                </button>
+              ` : ''}
+            </div>
+          `;
+        }
+
+        let undoBtn = '';
+        if (revertState && revertState.hasOwnProperty(field)) {
+          const orig = revertState[field].replace(/'/g, "\'").replace(/"/g, '&quot;');
+          undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[11px] text-ember hover:underline font-bold bg-ember-light px-2 py-0.5 border border-ember-border rounded-[2px] touch-press">Undo</button>`;
+        }
+
+        itemsHtml += `
+          <div class="bg-tonal1/60 border border-bordercol rounded-[2px] p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${field}</span>
+              <div class="flex items-center gap-2">
+                ${undoBtn}
+                <span class="text-[11px] font-mono text-ink-muted">Current: <strong class="text-ink">${currentValStr}</strong></span>
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              ${sugHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      if (badge) badge.textContent = `${count} field${count === 1 ? '' : 's'}`;
+      container.innerHTML = itemsHtml || '<p class="text-xs text-ink-faint italic py-1">No historical comparisons available.</p>';
+    }
+
+    async function fixProblemInline(fieldName, section, issueId) {
+      if (!currentRecord) return;
+      const fClean = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
+      const inputEl = document.getElementById(`fix_input_${fClean}`);
+      if (!inputEl) return;
+      const newVal = inputEl.value.trim();
+
+      // 1. Update form inputs in details/location tabs
+      const targetInputs = document.querySelectorAll(`[data-field="${fieldName}"]`);
+      targetInputs.forEach(inp => {
+        if (inp.type === 'checkbox') {
+          inp.checked = (newVal.toLowerCase() === 'true' || newVal === '1' || newVal === 'yes');
+        } else {
+          inp.value = newVal;
+        }
+      });
+
+      // 2. Update record
+      if (section === 'registration') {
+        currentRecord.registration = currentRecord.registration || {};
+        currentRecord.registration[fieldName] = newVal;
+      } else {
+        currentRecord.observation = currentRecord.observation || {};
+        currentRecord.observation[fieldName] = newVal;
+      }
+      markDirty(fieldName);
+
+      // 3. Clear problem flag on field
+      if (currentRecord.observation) {
+        const probCol = `${fieldName}_Problem`;
+        if (currentRecord.observation[probCol] !== undefined) {
+          currentRecord.observation[probCol] = false;
+          const probToggle = document.getElementById(`prob_${probCol}`);
+          if (probToggle) probToggle.checked = false;
+          markDirty(probCol);
+        }
+      }
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+        activeSchema.ui_sections.problems.forEach(p => {
+          if (p.maps_to === fieldName || p.target === fieldName) {
+            if (currentRecord.observation) currentRecord.observation[p.name] = false;
+          }
+        });
+      }
+
+      // 4. Resolve flagged issue if issueId exists or matches field
+      if (currentRecord.flagged_issues) {
+        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issueId && i.field !== fieldName);
+      }
+
+      triggerAutoSave();
+      showToast(`Fixed problem for ${fieldName}: ${newVal || '[BLANK]'}`);
+
+      // Refresh UI
+      renderDynamicForm(activeSchema, currentRecord);
+      renderProblemsTab(currentRecord);
+      renderHistoricalConflicts(currentRecord);
+      updateReviewButtonUI();
+    }
+
+    async function applyHistoricalAndFix(fieldName, value, issueId) {
+      await applyHistoricalValue(fieldName, value);
+      // Clear problem flag on field
+      if (currentRecord && currentRecord.observation) {
+        const probCol = `${fieldName}_Problem`;
+        if (currentRecord.observation[probCol] !== undefined) {
+          currentRecord.observation[probCol] = false;
+          const probToggle = document.getElementById(`prob_${probCol}`);
+          if (probToggle) probToggle.checked = false;
+          markDirty(probCol);
+        }
+      }
+      if (currentRecord && currentRecord.flagged_issues) {
+        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issueId && i.field !== fieldName);
+      }
+      triggerAutoSave();
+      renderDynamicForm(activeSchema, currentRecord);
+      renderProblemsTab(currentRecord);
+      renderHistoricalConflicts(currentRecord);
+      updateReviewButtonUI();
+    }
+
+        function populateDiscrepancyFields() {
       const select = document.getElementById('discrepancyFieldSelect');
       if (!activeSchema || !activeSchema.ui_sections) return;
       const reg = (activeSchema.ui_sections.registration || []).map(f => f.name);
