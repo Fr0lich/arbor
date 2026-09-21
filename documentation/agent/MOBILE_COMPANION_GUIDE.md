@@ -3,8 +3,12 @@
 This document serves as a strict instruction manual for any AI agent tasked with modifying or adding features to the Arbor project's Mobile Companion component. Read these rules carefully before making any code changes to the mobile architecture.
 
 ## 1. The Single Source of Truth
-The frontend HTML/JS/CSS for the mobile companion lives entirely inside the `INDEX_TEMPLATE` string within `backend/mobile_server.py`.
-- **CRITICAL RULE:** Agents must **never** create or modify an external `mobile_frontend.html` file or similar. Adding external HTML files causes fallback conflicts and overwrites the internal template.
+The frontend HTML/JS/CSS for the mobile companion lives entirely inside the `INDEX_TEMPLATE` and `INDEX_TEMPLATE_V2` strings within `backend/mobile_server.py`. There are now two distinct versions of the mobile website being maintained.
+- **CRITICAL RULE:** Agents must **never** create or modify an external `mobile_frontend.html` file or similar. Adding external HTML files causes fallback conflicts and overwrites the internal templates.
+- **Handling Dual Templates:**
+  - **Backend / Non-UI Changes:** If the change involves logic, API calls, JS state management, or non-UI specific functionality, it must be applied to **both** `INDEX_TEMPLATE` and `INDEX_TEMPLATE_V2` to maintain feature parity.
+  - **UI / Visual Changes:** Since the two versions are intended to have differences in their user interface, evaluate if a visual change makes sense for both templates.
+  - **When in doubt:** If you are unsure whether a change should be applied to one or both templates, use the `request_user_input` or `message_user` tool to explicitly ask the user for confirmation before proceeding.
 
 ## 2. Replicating Desktop Behavior
 The Mobile Companion must function as a true companion to the desktop experience. When tasked to "check how the desktop program does it, and make the mobile companion do that":
@@ -18,7 +22,7 @@ The user prefers keeping the Python server self-contained without external build
 
 ## 4. Disabling Features
 When disabling unused or deprecated frontend features in the mobile application (e.g., the barcode scanner):
-- Prioritize runtime efficiency by entirely removing the unused HTML/JS from the main `INDEX_TEMPLATE` string.
+- Prioritize runtime efficiency by entirely removing the unused HTML/JS from the main `INDEX_TEMPLATE` and `INDEX_TEMPLATE_V2` strings.
 - Do not simply hide the code via CSS or inject it dynamically.
 - Archive the removed code as string constants in a separate Python file (e.g., `backend/mobile_scanner.py`).
 
