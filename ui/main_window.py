@@ -622,6 +622,7 @@ class ObjectProgramUI(
         self.data_store = ObjectDataStore(self.app)
         self.layout_manager = LayoutStateManager(self)
         self.app_bus = app_bus
+        self.simultaneous_edit_var = tk.BooleanVar(value=False)
 
         if self.app.undo_stacks is None:
             self.app.undo_stacks = {}
@@ -5428,6 +5429,13 @@ class ObjectProgramUI(
             self._mobile_dialog.win.focus_force()
             self._update_push_to_phone_state()
 
+    def toggle_simultaneous_edit(self):
+        if hasattr(self, '_mobile_dialog') and self._mobile_dialog.win.winfo_exists():
+            if self.simultaneous_edit_var.get():
+                self._mobile_dialog.win.grab_release()
+            else:
+                self._mobile_dialog.win.grab_set()
+
     def _on_settings_changed_event(self, key, value, **kwargs):
         self.root.after(0, lambda k=key, v=value: self._apply_settings_change(k, v))
 
@@ -5525,7 +5533,12 @@ class ObjectProgramUI(
                     return s
 
                 if self.app.current_object_id is not None and _norm(self.app.current_object_id) == _norm(oid):
-                    self.load_object(self.app.current_object_id, skip_commit=True)
+                    if hasattr(self, 'simultaneous_edit_var') and self.simultaneous_edit_var.get():
+                        # If simultaneous edit is enabled, do not blindly overwrite the active object on the desktop
+                        # This avoids destroying fields the user is currently typing into.
+                        pass
+                    else:
+                        self.load_object(self.app.current_object_id, skip_commit=True)
             else:
                 self._invalidate_row_cache()
                 self.invalidate_search_index()
