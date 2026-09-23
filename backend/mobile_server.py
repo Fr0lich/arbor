@@ -796,13 +796,7 @@ class MobileServer:
         self.flask_app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
         self.session_token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
         self.sessions_lock = threading.Lock()
-        self.active_sessions = {
-            self.session_token: {
-                "session_id": self.session_id,
-                "created_at": datetime.now().isoformat(),
-                "ip": "127.0.0.1"
-            }
-        }
+        self.active_sessions = {}
         self.pin = ''.join(random.choices(string.digits, k=4))
         self.thread = None
         self._is_running = False
@@ -898,6 +892,12 @@ class MobileServer:
             return xf_ip.split(',')[0].strip()
         return request.remote_addr or "127.0.0.1"
 
+    def _get_client_identifier(self):
+        """Get a unique client string combining the IP address and User-Agent."""
+        ip = self._get_client_ip()
+        ua = request.headers.get('User-Agent', '')
+        return f"{ip}|{ua}"
+
     def _create_session(self, client_ip=None):
         """Generate and register a new unique session for a worker."""
         token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
@@ -908,8 +908,6 @@ class MobileServer:
                 "created_at": datetime.now().isoformat(),
                 "ip": client_ip or "unknown"
             }
-        self.session_token = token
-        self.session_id = sid
         return token, sid
 
     def _get_session_by_token(self, token):
@@ -1000,14 +998,14 @@ class MobileServer:
                     except Exception:
                         pass
 
-    def _check_rate_limit(self, ip=None):
-        if ip is None:
-            ip = self._get_client_ip()
+    def _check_rate_limit(self, identifier=None):
+        if identifier is None:
+            identifier = self._get_client_identifier()
 
-        if ip not in self._auth_attempts:
-            self._auth_attempts[ip] = {"consecutive": 0, "recent": [], "lockout_until": 0}
+        if identifier not in self._auth_attempts:
+            self._auth_attempts[identifier] = {"consecutive": 0, "recent": [], "lockout_until": 0}
 
-        state = self._auth_attempts[ip]
+        state = self._auth_attempts[identifier]
         now = time.time()
 
         if now < state["lockout_until"]:
@@ -1027,13 +1025,13 @@ class MobileServer:
 
         return None
 
-    def _record_failure(self, ip=None):
-        if ip is None:
-            ip = self._get_client_ip()
+    def _record_failure(self, identifier=None):
+        if identifier is None:
+            identifier = self._get_client_identifier()
 
-        if ip not in self._auth_attempts:
-            self._auth_attempts[ip] = {"consecutive": 0, "recent": [], "lockout_until": 0}
-        state = self._auth_attempts[ip]
+        if identifier not in self._auth_attempts:
+            self._auth_attempts[identifier] = {"consecutive": 0, "recent": [], "lockout_until": 0}
+        state = self._auth_attempts[identifier]
         now = time.time()
         state["recent"].append(now)
         state["consecutive"] += 1
@@ -1045,12 +1043,12 @@ class MobileServer:
 
         return None
 
-    def _record_success(self, ip=None):
-        if ip is None:
-            ip = self._get_client_ip()
+    def _record_success(self, identifier=None):
+        if identifier is None:
+            identifier = self._get_client_identifier()
 
-        if ip in self._auth_attempts:
-            self._auth_attempts[ip] = {"consecutive": 0, "recent": [], "lockout_until": 0}
+        if identifier in self._auth_attempts:
+            self._auth_attempts[identifier] = {"consecutive": 0, "recent": [], "lockout_until": 0}
 
     def _check_auth(self):
         """Verify session token or PIN authentication."""
@@ -1128,6 +1126,14 @@ class MobileServer:
         def require_auth():
             if request.endpoint in ['login', 'static', 'api_auth', 'service_worker', None]:
                 return
+
+            # For the main index endpoints, if a master token is supplied, allow the route to handle the redirect
+            # without intercepting it for authentication first.
+            if request.endpoint in ['index', 'index_v2']:
+                token_param = request.args.get('token')
+                if token_param and token_param == getattr(self, 'session_token', None):
+                    return
+
             if not self._check_auth():
                 if request.path.startswith('/api/'):
                     return jsonify({"error": "Unauthorized: Invalid or missing session token"}), 401
@@ -1145,20 +1151,21 @@ class MobileServer:
             error = None
             if request.method == 'POST':
                 ip = self._get_client_ip()
-                rate_limit_resp = self._check_rate_limit(ip)
+                identifier = self._get_client_identifier()
+                rate_limit_resp = self._check_rate_limit(identifier)
                 if rate_limit_resp:
                     return rate_limit_resp
 
                 provided_pin = request.form.get('pin', '').strip()
                 if provided_pin == self.pin or provided_pin == "43110":
-                    self._record_success(ip)
+                    self._record_success(identifier)
                     token, sid = self._create_session(ip)
                     session['token'] = token
                     session['session_id'] = sid
                     session['authenticated'] = True
                     return redirect(url_for('index', token=token))
                 else:
-                    lockout_resp = self._record_failure(ip)
+                    lockout_resp = self._record_failure(identifier)
                     if lockout_resp:
                         return lockout_resp
                     error = 'Invalid PIN'
@@ -1174,6 +1181,7 @@ class MobileServer:
         @app.route('/api/auth', methods=['POST'])
         def api_auth():
             ip = self._get_client_ip()
+            identifier = self._get_client_identifier()
             if not self.is_pin_required():
                 token, sid = self._create_session(ip)
                 session['token'] = token
@@ -1186,7 +1194,7 @@ class MobileServer:
                     "message": "Authenticated successfully (PIN disabled)"
                 })
 
-            rate_limit_resp = self._check_rate_limit(ip)
+            rate_limit_resp = self._check_rate_limit(identifier)
             if rate_limit_resp:
                 return rate_limit_resp
 
@@ -1196,20 +1204,32 @@ class MobileServer:
 
             if provided_token:
                 sess = self._get_session_by_token(provided_token)
-                if sess or provided_token == self.session_token:
-                    self._record_success(ip)
+                if sess:
+                    self._record_success(identifier)
                     session['token'] = provided_token
                     session['authenticated'] = True
-                    sid = sess["session_id"] if sess else self.session_id
+                    sid = sess["session_id"]
                     return jsonify({
                         "success": True,
                         "token": provided_token,
                         "session_id": sid,
                         "message": "Authenticated successfully"
                     })
+                elif provided_token == self.session_token:
+                    # Upgrade master token to a unique session token
+                    new_token, new_sid = self._create_session(ip)
+                    session['token'] = new_token
+                    session['session_id'] = new_sid
+                    session['authenticated'] = True
+                    return jsonify({
+                        "success": True,
+                        "token": new_token,
+                        "session_id": new_sid,
+                        "message": "Authenticated successfully"
+                    })
 
             if provided_pin == self.pin or provided_pin == "43110":
-                self._record_success(ip)
+                self._record_success(identifier)
                 token, sid = self._create_session(ip)
                 session['token'] = token
                 session['session_id'] = sid
@@ -1221,24 +1241,33 @@ class MobileServer:
                     "message": "Authenticated successfully"
                 })
 
-            lockout_resp = self._record_failure(ip)
+            lockout_resp = self._record_failure(identifier)
             if lockout_resp:
                 return lockout_resp
             return jsonify({"success": False, "error": "Invalid PIN"}), 401
 
         @app.route('/')
         def index():
-            is_auth, sid, tok = self._get_current_session()
             token_param = request.args.get('token')
+            if token_param and token_param == self.session_token:
+                # Master token found. Provision a new session and redirect
+                new_token, new_sid = self._create_session(self._get_client_ip())
+                session['token'] = new_token
+                session['session_id'] = new_sid
+                session['authenticated'] = True
+                return redirect(url_for('index', token=new_token))
+
+            is_auth, sid, tok = self._get_current_session()
             if token_param:
                 sess = self._get_session_by_token(token_param)
-                if sess or token_param == self.session_token:
+                if sess:
                     tok = token_param
-                    sid = sess["session_id"] if sess else self.session_id
+                    sid = sess["session_id"]
                     session['token'] = tok
                     session['session_id'] = sid
                     session['authenticated'] = True
                     is_auth = True
+
             if not is_auth:
                 if not self.is_pin_required():
                     tok, sid = self._create_session(self._get_client_ip())
@@ -1259,17 +1288,26 @@ class MobileServer:
 
         @app.route('/v2')
         def index_v2():
-            is_auth, sid, tok = self._get_current_session()
             token_param = request.args.get('token')
+            if token_param and token_param == self.session_token:
+                # Master token found. Provision a new session and redirect
+                new_token, new_sid = self._create_session(self._get_client_ip())
+                session['token'] = new_token
+                session['session_id'] = new_sid
+                session['authenticated'] = True
+                return redirect(url_for('index_v2', token=new_token))
+
+            is_auth, sid, tok = self._get_current_session()
             if token_param:
                 sess = self._get_session_by_token(token_param)
-                if sess or token_param == self.session_token:
+                if sess:
                     tok = token_param
-                    sid = sess["session_id"] if sess else self.session_id
+                    sid = sess["session_id"]
                     session['token'] = tok
                     session['session_id'] = sid
                     session['authenticated'] = True
                     is_auth = True
+
             if not is_auth:
                 if not self.is_pin_required():
                     tok, sid = self._create_session(self._get_client_ip())
