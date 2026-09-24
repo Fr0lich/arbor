@@ -3941,7 +3941,9 @@ INDEX_TEMPLATE = """
     async function apiFetch(url, options = {}) {
       options.headers = options.headers || {};
       options.headers['X-Session-Token'] = TOKEN;
-      options.headers['Content-Type'] = 'application/json';
+      if (options.body && typeof options.body === 'string' && !options.headers['Content-Type']) {
+        options.headers['Content-Type'] = 'application/json';
+      }
       const sep = url.includes('?') ? '&' : '?';
       const fullUrl = `${url}${sep}token=${encodeURIComponent(TOKEN)}`;
       const isCacheable = options.method !== 'POST' && (url.startsWith('/api/schema') || url.startsWith('/api/objects'));
@@ -4411,7 +4413,7 @@ INDEX_TEMPLATE = """
           fetchStatus();
           if (currentOid && dirtyFields.size === 0) {
             loadSpecimen(currentOid, true);
-          } else if (!currentOid) {
+          } else if (!currentOid && activeSchema && objectList.length === 0) {
             fetchList();
           }
         };
@@ -5943,7 +5945,8 @@ INDEX_TEMPLATE = """
           if (currentRecord && String(res.restored.id) === String(currentOid)) {
             Object.assign(currentRecord, res.restored);
             isReviewed = currentRecord.review_status === 'reviewed';
-            populateDetailView(currentRecord);
+            renderDynamicForm(activeSchema, currentRecord);
+            renderDiscrepancies(currentRecord);
             updateReviewButtonUI();
           }
 
@@ -6042,8 +6045,17 @@ INDEX_TEMPLATE = """
       }
 
       if (changed) {
+        if (currentRecord && currentRecord.observation && activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
+          activeSchema.ui_sections.location.forEach(field => {
+            if (presetData[field.name] !== undefined) {
+              currentRecord.observation[field.name] = presetData[field.name];
+            }
+          });
+        }
         showToast(`Applied Preset: ${pName}`);
-        queueSave();
+        triggerAutoSave();
+        if (typeof updateDetailProblemBanner === 'function' && currentRecord) updateDetailProblemBanner(currentRecord);
+        if (typeof renderDiscrepancies === 'function' && currentRecord) renderDiscrepancies(currentRecord);
       }
     }
 
@@ -7934,7 +7946,6 @@ INDEX_TEMPLATE_V2 = """
             // Unhide the toggle button since there is history available
             toggleBtn.classList.remove('hidden');
         }
-    }
         if (typeof renderProblemsTab === 'function' && currentRecord) renderProblemsTab(currentRecord);
         if (typeof renderHistoricalConflicts === 'function' && currentRecord) renderHistoricalConflicts(currentRecord);
     }
@@ -8082,7 +8093,9 @@ INDEX_TEMPLATE_V2 = """
     async function apiFetch(url, options = {}) {
       options.headers = options.headers || {};
       options.headers['X-Session-Token'] = TOKEN;
-      options.headers['Content-Type'] = 'application/json';
+      if (options.body && typeof options.body === 'string' && !options.headers['Content-Type']) {
+        options.headers['Content-Type'] = 'application/json';
+      }
       const sep = url.includes('?') ? '&' : '?';
       const fullUrl = `${url}${sep}token=${encodeURIComponent(TOKEN)}`;
       const isCacheable = options.method !== 'POST' && (url.startsWith('/api/schema') || url.startsWith('/api/objects'));
@@ -8552,7 +8565,7 @@ INDEX_TEMPLATE_V2 = """
           fetchStatus();
           if (currentOid && dirtyFields.size === 0) {
             loadSpecimen(currentOid, true);
-          } else if (!currentOid) {
+          } else if (!currentOid && activeSchema && objectList.length === 0) {
             fetchList();
           }
         };
@@ -10157,7 +10170,8 @@ INDEX_TEMPLATE_V2 = """
           if (currentRecord && String(res.restored.id) === String(currentOid)) {
             Object.assign(currentRecord, res.restored);
             isReviewed = currentRecord.review_status === 'reviewed';
-            populateDetailView(currentRecord);
+            renderDynamicForm(activeSchema, currentRecord);
+            renderDiscrepancies(currentRecord);
             updateReviewButtonUI();
           }
 
@@ -10256,8 +10270,17 @@ INDEX_TEMPLATE_V2 = """
       }
 
       if (changed) {
+        if (currentRecord && currentRecord.observation && activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
+          activeSchema.ui_sections.location.forEach(field => {
+            if (presetData[field.name] !== undefined) {
+              currentRecord.observation[field.name] = presetData[field.name];
+            }
+          });
+        }
         showToast(`Applied Preset: ${pName}`);
-        queueSave();
+        triggerAutoSave();
+        if (typeof updateDetailProblemBanner === 'function' && currentRecord) updateDetailProblemBanner(currentRecord);
+        if (typeof renderDiscrepancies === 'function' && currentRecord) renderDiscrepancies(currentRecord);
       }
     }
 
