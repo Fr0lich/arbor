@@ -91,7 +91,9 @@ def get_historical_cache(app_state):
         if reg_by_id is not None:
             if isinstance(reg_by_id, pd.DataFrame):
                 cols = list(reg_by_id.columns)
-                for hist_id, row in reg_by_id.iterrows():
+                from config import ALL_UNKNOWN_TOKENS as _AUT
+                for row_tuple in reg_by_id.itertuples(index=True, name=None):
+                    hist_id = row_tuple[0]
                     s_id = str(hist_id).strip()
                     hist_presence_set.add(s_id)
                     if s_id.isdigit():
@@ -101,11 +103,10 @@ def get_historical_cache(app_state):
                             pass
                     if s_id not in hist_fields_by_oid:
                         hist_fields_by_oid[s_id] = set()
-                    for col in cols:
-                        val = row[col]
+                    for i, col in enumerate(cols):
+                        val = row_tuple[i + 1]
                         if pd.notna(val):
                             val_str = str(val).strip()
-                            from config import ALL_UNKNOWN_TOKENS as _AUT
                             if val_str and val_str.lower() not in ("nan", "none", "") and val_str.lower() not in _AUT:
                                 hist_fields_by_oid[s_id].add(col)
             elif isinstance(reg_by_id, dict):
