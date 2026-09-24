@@ -1,7 +1,15 @@
 import requests
+from requests.adapters import HTTPAdapter
 import concurrent.futures
 import re
 from typing import List, Dict, Optional, Any
+
+# Configure a shared requests session with connection pooling to optimize
+# batch lookups and reduce SSL/TCP handshake overhead.
+session = requests.Session()
+adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)
+session.mount('http://', adapter)
+session.mount('https://', adapter)
 
 UNDETERMINED_SPECIES_EXACT = {
     "", "sp", "sp.", "spp", "spp.", "spec", "spec.", "species",
@@ -41,7 +49,7 @@ def check_gbif(genus: str, species: str):
         return None
     url = f"https://api.gbif.org/v1/species/match?name={name}"
     try:
-        response = requests.get(url, timeout=5)
+        response = session.get(url, timeout=5)
         response.raise_for_status()
         data = response.json()
 
@@ -92,7 +100,7 @@ def check_gbif(genus: str, species: str):
 def get_accepted_name(usage_key: int):
     url = f"https://api.gbif.org/v1/species/{usage_key}"
     try:
-        response = requests.get(url, timeout=5)
+        response = session.get(url, timeout=5)
         response.raise_for_status()
         data = response.json()
 
