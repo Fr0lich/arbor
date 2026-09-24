@@ -196,12 +196,14 @@ def test_pin_requirement_toggle(mock_app_state):
 
     # 1. When PIN required (default):
     with patch("config.load_prefs", return_value={"require_mobile_pin": True}):
+        server.update_pin_requirement(True)
         assert server.is_pin_required() is True
         res_fail = client.post('/api/auth', json={"pin": "WRONG_PIN"})
         assert res_fail.status_code == 401
 
     # 2. When PIN requirement is disabled:
     with patch("config.load_prefs", return_value={"require_mobile_pin": False}):
+        server.update_pin_requirement(False)
         assert server.is_pin_required() is False
 
         # POST /api/auth without valid PIN succeeds
