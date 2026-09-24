@@ -449,8 +449,9 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
     effective_reviewed = reviewed
 
     # Conflict check
-    if client_timestamp and hasattr(app_state, 'undo_stacks'):
-        stacks = app_state.undo_stacks.get(resolved_reg_oid, []) or app_state.undo_stacks.get(str(oid), [])
+    undo_stacks = getattr(app_state, 'undo_stacks', {})
+    if client_timestamp and undo_stacks:
+        stacks = undo_stacks.get(resolved_reg_oid, []) or undo_stacks.get(str(oid), [])
         if stacks:
             last_edit_time = stacks[-1].get("timestamp")
             if last_edit_time:
@@ -618,9 +619,12 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
         "source": "mobile",
         "_session_id": worker_sid
     }
-    app_state.undo_stacks.setdefault(resolved_reg_oid, []).append(undo_snapshot)
-    if len(app_state.undo_stacks[resolved_reg_oid]) > 20:
-        app_state.undo_stacks[resolved_reg_oid].pop(0)
+    undo_stacks = getattr(app_state, 'undo_stacks', {})
+    undo_stacks.setdefault(resolved_reg_oid, []).append(undo_snapshot)
+    if len(undo_stacks[resolved_reg_oid]) > 20:
+        undo_stacks[resolved_reg_oid].pop(0)
+    if not hasattr(app_state, 'undo_stacks'):
+        app_state.undo_stacks = undo_stacks
 
     changed_fields = []
     changed_values = []
@@ -764,8 +768,8 @@ def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fiel
         "LocationChanged": ", ".join(loc_fields),
         "LocationChangedValues": " | ".join(loc_values),
         "User": "Mobile-Companion",
-        "SourceFile": os.path.basename(app_state.excel_path or ""),
-        "OutputFile": os.path.basename(app_state.output_path or app_state.excel_path or "")
+        "SourceFile": os.path.basename(getattr(app_state, 'excel_path', '') or "") if getattr(app_state, 'excel_path', None) else "",
+        "OutputFile": os.path.basename(getattr(app_state, 'output_path', '') or getattr(app_state, 'excel_path', '') or "") if getattr(app_state, 'output_path', None) or getattr(app_state, 'excel_path', None) else ""
     }
     effective_sid = session_id or getattr(app_state, "_mobile_session_id", None)
     if effective_sid:
@@ -789,6 +793,7 @@ class MobileServer:
         self.port = port
         self.on_edit_callback = on_edit_callback
         self.session_id = uuid.uuid4().hex[:12]
+        self._pin_required = config.load_prefs().get("require_mobile_pin", True)
         if self.app_state:
             self.app_state._mobile_session_id = self.session_id
         self.flask_app = Flask(__name__)
@@ -884,8 +889,11 @@ class MobileServer:
 
     def is_pin_required(self):
         """Check if mobile PIN authentication is required according to user preferences."""
-        prefs = config.load_prefs()
-        return bool(prefs.get("require_mobile_pin", True))
+        return self._pin_required
+
+    def update_pin_requirement(self, is_required: bool):
+        """Update the cached mobile PIN requirement without restarting the server."""
+        self._pin_required = bool(is_required)
 
     def _get_client_ip(self):
         """Extract the true client IP from Cloudflare/Proxy headers or remote_addr."""
@@ -2103,8 +2111,9 @@ self.addEventListener('fetch', (event) => {
                         obs_row = self.app_state.df_obs.loc[[obs_oid]].copy()
 
                 local_endpoints = []
-                if self.app_state.df_photo is not None and not self.app_state.df_photo.empty:
-                    df_p = self.app_state.df_photo
+                df_photo = getattr(self.app_state, 'df_photo', None)
+                if df_photo is not None and not df_photo.empty:
+                    df_p = df_photo
                     p_oid = _resolve_oid_in_df(df_p, oid)
                     if p_oid is not None and p_oid in df_p.index:
                         p_rows = df_p.loc[[p_oid]]
@@ -2265,8 +2274,9 @@ self.addEventListener('fetch', (event) => {
                         oid = edit["oid"]
                         break
 
-            if not oid and hasattr(self.app_state, 'undo_stacks') and self.app_state.undo_stacks:
-                for k, stack in self.app_state.undo_stacks.items():
+            undo_stacks = getattr(self.app_state, 'undo_stacks', {})
+            if not oid and undo_stacks:
+                for k, stack in undo_stacks.items():
                     if stack and any(s.get("_session_id") in (client_sid, None) for s in stack):
                         oid = str(k)
                         break
@@ -2278,11 +2288,12 @@ self.addEventListener('fetch', (event) => {
                 resolved_reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
                 resolved_obs_oid = _resolve_oid_in_df(self.app_state.df_obs, oid)
 
-                target_key = resolved_reg_oid if (hasattr(self.app_state, 'undo_stacks') and resolved_reg_oid in self.app_state.undo_stacks) else str(oid)
-                if not hasattr(self.app_state, 'undo_stacks') or target_key not in self.app_state.undo_stacks or not self.app_state.undo_stacks[target_key]:
+                undo_stacks = getattr(self.app_state, 'undo_stacks', {})
+                target_key = resolved_reg_oid if (resolved_reg_oid in undo_stacks) else str(oid)
+                if target_key not in undo_stacks or not undo_stacks[target_key]:
                     return jsonify({"error": f"No undo history for {oid}"}), 404
 
-                stack = self.app_state.undo_stacks[target_key]
+                stack = undo_stacks[target_key]
                 target_idx = -1
                 for idx in range(len(stack) - 1, -1, -1):
                     snap_sid = stack[idx].get("_session_id")
@@ -2594,8 +2605,8 @@ self.addEventListener('fetch', (event) => {
                     "LocationChanged": "",
                     "LocationChangedValues": "",
                     "User": "Mobile-Companion",
-                    "SourceFile": os.path.basename(self.app_state.excel_path or ""),
-                    "OutputFile": os.path.basename(self.app_state.output_path or self.app_state.excel_path or "")
+                    "SourceFile": os.path.basename(getattr(self.app_state, 'excel_path', '') or "") if getattr(self.app_state, 'excel_path', None) else "",
+                    "OutputFile": os.path.basename(getattr(self.app_state, 'output_path', '') or getattr(self.app_state, 'excel_path', '') or "") if getattr(self.app_state, 'output_path', None) or getattr(self.app_state, 'excel_path', None) else ""
                 }
                 if getattr(self.app_state, "_mobile_session_id", None):
                     log_entry["_session_id"] = self.app_state._mobile_session_id
