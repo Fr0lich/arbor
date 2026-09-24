@@ -5586,6 +5586,56 @@ INDEX_TEMPLATE = """
         `;
       });
 
+      // Render any ungrouped registration fields (ensures 100% of schema fields are always editable)
+      const groupedFieldNames = new Set(regGroups.flatMap(g => g.fields || []));
+      const ungroupedFields = regFields.filter(f => !groupedFieldNames.has(f.name));
+      if (ungroupedFields.length > 0) {
+        let ungrpProbCount = 0;
+        let ungrpUknCount = 0;
+        let ungrpFieldsHtml = '';
+
+        ungroupedFields.forEach(fDef => {
+          const val = (record.registration && record.registration[fDef.name] !== undefined) ? record.registration[fDef.name] : '';
+          if (isFieldProblemActive(fDef.name, 'registration', record)) ungrpProbCount++;
+          else if (isValueUnknown(val)) ungrpUknCount++;
+          ungrpFieldsHtml += renderFieldInput(fDef, val, 'registration', record);
+        });
+
+        const isUngrpOpen = (ungrpProbCount > 0 || ungrpUknCount > 0);
+        let ungrpBadgesHtml = '';
+        if (ungrpProbCount > 0) {
+          ungrpBadgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#C62828] text-white flex items-center gap-0.5 shadow-xs"><span>⚠</span><span>${ungrpProbCount}</span></span>`;
+        }
+        if (ungrpUknCount > 0) {
+          ungrpBadgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#FBC02D] text-[#2c302e] flex items-center gap-0.5 shadow-xs"><span>?</span><span>${ungrpUknCount}</span></span>`;
+        }
+
+        html += `
+          <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion ${isUngrpOpen ? 'acc-open' : ''}">
+            <button
+              type="button"
+              onclick="toggleAccordion(this)"
+              class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press border-b border-bordercol text-left"
+            >
+              <div class="flex items-center gap-2.5">
+                <span class="text-base">📋</span>
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <h3 class="font-bold text-xs text-ink uppercase tracking-wider">Additional Fields</h3>
+                    ${ungrpBadgesHtml}
+                  </div>
+                  <p class="text-[10px] text-ink-muted">${ungroupedFields.map(f => f.name).join(' • ')}</p>
+                </div>
+              </div>
+              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">${isUngrpOpen ? '▲' : '▼'}</span>
+            </button>
+            <div class="p-3.5 space-y-3 acc-content ${isUngrpOpen ? 'block' : 'hidden'}">
+              ${ungrpFieldsHtml}
+            </div>
+          </div>
+        `;
+      }
+
       // 2. Render Physical Location Group from config.py
       if (locFields.length > 0) {
         let locFieldsHtml = '';
@@ -7876,6 +7926,54 @@ INDEX_TEMPLATE_V2 = """
       renderDynamicForm(activeSchema, currentRecord);
     }
 
+    function onLocationCoordChange(field, value) {
+      if (!currentRecord) return;
+      currentRecord.observation = currentRecord.observation || {};
+      currentRecord.observation[field] = value;
+      markDirty(field);
+      triggerAutoSave();
+
+      // Update sticky top summary header
+      let locStr = [];
+      if (currentRecord.observation) {
+        if (currentRecord.observation.Building) locStr.push(currentRecord.observation.Building);
+        if (currentRecord.observation.Floor) locStr.push(`Floor ${currentRecord.observation.Floor}`);
+        if (currentRecord.observation.Cabinet) locStr.push(`Cab ${currentRecord.observation.Cabinet}`);
+        if (currentRecord.observation["Stored as"]) locStr.push(currentRecord.observation["Stored as"]);
+      }
+      const topLoc = document.getElementById('detailTopLocation');
+      if (topLoc) topLoc.textContent = locStr.length > 0 ? `Location: ${locStr.join(' • ')}` : 'Location: Unrecorded';
+
+      // Update current coordinate readout in workstation card
+      const curReadout = document.getElementById('activeCabCurrentReadout');
+      if (curReadout) {
+        curReadout.textContent = `${currentRecord.observation.Building || '—'} • Fl ${currentRecord.observation.Floor || '—'} • Cab ${currentRecord.observation.Cabinet || '—'}`;
+      }
+
+      // Update active cabinet match badge
+      const btnContainer = document.getElementById('activeCabBtnContainer');
+      if (btnContainer) {
+        const matchesActiveCab = Boolean(
+          (currentRecord.observation.Building && currentRecord.observation.Building === activeCabinet.building) &&
+          (currentRecord.observation.Floor && currentRecord.observation.Floor === activeCabinet.floor) &&
+          (currentRecord.observation.Cabinet && currentRecord.observation.Cabinet === activeCabinet.cabinet)
+        );
+        if (matchesActiveCab) {
+          btnContainer.innerHTML = `
+            <span class="px-2.5 py-1 text-[10px] font-bold bg-fern text-white rounded-[2px] shadow-xs shrink-0 flex items-center gap-1">
+              <span>✓</span><span>In Active Cab</span>
+            </span>
+          `;
+        } else {
+          btnContainer.innerHTML = `
+            <button type="button" onclick="applyActiveCabinet()" class="min-h-[36px] px-3 py-1.5 text-xs font-bold bg-fern hover:bg-fern-dark text-white rounded-[2px] shadow-xs shrink-0 touch-press touch-target-min">
+              Apply to Specimen
+            </button>
+          `;
+        }
+      }
+    }
+
     function toggleLocationProblem(checked) {
       if (!currentRecord) return;
       currentRecord.observation = currentRecord.observation || {};
@@ -9855,6 +9953,60 @@ INDEX_TEMPLATE_V2 = """
         `;
       });
 
+      // Render any ungrouped registration fields (ensures 100% of schema fields are always editable)
+      const groupedFieldNames = new Set(regGroups.flatMap(g => g.fields || []));
+      const ungroupedFields = regFields.filter(f => !groupedFieldNames.has(f.name));
+      if (ungroupedFields.length > 0) {
+        let ungrpProbCount = 0;
+        let ungrpUknCount = 0;
+        let ungrpFieldsHtml = '';
+
+        ungroupedFields.forEach(fDef => {
+          const val = (record.registration && record.registration[fDef.name] !== undefined) ? record.registration[fDef.name] : '';
+          if (isFieldProblemActive(fDef.name, 'registration', record)) {
+            ungrpProbCount++;
+            totalRegProblems++;
+          } else if (isValueUnknown(val)) {
+            ungrpUknCount++;
+          }
+          ungrpFieldsHtml += renderFieldInput(fDef, val, 'registration', record);
+        });
+
+        const isUngrpOpen = (ungrpProbCount > 0 || ungrpUknCount > 0);
+        let ungrpBadgesHtml = '';
+        if (ungrpProbCount > 0) {
+          ungrpBadgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#C62828] text-white flex items-center gap-0.5 shadow-xs"><span>⚠</span><span>${ungrpProbCount}</span></span>`;
+        }
+        if (ungrpUknCount > 0) {
+          ungrpBadgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#FBC02D] text-[#2c302e] flex items-center gap-0.5 shadow-xs"><span>?</span><span>${ungrpUknCount}</span></span>`;
+        }
+
+        regHtml += `
+          <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion ${isUngrpOpen ? 'acc-open' : ''}">
+            <button
+              type="button"
+              onclick="toggleAccordion(this)"
+              class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press border-b border-bordercol text-left"
+            >
+              <div class="flex items-center gap-2.5">
+                <span class="text-base">📋</span>
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <h3 class="font-bold text-xs text-ink uppercase tracking-wider">Additional Fields</h3>
+                    ${ungrpBadgesHtml}
+                  </div>
+                  <p class="text-[10px] text-ink-muted">${ungroupedFields.map(f => f.name).join(' • ')}</p>
+                </div>
+              </div>
+              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">${isUngrpOpen ? '▲' : '▼'}</span>
+            </button>
+            <div class="p-3.5 space-y-3 acc-content ${isUngrpOpen ? 'block' : 'hidden'}">
+              ${ungrpFieldsHtml}
+            </div>
+          </div>
+        `;
+      }
+
       // 2. Render Physical Location Group (Optimized for Batch Herbarium Audits)
       let locHtml = '';
       let locProbCount = 0;
@@ -9885,6 +10037,38 @@ INDEX_TEMPLATE_V2 = """
           ? `${activeCabinet.building || 'Any Building'} • Fl ${activeCabinet.floor || '?'} • Cab ${activeCabinet.cabinet || 'Unset'}`
           : 'No Active Cabinet Set';
 
+        const bldDef = locFields.find(f => f.name === "Building") || {
+          name: "Building",
+          type: "choice",
+          choices: ["Lid's hus", "Økern", "Annet"]
+        };
+        const floorDef = locFields.find(f => f.name === "Floor") || {
+          name: "Floor",
+          type: "choice",
+          choices: ["4", "3", "2", "1", "-1", "-2"]
+        };
+
+        const bldOptionsHtml = ['<option value="">Select building...</option>']
+          .concat((bldDef.choices || []).map(c => `<option value="${c}" ${String(curBld) === String(c) ? 'selected' : ''}>${c}</option>`))
+          .join('');
+
+        const floorOptionsHtml = ['<option value="">Select floor...</option>']
+          .concat((floorDef.choices || []).map(c => `<option value="${c}" ${String(curFl) === String(c) ? 'selected' : ''}>${c}</option>`))
+          .join('');
+
+        // Find any other custom location fields defined in the schema (e.g. Room, Shelf, Section, etc.)
+        const standardLocNames = new Set(["Building", "Floor", "Cabinet", "Stored as", "Extra", "Loaned out", "Loaned out date", "Loc_Problem"]);
+        const customLocFields = locFields.filter(f => !standardLocNames.has(f.name));
+        let customLocFieldsHtml = '';
+        if (customLocFields.length > 0) {
+          customLocFields.forEach(fDef => {
+            const val = (obs[fDef.name] !== undefined) ? obs[fDef.name] : '';
+            if (isFieldProblemActive(fDef.name, 'observation', record)) locProbCount++;
+            else if (isValueUnknown(val)) locUknCount++;
+            customLocFieldsHtml += renderFieldInput(fDef, val, 'observation', record);
+          });
+        }
+
         const storedAsDef = locFields.find(f => f.name === "Stored as") || {
           name: "Stored as",
           type: "choice",
@@ -9912,17 +10096,19 @@ INDEX_TEMPLATE_V2 = """
               <div class="p-2.5 bg-tonal1 border border-bordercol rounded-[2px] flex items-center justify-between gap-2">
                 <div class="min-w-0 flex-1">
                   <div class="font-mono text-xs font-bold text-ink truncate">${cabDisplay}</div>
-                  <p class="font-sans text-[10px] text-ink-muted mt-0.5">Current: <span class="font-mono">${curBld || '—'} • Fl ${curFl || '—'} • Cab ${curCab || '—'}</span></p>
+                  <p class="font-sans text-[10px] text-ink-muted mt-0.5">Current: <span id="activeCabCurrentReadout" class="font-mono">${curBld || '—'} • Fl ${curFl || '—'} • Cab ${curCab || '—'}</span></p>
                 </div>
-                ${matchesActiveCab ? `
-                  <span class="px-2.5 py-1 text-[10px] font-bold bg-fern text-white rounded-[2px] shadow-xs shrink-0 flex items-center gap-1">
-                    <span>✓</span><span>In Active Cab</span>
-                  </span>
-                ` : `
-                  <button type="button" onclick="applyActiveCabinet()" class="min-h-[36px] px-3 py-1.5 text-xs font-bold bg-fern hover:bg-fern-dark text-white rounded-[2px] shadow-xs shrink-0 touch-press touch-target-min">
-                    Apply to Specimen
-                  </button>
-                `}
+                <div id="activeCabBtnContainer" class="shrink-0">
+                  ${matchesActiveCab ? `
+                    <span class="px-2.5 py-1 text-[10px] font-bold bg-fern text-white rounded-[2px] shadow-xs shrink-0 flex items-center gap-1">
+                      <span>✓</span><span>In Active Cab</span>
+                    </span>
+                  ` : `
+                    <button type="button" onclick="applyActiveCabinet()" class="min-h-[36px] px-3 py-1.5 text-xs font-bold bg-fern hover:bg-fern-dark text-white rounded-[2px] shadow-xs shrink-0 touch-press touch-target-min">
+                      Apply to Specimen
+                    </button>
+                  `}
+                </div>
               </div>
 
               <div class="flex items-center justify-between pt-0.5 text-[11px]">
@@ -9932,7 +10118,59 @@ INDEX_TEMPLATE_V2 = """
               </div>
             </div>
 
-            <!-- 2. Frequently Edited Object Storage Medium -->
+            <!-- 2. Physical Coordinates & Direct Overrides -->
+            <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-3">
+              <div class="border-b border-tonal2 pb-1.5 flex items-center justify-between">
+                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Physical Coordinates</h3>
+                <span class="text-[10px] text-ink-muted">Direct Edit / Override</span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div class="space-y-1">
+                  <label for="input_observation_Building" class="text-xs font-bold text-ink">Building:</label>
+                  <select
+                    id="input_observation_Building"
+                    data-section="observation"
+                    data-field="Building"
+                    onchange="onLocationCoordChange('Building', this.value)"
+                    class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs outline-none bg-surface text-ink focus:border-fern cursor-pointer"
+                  >
+                    ${bldOptionsHtml}
+                  </select>
+                </div>
+
+                <div class="space-y-1">
+                  <label for="input_observation_Floor" class="text-xs font-bold text-ink">Floor:</label>
+                  <select
+                    id="input_observation_Floor"
+                    data-section="observation"
+                    data-field="Floor"
+                    onchange="onLocationCoordChange('Floor', this.value)"
+                    class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs outline-none bg-surface text-ink focus:border-fern cursor-pointer"
+                  >
+                    ${floorOptionsHtml}
+                  </select>
+                </div>
+
+                <div class="space-y-1">
+                  <label for="input_observation_Cabinet" class="text-xs font-bold text-ink">Cabinet:</label>
+                  <input
+                    type="text"
+                    id="input_observation_Cabinet"
+                    data-section="observation"
+                    data-field="Cabinet"
+                    value="${curCab}"
+                    placeholder="e.g. 14A, C-02..."
+                    oninput="onLocationCoordChange('Cabinet', this.value)"
+                    onblur="saveCurrentEdits()"
+                    class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs outline-none bg-surface text-ink focus:border-fern"
+                  />
+                </div>
+              </div>
+              ${customLocFieldsHtml}
+            </div>
+
+            <!-- 3. Frequently Edited Object Storage Medium -->
             <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-3">
               <div class="border-b border-tonal2 pb-1.5">
                 <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Storage Preparation & Shelf Note</h3>
@@ -9968,7 +10206,7 @@ INDEX_TEMPLATE_V2 = """
               </div>
             </div>
 
-            <!-- 3. Location Problem & Loan Controls -->
+            <!-- 4. Location Problem & Loan Controls -->
             <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-2.5">
               <div class="border-b border-tonal2 pb-1.5">
                 <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Location Status & Loans</h3>
@@ -10718,14 +10956,35 @@ INDEX_TEMPLATE_V2 = """
       const problemFields = [];
       const seenFields = new Set();
 
+      function getSubstantiveFieldName(rawField) {
+        if (!rawField) return 'General';
+        if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+          const match = activeSchema.ui_sections.problems.find(p => p.name === rawField);
+          if (match && (match.maps_to || match.target)) return match.maps_to || match.target;
+        }
+        if (rawField.endsWith('_Problem')) {
+          const stripped = rawField.replace(/_Problem$/, '').replace(/_/g, ' ');
+          if (activeSchema && activeSchema.ui_sections) {
+            const allReg = activeSchema.ui_sections.registration || [];
+            const allLoc = activeSchema.ui_sections.location || [];
+            const found = allReg.find(f => f.name.toLowerCase() === stripped.toLowerCase()) || allLoc.find(f => f.name.toLowerCase() === stripped.toLowerCase());
+            if (found) return found.name;
+          }
+          return stripped;
+        }
+        return rawField;
+      }
+
       // 1. Add flagged custom issues
       issues.forEach(iss => {
         if (!iss.resolved) {
-          const fName = iss.field || 'General';
+          const rawName = iss.field || 'General';
+          const fName = getSubstantiveFieldName(rawName);
           seenFields.add(fName);
+          const isReg = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.registration && activeSchema.ui_sections.registration.some(f => f.name === fName));
           problemFields.push({
             field: fName,
-            section: (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.registration && activeSchema.ui_sections.registration.some(f => f.name === fName)) ? 'registration' : 'observation',
+            section: isReg ? 'registration' : 'observation',
             type: 'flagged_issue',
             issueId: iss.id,
             reason: iss.reason || 'Flagged discrepancy'
@@ -10739,6 +10998,7 @@ INDEX_TEMPLATE_V2 = """
         const locFields = activeSchema.ui_sections.location || [];
 
         regFields.forEach(f => {
+          if (f.name.endsWith('_Problem')) return;
           if (!seenFields.has(f.name)) {
             const val = (record.registration && record.registration[f.name] !== undefined) ? record.registration[f.name] : '';
             const isProb = isFieldProblemActive(f.name, 'registration', record);
@@ -10757,6 +11017,7 @@ INDEX_TEMPLATE_V2 = """
         });
 
         locFields.forEach(f => {
+          if (f.name.endsWith('_Problem') || (activeSchema.ui_sections.problems && activeSchema.ui_sections.problems.some(p => p.name === f.name))) return;
           if (!seenFields.has(f.name)) {
             const val = (record.observation && record.observation[f.name] !== undefined) ? record.observation[f.name] : '';
             const isProb = isFieldProblemActive(f.name, 'observation', record);

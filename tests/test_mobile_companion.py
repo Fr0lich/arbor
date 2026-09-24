@@ -1241,6 +1241,110 @@ def test_mobile_panel_version_toggle(mock_app_state):
         root.destroy()
 
 
+def test_v2_template_includes_location_coordinates():
+    from backend.mobile_server import INDEX_TEMPLATE_V2
+    # Verify coordinates card and inputs are present
+    assert "input_observation_Building" in INDEX_TEMPLATE_V2
+    assert "input_observation_Floor" in INDEX_TEMPLATE_V2
+    assert "input_observation_Cabinet" in INDEX_TEMPLATE_V2
+    assert "onLocationCoordChange" in INDEX_TEMPLATE_V2
+    assert "Physical Coordinates" in INDEX_TEMPLATE_V2
+
+
+def test_desktop_smart_commit_preserves_mobile_edits(mock_app_state):
+    import tkinter as tk
+    from ui.main_window import ObjectProgramUI
+    root = tk.Tk()
+    root.withdraw()
+
+    class DummyApp:
+        pass
+
+    app = DummyApp()
+    app.current_object_id = "1024"
+    app.df_reg = mock_app_state.df_reg.copy()
+    app.df_obs = mock_app_state.df_obs.copy()
+    app.df_photo = mock_app_state.df_photo.copy()
+    app.df_log = mock_app_state.df_log.copy()
+    app._log_records = []
+    app.dirty = False
+    app.active_object_ids = ["1024", "1025", "1026"]
+    app.config = mock_app_state.config
+    app.undo_stacks = {}
+    app.redo_stacks = {}
+    app.excel_path = mock_app_state.excel_path
+    app.output_path = mock_app_state.output_path
+
+    # Instantiate UI with minimal dependencies
+    ui = ObjectProgramUI.__new__(ObjectProgramUI)
+    ui.root = root
+    ui.app = app
+    ui.initializing = False
+    ui._is_navigating = False
+    ui.problem_to_field = {"MissingLabel": "ProblemDescription"}
+    ui.problem_columns = ["MissingLabel"]
+    ui.choice_fields = set()
+    ui.field_undo_stack = []
+
+    # Mock variables and widgets
+    ui.reg_vars = {
+        "Genus": tk.StringVar(value="Pinus"),
+        "Species": tk.StringVar(value="sylvestris"),
+        "Family": tk.StringVar(value="Pinaceae"),
+        "Author": tk.StringVar(value="L."),
+        "UID": tk.StringVar(value="u1024"),
+        "ProblemDescription": tk.StringVar(value="")
+    }
+    ui.reg_entries = {k: tk.Entry(root, textvariable=v) for k, v in ui.reg_vars.items()}
+    ui.location_vars = {
+        "Room": tk.StringVar(value="Room 304"),
+        "Cabinet": tk.StringVar(value="C-12"),
+        "Shelf": tk.StringVar(value="Shelf 3")
+    }
+    ui.problem_vars = {"MissingLabel": tk.BooleanVar(value=False)}
+    ui.reviewed_var = tk.BooleanVar(value=False)
+    ui.reviewed_time_label = tk.Label(root)
+    ui.update_reviewed_button_state = lambda: None
+    ui.update_dirty_ui = lambda: None
+    ui.update_history_indicator = lambda *args: None
+    ui.update_list_item_color = lambda *args: None
+    ui._problem_cache = {}
+    ui._row_cache_dirty = False
+    ui._cached_reg_dict = None
+    ui._cached_obs_dict = None
+    ui._cached_reviewed_dict = None
+    ui.push_undo_state = lambda: None
+    ui.log_action = lambda *args, **kwargs: None
+    ui.invalidate_search_index = lambda: None
+    ui.search_engine = type("DummySearch", (), {"invalidate_search_index": lambda self: None})()
+
+    # Baseline simulated on load:
+    ui._loaded_reg_values = {k: v.get() for k, v in ui.reg_vars.items()}
+    ui._loaded_loc_values = {k: v.get() for k, v in ui.location_vars.items()}
+    ui._loaded_reviewed_state = False
+    ui.loaded_problem_states = {"MissingLabel": False}
+
+    # Simulate mobile server editing Genus directly in df_reg from 'Pinus' -> 'Abies'
+    app.df_reg.at["1024", "Genus"] = "Abies"
+
+    # Now desktop commits current object (e.g. during autosave tick or navigation)
+    ui.commit_current_object(skip_logging=True)
+
+    # The mobile edit "Abies" in df_reg MUST NOT be overwritten with desktop's untouched widget "Pinus"
+    assert app.df_reg.at["1024", "Genus"] == "Abies"
+
+    # Now simulate the desktop user explicitly editing Species to "montana"
+    ui.reg_vars["Species"].set("montana")
+    ui.commit_current_object(skip_logging=True)
+
+    # Desktop's edit to Species is committed, while Genus remains "Abies"
+    assert app.df_reg.at["1024", "Species"] == "montana"
+    assert app.df_reg.at["1024", "Genus"] == "Abies"
+
+    root.destroy()
+
+
+
 
 
 

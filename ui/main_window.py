@@ -4212,7 +4212,14 @@ class ObjectProgramUI(
             else:
                 new = self.reg_vars[col].get()
 
-            if old != new:
+            # Baseline check: only treat as a desktop change if the widget value differs from what was loaded into it
+            loaded_val = getattr(self, "_loaded_reg_values", {}).get(col, None)
+            if loaded_val is not None:
+                user_edited = (new != loaded_val)
+            else:
+                user_edited = (old != new)
+
+            if user_edited and old != new:
                 ensure_undo()
 
                 self.app.df_reg.at[oid, col] = new
@@ -4258,6 +4265,9 @@ class ObjectProgramUI(
                                     self._cached_obs_dict[oid][p_col] = False
                                 self.loaded_problem_states[p_col] = False
 
+                if hasattr(self, "_loaded_reg_values"):
+                    self._loaded_reg_values[col] = new
+
 
         # -------- PROBLEMS --------
         for col, var in self.problem_vars.items():
@@ -4297,12 +4307,20 @@ class ObjectProgramUI(
             old = utils.fmt_pandas_val(self.app.df_obs.at[oid, col] if oid in self.app.df_obs.index and col in self.app.df_obs.columns else "")
             new = var.get()
 
-            if old != new:
+            loaded_val = getattr(self, "_loaded_loc_values", {}).get(col, None)
+            if loaded_val is not None:
+                user_edited = (new != loaded_val)
+            else:
+                user_edited = (old != new)
+
+            if user_edited and old != new:
                 ensure_undo()
                 self.app.df_obs.at[oid, col] = new
                 if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
                     self._cached_obs_dict[oid][col] = new
                 loc_changed = True
+                if hasattr(self, "_loaded_loc_values"):
+                    self._loaded_loc_values[col] = new
 
         if loc_changed:
             loc_changed_fields.append("Location")
@@ -4317,7 +4335,13 @@ class ObjectProgramUI(
         old = bool(self.app.df_obs.at[oid, REVIEWED_COLUMN]) if oid in self.app.df_obs.index and REVIEWED_COLUMN in self.app.df_obs.columns else False
         new = bool(self.reviewed_var.get())
 
-        if old != new:
+        loaded_rev = getattr(self, "_loaded_reviewed_state", None)
+        if loaded_rev is not None:
+            user_edited = (new != loaded_rev)
+        else:
+            user_edited = (old != new)
+
+        if user_edited and old != new:
             ensure_undo()
             self.app.df_obs.at[oid, REVIEWED_COLUMN] = new
             if getattr(self, "_cached_obs_dict", None) is not None and oid in self._cached_obs_dict:
@@ -4340,6 +4364,7 @@ class ObjectProgramUI(
                 reg_changed_values.append("Reviewed removed")
 
             reg_changed_fields.append(REVIEWED_COLUMN)
+            self._loaded_reviewed_state = new
             self.update_reviewed_button_state()
 
 
@@ -5148,6 +5173,19 @@ class ObjectProgramUI(
                 col: bool(v.get()) for col, v in self.problem_vars.items()
             }
 
+            # Baseline values for smart commit filtering (prevents desktop from overwriting mobile edits)
+            self._loaded_reg_values = {}
+            for col, widget in self.reg_entries.items():
+                if isinstance(widget, tk.Text):
+                    self._loaded_reg_values[col] = widget.get("1.0", tk.END).strip()
+                else:
+                    self._loaded_reg_values[col] = str(self.reg_vars[col].get() if col in self.reg_vars else "")
+
+            self._loaded_loc_values = {
+                col: str(var.get() if var else "") for col, var in self.location_vars.items()
+            }
+            self._loaded_reviewed_state = bool(obs.get(REVIEWED_COLUMN, False))
+
             self.reviewed_var.set(bool(obs.get(REVIEWED_COLUMN, False)))
 
             if not skip_heavy:
@@ -5542,9 +5580,56 @@ class ObjectProgramUI(
 
                 if self.app.current_object_id is not None and _norm(self.app.current_object_id) == _norm(oid):
                     if hasattr(self, 'simultaneous_edit_var') and self.simultaneous_edit_var.get():
-                        # If simultaneous edit is enabled, do not blindly overwrite the active object on the desktop
-                        # This avoids destroying fields the user is currently typing into.
-                        pass
+                        # If simultaneous edit is enabled, selectively update untouched desktop widgets in-place
+                        with (getattr(self.app, 'df_lock', None) or nullcontext()):
+                            reg_row = self.app.df_reg.loc[oid].to_dict() if self.app.df_reg is not None and oid in self.app.df_reg.index else {}
+                            obs_row = self.app.df_obs.loc[oid].to_dict() if self.app.df_obs is not None and oid in self.app.df_obs.index else {}
+
+                        if not hasattr(self, "_loaded_reg_values"):
+                            self._loaded_reg_values = {}
+                        for col, widget in self.reg_entries.items():
+                            if isinstance(widget, tk.Text):
+                                curr_w_val = widget.get("1.0", tk.END).strip()
+                            else:
+                                curr_w_val = self.reg_vars[col].get()
+                            loaded_val = self._loaded_reg_values.get(col, curr_w_val)
+                            # If desktop user has not changed this field locally:
+                            if curr_w_val == loaded_val:
+                                new_db_val = utils.fmt_pandas_val(reg_row.get(col, ""))
+                                if curr_w_val != new_db_val:
+                                    if isinstance(widget, tk.Text):
+                                        widget.delete("1.0", tk.END)
+                                        widget.insert("1.0", str(new_db_val))
+                                    else:
+                                        self.reg_vars[col].set(new_db_val)
+                                    self._loaded_reg_values[col] = new_db_val
+
+                        if not hasattr(self, "_loaded_loc_values"):
+                            self._loaded_loc_values = {}
+                        for col, var in self.location_vars.items():
+                            curr_w_val = var.get()
+                            loaded_val = self._loaded_loc_values.get(col, curr_w_val)
+                            if curr_w_val == loaded_val:
+                                new_db_val = utils.fmt_pandas_val(obs_row.get(col, ""))
+                                if curr_w_val != new_db_val:
+                                    var.set(new_db_val)
+                                    self._loaded_loc_values[col] = new_db_val
+
+                        curr_rev = bool(self.reviewed_var.get())
+                        loaded_rev = getattr(self, "_loaded_reviewed_state", curr_rev)
+                        if curr_rev == loaded_rev:
+                            db_rev = bool(obs_row.get(REVIEWED_COLUMN, False))
+                            if curr_rev != db_rev:
+                                self.reviewed_var.set(db_rev)
+                                self._loaded_reviewed_state = db_rev
+
+                        self.update_location_summary(oid)
+                        if hasattr(self, "update_location_summary_view"):
+                            self.update_location_summary_view()
+                        if hasattr(self, "update_problems_default_view"):
+                            self.update_problems_default_view()
+                        if hasattr(self, "update_reviewed_button_state"):
+                            self.update_reviewed_button_state()
                     else:
                         self.load_object(self.app.current_object_id, skip_commit=True)
             else:
