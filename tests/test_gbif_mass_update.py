@@ -151,7 +151,8 @@ def test_gbif_apply_and_rollback():
 
 def test_check_gbif_network_error_returns_dict():
     from backend.gbif import check_gbif
-    with patch("requests.get", side_effect=Exception("Connection timed out")):
+    check_gbif.cache_clear()
+    with patch("requests.Session.get", side_effect=Exception("Connection timed out")):
         res = check_gbif("Quercus", "robur")
         assert isinstance(res, dict)
         assert "error" in res
@@ -160,6 +161,7 @@ def test_check_gbif_network_error_returns_dict():
 
 def test_check_gbif_higher_classification_formatting():
     from backend.gbif import check_gbif
+    check_gbif.cache_clear()
     mock_resp = MagicMock()
     mock_resp.json.return_value = {
         "scientificName": "Quercus robur L.",
@@ -174,7 +176,7 @@ def test_check_gbif_higher_classification_formatting():
         "status": "ACCEPTED",
         "rank": "SPECIES"
     }
-    with patch("requests.get", return_value=mock_resp):
+    with patch("requests.Session.get", return_value=mock_resp):
         res = check_gbif("Quercus", "robur")
         assert res["higherClassification"] == "Plantae | Tracheophyta"
 

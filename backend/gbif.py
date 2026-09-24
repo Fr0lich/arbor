@@ -1,7 +1,10 @@
 import requests
 import concurrent.futures
+import functools
 import re
 from typing import List, Dict, Optional, Any
+
+_session = requests.Session()
 
 UNDETERMINED_SPECIES_EXACT = {
     "", "sp", "sp.", "spp", "spp.", "spec", "spec.", "species",
@@ -33,6 +36,7 @@ def is_undetermined_species(species: Any) -> bool:
     return False
 
 
+@functools.lru_cache(maxsize=1024)
 def check_gbif(genus: str, species: str):
     genus = (genus or "").strip()
     species = (species or "").strip()
@@ -41,7 +45,7 @@ def check_gbif(genus: str, species: str):
         return None
     url = f"https://api.gbif.org/v1/species/match?name={name}"
     try:
-        response = requests.get(url, timeout=5)
+        response = _session.get(url, timeout=5)
         response.raise_for_status()
         data = response.json()
 
@@ -89,10 +93,11 @@ def check_gbif(genus: str, species: str):
         print(f"Error checking GBIF: {e}")
         return {"error": str(e)}
 
+@functools.lru_cache(maxsize=1024)
 def get_accepted_name(usage_key: int):
     url = f"https://api.gbif.org/v1/species/{usage_key}"
     try:
-        response = requests.get(url, timeout=5)
+        response = _session.get(url, timeout=5)
         response.raise_for_status()
         data = response.json()
 
