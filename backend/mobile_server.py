@@ -7307,78 +7307,72 @@ INDEX_TEMPLATE_V2 = """
         <!-- TAB 3: PROBLEMS & DISCREPANCIES            -->
         <!-- ========================================== -->
         <div id="tabContentProblems" class="hidden space-y-3.5">
-          <!-- Active Problems Alert Banner -->
-          <div id="detailProblemBanner" class="hidden bg-ember-light border border-ember-border rounded-[2px] p-3 shadow-xs space-y-1.5">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-ember-dark flex items-center gap-1">
-                <span>⚠</span>
-                <span>Active Problems Detected</span>
-              </span>
-            </div>
-            <div id="detailProblemBadges" class="flex flex-wrap items-center gap-1.5 pt-1">
-              <!-- Problem chips injected here -->
-            </div>
-          </div>
-
-          <!-- Section 1: Active Problem & Discrepancy Resolvers -->
-          <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
+          <!-- Tier 1: Quick Problem Flags Checklist -->
+          <div id="problemFlagsCard" class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-2.5 shadow-xs">
             <div class="flex items-center justify-between border-b border-tonal2 pb-2">
               <div class="flex items-center gap-2">
-                <span class="text-ember font-bold text-sm">⚑</span>
+                <span class="text-[#C62828] font-bold text-sm">⚑</span>
                 <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
-                  Flagged Issues & Problem Fields
+                  Quick Problem Flags
                 </h3>
               </div>
               <button
                 type="button"
                 onclick="openAddDiscrepancyModal()"
-                class="text-xs font-medium text-ember hover:text-ember-dark flex items-center gap-1 border border-ember-border bg-ember-light px-2 py-0.5 rounded-[2px] transition-colors touch-target-min"
+                class="text-xs font-medium text-ink-muted hover:text-ink flex items-center gap-1 border border-bordercol bg-tonal1 hover:bg-tonal2 px-2 py-0.5 rounded-[2px] transition-colors touch-target-min"
               >
                 <span>+</span>
-                <span>Flag Issue</span>
+                <span>Flag Custom Issue</span>
               </button>
+            </div>
+            <div id="problemTogglesContainer" class="grid grid-cols-2 gap-2 text-xs pt-1">
+              <!-- Dynamically generated from ui_sections.problems -->
+            </div>
+          </div>
+
+          <!-- Tier 2: Active Resolution Queue -->
+          <div id="activeIssuesCard" class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
+            <div class="flex items-center justify-between border-b border-tonal2 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-[#C62828] font-bold text-sm">⚠</span>
+                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
+                  Active Resolution Queue
+                </h3>
+              </div>
+              <span id="activeIssuesCountBadge" class="hidden font-mono text-[10px] text-white bg-[#C62828] px-1.5 py-0.2 rounded-[2px] font-bold">
+                0
+              </span>
             </div>
 
             <!-- Problem Cards Injected Dynamically by renderProblemsTab() -->
             <div id="problemResolverContainer" class="space-y-3">
               <!-- Rendered dynamically -->
             </div>
-
-            <!-- Legacy Discrepancies List (hidden helper container) -->
-            <div id="activeDiscrepanciesList" class="hidden"></div>
           </div>
 
-          <!-- Section 2: Historical Archive Comparisons & Data Resolver -->
+          <!-- Tier 3: Historical Archive Conflicts -->
           <div id="historicalSectionCard" class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
             <div class="flex items-center justify-between border-b border-tonal2 pb-2">
               <div class="flex items-center gap-2">
-                <span class="text-fern font-bold text-sm">📜</span>
+                <span class="text-[#0284C7] font-bold text-sm">📜</span>
                 <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
-                  Historical Archive Comparisons
+                  Historical Archive Conflicts
                 </h3>
               </div>
               <span id="histConflictBadge" class="font-mono text-[10px] text-ink-muted bg-tonal1 border border-tonal3 px-1.5 py-0.2 rounded-[2px]">
-                0 comparisons
+                0 conflicts
               </span>
             </div>
 
             <!-- Historical comparison cards injected by renderHistoricalConflicts() -->
             <div id="historicalConflictsContainer" class="space-y-2.5">
-              <p class="text-xs text-ink-faint italic py-1">No historical archive data loaded for this specimen.</p>
+              <!-- Rendered dynamically -->
             </div>
           </div>
 
-          <!-- Section 3: Problem Flags Quick-Toggle Grid -->
-          <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
-            <div class="border-b border-tonal2 pb-2">
-              <p class="font-mono text-[10px] uppercase font-bold text-ink-muted">Quick Problem Toggles:</p>
-            </div>
-            <div id="problemFlagsGrid" class="pt-1 space-y-2">
-              <div id="problemTogglesContainer" class="grid grid-cols-2 gap-2 text-xs">
-                <!-- Checkboxes dynamically generated from ui_sections.problems -->
-              </div>
-            </div>
-          </div>
+          <!-- Hidden fallback elements for compatibility -->
+          <div id="detailProblemBanner" class="hidden"><div id="detailProblemBadges" class="hidden"></div></div>
+          <div id="activeDiscrepanciesList" class="hidden"></div>
         </div>
 
         <!-- Hidden container fallback to prevent null reference if accessed -->
@@ -7838,6 +7832,77 @@ INDEX_TEMPLATE_V2 = """
 
     let locationPresets = {};
     let lastSelectedPreset = "Default";
+    let activeCabinet = { building: "Lid's hus", floor: "2", cabinet: "" };
+    try {
+      const savedCab = localStorage.getItem('arbor_active_cabinet');
+      if (savedCab) activeCabinet = JSON.parse(savedCab);
+    } catch(e) {}
+
+    function applyActiveCabinet() {
+      if (!currentRecord) return;
+      currentRecord.observation = currentRecord.observation || {};
+      let changed = false;
+      if (activeCabinet.building) {
+        currentRecord.observation.Building = activeCabinet.building;
+        markDirty('Building');
+        changed = true;
+      }
+      if (activeCabinet.floor) {
+        currentRecord.observation.Floor = activeCabinet.floor;
+        markDirty('Floor');
+        changed = true;
+      }
+      if (activeCabinet.cabinet) {
+        currentRecord.observation.Cabinet = activeCabinet.cabinet;
+        markDirty('Cabinet');
+        changed = true;
+      }
+      if (changed) {
+        triggerAutoSave();
+        showToast(`✓ Applied Active Cabinet: ${activeCabinet.building || ''} Fl ${activeCabinet.floor || ''} Cab ${activeCabinet.cabinet || ''}`);
+        renderDynamicForm(activeSchema, currentRecord);
+      }
+    }
+
+    function setAsActiveCabinet() {
+      if (!currentRecord || !currentRecord.observation) return;
+      activeCabinet = {
+        building: currentRecord.observation.Building || '',
+        floor: currentRecord.observation.Floor || '',
+        cabinet: currentRecord.observation.Cabinet || ''
+      };
+      try { localStorage.setItem('arbor_active_cabinet', JSON.stringify(activeCabinet)); } catch(e) {}
+      showToast(`🔒 Set Active Cabinet: ${activeCabinet.building || ''} Fl ${activeCabinet.floor || ''} Cab ${activeCabinet.cabinet || ''}`);
+      renderDynamicForm(activeSchema, currentRecord);
+    }
+
+    function toggleLocationProblem(checked) {
+      if (!currentRecord) return;
+      currentRecord.observation = currentRecord.observation || {};
+      currentRecord.observation.Loc_Problem = checked;
+      markDirty('Loc_Problem');
+      triggerAutoSave();
+      renderDynamicForm(activeSchema, currentRecord);
+      renderDiscrepancies(currentRecord);
+    }
+
+    function toggleLoanStatus(checked) {
+      if (!currentRecord) return;
+      currentRecord.observation = currentRecord.observation || {};
+      currentRecord.observation['Loaned out'] = checked;
+      markDirty('Loaned out');
+      if (checked) {
+        const today = new Date().toISOString().split('T')[0];
+        currentRecord.observation['Loaned out date'] = today;
+        markDirty('Loaned out date');
+      } else {
+        currentRecord.observation['Loaned out date'] = '';
+        markDirty('Loaned out date');
+      }
+      triggerAutoSave();
+      renderDynamicForm(activeSchema, currentRecord);
+    }
+
     let historicalData = {};
     let revertState = {}; // field: originalValue
     let presenceHeartbeatTimer = null;
@@ -9790,56 +9855,157 @@ INDEX_TEMPLATE_V2 = """
         `;
       });
 
-      // 2. Render Physical Location Group (Flat, No Accordion)
+      // 2. Render Physical Location Group (Optimized for Batch Herbarium Audits)
       let locHtml = '';
       let locProbCount = 0;
       let locUknCount = 0;
 
       if (locFields.length > 0) {
-        let locFieldsHtml = '';
+        const obs = record.observation || {};
+        const curBld = obs.Building || '';
+        const curFl = obs.Floor || '';
+        const curCab = obs.Cabinet || '';
+        const curStored = obs["Stored as"] || '';
+        const curExtra = obs.Extra || '';
+        const isLocProb = Boolean(obs.Loc_Problem === true || String(obs.Loc_Problem).toLowerCase() === 'true' || obs.Loc_Problem === '1');
+        const isLoaned = Boolean(obs["Loaned out"] === true || String(obs["Loaned out"]).toLowerCase() === 'true' || obs["Loaned out"] === '1');
+        const loanDate = obs["Loaned out date"] || '';
 
-        locFields.forEach(fDef => {
-          const val = (record.observation && record.observation[fDef.name] !== undefined) ? record.observation[fDef.name] : '';
-          if (isFieldProblemActive(fDef.name, 'observation', record)) locProbCount++;
-          else if (isValueUnknown(val)) locUknCount++;
-          locFieldsHtml += renderFieldInput(fDef, val, 'observation', record);
-        });
+        if (isLocProb) locProbCount++;
+        if (isValueUnknown(curStored)) locUknCount++;
+        if (isValueUnknown(curExtra)) locUknCount++;
 
-        let presetOptions = `<option value="Default" ${lastSelectedPreset === 'Default' ? 'selected' : ''}>Default</option>`;
-        Object.keys(locationPresets).forEach(pName => {
-          if (pName !== 'Default') {
-            presetOptions += `<option value="${pName}" ${lastSelectedPreset === pName ? 'selected' : ''}>${pName}</option>`;
-          }
-        });
+        const matchesActiveCab = Boolean(
+          (curBld && curBld === activeCabinet.building) &&
+          (curFl && curFl === activeCabinet.floor) &&
+          (curCab && curCab === activeCabinet.cabinet)
+        );
+
+        const cabDisplay = (activeCabinet.building || activeCabinet.floor || activeCabinet.cabinet)
+          ? `${activeCabinet.building || 'Any Building'} • Fl ${activeCabinet.floor || '?'} • Cab ${activeCabinet.cabinet || 'Unset'}`
+          : 'No Active Cabinet Set';
+
+        const storedAsDef = locFields.find(f => f.name === "Stored as") || {
+          name: "Stored as",
+          type: "choice",
+          choices: ["Mounted on wooden platform", "Petridish", "in plastic box", "in paper box", "Free standing", "in plastic bag"]
+        };
+
+        const storedOptionsHtml = ['<option value="">Select storage container...</option>']
+          .concat((storedAsDef.choices || []).map(c => `<option value="${c}" ${String(curStored) === String(c) ? 'selected' : ''}>${c}</option>`))
+          .join('');
 
         locHtml = `
-          <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-3">
-            <div class="flex items-center justify-between border-b border-tonal2 pb-2">
-              <div class="flex items-center gap-2">
-                <span class="text-fern font-bold text-sm">📍</span>
-                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
-                  Physical Storage Location
-                </h3>
+          <div class="space-y-3">
+            <!-- 1. Active Cabinet Workstation Card -->
+            <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-2.5">
+              <div class="flex items-center justify-between border-b border-tonal2 pb-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-fern font-bold text-xs">🔒</span>
+                  <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Active Cabinet Workstation</h3>
+                </div>
+                <button type="button" onclick="openPresetSettings()" class="text-[11px] font-sans font-medium text-fern hover:text-fern-dark touch-press">
+                  ⚙ Switch Cabinet / Presets
+                </button>
               </div>
-              ${locProbCount > 0 ? `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#C62828] text-white flex items-center gap-0.5 shadow-xs"><span>⚠</span><span>${locProbCount}</span></span>` : ''}
+
+              <div class="p-2.5 bg-tonal1 border border-bordercol rounded-[2px] flex items-center justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="font-mono text-xs font-bold text-ink truncate">${cabDisplay}</div>
+                  <p class="font-sans text-[10px] text-ink-muted mt-0.5">Current: <span class="font-mono">${curBld || '—'} • Fl ${curFl || '—'} • Cab ${curCab || '—'}</span></p>
+                </div>
+                ${matchesActiveCab ? `
+                  <span class="px-2.5 py-1 text-[10px] font-bold bg-fern text-white rounded-[2px] shadow-xs shrink-0 flex items-center gap-1">
+                    <span>✓</span><span>In Active Cab</span>
+                  </span>
+                ` : `
+                  <button type="button" onclick="applyActiveCabinet()" class="min-h-[36px] px-3 py-1.5 text-xs font-bold bg-fern hover:bg-fern-dark text-white rounded-[2px] shadow-xs shrink-0 touch-press touch-target-min">
+                    Apply to Specimen
+                  </button>
+                `}
+              </div>
+
+              <div class="flex items-center justify-between pt-0.5 text-[11px]">
+                <button type="button" onclick="setAsActiveCabinet()" class="text-ink-muted hover:text-ink hover:underline touch-press">
+                  Save current specimen location as Active Cabinet
+                </button>
+              </div>
             </div>
 
-            <!-- Location Preset Bar -->
-            <div class="flex items-center gap-2 py-1">
-              <select id="locPresetSelect" class="flex-grow bg-surface border border-bordercol rounded-[2px] px-2 py-2 text-xs font-sans text-ink outline-none focus:border-fern">
-                ${presetOptions}
-              </select>
-              <button type="button" onclick="applyLocPreset()" class="px-3 py-2 bg-tonal1 hover:bg-tonal2 text-ink text-xs font-bold rounded-[2px] border border-bordercol transition-colors cursor-pointer touch-press shrink-0">
-                Apply Preset
-              </button>
-              <button type="button" onclick="openPresetSettings()" class="px-2.5 py-2 bg-surface hover:bg-tonal1 text-ink text-xs rounded-[2px] border border-bordercol transition-colors cursor-pointer touch-press shrink-0" title="Preset Settings">
-                ⚙️
-              </button>
+            <!-- 2. Frequently Edited Object Storage Medium -->
+            <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-3">
+              <div class="border-b border-tonal2 pb-1.5">
+                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Storage Preparation & Shelf Note</h3>
+              </div>
+
+              <div class="space-y-1">
+                <label for="input_observation_Stored_as" class="text-xs font-bold text-ink">Stored as (Mounting / Container):</label>
+                <select
+                  id="input_observation_Stored_as"
+                  data-section="observation"
+                  data-field="Stored as"
+                  onchange="markDirty('Stored as'); triggerAutoSave()"
+                  onblur="saveCurrentEdits()"
+                  class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-3 py-2 text-xs outline-none bg-surface text-ink focus:border-fern cursor-pointer"
+                >
+                  ${storedOptionsHtml}
+                </select>
+              </div>
+
+              <div class="space-y-1">
+                <label for="input_observation_Extra" class="text-xs font-bold text-ink">Extra (Box # / Tray / Sub-shelf placement):</label>
+                <input
+                  type="text"
+                  id="input_observation_Extra"
+                  data-section="observation"
+                  data-field="Extra"
+                  value="${curExtra}"
+                  placeholder="e.g. Box 3, Upper Shelf, Tray 12..."
+                  oninput="markDirty('Extra'); triggerAutoSave()"
+                  onblur="saveCurrentEdits()"
+                  class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-3 py-2 text-xs outline-none bg-surface text-ink focus:border-fern"
+                />
+              </div>
             </div>
 
-            <!-- Flat Location Fields -->
-            <div class="space-y-3 pt-1">
-              ${locFieldsHtml}
+            <!-- 3. Location Problem & Loan Controls -->
+            <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-2.5">
+              <div class="border-b border-tonal2 pb-1.5">
+                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Location Status & Loans</h3>
+              </div>
+
+              <!-- Location Discrepancy Toggle -->
+              <label class="touch-target-min min-h-[44px] flex items-center gap-2.5 p-2.5 border rounded-[2px] transition-colors touch-press cursor-pointer ${isLocProb ? 'border-[#C62828] bg-red-50 text-[#C62828] font-bold' : 'border-bordercol bg-surface text-ink hover:bg-tonal1'}">
+                <input
+                  type="checkbox"
+                  id="input_observation_Loc_Problem"
+                  data-section="observation"
+                  data-field="Loc_Problem"
+                  ${isLocProb ? 'checked' : ''}
+                  onchange="toggleLocationProblem(this.checked)"
+                  class="w-4 h-4 text-[#C62828] rounded-[2px] border-bordercol focus:ring-[#C62828] cursor-pointer shrink-0"
+                />
+                <span class="text-xs select-none">⚑ Location Discrepancy (Wrong Cabinet / Missing)</span>
+              </label>
+
+              <!-- Loan Status Toggle Card (Desktop Parity) -->
+              <div class="border rounded-[2px] p-2.5 space-y-1.5 ${isLoaned ? 'border-l-4 border-l-[#FBC02D] bg-[#fef9c3]/40 border-bordercol' : 'border-l-4 border-l-fern bg-surface border-bordercol'}">
+                <div class="flex items-center justify-between">
+                  <label class="flex items-center gap-2 text-xs font-bold text-ink cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      id="input_observation_Loaned_out"
+                      data-section="observation"
+                      data-field="Loaned out"
+                      ${isLoaned ? 'checked' : ''}
+                      onchange="toggleLoanStatus(this.checked)"
+                      class="w-4 h-4 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
+                    />
+                    <span>${isLoaned ? 'Loaned Out to External Institution' : 'In Collection (Not Loaned)'}</span>
+                  </label>
+                  ${loanDate ? `<span class="font-mono text-[10px] text-ink-muted">Date: ${loanDate}</span>` : ''}
+                </div>
+              </div>
             </div>
           </div>
         `;
@@ -10440,28 +10606,96 @@ INDEX_TEMPLATE_V2 = """
     }
 
     // ==========================================
+    // DISCREPANCY & PROBLEM HELPERS
+    // ==========================================
+    const UNKNOWN_TOKENS = new Set([
+      "?", "-", "nan", "unknown", "ukjent", "[unknown]", "[ukjent]",
+      "unknown:missing", "unknown:indecipherable", "unknown:undigitized",
+      "withheld", "n/a", "none"
+    ]);
+
+    function isValueUnknown(val) {
+      if (val === null || val === undefined) return false;
+      const s = String(val).trim().toLowerCase();
+      if (!s) return false;
+      return UNKNOWN_TOKENS.has(s);
+    }
+
+    function isFieldProblemActive(fieldName, section, record) {
+      if (!record) return false;
+      if (record.flagged_issues && record.flagged_issues.some(i => !i.resolved && i.field === fieldName)) {
+        return true;
+      }
+      if (record.observation) {
+        const directProb = record.observation[`${fieldName}_Problem`];
+        if (directProb === true || String(directProb).toLowerCase() === 'true' || directProb === '1') {
+          return true;
+        }
+        if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+          const match = activeSchema.ui_sections.problems.find(p => p.maps_to === fieldName || p.target === fieldName || p.name === `${fieldName}_Problem`);
+          if (match) {
+            const v = record.observation[match.name];
+            if (v === true || String(v).toLowerCase() === 'true' || v === '1') {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    async function toggleFieldProblem(fieldName) {
+      if (!currentRecord) return;
+      const probCol = `${fieldName}_Problem`;
+      currentRecord.observation = currentRecord.observation || {};
+      const curVal = (currentRecord.observation[probCol] === true || String(currentRecord.observation[probCol]).toLowerCase() === 'true' || currentRecord.observation[probCol] === '1');
+      const newVal = !curVal;
+      currentRecord.observation[probCol] = newVal;
+      markDirty(probCol);
+
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+        activeSchema.ui_sections.problems.forEach(p => {
+          if (p.maps_to === fieldName || p.target === fieldName || p.name === probCol) {
+            currentRecord.observation[p.name] = newVal;
+            markDirty(p.name);
+          }
+        });
+      }
+
+      if (!newVal && currentRecord.flagged_issues) {
+        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.field !== fieldName);
+      }
+
+      renderDynamicForm(activeSchema, currentRecord);
+      updateDetailProblemBanner(currentRecord);
+      renderDiscrepancies(currentRecord);
+      await saveCurrentEdits();
+      showToast(newVal ? `Flagged problem on ${fieldName}` : `Cleared problem on ${fieldName}`);
+    }
+
+    // ==========================================
     // DISCREPANCY & PROBLEM TOGGLES
     // ==========================================
     function renderDiscrepancies(record) {
       renderProblemsTab(record);
       renderHistoricalConflicts(record);
 
-      // Quick Toggles from ui_sections.problems
+      // Quick Toggles from ui_sections.problems (Tier 1)
       const togglesContainer = document.getElementById('problemTogglesContainer');
       if (togglesContainer && activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
         const probs = activeSchema.ui_sections.problems;
         togglesContainer.innerHTML = probs.map(p => {
           const pName = p.name;
           const pLabel = pName.replace('_Problem', '').replace(/_/g, ' ');
-          const isFlagged = (record.observation && (String(record.observation[pName]).toLowerCase() === 'true' || record.observation[pName] === true || record.observation[pName] === '1'));
+          const isFlagged = (record && record.observation && (String(record.observation[pName]).toLowerCase() === 'true' || record.observation[pName] === true || record.observation[pName] === '1'));
           return `
-            <label class="touch-target-min min-h-[44px] flex items-center gap-2 p-2.5 border rounded-[2px] transition-colors touch-press cursor-pointer ${isFlagged ? 'border-ember bg-ember-light text-ember-dark font-semibold' : 'border-bordercol bg-surface text-ink hover:bg-tonal1'}">
+            <label class="touch-target-min min-h-[44px] flex items-center gap-2 p-2.5 border rounded-[2px] transition-colors touch-press cursor-pointer ${isFlagged ? 'border-red-300 bg-red-50 text-[#C62828] font-semibold' : 'border-bordercol bg-surface text-ink hover:bg-tonal1'}">
               <input
                 type="checkbox"
                 id="prob_${pName}"
                 ${isFlagged ? 'checked' : ''}
                 onchange="toggleProblemFlag('${pName}')"
-                class="w-4 h-4 text-ember rounded-[2px] border-bordercol focus:ring-ember cursor-pointer shrink-0"
+                class="w-4 h-4 text-[#C62828] rounded-[2px] border-bordercol focus:ring-[#C62828] cursor-pointer shrink-0"
               />
               <span class="truncate font-sans text-xs select-none">${pLabel}</span>
             </label>
@@ -10472,9 +10706,11 @@ INDEX_TEMPLATE_V2 = """
 
     function renderProblemsTab(record) {
       const container = document.getElementById('problemResolverContainer');
+      const badge = document.getElementById('activeIssuesCountBadge');
       if (!container) return;
       if (!record) {
         container.innerHTML = '<p class="text-xs text-ink-faint italic py-1">No specimen selected.</p>';
+        if (badge) badge.classList.add('hidden');
         return;
       }
 
@@ -10482,7 +10718,7 @@ INDEX_TEMPLATE_V2 = """
       const problemFields = [];
       const seenFields = new Set();
 
-      // 1. Add flagged issues
+      // 1. Add flagged custom issues
       issues.forEach(iss => {
         if (!iss.resolved) {
           const fName = iss.field || 'General';
@@ -10492,7 +10728,7 @@ INDEX_TEMPLATE_V2 = """
             section: (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.registration && activeSchema.ui_sections.registration.some(f => f.name === fName)) ? 'registration' : 'observation',
             type: 'flagged_issue',
             issueId: iss.id,
-            reason: iss.reason || 'Flagged problem'
+            reason: iss.reason || 'Flagged discrepancy'
           });
         }
       });
@@ -10539,11 +10775,21 @@ INDEX_TEMPLATE_V2 = """
         });
       }
 
+      // Update count badge
+      if (badge) {
+        if (problemFields.length > 0) {
+          badge.textContent = `${problemFields.length} active issue${problemFields.length === 1 ? '' : 's'}`;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
+
       if (problemFields.length === 0) {
         container.innerHTML = `
-          <div class="p-3 bg-fern-light/30 border border-fern/30 rounded-[2px] flex items-center gap-2 text-xs font-sans text-fern-dark">
-            <span class="text-sm font-bold">✓</span>
-            <span class="font-medium">No active problems or flagged issues found for this specimen.</span>
+          <div class="p-3 bg-surface border border-fern/40 border-l-[3px] border-l-fern rounded-[2px] flex items-center gap-2.5 text-xs font-sans text-ink">
+            <span class="text-sm font-bold text-fern">✓</span>
+            <span class="font-medium text-ink-muted">All specimen fields validated. No active problem flags.</span>
           </div>
         `;
         return;
@@ -10562,13 +10808,18 @@ INDEX_TEMPLATE_V2 = """
         const currentValStr = (currentVal !== null && currentVal !== undefined && String(currentVal).trim() !== '') ? String(currentVal) : '[BLANK]';
         const escapedCurrentVal = String(currentVal || '').replace(/"/g, '&quot;');
 
+        const isUnknown = p.type === 'unknown_value';
+        const borderLeftClass = isUnknown ? 'border-l-[3px] border-l-[#FBC02D]' : 'border-l-[3px] border-l-[#C62828]';
+        const badgeClass = isUnknown ? 'bg-[#FBC02D] text-[#2c302e]' : 'bg-[#C62828] text-white';
+        const badgeLabel = isUnknown ? 'UKN' : 'ERR';
+
         // Check if historical suggestions exist for this field
         let histSuggestionsHtml = '';
         if (historicalData && historicalData[fName] && Object.keys(historicalData[fName]).length > 0) {
           const suggestions = historicalData[fName];
           let sugItems = '';
           for (const [sugVal, sources] of Object.entries(suggestions)) {
-            const encodedVal = sugVal.replace(/'/g, "\'").replace(/"/g, '&quot;');
+            const encodedVal = sugVal.replace(/'/g, "\\'").replace(/"/g, '&quot;');
             const sourceStr = sources.join(', ');
             sugItems += `
               <div class="p-2 bg-surface border border-bordercol rounded-[2px] flex items-center justify-between gap-2 text-xs">
@@ -10579,8 +10830,8 @@ INDEX_TEMPLATE_V2 = """
                 <button
                   type="button"
                   onclick="applyHistoricalAndFix('${fName}', '${encodedVal}', '${p.issueId || ''}')"
-                  class="min-h-[36px] px-3 py-1 bg-fern hover:bg-fern-dark text-white font-bold text-xs rounded-[2px] shadow-xs shrink-0 touch-target-min touch-press"
-                  title="Apply historical value & fix problem"
+                  class="min-h-[34px] px-3 py-1 bg-fern hover:bg-fern-dark text-white font-bold text-xs rounded-[2px] shadow-xs shrink-0 touch-target-min touch-press"
+                  title="Apply historical suggestion & clear flag"
                 >
                   Apply Fix
                 </button>
@@ -10601,31 +10852,32 @@ INDEX_TEMPLATE_V2 = """
         }
 
         cardsHtml += `
-          <div class="bg-surface border-2 border-ember-border/80 rounded-[2px] p-3 space-y-2.5 shadow-2xs">
-            <!-- Header -->
+          <div class="bg-surface border border-bordercol ${borderLeftClass} rounded-[2px] p-3 space-y-2.5 shadow-2xs">
+            <!-- Card Header -->
             <div class="flex items-start justify-between gap-2 border-b border-tonal2 pb-2">
               <div>
                 <div class="flex items-center gap-1.5">
                   <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${fName}</span>
-                  <span class="px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold ${p.type === 'unknown_value' ? 'bg-[#FBC02D] text-[#2c302e]' : 'bg-[#C62828] text-white'}">
-                    ${p.type === 'unknown_value' ? '?' : '⚠'} ${p.reason}
+                  <span class="px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold ${badgeClass}">
+                    ${badgeLabel}
                   </span>
+                  <span class="text-[11px] text-ink-muted">${p.reason}</span>
                 </div>
-                <p class="text-xs font-mono text-ink-muted mt-0.5">Current: <span class="font-semibold text-ink">${currentValStr}</span></p>
+                <p class="text-xs font-mono text-ink-muted mt-0.5">Current: <span class="font-semibold text-ink font-mono">${currentValStr}</span></p>
               </div>
               <button
                 type="button"
                 onclick="${p.issueId ? `resolveDiscrepancy('${p.issueId}')` : `toggleFieldProblem('${fName}')`}"
-                class="text-[11px] font-medium text-ink-muted hover:text-ember px-2 py-1 rounded-[2px] border border-bordercol hover:bg-tonal1 transition-colors touch-target-min"
-                title="Dismiss flag without changing value"
+                class="text-[11px] font-medium text-ink-muted hover:text-[#C62828] px-2 py-1 rounded-[2px] border border-bordercol hover:bg-tonal1 transition-colors touch-target-min shrink-0"
+                title="Clear flag without changing value"
               >
-                Dismiss
+                ✕ Clear Flag
               </button>
             </div>
 
             <!-- Inline Direct Fix Editor -->
             <div class="space-y-1.5">
-              <label class="block font-mono text-[10px] uppercase font-bold text-ink-muted">Fix / Correct Value:</label>
+              <label class="block font-mono text-[10px] uppercase font-bold text-ink-muted">Manual Override / Corrected Value:</label>
               <div class="flex items-center gap-1.5">
                 <input
                   type="text"
@@ -10638,10 +10890,10 @@ INDEX_TEMPLATE_V2 = """
                 <button
                   type="button"
                   onclick="fixProblemInline('${fName}', '${p.section}', '${p.issueId || ''}')"
-                  class="min-h-[38px] px-3.5 py-2 bg-fern hover:bg-fern-dark text-white font-bold text-xs rounded-[2px] shadow-xs shrink-0 touch-target-min touch-press flex items-center gap-1"
+                  class="min-h-[36px] px-3 py-2 bg-fern hover:bg-fern-dark text-white font-bold text-xs rounded-[2px] shadow-xs shrink-0 touch-target-min touch-press flex items-center gap-1"
                 >
                   <span>✓</span>
-                  <span>Save Fix</span>
+                  <span>Save</span>
                 </button>
               </div>
             </div>
@@ -10666,12 +10918,12 @@ INDEX_TEMPLATE_V2 = """
         return;
       }
 
-      let count = 0;
-      let itemsHtml = '';
+      let conflictCount = 0;
+      let matchCount = 0;
+      let conflictCardsHtml = '';
 
       for (const [field, valuesMap] of Object.entries(historicalData)) {
         if (!valuesMap || Object.keys(valuesMap).length === 0) continue;
-        count++;
 
         let currentVal = '';
         if (record && record.registration && record.registration[field] !== undefined) {
@@ -10679,61 +10931,89 @@ INDEX_TEMPLATE_V2 = """
         } else if (record && record.observation && record.observation[field] !== undefined) {
           currentVal = record.observation[field];
         }
-        const currentValStr = (currentVal !== null && currentVal !== undefined && String(currentVal).trim() !== '') ? String(currentVal) : '[BLANK]';
+        const currentValClean = (currentVal !== null && currentVal !== undefined) ? String(currentVal).trim() : '';
+        const currentValStr = currentValClean !== '' ? currentValClean : '[BLANK]';
 
-        let sugHtml = '';
+        // Check each archive suggestion for conflict vs match
         for (const [histVal, sources] of Object.entries(valuesMap)) {
-          const encodedVal = histVal.replace(/'/g, "\'").replace(/"/g, '&quot;');
-          const sourceStr = sources.join(', ');
-          const isMatching = String(currentVal).trim() === String(histVal).trim();
+          const histValClean = String(histVal).trim();
+          const isMatching = currentValClean.toLowerCase() === histValClean.toLowerCase();
 
-          sugHtml += `
-            <div class="p-2.5 bg-surface border rounded-[2px] flex items-center justify-between gap-2 text-xs ${isMatching ? 'border-fern/50 bg-fern-light/20' : 'border-bordercol'}">
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5">
-                  <span class="font-mono font-bold ${isMatching ? 'text-fern-dark' : 'text-ink'}">${encodedVal}</span>
-                  ${isMatching ? '<span class="text-[10px] text-fern-dark font-medium bg-fern/10 px-1 py-0.2 rounded-[2px]">Matches Current</span>' : ''}
+          if (isMatching) {
+            matchCount++;
+          } else {
+            conflictCount++;
+            const encodedVal = histVal.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const sourceStr = sources.join(', ');
+
+            let undoBtn = '';
+            if (revertState && revertState.hasOwnProperty(field)) {
+              const orig = revertState[field].replace(/'/g, "\\'").replace(/"/g, '&quot;');
+              undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[11px] text-ember hover:underline font-bold bg-ember-light px-2 py-0.5 border border-ember-border rounded-[2px] touch-press">Undo</button>`;
+            }
+
+            conflictCardsHtml += `
+              <div class="bg-surface border border-bordercol border-l-[3px] border-l-[#0284C7] rounded-[2px] p-3 space-y-2.5 shadow-2xs">
+                <div class="flex items-center justify-between border-b border-tonal2 pb-1.5">
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${field}</span>
+                    <span class="px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-[#0284C7] text-white">
+                      Archive Conflict
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    ${undoBtn}
+                    <span class="text-[11px] font-mono text-ink-muted">Current: <strong class="text-ink font-mono">${currentValStr}</strong></span>
+                  </div>
                 </div>
-                <p class="text-[10px] text-ink-muted mt-0.5">Sources: <span class="font-mono">${sourceStr}</span></p>
-              </div>
-              ${!isMatching ? `
-                <button
-                  type="button"
-                  onclick="applyHistoricalAndFix('${field}', '${encodedVal}', '')"
-                  class="min-h-[36px] px-3 py-1.5 bg-tonal1 hover:bg-fern hover:text-white border border-bordercol hover:border-fern text-ink font-bold text-xs rounded-[2px] transition-colors shrink-0 touch-target-min touch-press"
-                  title="Accept historical value into active database"
-                >
-                  Accept
-                </button>
-              ` : ''}
-            </div>
-          `;
-        }
 
-        let undoBtn = '';
-        if (revertState && revertState.hasOwnProperty(field)) {
-          const orig = revertState[field].replace(/'/g, "\'").replace(/"/g, '&quot;');
-          undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[11px] text-ember hover:underline font-bold bg-ember-light px-2 py-0.5 border border-ember-border rounded-[2px] touch-press">Undo</button>`;
-        }
-
-        itemsHtml += `
-          <div class="bg-tonal1/60 border border-bordercol rounded-[2px] p-3 space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${field}</span>
-              <div class="flex items-center gap-2">
-                ${undoBtn}
-                <span class="text-[11px] font-mono text-ink-muted">Current: <strong class="text-ink">${currentValStr}</strong></span>
+                <div class="p-2.5 bg-sky-50/50 border border-sky-200/80 rounded-[2px] flex items-center justify-between gap-2 text-xs">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-mono font-bold text-[#0284C7]">${encodedVal}</span>
+                    </div>
+                    <p class="text-[10px] text-ink-muted mt-0.5">Archive Sources: <span class="font-mono">${sourceStr}</span></p>
+                  </div>
+                  <button
+                    type="button"
+                    onclick="applyHistoricalAndFix('${field}', '${encodedVal}', '')"
+                    class="min-h-[34px] px-3 py-1.5 bg-[#0284C7] hover:bg-sky-700 text-white font-bold text-xs rounded-[2px] transition-colors shrink-0 touch-target-min touch-press"
+                    title="Accept historical archive value"
+                  >
+                    Accept Value
+                  </button>
+                </div>
               </div>
-            </div>
-            <div class="space-y-1.5">
-              ${sugHtml}
-            </div>
+            `;
+          }
+        }
+      }
+
+      if (badge) {
+        badge.textContent = `${conflictCount} conflict${conflictCount === 1 ? '' : 's'}`;
+      }
+
+      let summaryHtml = '';
+      if (matchCount > 0) {
+        summaryHtml = `
+          <div class="p-2.5 bg-tonal1/70 border border-bordercol rounded-[2px] flex items-center gap-2 text-xs text-ink-muted">
+            <span class="text-fern font-bold text-sm">✓</span>
+            <span><strong>${matchCount}</strong> archive field${matchCount === 1 ? '' : 's'} match active specimen data.</span>
           </div>
         `;
       }
 
-      if (badge) badge.textContent = `${count} field${count === 1 ? '' : 's'}`;
-      container.innerHTML = itemsHtml || '<p class="text-xs text-ink-faint italic py-1">No historical comparisons available.</p>';
+      if (conflictCount === 0) {
+        container.innerHTML = `
+          ${summaryHtml}
+          <div class="p-3 bg-surface border border-sky-200 border-l-[3px] border-l-[#0284C7] rounded-[2px] flex items-center gap-2 text-xs font-sans text-ink">
+            <span class="text-sm font-bold text-[#0284C7]">ℹ</span>
+            <span class="font-medium text-ink-muted">No historical archive conflicts detected.</span>
+          </div>
+        `;
+      } else {
+        container.innerHTML = summaryHtml + conflictCardsHtml;
+      }
     }
 
     async function fixProblemInline(fieldName, section, issueId) {
@@ -10775,7 +11055,7 @@ INDEX_TEMPLATE_V2 = """
       }
       if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
         activeSchema.ui_sections.problems.forEach(p => {
-          if (p.maps_to === fieldName || p.target === fieldName) {
+          if (p.maps_to === fieldName || p.target === fieldName || p.name === `${fieldName}_Problem`) {
             if (currentRecord.observation) currentRecord.observation[p.name] = false;
           }
         });
@@ -10818,7 +11098,7 @@ INDEX_TEMPLATE_V2 = """
       updateReviewButtonUI();
     }
 
-        function populateDiscrepancyFields() {
+    function populateDiscrepancyFields() {
       const select = document.getElementById('discrepancyFieldSelect');
       if (!activeSchema || !activeSchema.ui_sections) return;
       const reg = (activeSchema.ui_sections.registration || []).map(f => f.name);
