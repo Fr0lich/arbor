@@ -1,0 +1,1951 @@
+<!DOCTYPE html><html class="h-full bg-stone-900" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>Arbor - Specimen Detail View</title>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Lora (Serif), Inter (Sans), JetBrains Mono (Mono) -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Lora:ital,wght@0,500;0,600;1,400;1,600&amp;display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Lora', 'serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            alabaster: '#f3f3f3',
+            surface: '#ffffff',
+            bordercol: '#d4d8d5',
+            ink: '#191e1a',
+            muted: '#535d56',
+            subdued: '#848f87',
+            fern: '#3a7d44',
+            'fern-light': '#eaf4ec',
+            brick: '#c93a40',
+            'brick-light': '#fdf2f2',
+            slate: '#4a7b9d',
+            'slate-light': '#f0f6fa',
+            ember: '#d95c14',
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Custom ergonomic touch active styles and scrollbar hiding */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .tap-highlight-transparent {
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Tab indicator animation */
+    .tab-slider {
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    /* Viewport lock */
+    body {
+      touch-action: pan-y;
+      overscroll-behavior-y: none;
+    }
+    /* Swiper panel track */
+    #tabTrack {
+      transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+  </style>
+</head>
+<script class="">
+  // Synchronization function to update Details tab problem styling
+  function updateDetailsFieldProblemUI(field, isFlagged) {
+    const wrapper = document.getElementById(`fieldWrapper_${field}`);
+    const input = document.getElementById(`input_${field}`);
+    const alertBadge = document.getElementById(`fieldAlert_${field}`);
+    const subtext = document.getElementById(`subtext_${field}`);
+    const label = document.getElementById(`label_${field}`);
+    const alertIcon = document.getElementById(`btnAuthorAlertIcon`);
+
+    if (!wrapper || !input) return;
+
+    if (isFlagged) {
+      if (label) {
+        label.classList.remove('text-subdued');
+        label.classList.add('text-brick', 'font-bold');
+      }
+      if (alertBadge) {
+        alertBadge.classList.remove('hidden');
+      }
+      if (subtext) {
+        subtext.classList.remove('hidden');
+      }
+      if (alertIcon) {
+        alertIcon.classList.remove('hidden');
+      }
+      input.className = 'w-full text-xs font-mono font-medium text-ink bg-orange-50 border border-brick focus:border-brick rounded-[2px] pl-2.5 pr-7 py-1.5 transition-colors focus:outline-none';
+    } else {
+      if (label) {
+        label.classList.add('text-subdued');
+        label.classList.remove('text-brick', 'font-bold');
+      }
+      if (alertBadge) {
+        alertBadge.classList.add('hidden');
+      }
+      if (subtext) {
+        subtext.classList.add('hidden');
+      }
+      if (alertIcon) {
+        alertIcon.classList.add('hidden');
+      }
+      input.className = 'w-full text-xs font-mono font-medium text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none';
+    }
+
+    // Update Taxonomic Hierarchy alert summary count
+    const authorFlag = document.getElementById('flagAuthorProblem');
+    const genusFlag = document.querySelector('[data-field="Genus_Problem"]');
+    const speciesFlag = document.querySelector('[data-field="Species_Problem"]');
+    const familyFlag = document.querySelector('[data-field="Family_Problem"]');
+    
+    let flagsCount = 0;
+    if (authorFlag && authorFlag.getAttribute('data-active') === 'true') flagsCount++;
+    if (genusFlag && genusFlag.getAttribute('data-active') === 'true') flagsCount++;
+    if (speciesFlag && speciesFlag.getAttribute('data-active') === 'true') flagsCount++;
+    if (familyFlag && familyFlag.getAttribute('data-active') === 'true') flagsCount++;
+
+    const summaryBadge = document.getElementById('taxonAlertSummaryBadge');
+    if (summaryBadge) {
+      if (flagsCount > 0) {
+        summaryBadge.classList.remove('hidden');
+        summaryBadge.innerHTML = `<svg class="w-3 h-3 text-brick stroke-2 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path></svg> ${flagsCount} Flagged`;
+      } else {
+        summaryBadge.classList.add('hidden');
+      }
+    }
+  }
+
+  // Hook into setAuthorFlagCardState if present
+  if (typeof setAuthorFlagCardState === 'function') {
+    const origSetAuthorFlag = setAuthorFlagCardState;
+    setAuthorFlagCardState = function(isFlagged) {
+      origSetAuthorFlag(isFlagged);
+      updateDetailsFieldProblemUI('Author', isFlagged);
+    };
+  }
+
+  // Hook into toggleProblemButton to synchronize any taxon problem
+  if (typeof toggleProblemButton === 'function') {
+    const origToggleProblem = toggleProblemButton;
+    toggleProblemButton = function(btn) {
+      origToggleProblem(btn);
+      const field = btn.getAttribute('data-field');
+      const isActive = btn.getAttribute('data-active') === 'true';
+      if (field === 'Author_Problem') updateDetailsFieldProblemUI('Author', isActive);
+      if (field === 'Genus_Problem') updateDetailsFieldProblemUI('Genus', isActive);
+      if (field === 'Species_Problem') updateDetailsFieldProblemUI('Species', isActive);
+      if (field === 'Family_Problem') updateDetailsFieldProblemUI('Family', isActive);
+    };
+  }
+</script><body class="h-full flex items-center justify-center p-0 md:p-6 font-sans text-ink antialiased select-none">
+<!-- Mobile Device Simulation Frame -->
+<div class="relative w-full max-w-[430px] h-full md:h-[900px] md:max-h-[94vh] bg-alabaster flex flex-col overflow-hidden md:rounded-2xl md:shadow-2xl md:border md:border-stone-700">
+<!-- 1. STICKY TOP NAVIGATION BAR -->
+<header class="flex-none bg-surface border-b border-bordercol px-3 py-2 flex flex-col gap-2 z-30 shadow-xs">
+  <div class="flex items-center justify-between gap-2">
+    <!-- Back button -->
+    <button aria-label="Return to Vault List" class="flex items-center gap-1.5 px-2 py-1.5 min-h-[36px] -ml-1 text-xs font-semibold text-muted hover:text-ink active:bg-stone-100 rounded-[3px] transition-colors tap-highlight-transparent flex-none" id="btnBack">
+      <svg class="w-4 h-4 text-ink stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M15.75 19.5L8.25 12l7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <span class="font-mono">Vault 04</span>
+    </button>
+
+    <!-- Center/Right controls: Undo + Counter + Steppers -->
+    <div class="flex items-center gap-1.5 flex-none">
+      <!-- Undo Button -->
+      <button class="items-center gap-1 px-2 py-1 h-[30px] text-[10px] font-mono font-medium text-ember bg-orange-50 border border-orange-200 rounded-[3px] active:scale-95 transition-all flex" id="btnUndo">
+        <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <span class="">Undo</span>
+      </button>
+
+      <!-- Specimen index counter -->
+      <span class="text-[11px] font-mono font-medium text-subdued tracking-tight bg-stone-100 px-2 py-1 rounded-[3px] border border-bordercol/60 flex items-center">
+        <span class="text-ink font-semibold" id="currentRecordNum">13</span><span class="text-stone-400 mx-0.5">/</span><span id="totalRecordsNum" class="">128</span>
+      </span>
+
+      <!-- Segmented Next/Prev Steppers -->
+      <div class="inline-flex rounded-[3px] border border-bordercol bg-alabaster p-0.5 shadow-2xs">
+        <button class="w-7 h-7 flex items-center justify-center rounded-[2px] hover:bg-surface text-ink active:bg-stone-200 transition-colors tap-highlight-transparent" id="btnPrev" title="Previous Specimen">
+          <svg class="w-3.5 h-3.5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <div class="w-[1px] bg-bordercol my-0.5"></div>
+        <button class="w-7 h-7 flex items-center justify-center rounded-[2px] hover:bg-surface text-ink active:bg-stone-200 transition-colors tap-highlight-transparent" id="btnNext" title="Next Specimen">
+          <svg class="w-3.5 h-3.5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Search Bar -->
+  <div class="relative flex items-center w-full">
+    <div class="absolute left-2.5 pointer-events-none text-muted flex items-center">
+      <svg class="w-3.5 h-3.5 stroke-[2.2] text-subdued" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </div>
+    <input id="vaultLiveSearch" type="text" placeholder="Search specimen, barcode, taxon (e.g. #0894)..." class="w-full text-xs font-mono pl-8 pr-16 py-1.5 min-h-[34px] bg-alabaster hover:bg-white focus:bg-white border border-bordercol rounded-[3px] text-ink focus:border-ink focus:outline-none transition-all placeholder:text-stone-400 placeholder:font-sans" oninput="handleLiveSearch(this.value)" onkeydown="if(event.key==='Escape'){clearLiveSearch();}" autocomplete="off">
+    <!-- Shortcut / Clear Container -->
+    <div class="absolute right-1.5 flex items-center gap-1">
+      <button id="btnClearSearch" type="button" onclick="clearLiveSearch()" class="hidden text-[11px] font-mono text-stone-400 hover:text-ink px-1.5 py-0.5 rounded hover:bg-stone-100 transition-colors" title="Clear search">✕</button>
+      <kbd class="hidden sm:inline-flex text-[9px] font-mono font-medium text-subdued bg-stone-100 border border-stone-200 px-1 py-0.5 rounded pointer-events-none">⌘K</kbd>
+    </div>
+    <!-- Live Filter Floating Hint Dropdown -->
+    <div id="searchDropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-surface border border-bordercol rounded-[3px] shadow-lg z-50 p-2 text-xs font-mono space-y-1">
+      <div class="flex items-center justify-between text-[10px] text-subdued border-b border-stone-100 pb-1">
+        <span id="searchResultsCount" class="">Matches in Vault 04</span>
+        <span class="text-fern font-medium">Live index</span>
+      </div>
+      <div id="searchResultsList" class="space-y-0.5 pt-0.5">
+        <!-- Dynamic results pop up here -->
+      </div>
+    </div>
+  </div>
+</header>
+<!-- 2. STICKY SPECIMEN IDENTIFICATION HEADER -->
+<section class="flex-none bg-surface border-b border-bordercol px-4 pt-3 pb-3 z-20 shadow-sm">
+<!-- Accession Bar & Status Badge -->
+<div class="flex items-center justify-between mb-1.5">
+<div class="flex items-center gap-2">
+<span class="font-mono text-xs font-bold text-ink tracking-tight px-1.5 py-0.5 bg-stone-100 border border-bordercol rounded-[2px]">
+            #2024-BOT-0894
+          </span>
+
+</div>
+<!-- Interactive Quick Status Pill -->
+<button class="flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300" id="badgeStatus" onclick="toggleReviewedState()"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span><span class="">UNREVIEWED</span></button>
+</div>
+<!-- Taxon Scientific Title -->
+<h1 class="text-[19px] leading-tight font-serif font-semibold italic text-ink tracking-tight flex items-baseline gap-1.5">
+<span class="">Betula pendula</span>
+<span class="text-xs font-normal not-italic font-sans text-muted">Roth subsp.</span>
+
+</h1>
+<!-- Metadata summary sub-line -->
+<div class="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-xs text-muted">
+<div class="flex items-center gap-1">
+<span class="text-subdued font-medium">Fam:</span>
+<span class="font-medium text-ink">Betulaceae</span>
+</div>
+<span class="text-bordercol">•</span>
+<div class="flex items-center gap-1 font-mono text-[11px]">
+<span class="text-subdued font-sans">Loc:</span>
+<span class="text-ink font-semibold" id="headerLocSummary">Cab 04 · Sh 02 · Fl -1</span>
+</div>
+</div>
+</section>
+<!-- 3. SEGMENTED TAB CONTROLLER (Sticky) -->
+<nav class="flex-none bg-alabaster border-b border-bordercol px-3 pt-2 pb-1.5 z-20">
+<div class="relative bg-stone-200/90 p-1 rounded-[4px] flex items-center justify-between text-xs font-medium text-muted shadow-inner">
+<!-- Sliding active indicator pill -->
+<div class="tab-slider absolute top-1 bottom-1 w-[calc((100%-8px)/3)] bg-surface rounded-[2px] shadow-sm border border-stone-300 pointer-events-none translate-x-0" id="tabIndicator" style="transform: translateX(100%);"></div>
+<!-- Tab 1: Location (Active Default) -->
+<button class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent text-muted" data-tab-index="0" onclick="switchTab(0)">
+<svg class="w-3.5 h-3.5 text-current stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Location</span>
+</button>
+<!-- Tab 2: Details & Archival Scans -->
+<button class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent font-semibold text-ink" data-tab-index="1" onclick="switchTab(1)">
+<svg class="w-3.5 h-3.5 text-current stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Details</span>
+</button>
+<!-- Tab 3: Problems & Conflicts -->
+<button class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent text-muted" data-tab-index="2" onclick="switchTab(2)">
+<svg class="w-3.5 h-3.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Problems</span>
+<span class="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-brick text-white shadow-xs" id="tabProblemBadge">2</span>
+</button>
+</div>
+</nav>
+<!-- 4. HORIZONTAL SWIPEABLE TAB PANELS CONTAINER -->
+<div class="flex-1 overflow-hidden relative" id="swipeArea">
+<div class="h-full flex w-[300%]" id="tabTrack" style="transform: translateX(-33.3333%);">
+<!-- ================= PANEL 1: LOCATION (Variant A: Spatial Hierarchy Breadcrumb & Status Pill Card) ================= -->
+<div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24"><!-- 1. UTILITY BAR: REPETITION KILLER -->
+<div class="bg-surface border border-bordercol rounded-[3px] p-2.5 shadow-2xs">
+<button class="w-full py-2.5 px-3 bg-stone-100 hover:bg-stone-200/80 active:bg-stone-300 border border-stone-300 rounded-[3px] flex items-center justify-between text-left transition-all tap-highlight-transparent min-h-[44px]" id="btnCopyPrevSpecimen" onclick="handleCopyPreviousSpecimen()" type="button">
+<div class="flex items-center gap-2 truncate">
+<span class="text-base leading-none" id="copyIconSpan">📋</span>
+<div class="truncate">
+<span class="text-xs font-bold text-ink block truncate" id="copyTitleSpan">Copy from Previous (#2024-BOT-0893)</span>
+<span class="text-[10px] font-mono text-muted block truncate" id="copySubtitleSpan">Bldg: Økern · Fl: -1 · Cab: 04 · Sh: 02</span>
+</div>
+</div>
+<span class="text-[10px] font-mono font-bold px-2 py-1 bg-surface border border-stone-300 text-muted rounded-[2px] shadow-2xs whitespace-nowrap ml-2" id="copyActionTag">1-Tap Fill</span>
+</button>
+</div>
+<!-- 2. MAIN LOCATION CARD -->
+<div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-xs space-y-3.5">
+<div class="flex items-center justify-between border-b border-stone-100 pb-2">
+<div>
+<h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Physical Coordinate Audit</h2>
+<p class="text-[10px] font-mono text-subdued">Thumb-optimized targets · Rapid field audit</p>
+</div>
+<span class="text-[10px] font-mono text-fern font-semibold flex items-center gap-1" id="locSyncIndicator">
+<svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      Synced
+    </span>
+</div>
+<!-- SECTION A: BUILDING SELECTOR -->
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued">Building / Vault Facility</label>
+<button class="text-[10px] font-mono text-slate hover:text-ink flex items-center gap-0.5 tap-highlight-transparent" id="btnToggleOtherBldg" onclick="toggleCustomBuildingInput()" type="button">+ Other</button>
+</div>
+<div class="grid grid-cols-2 gap-2" id="buildingChipsGrid">
+<button class="bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs bg-[#1c3829] text-white border-transparent" data-building="Økern" onclick="setBuildingSelection('Økern', this)" type="button"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+
+<span class="">Økern</span>
+</button>
+<button class="bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs" data-building="Lid's hus" hus",="" lid's="" onclick="setBuildingSelection(" this)"="" type="button">
+<span class="">Lid's hus</span>
+</button>
+</div>
+<!-- Inline Manual Custom Building -->
+<div class="hidden pt-1 space-y-1" id="customBuildingWrap">
+<div class="flex items-center gap-1.5">
+<input class="flex-1 text-xs font-mono px-2.5 py-1.5 min-h-[38px] bg-alabaster border border-bordercol rounded-[2px] text-ink focus:bg-white focus:border-ink focus:outline-none" id="customBuildingInput" oninput="onCustomBuildingInput(this.value)" placeholder="Specify facility name or field annex..." type="text">
+<button class="px-2.5 py-1.5 min-h-[38px] text-xs font-mono font-semibold bg-stone-800 text-white rounded-[2px] active:bg-black tap-highlight-transparent" onclick="applyCustomBuilding()" type="button">Set</button>
+</div>
+</div>
+</div>
+<!-- SECTION B: PHYSICAL STEPPER GRID (Floor, Cabinet, Shelf) -->
+<div class="space-y-2 pt-1">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase font-bold text-subdued">
+<span class="">Spatial Coordinates</span>
+<span class="text-[9px] text-muted lowercase">tap number for keypad</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<!-- FLOOR STEPPER -->
+<div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
+<span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Floor</span>
+<div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
+<span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayFloorVal" onclick="activateDirectInput('Floor')">-1</span>
+<input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputFloorVal" inputmode="numeric" onblur="finishDirectInput('Floor')" onkeydown="if(event.key==='Enter')finishDirectInput('Floor')" pattern="[0-9\-]*" type="text">
+</div>
+<div class="grid grid-cols-2 gap-1">
+<button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', -1)" type="button">−</button>
+<button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', 1)" type="button">+</button>
+</div>
+</div>
+<!-- CABINET STEPPER -->
+<div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
+<span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Cabinet</span>
+<div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
+<span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayCabVal" onclick="activateDirectInput('Cab')">04</span>
+<input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputCabVal" inputmode="numeric" onblur="finishDirectInput('Cab')" onkeydown="if(event.key==='Enter')finishDirectInput('Cab')" pattern="[0-9]*" type="text">
+</div>
+<div class="grid grid-cols-2 gap-1">
+<button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', -1)" type="button">−</button>
+<button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', 1)" type="button">+</button>
+</div>
+</div>
+<!-- SHELF STEPPER -->
+<div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
+<span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Shelf</span>
+<div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
+<span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayShelfVal" onclick="activateDirectInput('Shelf')">02</span>
+<input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputShelfVal" inputmode="numeric" onblur="finishDirectInput('Shelf')" onkeydown="if(event.key==='Enter')finishDirectInput('Shelf')" pattern="[0-9]*" type="text">
+</div>
+<div class="grid grid-cols-2 gap-1">
+<button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', -1)" type="button">−</button>
+<button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', 1)" type="button">+</button>
+</div>
+</div>
+</div>
+<!-- Live Verified Breadcrumb Trail -->
+<div class="bg-stone-100 border border-bordercol/60 rounded-[2px] px-2.5 py-1.5 flex items-center justify-between text-[11px] font-mono mt-1">
+<div class="flex items-center gap-1 text-ink truncate">
+<span class="text-subdued uppercase text-[9px] font-sans font-bold">Live:</span>
+<span class="font-semibold truncate" id="liveLocBreadcrumb">Økern › Floor -1 › Cab 04 › Sh 02</span>
+</div>
+<span class="text-[10px] font-mono text-fern font-bold whitespace-nowrap ml-1">✓ Validated</span>
+</div>
+</div>
+<!-- SECTION C: STORED AS SECTION -->
+<div class="space-y-2 pt-1 border-t border-stone-100">
+<div class="flex items-center justify-between">
+<label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued flex items-center gap-1.5">
+<span class="">Stored as</span>
+</label>
+<span class="text-[10px] font-mono text-ink font-semibold truncate max-w-[170px]" id="activeStoredAsLabel">Free Standing</span>
+</div>
+<!-- 2x2 Quick-Select Option Grid -->
+<div class="grid grid-cols-2 gap-2 text-xs font-mono" id="storageQuickGrid">
+<!-- Tile 1: Free Standing (Active default) -->
+<button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border-2 border-ink bg-stone-100 text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Free Standing" onclick="handleStorageOptionSelect('Free Standing', this)" type="button">
+<span class="font-semibold truncate">Free Standing</span>
+<span class="w-2 h-2 rounded-full bg-fern flex-none ml-1.5"></span>
+</button>
+<!-- Tile 2: Petri dish -->
+<button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Petri dish" onclick="handleStorageOptionSelect('Petri dish', this)" type="button">
+<span class="font-medium truncate">Petri dish</span>
+<span class="w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5"></span>
+</button>
+<!-- Tile 3: Mounted to platform -->
+<button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Mounted to platform" onclick="handleStorageOptionSelect('Mounted to platform', this)" type="button">
+<span class="font-medium truncate">Mounted to platform</span>
+<span class="w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5"></span>
+</button>
+<!-- Tile 4: More... ▾ -->
+<button class="min-h-[44px] p-2.5 rounded-[2px] border border-dashed border-stone-400 hover:border-ink bg-stone-50 hover:bg-white text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" id="btnMoreStorageModal" onclick="openStoredAsBottomSheet()" type="button">
+<span class="font-semibold truncate text-muted">More...</span>
+<svg class="w-3.5 h-3.5 text-muted flex-none ml-1.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19.5 8.25l-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</button>
+</div>
+<!-- Manual 'Stored as' Text Override -->
+<div class="pt-1 space-y-1">
+<div class="relative flex items-center">
+<input class="w-full text-xs font-mono bg-alabaster border border-bordercol rounded-[2px] pl-2.5 pr-8 py-2 min-h-[38px] text-ink focus:bg-white focus:border-ink focus:outline-none transition-colors" id="manualStorageInput" oninput="onManualStorageChange(this.value)" placeholder="Or enter manual storage type..." type="text">
+<button class="absolute right-2 text-stone-400 hover:text-ink hidden tap-highlight-transparent p-1 leading-none text-xs font-mono font-bold" id="btnClearManualStorage" onclick="clearManualStorage()" title="Clear manual storage" type="button">✕</button>
+</div>
+<div class="flex items-center justify-between px-0.5 text-[9px] font-mono text-subdued">
+<span class="">Custom override preserved on copy</span>
+<span class="text-fern" id="manualStorageSyncNotice">Auto-saved</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 3. COMPACT REPOSITORY STATUS -->
+<div class="bg-surface border border-bordercol rounded-[3px] p-3 shadow-xs space-y-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-fern" id="loanStatusPillDot"></span>
+<h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Availability Status</h2>
+</div>
+<span class="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] bg-fern-light text-fern border border-fern/30" id="loanStateIndicatorTag">In Repository</span>
+</div>
+<div class="grid grid-cols-2 p-1 bg-stone-100 border border-stone-200 rounded-[3px] gap-1">
+<button class="py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-white text-ink border border-stone-300 min-h-[36px]" id="btnStatusAvailable" onclick="setLoanStatus('available')" type="button">
+<svg class="w-3.5 h-3.5 text-fern stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span class="">In Repository / Available</span>
+</button>
+<button class="py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]" id="btnStatusLoan" onclick="setLoanStatus('loan')" type="button">
+<svg class="w-3.5 h-3.5 text-amber-600 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span class="">Loaned Out</span>
+</button>
+</div>
+<div class="p-2 bg-fern-light border border-fern/20 rounded-[2px] flex items-center justify-between text-[11px]" id="availableStatusBox">
+<div class="flex items-center gap-1.5 text-fern font-medium">
+<svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span class="">Ready for physical curation &amp; inspection</span>
+</div>
+<span class="text-[10px] font-mono text-fern/90 bg-white/70 px-1 py-0.2 rounded border border-fern/20 font-bold">CIRC: CLEAR</span>
+</div>
+<div class="hidden p-2.5 bg-amber-50 border border-amber-300 rounded-[2px] space-y-1 text-xs" id="loanedStatusBox">
+<div class="flex items-center justify-between text-[11px] font-mono text-amber-900 font-bold">
+<span class="">EXTERNAL LOAN: RBG KEW</span>
+<span class="">#LN-2024-881</span>
+</div>
+<div class="text-[10px] font-mono text-amber-800/80 flex items-center justify-between">
+<span class="">Due: Apr 2025</span>
+<span class="">Auth: Herb. Keeper (8A)</span>
+</div>
+</div>
+</div>
+<!-- 4. LOCATION VERIFICATION BARCODE -->
+
+<!-- 5. INTERACTIVE MORE... BOTTOM SHEET MODAL -->
+<div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end animate-fade-in hidden" id="storedAsBottomSheet" onclick="if(event.target===this)closeStoredAsBottomSheet()">
+<div class="bg-surface border-t border-bordercol rounded-t-xl p-4 space-y-3 max-h-[80vh] overflow-y-auto shadow-2xl transition-transform duration-200">
+<div class="flex items-center justify-between pb-2 border-b border-stone-200">
+<div>
+<h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Additional Storage Vessels</h3>
+<p class="text-[10px] font-mono text-subdued">Select botanical archival method</p>
+</div>
+<button class="p-1 text-muted hover:text-ink min-h-[36px] min-w-[36px] flex items-center justify-center font-mono text-sm" onclick="closeStoredAsBottomSheet()" type="button">✕</button>
+</div>
+<div class="space-y-1.5 font-mono text-xs">
+<button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Herbarium Sheet')" type="button">
+<div class="truncate">
+<span class="font-bold block text-ink">Herbarium Sheet</span>
+<span class="text-[10px] text-muted block">Cardstock 420x297mm archival standard</span>
+</div>
+<span class="text-xs text-muted">Select</span>
+</button>
+<button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Standard Box / Bin')" type="button">
+<div class="truncate">
+<span class="font-bold block text-ink">Standard Box / Bin</span>
+<span class="text-[10px] text-muted block">Acid-free corrugated storage box</span>
+</div>
+<span class="text-xs text-muted">Select</span>
+</button>
+<button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Liquid / Glass Jar')" type="button">
+<div class="truncate">
+<span class="font-bold block text-ink">Liquid / Glass Jar</span>
+<span class="text-[10px] text-muted block">70% EtOH spirit fluid preservative</span>
+</div>
+<span class="text-xs text-muted">Select</span>
+</button>
+<button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Capsule / Seed Envelope')" type="button">
+<div class="truncate">
+<span class="font-bold block text-ink">Capsule / Seed Envelope</span>
+<span class="text-[10px] text-muted block">Glassine carpo-taxonomic pouch</span>
+</div>
+<span class="text-xs text-muted">Select</span>
+</button>
+<button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Microscope Slide')" type="button">
+<div class="truncate">
+<span class="font-bold block text-ink">Microscope Slide</span>
+<span class="text-[10px] text-muted block">Canada balsam histological mount</span>
+</div>
+<span class="text-xs text-muted">Select</span>
+</button>
+<button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Oversized Folder')" type="button">
+<div class="truncate">
+<span class="font-bold block text-ink">Oversized Folder</span>
+<span class="text-[10px] text-muted block">Double-width herbarium portfolio</span>
+</div>
+<span class="text-xs text-muted">Select</span>
+</button>
+</div>
+</div>
+</div>
+<!-- INLINE CONTROLLER LOGIC FOR NEW LOCATION TAB -->
+<script>
+  // Internal tactile location model
+  window.arborLoc = {
+    building: 'Økern',
+    floor: -1,
+    cabinet: 4,
+    shelf: 2,
+    storedAs: 'Free Standing',
+    isCustomBuilding: false
+  };
+
+  function refreshLocUI() {
+    const a = window.arborLoc;
+    const cabStr = a.cabinet < 10 && a.cabinet >= 0 ? '0' + a.cabinet : a.cabinet.toString();
+    const shStr = a.shelf < 10 && a.shelf >= 0 ? '0' + a.shelf : a.shelf.toString();
+
+    const dFloor = document.getElementById('displayFloorVal');
+    const dCab = document.getElementById('displayCabVal');
+    const dShelf = document.getElementById('displayShelfVal');
+    const bread = document.getElementById('liveLocBreadcrumb');
+    const headerLoc = document.getElementById('headerLocSummary');
+    const storedLabel = document.getElementById('activeStoredAsLabel');
+
+    if (dFloor) dFloor.textContent = a.floor;
+    if (dCab) dCab.textContent = cabStr;
+    if (dShelf) dShelf.textContent = shStr;
+    if (bread) bread.textContent = `${a.building} › Floor ${a.floor} › Cab ${cabStr} › Sh ${shStr}`;
+    if (headerLoc) headerLoc.textContent = `Cab ${cabStr} · Sh ${shStr} · Fl ${a.floor}`;
+    if (storedLabel) storedLabel.textContent = a.storedAs;
+  }
+
+  function handleCopyPreviousSpecimen() {
+    // Copies building, floor, cabinet, shelf, but preserves 'storedAs'
+    window.arborLoc.building = 'Økern';
+    window.arborLoc.floor = -1;
+    window.arborLoc.cabinet = 4;
+    window.arborLoc.shelf = 2;
+
+    // Update building chips
+    document.querySelectorAll('.bldg-chip').forEach(c => {
+      if (c.getAttribute('data-building') === 'Økern') {
+        c.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs bg-[#1c3829] text-white border-transparent';
+        if (!c.querySelector('span.rounded-full')) {
+          const dot = document.createElement('span');
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+          c.prepend(dot);
+        }
+      } else {
+        c.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs';
+        const dot = c.querySelector('span.rounded-full');
+        if (dot) dot.remove();
+      }
+    });
+
+    const wrap = document.getElementById('customBuildingWrap');
+    if (wrap) wrap.classList.add('hidden');
+
+    refreshLocUI();
+
+    // Visual Flash Feedback on Button
+    const copyBtn = document.getElementById('btnCopyPrevSpecimen');
+    const copyTag = document.getElementById('copyActionTag');
+    const copyTitle = document.getElementById('copyTitleSpan');
+    const copyIcon = document.getElementById('copyIconSpan');
+
+    if (copyBtn) {
+      copyBtn.classList.remove('bg-stone-100', 'border-stone-300');
+      copyBtn.classList.add('bg-fern-light', 'border-fern');
+    }
+    if (copyTag) {
+      copyTag.textContent = '✓ Copied Location';
+      copyTag.className = 'text-[10px] font-mono font-bold px-2 py-1 bg-fern text-white rounded-[2px] shadow-2xs whitespace-nowrap ml-2';
+    }
+    if (copyTitle) copyTitle.textContent = '✓ Copied (#2024-BOT-0893)';
+    if (copyIcon) copyIcon.textContent = '✅';
+
+    if (typeof flashSyncStatus === 'function') flashSyncStatus('Copied: Økern · Floor -1 · Cab 04 · Sh 02');
+    if (typeof markModified === 'function') markModified();
+
+    setTimeout(() => {
+      if (copyBtn) {
+        copyBtn.classList.remove('bg-fern-light', 'border-fern');
+        copyBtn.classList.add('bg-stone-100', 'border-stone-300');
+      }
+      if (copyTag) {
+        copyTag.textContent = '1-Tap Fill';
+        copyTag.className = 'text-[10px] font-mono font-bold px-2 py-1 bg-surface border border-stone-300 text-muted rounded-[2px] shadow-2xs whitespace-nowrap ml-2';
+      }
+      if (copyTitle) copyTitle.textContent = 'Copy from Previous (#2024-BOT-0893)';
+      if (copyIcon) copyIcon.textContent = '📋';
+    }, 2800);
+  }
+
+  function setBuildingSelection(bldgName, btn) {
+    window.arborLoc.building = bldgName;
+    window.arborLoc.isCustomBuilding = false;
+    document.querySelectorAll('.bldg-chip').forEach(c => {
+      c.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs';
+      const dot = c.querySelector('span.rounded-full');
+      if (dot) dot.remove();
+    });
+    if (btn) {
+      btn.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs bg-[#1c3829] text-white border-transparent';
+      const dot = document.createElement('span');
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+      btn.prepend(dot);
+    }
+    const wrap = document.getElementById('customBuildingWrap');
+    if (wrap) wrap.classList.add('hidden');
+    refreshLocUI();
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Facility set to: ${bldgName}`);
+    if (typeof markModified === 'function') markModified();
+  }
+
+  function toggleCustomBuildingInput() {
+    const wrap = document.getElementById('customBuildingWrap');
+    if (!wrap) return;
+    wrap.classList.toggle('hidden');
+    if (!wrap.classList.contains('hidden')) {
+      const input = document.getElementById('customBuildingInput');
+      if (input) input.focus();
+    }
+  }
+
+  function applyCustomBuilding() {
+    const input = document.getElementById('customBuildingInput');
+    const val = input ? input.value.trim() : '';
+    if (!val) return;
+    window.arborLoc.building = val;
+    window.arborLoc.isCustomBuilding = true;
+    document.querySelectorAll('.bldg-chip').forEach(c => {
+      c.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs';
+      const dot = c.querySelector('span.rounded-full');
+      if (dot) dot.remove();
+    });
+    refreshLocUI();
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Facility set to: ${val}`);
+    if (typeof markModified === 'function') markModified();
+  }
+
+  function onCustomBuildingInput(val) {
+    if (val.trim()) {
+      window.arborLoc.building = val.trim();
+      refreshLocUI();
+    }
+  }
+
+  function adjustCoordinate(field, delta) {
+    if (field === 'floor') {
+      window.arborLoc.floor += delta;
+      if (typeof flashSyncStatus === 'function') flashSyncStatus(`Floor set to ${window.arborLoc.floor}`);
+    } else if (field === 'cab') {
+      window.arborLoc.cabinet = Math.max(1, window.arborLoc.cabinet + delta);
+      if (typeof flashSyncStatus === 'function') flashSyncStatus(`Cabinet set to Cab 0${window.arborLoc.cabinet}`);
+    } else if (field === 'shelf') {
+      window.arborLoc.shelf = Math.max(1, window.arborLoc.shelf + delta);
+      if (typeof flashSyncStatus === 'function') flashSyncStatus(`Shelf set to Sh 0${window.arborLoc.shelf}`);
+    }
+    refreshLocUI();
+    if (typeof markModified === 'function') markModified();
+  }
+
+  function activateDirectInput(field) {
+    const disp = document.getElementById(`display${field}Val`);
+    const inp = document.getElementById(`input${field}Val`);
+    if (!disp || !inp) return;
+    inp.value = disp.textContent;
+    disp.classList.add('hidden');
+    inp.classList.remove('hidden');
+    inp.focus();
+    inp.select();
+  }
+
+  function finishDirectInput(field) {
+    const disp = document.getElementById(`display${field}Val`);
+    const inp = document.getElementById(`input${field}Val`);
+    if (!disp || !inp) return;
+    const parsed = parseInt(inp.value, 10);
+    if (!isNaN(parsed)) {
+      if (field === 'Floor') {
+        window.arborLoc.floor = parsed;
+      } else if (field === 'Cab') {
+        window.arborLoc.cabinet = Math.max(1, parsed);
+      } else if (field === 'Shelf') {
+        window.arborLoc.shelf = Math.max(1, parsed);
+      }
+      if (typeof flashSyncStatus === 'function') flashSyncStatus(`${field} coordinate updated: ${parsed}`);
+      if (typeof markModified === 'function') markModified();
+    }
+    inp.classList.add('hidden');
+    disp.classList.remove('hidden');
+    refreshLocUI();
+  }
+
+  function handleStorageOptionSelect(name, btn) {
+    window.arborLoc.storedAs = name;
+    document.querySelectorAll('.storage-quick-btn').forEach(b => {
+      b.className = 'storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs';
+      const dot = b.querySelector('span:last-child');
+      if (dot) {
+        dot.className = 'w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5';
+      }
+    });
+    if (btn) {
+      btn.className = 'storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border-2 border-ink bg-stone-100 text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs';
+      const dot = btn.querySelector('span:last-child');
+      if (dot) {
+        dot.className = 'w-2 h-2 rounded-full bg-fern flex-none ml-1.5';
+      }
+    }
+    const manualInput = document.getElementById('manualStorageInput');
+    if (manualInput) manualInput.value = '';
+    const clearBtn = document.getElementById('btnClearManualStorage');
+    if (clearBtn) clearBtn.classList.add('hidden');
+
+    refreshLocUI();
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Stored as: ${name}`);
+    if (typeof markModified === 'function') markModified();
+  }
+
+  function openStoredAsBottomSheet() {
+    const sheet = document.getElementById('storedAsBottomSheet');
+    if (sheet) sheet.classList.remove('hidden');
+  }
+
+  function closeStoredAsBottomSheet() {
+    const sheet = document.getElementById('storedAsBottomSheet');
+    if (sheet) sheet.classList.add('hidden');
+  }
+
+  function selectModalStorageOption(name) {
+    window.arborLoc.storedAs = name;
+    document.querySelectorAll('.storage-quick-btn').forEach(b => {
+      b.className = 'storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs';
+      const dot = b.querySelector('span:last-child');
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5';
+    });
+    const moreBtn = document.getElementById('btnMoreStorageModal');
+    if (moreBtn) {
+      moreBtn.querySelector('span').textContent = name;
+      moreBtn.className = 'min-h-[44px] p-2.5 rounded-[2px] border-2 border-ink bg-stone-100 text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs';
+    }
+    const manualInput = document.getElementById('manualStorageInput');
+    if (manualInput) manualInput.value = '';
+    const clearBtn = document.getElementById('btnClearManualStorage');
+    if (clearBtn) clearBtn.classList.add('hidden');
+
+    closeStoredAsBottomSheet();
+    refreshLocUI();
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Stored as: ${name}`);
+    if (typeof markModified === 'function') markModified();
+  }
+
+  function onManualStorageChange(val) {
+    const clearBtn = document.getElementById('btnClearManualStorage');
+    if (clearBtn) {
+      if (val.trim()) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+    }
+    if (val.trim()) {
+      window.arborLoc.storedAs = val.trim();
+      document.querySelectorAll('.storage-quick-btn').forEach(b => {
+        b.className = 'storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs';
+        const dot = b.querySelector('span:last-child');
+        if (dot) dot.className = 'w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5';
+      });
+      refreshLocUI();
+      if (typeof markModified === 'function') markModified();
+    }
+  }
+
+  function clearManualStorage() {
+    const input = document.getElementById('manualStorageInput');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    const clearBtn = document.getElementById('btnClearManualStorage');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    handleStorageOptionSelect('Free Standing', document.querySelector('[data-storage-name="Free Standing"]'));
+  }
+
+  // Initialize display on load
+  refreshLocUI();
+</script></div>
+<!-- ================= PANEL 2: DETAILS & ARCHIVAL SCANS ================= -->
+<div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24">
+<!-- Specimen Photo Card & Inspection Trigger -->
+<div class="bg-surface border border-bordercol rounded-[3px] overflow-hidden shadow-sm">
+<div class="relative bg-stone-900 group">
+<!-- Herbarium specimen SVG illustration representing mounted plant sheet -->
+<div class="cursor-pointer relative h-48 w-full flex items-center justify-center bg-stone-800 overflow-hidden" onclick="openPhotoViewer()">
+<!-- Botanical Drawing Graphic -->
+<svg class="w-full h-full object-contain p-2 opacity-90 transition-transform duration-300 group-hover:scale-105" viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg">
+<!-- Archival sheet paper background -->
+<rect fill="#f8f5eb" height="380" rx="3" stroke="#c8beab" stroke-width="2" width="280" x="10" y="10"></rect>
+<!-- Pressed stem and branches -->
+<path d="M150,340 C148,270 145,210 152,140 C154,100 148,60 150,40" fill="none" stroke="#483c32" stroke-linecap="round" stroke-width="3.5"></path>
+<path d="M149,260 C130,240 100,230 75,235" fill="none" stroke="#483c32" stroke-linecap="round" stroke-width="2.5"></path>
+<path d="M151,200 C175,180 205,175 230,185" fill="none" stroke="#483c32" stroke-linecap="round" stroke-width="2.5"></path>
+<path d="M151,130 C135,110 105,95 85,100" fill="none" stroke="#483c32" stroke-linecap="round" stroke-width="2"></path>
+<!-- Pressed leaves (Betula pendula serrated profile) -->
+<path d="M75,235 C60,220 50,195 70,185 C85,200 90,225 75,235 Z" fill="#3b4d3b" opacity="0.85"></path>
+<path d="M230,185 C245,170 255,145 235,135 C220,150 215,175 230,185 Z" fill="#364936" opacity="0.85"></path>
+<path d="M85,100 C70,85 65,65 80,55 C95,70 98,90 85,100 Z" fill="#435843" opacity="0.85"></path>
+<path d="M150,40 C165,25 175,35 160,50 Z" fill="#3b4d3b" opacity="0.8"></path>
+<!-- Archival Herbarium Mounting Label on bottom right -->
+<rect fill="#fff" height="90" stroke="#999" stroke-width="0.8" width="120" x="160" y="290"></rect>
+<text fill="#222" font-family="sans-serif" font-size="6.5" font-weight="bold" x="165" y="305">HERBARIUM ARBORIENSIS</text>
+<text fill="#111" font-family="serif" font-size="8" font-style="italic" x="165" y="318">Betula pendula Roth</text>
+<text fill="#444" font-family="sans-serif" font-size="6" x="165" y="330">Loc: Fennoscandia, boreal margin</text>
+<text fill="#444" font-family="sans-serif" font-size="6" x="165" y="340">Coll: E. Lindqvist #1092</text>
+<text fill="#000" font-family="monospace" font-size="6" x="165" y="350">14-JUN-1987 · DET: H. KARLSSON</text>
+<!-- Herbarium mounting paper tape strips -->
+<rect fill="#e2d8c3" height="7" opacity="0.85" width="30" x="135" y="320"></rect>
+<rect fill="#e2d8c3" height="6" opacity="0.85" width="22" x="140" y="195"></rect>
+<rect fill="#e2d8c3" height="6" opacity="0.85" width="20" x="140" y="80"></rect>
+</svg>
+<!-- Tap to inspect badge -->
+<div class="absolute bottom-2.5 right-2.5 bg-black/75 backdrop-blur-xs text-white text-[10px] font-mono px-2 py-1 rounded-[2px] flex items-center gap-1">
+<svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Tap to Zoom</span>
+</div>
+</div>
+<!-- Photo bar actions -->
+<div class="px-3 py-2 bg-surface flex items-center justify-between border-t border-bordercol text-xs">
+<div class="flex items-center gap-1.5 text-muted">
+<span class="font-mono text-[11px] font-medium text-ink">Scan 01/01</span>
+<span class="text-subdued">• 4800 DPI TIFF</span>
+</div>
+<button class="font-medium text-slate hover:text-ink flex items-center gap-1 tap-highlight-transparent min-h-[36px]" onclick="openPhotoViewer()">
+<span class="">Fullscreen Viewer</span>
+<svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+</div>
+</div>
+<!-- Academic Taxonomic Profile Card -->
+<div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-2.5" id="taxonHierarchyCard">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans flex items-center gap-1.5">
+      <span class="">Taxonomic Hierarchy</span>
+    </h2>
+    <div class="flex items-center gap-1.5">
+      <span id="taxonAlertSummaryBadge" class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-[2px] bg-brick-light text-brick border border-brick/30 flex items-center gap-1">
+        <svg class="w-3 h-3 text-brick stroke-2 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
+        </svg>
+        1 Flagged
+      </span>
+      <span class="text-[10px] font-mono text-fern font-medium flex items-center gap-1 bg-fern-light px-1.5 py-0.5 rounded-[2px] border border-fern/20">
+        <span class="w-1.5 h-1.5 rounded-full bg-fern"></span>Accepted (IPNI)
+      </span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-2.5 text-xs">
+    <!-- Genus -->
+    <div class="space-y-1 relative" id="fieldWrapper_Genus">
+      <div class="flex items-center justify-between">
+        <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">Genus</label>
+        <span id="fieldAlert_Genus" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">
+          <svg class="w-2.5 h-2.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008z"></path></svg>
+          Problem
+        </span>
+      </div>
+      <input id="input_Genus" type="text" value="Betula" class="w-full text-sm font-serif italic text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="if(typeof markModified==='function')markModified()">
+    </div>
+
+    <!-- Species -->
+    <div class="space-y-1 relative" id="fieldWrapper_Species">
+      <div class="flex items-center justify-between">
+        <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">Species</label>
+        <span id="fieldAlert_Species" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">
+          <svg class="w-2.5 h-2.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008z"></path></svg>
+          Problem
+        </span>
+      </div>
+      <input id="input_Species" type="text" value="pendula" class="w-full text-sm font-serif italic text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="if(typeof markModified==='function')markModified()">
+    </div>
+
+    <!-- Family -->
+    <div class="space-y-1 relative" id="fieldWrapper_Family">
+      <div class="flex items-center justify-between">
+        <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">Family</label>
+        <span id="fieldAlert_Family" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">
+          <svg class="w-2.5 h-2.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008z"></path></svg>
+          Problem
+        </span>
+      </div>
+      <input id="input_Family" type="text" value="Betulaceae" class="w-full text-xs font-sans font-medium text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="if(typeof markModified==='function')markModified()">
+    </div>
+
+    <!-- Author (With Prominent Problem Flagged Indicator Icon & Styling) -->
+    <div class="space-y-1 relative" id="fieldWrapper_Author">
+      <div class="flex items-center justify-between">
+        <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-brick flex items-center gap-1" id="label_Author">
+          <span class="">Author</span>
+        </label>
+        <span id="fieldAlert_Author" class="text-[9px] font-mono font-bold text-brick bg-brick-light border border-brick/40 px-1 py-0.2 rounded-[2px] flex items-center gap-0.5 cursor-pointer tap-highlight-transparent" onclick="switchTab(2)" title="View in Problems tab">
+          <svg class="w-2.5 h-2.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
+          </svg>
+          <span class="">Flagged</span>
+        </span>
+      </div>
+      <div class="relative flex items-center">
+        <input id="input_Author" type="text" value="Roth" class="w-full text-xs font-mono font-medium text-ink bg-orange-50 border border-brick focus:border-brick rounded-[2px] pl-2.5 pr-7 py-1.5 transition-colors focus:outline-none" oninput="if(typeof markModified==='function')markModified()">
+        <button type="button" onclick="switchTab(2)" class="absolute right-1.5 text-brick hover:text-ink tap-highlight-transparent" id="btnAuthorAlertIcon" title="Conflict 1: Authority Citation. Tap to view conflict resolver in Problems tab.">
+          <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
+          </svg>
+        </button>
+      </div>
+      <p id="subtext_Author" class="text-[9px] font-mono text-brick/80 flex items-center justify-between">
+        <span class="">Authority citation conflict</span>
+        <button type="button" onclick="switchTab(2)" class="underline hover:text-brick text-[9px]">Resolve ↗</button>
+      </p>
+    </div>
+  </div>
+
+  <div class="pt-1 border-t border-stone-100 flex items-center justify-between text-[10px] font-mono text-subdued">
+    <span class="">Rank: subsp. pendula</span>
+    
+  </div>
+</div>
+<!-- Collector & Field Provenance Card -->
+<div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-2.5"><div class="flex items-center justify-between pb-1 border-b border-stone-100"><h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Collector &amp; Provenance Data</h2><span class="text-[10px] font-mono text-subdued">Editable audit fields</span></div><div class="space-y-2 text-xs"><div class="grid grid-cols-2 gap-2"><div class="space-y-1"><label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">PCollector</label><input type="text" value="Dr. Erik Lindqvist" placeholder="Enter collector name" class="w-full text-xs font-sans font-medium text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="if(typeof markModified==='function')markModified()"></div><div class="space-y-1"><label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">Field Number</label><input type="text" value="EL-1987-1092" placeholder="e.g. EL-1987-1092" class="w-full text-xs font-mono font-semibold text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="if(typeof markModified==='function')markModified()"></div></div><div class="grid grid-cols-2 gap-2"><div class="space-y-1"><label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">Collection Date</label><input type="text" value="1987-06-14" placeholder="YYYY-MM-DD" class="w-full text-xs font-mono text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="if(typeof markModified==='function')markModified()"></div><div class="space-y-1"><label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">Collection Place</label><input type="text" value="Southern Finland, Uusimaa province" placeholder="e.g., Uusimaa, Finland" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="if(typeof markModified==='function')markModified()"></div></div><div class="space-y-1 pt-1"><label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">Box Label</label><textarea rows="2" class="w-full text-[11px] font-sans leading-relaxed text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] p-2 transition-colors focus:outline-none resize-none" oninput="if(typeof markModified==='function')markModified()" placeholder="Enter box label or packaging inscription...">Southern Finland, Uusimaa province, dry podzolic bedrock slope along lake margin. Elevation 64m. Associated with Pinus sylvestris and Vaccinium myrtillus.</textarea></div><div class="space-y-1"><label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block">Comment</label><textarea rows="2" class="w-full text-[11px] font-sans leading-relaxed text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] p-2 transition-colors focus:outline-none resize-none" oninput="if(typeof markModified==='function')markModified()" placeholder="Add curatorial notes or observations..."></textarea></div></div></div>
+</div>
+<!-- ================= PANEL 3: PROBLEMS & CONFLICT RESOLVER ================= -->
+<div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24">
+<!-- Problem Summary Bar -->
+<div class="flex items-center justify-between p-3 bg-brick-light border border-brick/30 rounded-[3px] transition-colors duration-200" id="problemSummaryBar">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-brick animate-ping" id="problemSummaryDot"></span>
+<span class="text-xs font-bold text-brick uppercase font-mono" id="problemSummaryCountText">2 Active Discrepancies</span>
+</div>
+<span class="text-[10px] font-mono text-brick/80" id="problemSummaryActionText">Requires Resolution</span>
+</div>
+<!-- Active Discrepancy Conflict Resolver Card -->
+<div class="bg-surface border-2 border-brick/40 rounded-[3px] p-3.5 shadow-sm space-y-3 transition-colors duration-200" id="authorConflictCard">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-bold uppercase font-mono text-brick tracking-tight flex items-center gap-1" id="conflictHeaderTitle">
+<svg class="w-3.5 h-3.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+                Conflict 1: Authority Citation
+              </span>
+<span class="text-[10px] font-mono bg-stone-100 text-subdued px-1.5 py-0.5 rounded-[2px]">Field: Author</span>
+</div>
+<!-- Side-by-side comparison -->
+<div class="space-y-2">
+<!-- Current in DB -->
+<div class="p-2.5 bg-alabaster border border-bordercol rounded-[2px] transition-colors" id="currentStoredCard">
+<div class="flex items-center justify-between text-[10px] font-mono text-subdued mb-0.5">
+<span class="">CURRENT STORED VALUE</span>
+<span class="text-brick font-semibold" id="currentStoredBadge">Flagged Typo</span>
+</div>
+<div class="font-serif italic text-ink font-semibold text-sm" id="currentStoredDisplay">
+                  Betula pendula <span class="not-italic text-brick font-mono line-through" id="currentAuthorDisplayPart">Rothe</span>
+</div>
+</div>
+<!-- Suggested Archive Reference -->
+<div class="p-2.5 bg-fern-light border border-fern/30 rounded-[2px]">
+<div class="flex items-center justify-between text-[10px] font-mono text-fern mb-0.5">
+<span class="">SUGGESTED BY IPNI &amp; CATALOGUE</span>
+<span class="font-semibold">99.4% Match</span>
+</div>
+<div class="font-serif italic text-ink font-semibold text-sm flex items-center justify-between">
+<span class="">Betula pendula <span class="not-italic text-fern font-sans font-bold">Roth</span></span>
+<button class="px-2.5 py-1 text-xs font-mono font-semibold bg-fern text-white rounded-[2px] shadow-xs hover:bg-fern/90 active:scale-95 min-h-[34px] tap-highlight-transparent transition-all flex items-center gap-1" id="btnApplyAuthor" onclick="resolveAuthorConflict()">
+                    Apply Fix
+                  </button>
+</div>
+</div>
+</div>
+<div class="pt-2 border-t border-bordercol/60 space-y-2">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-mono uppercase text-subdued font-semibold tracking-wider">Or Enter Manual Override</span>
+<button class="text-[10px] font-mono font-medium text-slate hover:text-ink tap-highlight-transparent" onclick="const box = document.getElementById('manualAuthorBox'); box.classList.toggle('hidden');" type="button">Toggle Input</button>
+</div>
+<div class="space-y-1.5" id="manualAuthorBox">
+<div class="flex items-center gap-1.5">
+<input class="flex-1 font-mono text-xs bg-alabaster border border-bordercol rounded-[2px] px-2.5 py-1.5 text-ink focus:bg-white focus:border-ink focus:outline-none transition-colors" id="customAuthorInput" placeholder="e.g. Roth ex Hoffm." type="text">
+<button class="px-2.5 py-1.5 text-xs font-mono font-semibold bg-stone-800 text-white hover:bg-stone-900 active:bg-black rounded-[2px] shadow-xs min-h-[34px] tap-highlight-transparent whitespace-nowrap transition-all flex items-center gap-1" id="btnApplyManualAuthor" onclick="applyManualAuthorFix()" type="button">Apply Manual Fix</button>
+</div>
+<p class="text-[10px] font-mono text-subdued">Overrides authority citation standard without external IPNI validation.</p>
+</div>
+</div>
+<p class="text-[11px] text-muted leading-tight">
+              IPNI standard author identifier: Albrecht Wilhelm Roth (1757–1834).
+            </p>
+</div>
+<!-- Quick Issue Flag Toggles Grid -->
+<div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3">
+<h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">DATA INTEGRITY FLAGS (11 SCHEMA FIELDS)</h2>
+<div class="grid grid-cols-2 gap-2" id="flagGrid">
+<!-- 1. Genus_Problem -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="false" data-field="Genus_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Genus Problem</span>
+<span class="font-mono text-[9px] text-subdued">Genus_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label mt-1">Clear</span>
+</button>
+<!-- 2. Species_Problem -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="false" data-field="Species_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Species Problem</span>
+<span class="font-mono text-[9px] text-subdued">Species_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label mt-1">Clear</span>
+</button>
+<!-- 3. Family_Problem -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="false" data-field="Family_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Family Problem</span>
+<span class="font-mono text-[9px] text-subdued">Family_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label mt-1">Clear</span>
+</button>
+<!-- 4. Author_Problem (Active) -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-brick bg-brick-light text-brick transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="true" data-field="Author_Problem" id="flagAuthorProblem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-brick block">Author Problem</span>
+<span class="font-mono text-[9px] text-brick/80">Author_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-brick font-bold status-label mt-1">Flagged</span>
+</button>
+<!-- 5. PlantPart_Problem -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="false" data-field="PlantPart_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Plant Part Problem</span>
+<span class="font-mono text-[9px] text-subdued">PlantPart_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label mt-1">Clear</span>
+</button>
+<!-- 6. Collector_Problem -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="false" data-field="Collector_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Collector Problem</span>
+<span class="font-mono text-[9px] text-subdued">Collector_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label mt-1">Clear</span>
+</button>
+<!-- 7. Collection_Date_Problem -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="false" data-field="Collection_Date_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Collection Date Problem</span>
+<span class="font-mono text-[9px] text-subdued">Collection_Date_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label mt-1">Clear</span>
+</button>
+<!-- 8. Collection_Place_Problem -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="false" data-field="Collection_Place_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Collection Place Problem</span>
+<span class="font-mono text-[9px] text-subdued">Collection_Place_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label mt-1">Clear</span>
+</button>
+<!-- 9. Box_Label_Problem (Active) -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-brick bg-brick-light text-brick transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="true" data-field="Box_Label_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-brick block">Box Label Problem</span>
+<span class="font-mono text-[9px] text-brick/80">Box_Label_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-brick font-bold status-label mt-1">Flagged</span>
+</button>
+<!-- 10. Images_Problem -->
+<button class="flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between" data-active="false" data-field="Images_Problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Images Problem</span>
+<span class="font-mono text-[9px] text-subdued">Images_Problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label mt-1">Clear</span>
+</button>
+<!-- 11. Other_problem (Spans 2 columns on mobile for balanced grid) -->
+<button class="flag-pill col-span-2 text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex items-center justify-between" data-active="false" data-field="Other_problem" onclick="toggleProblemButton(this)">
+<div>
+<span class="text-xs font-semibold text-ink block">Other Problem</span>
+<span class="font-mono text-[9px] text-subdued">Other_problem</span>
+</div>
+<span class="text-[10px] font-mono text-subdued status-label">Clear</span>
+</button>
+</div>
+</div>
+<!-- Problem Note Input -->
+<div class="bg-surface border border-bordercol rounded-[3px] p-3 space-y-2 shadow-sm">
+<label class="block text-[11px] font-bold text-ink uppercase tracking-wider">Curator Field Note</label>
+<textarea class="w-full text-xs font-sans p-2 bg-alabaster border border-bordercol rounded-[2px] text-ink focus:bg-white focus:border-ink focus:outline-none resize-none" id="curatorNote" onchange="markModified()" placeholder="Record physical observations, glue deterioration, or accession anomalies..." rows="2"></textarea>
+</div>
+</div>
+</div>
+</div>
+<!-- 5. STICKY BOTTOM ACTION BAR (Thumb Ergonomics) -->
+<footer class="flex-none bg-surface border-t border-bordercol p-3 z-30 shadow-lg">
+<div class="flex items-center justify-between px-1 mb-2 text-[11px] font-mono">
+<!-- Live Host Connectivity Indicator -->
+<div class="flex items-center gap-1.5 text-muted">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span class="font-medium">Vault Host Sync</span>
+</div>
+<!-- Sync status ticker -->
+<div class="text-muted flex items-center gap-1" id="footerSyncStatus">
+
+
+</div>
+</div>
+<!-- High-Contrast Primary Audit Action: MARK REVIEWED -->
+<button class="w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-white text-ink border-2 border-ink hover:bg-stone-50" id="btnPrimaryReview" onclick="toggleReviewedState()">
+<svg class="w-5 h-5 stroke-[2.2] text-current" fill="none" id="primaryReviewIcon" stroke="currentColor" viewBox="0 0 24 24">
+<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"></circle>
+<path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="" id="primaryReviewText">MARK AS REVIEWED</span>
+<span class="text-xs font-mono opacity-60 ml-1">· #14</span>
+</button>
+</footer>
+<!-- 6. FULLSCREEN INTERACTIVE PHOTO VIEWER MODAL -->
+<div class="absolute inset-0 z-50 bg-black/95 flex flex-col animate-fade-in select-none hidden" id="photoViewerModal">
+<!-- Viewer Top Bar -->
+<div class="flex-none p-3.5 flex items-center justify-between text-white border-b border-stone-800 bg-stone-950/80 backdrop-blur-md">
+<div>
+<div class="text-xs font-mono font-bold text-stone-200">#2024-BOT-0894</div>
+<div class="text-[11px] font-serif italic text-stone-400">Betula pendula Roth (Holotype Sheet)</div>
+</div>
+<button class="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-400 hover:text-white rounded-[3px] bg-stone-800/80 active:bg-stone-700" onclick="closePhotoViewer()">
+<svg class="w-5 h-5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+<!-- Zoomable Pan Viewport -->
+<div class="flex-1 overflow-hidden relative flex items-center justify-center p-4" id="photoContainer">
+<div class="w-full h-full max-w-sm flex items-center justify-center transition-transform duration-200 origin-center" id="zoomTarget" style="transform: scale(1) rotate(0deg);">
+<!-- Scaled High Resolution Herbarium Plate -->
+<svg class="w-full h-full max-h-[75vh] object-contain drop-shadow-2xl" viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg">
+<rect fill="#fcf9ee" height="380" rx="2" stroke="#b0a590" stroke-width="2" width="280" x="10" y="10"></rect>
+<!-- Centered high-detail botanical plate -->
+<path d="M150,340 C148,270 145,210 152,140 C154,100 148,60 150,40" fill="none" stroke="#3d3025" stroke-linecap="round" stroke-width="3.5"></path>
+<path d="M149,260 C130,240 100,230 75,235" fill="none" stroke="#3d3025" stroke-linecap="round" stroke-width="2.5"></path>
+<path d="M151,200 C175,180 205,175 230,185" fill="none" stroke="#3d3025" stroke-linecap="round" stroke-width="2.5"></path>
+<path d="M151,130 C135,110 105,95 85,100" fill="none" stroke="#3d3025" stroke-linecap="round" stroke-width="2"></path>
+<!-- Serrated Leaves with Venation -->
+<g fill="#334633" stroke="#253425" stroke-width="0.5">
+<path d="M75,235 C60,220 50,195 70,185 C85,200 90,225 75,235 Z"></path>
+<path d="M230,185 C245,170 255,145 235,135 C220,150 215,175 230,185 Z"></path>
+<path d="M85,100 C70,85 65,65 80,55 C95,70 98,90 85,100 Z"></path>
+<path d="M150,40 C165,25 175,35 160,50 Z"></path>
+</g>
+<!-- Archival label -->
+<rect fill="#ffffff" height="95" stroke="#777" stroke-width="0.8" width="125" x="155" y="285"></rect>
+<text fill="#000" font-family="sans-serif" font-size="7" font-weight="bold" x="162" y="302">ARBOR BOTANICAL INDEX</text>
+<text fill="#000" font-family="serif" font-size="9" font-style="italic" x="162" y="316">Betula pendula Roth</text>
+<text fill="#333" font-family="sans-serif" font-size="6.5" x="162" y="328">Subsp. pendula</text>
+<text fill="#555" font-family="sans-serif" font-size="6" x="162" y="339">Archival Scan ID: SC-894-A</text>
+<text fill="#000" font-family="monospace" font-size="5.5" x="162" y="350">EXP-REV: CONFIRMED 2024</text>
+<!-- Physical Stamp Mark -->
+<circle cx="255" cy="355" fill="none" r="14" stroke="#c93a40" stroke-dasharray="2,2" stroke-width="1.5"></circle>
+<text fill="#c93a40" font-family="sans-serif" font-size="5.5" font-weight="bold" x="245" y="358">TYPUS</text>
+</svg>
+</div>
+</div>
+<!-- Viewer Bottom Controls (Zoom / Rotate / Reset) -->
+<div class="flex-none p-3.5 bg-stone-950/90 border-t border-stone-800 flex items-center justify-between text-xs font-mono">
+<div class="flex items-center gap-1.5 bg-stone-900 p-1 rounded-[3px] border border-stone-800">
+<button class="px-3 py-2 min-h-[44px] min-w-[44px] text-white hover:bg-stone-800 rounded active:bg-stone-700 flex items-center justify-center font-bold text-base" onclick="changeZoom(-0.25)" title="Zoom Out">-</button>
+<span class="px-2 text-stone-300 text-xs" id="zoomLevelDisplay">100%</span>
+<button class="px-3 py-2 min-h-[44px] min-w-[44px] text-white hover:bg-stone-800 rounded active:bg-stone-700 flex items-center justify-center font-bold text-base" onclick="changeZoom(0.25)" title="Zoom In">+</button>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-3 py-2 min-h-[44px] flex items-center gap-1.5 bg-stone-900 border border-stone-800 text-stone-200 rounded-[3px] active:bg-stone-800" onclick="rotateImage()">
+<svg class="w-4 h-4 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Rotate</span>
+</button>
+<button class="px-3 py-2 min-h-[44px] bg-stone-800 text-stone-300 rounded-[3px] active:bg-stone-700" onclick="resetImageTransform()">
+            Reset
+          </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Vanilla ES6+ Interactive Logic -->
+<script>
+    // State Management
+    const state = {
+      activeTab: 0, // Default viewing Location tab as requested
+      loanStatus: 'available', // 'available' or 'loan'
+      storedAs: 'Standard Herbarium Packet in Acid-Free Folder',
+      isReviewed: false,
+      hasModifications: false,
+      totalActiveProblems: 7, // Initial problem count as shown in badge
+      activeConflictsCount: 2, // Active discrepancies count in summary bar
+      authorProblemResolved: false,
+      authorResolutionType: null, // 'ipni' or 'manual'
+      zoom: 1.0,
+      rotation: 0,
+      recordIndex: 13,
+      totalRecords: 128
+    };
+
+    // DOM Elements
+    const tabTrack = document.getElementById('tabTrack');
+    const tabIndicator = document.getElementById('tabIndicator');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const swipeArea = document.getElementById('swipeArea');
+    const btnUndo = document.getElementById('btnUndo');
+    const badgeStatus = document.getElementById('badgeStatus');
+    const btnPrimaryReview = document.getElementById('btnPrimaryReview');
+    const primaryReviewText = document.getElementById('primaryReviewText');
+    const footerSyncText = document.getElementById('footerSyncText');
+    const headerLocSummary = document.getElementById('headerLocSummary');
+    const photoViewerModal = document.getElementById('photoViewerModal');
+    const zoomTarget = document.getElementById('zoomTarget');
+    const zoomLevelDisplay = document.getElementById('zoomLevelDisplay');
+    const tabProblemBadge = document.getElementById('tabProblemBadge');
+    const flagAuthorProblem = document.getElementById('flagAuthorProblem');
+    const btnApplyAuthor = document.getElementById('btnApplyAuthor');
+    const btnApplyManualAuthor = document.getElementById('btnApplyManualAuthor');
+    const currentStoredDisplay = document.getElementById('currentStoredDisplay');
+    const currentStoredBadge = document.getElementById('currentStoredBadge');
+    const authorConflictCard = document.getElementById('authorConflictCard');
+    const problemSummaryCountText = document.getElementById('problemSummaryCountText');
+    const problemSummaryBar = document.getElementById('problemSummaryBar');
+    const problemSummaryDot = document.getElementById('problemSummaryDot');
+    const problemSummaryActionText = document.getElementById('problemSummaryActionText');
+
+    // Breadcrumb and Loan elements
+    const breadCab = document.getElementById('breadCab');
+    const breadShelf = document.getElementById('breadShelf');
+    const breadBox = document.getElementById('breadBox');
+    const breadFolder = document.getElementById('breadFolder');
+    const btnStatusAvailable = document.getElementById('btnStatusAvailable');
+    const btnStatusLoan = document.getElementById('btnStatusLoan');
+    const availableStatusBox = document.getElementById('availableStatusBox');
+    const loanedStatusBox = document.getElementById('loanedStatusBox');
+    const loanStatusPillDot = document.getElementById('loanStatusPillDot');
+    const loanStateIndicatorTag = document.getElementById('loanStateIndicatorTag');
+    const currentStoredAsDisplay = document.getElementById('currentStoredAsDisplay');
+
+    // 1. TAB SWITCHING LOGIC
+    function switchTab(index) {
+      if (index < 0 || index > 2) return;
+      state.activeTab = index;
+
+      // Update slide position
+      tabTrack.style.transform = `translateX(-${index * 33.3333}%)`;
+
+      // Update segmented pill indicator
+      tabIndicator.style.transform = `translateX(${index * 100}%)`;
+
+      // Update tab button text styles
+      tabBtns.forEach((btn, i) => {
+        if (i === index) {
+          btn.classList.add('font-semibold', 'text-ink');
+          btn.classList.remove('text-muted');
+        } else {
+          btn.classList.remove('font-semibold', 'text-ink');
+          btn.classList.add('text-muted');
+        }
+      });
+    }
+
+    // Initialize initial tab position to match request (tab 0: Location)
+    switchTab(0);
+
+    // 2. LOAN & AVAILABILITY STATUS TOGGLING
+    function setLoanStatus(status) {
+      state.loanStatus = status;
+      if (status === 'available') {
+        // Toggle Switch button styles
+        btnStatusAvailable.className = "py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-white text-ink border border-stone-300";
+        btnStatusLoan.className = "py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink";
+        
+        // Show/Hide details boxes
+        availableStatusBox.classList.remove('hidden');
+        loanedStatusBox.classList.add('hidden');
+
+        // Header Pill
+        loanStatusPillDot.className = "w-2 h-2 rounded-full bg-fern";
+        loanStateIndicatorTag.className = "text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] transition-colors bg-fern-light text-fern border border-fern/30";
+        loanStateIndicatorTag.textContent = "In Repository";
+
+        flashSyncStatus("Status updated: Specimen in repository");
+      } else {
+        // Active Loan
+        btnStatusLoan.className = "py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-amber-500 text-white border border-amber-600";
+        btnStatusAvailable.className = "py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink";
+        
+        availableStatusBox.classList.add('hidden');
+        loanedStatusBox.classList.remove('hidden');
+
+        loanStatusPillDot.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
+        loanStateIndicatorTag.className = "text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] transition-colors bg-amber-100 text-amber-900 border border-amber-300";
+        loanStateIndicatorTag.textContent = "On Active Loan (Kew)";
+
+        flashSyncStatus("Status updated: On loan to Royal Botanic Gardens, Kew");
+      }
+      markModified();
+    }
+
+    // 3. PHYSICAL PREPARATION VESSEL SELECTOR
+    function setPreparation(prepName) {
+      state.storedAs = prepName;
+      if (currentStoredAsDisplay) {
+        currentStoredAsDisplay.textContent = prepName;
+      }
+      // Update chip styles
+      document.querySelectorAll('.prep-chip').forEach(chip => {
+        if (chip.textContent.includes(prepName.substring(0, 10))) {
+          chip.className = "prep-chip text-left px-2 py-1.5 rounded-[2px] border border-ink bg-stone-100 text-ink font-semibold text-[11px] transition-colors truncate";
+          if (!chip.textContent.startsWith('✓')) chip.textContent = '✓ ' + chip.textContent.replace('✓ ', '');
+        } else {
+          chip.className = "prep-chip text-left px-2 py-1.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-[11px] transition-colors truncate";
+          chip.textContent = chip.textContent.replace('✓ ', '');
+        }
+      });
+      flashSyncStatus(`Preparation vessel updated: ${prepName}`);
+      markModified();
+    }
+
+    // 4. HORIZONTAL TOUCH SWIPE GESTURE SUPPORT
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+
+    swipeArea.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+      touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+
+    swipeArea.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      touchEndY = e.changedTouches[0].screenY;
+      handleSwipe();
+    }, { passive: true });
+
+    function handleSwipe() {
+      const deltaX = touchEndX - touchStartX;
+      const deltaY = touchEndY - touchStartY;
+      
+      // Ensure horizontal swipe is dominant and exceeds minimum threshold (45px)
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 45) {
+        if (deltaX < 0) {
+          // Swipe Left -> Next Tab
+          if (state.activeTab < 2) switchTab(state.activeTab + 1);
+        } else {
+          // Swipe Right -> Prev Tab
+          if (state.activeTab > 0) switchTab(state.activeTab - 1);
+        }
+      }
+    }
+
+    // 5. REVIEWED STATE TOGGLE
+    function toggleReviewedState() {
+      state.isReviewed = !state.isReviewed;
+
+      if (state.isReviewed) {
+        btnPrimaryReview.className = "w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-fern text-white border-2 border-fern";
+        primaryReviewText.textContent = "SPECIMEN AUDITED & VERIFIED";
+        
+        badgeStatus.className = "flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-fern-light text-fern border-fern/40";
+        badgeStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-fern"></span><span>✓ REVIEWED</span>';
+        
+        flashSyncStatus("Audit Status: Verified");
+      } else {
+        btnPrimaryReview.className = "w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-white text-ink border-2 border-ink hover:bg-stone-50";
+        primaryReviewText.textContent = "MARK AS REVIEWED";
+        
+        badgeStatus.className = "flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300";
+        badgeStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span><span>UNREVIEWED</span>';
+        
+        flashSyncStatus("Audit Status: Unreviewed");
+      }
+    }
+
+    // 6. LOCATION PRESET HANDLER & BREADCRUMB UPDATE
+    function applyPreset(cab, sh, box, folder) {
+      document.getElementById('locCabinet').value = cab;
+      document.getElementById('locShelf').value = sh;
+      document.getElementById('locBox').value = box;
+      document.getElementById('locFolder').value = folder;
+      updateLocSummary();
+      markModified();
+    }
+
+    function updateLocSummary() {
+      const c = document.getElementById('locCabinet').value || '--';
+      const s = document.getElementById('locShelf').value || '--';
+      const b = document.getElementById('locBox').value || '--';
+      const f = document.getElementById('locFolder').value || '--';
+      
+      headerLocSummary.textContent = `Cab ${c} · Sh ${s} · Box ${b}`;
+      if (breadCab) breadCab.textContent = `Cab ${c}`;
+      if (breadShelf) breadShelf.textContent = `Shelf ${s}`;
+      if (breadBox) breadBox.textContent = `Box ${b}`;
+      if (breadFolder) breadFolder.textContent = `Fld ${f}`;
+    }
+
+    // 7. PROBLEM COUNTERS & DISCREPANCIES HELPERS
+    function updateBadgesAndCounters() {
+      tabProblemBadge.textContent = state.totalActiveProblems;
+      if (state.totalActiveProblems === 0) {
+        tabProblemBadge.className = "font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-stone-300 text-stone-700 shadow-xs";
+      } else {
+        tabProblemBadge.className = "font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-brick text-white shadow-xs";
+      }
+
+      if (state.activeConflictsCount <= 1) {
+        problemSummaryCountText.textContent = `${state.activeConflictsCount} Active Discrepanc${state.activeConflictsCount === 1 ? 'y' : 'ies'}`;
+      } else {
+        problemSummaryCountText.textContent = `${state.activeConflictsCount} Active Discrepancies`;
+      }
+
+      if (state.activeConflictsCount === 0) {
+        problemSummaryBar.className = "flex items-center justify-between p-3 bg-fern-light border border-fern/30 rounded-[3px] transition-colors duration-200";
+        problemSummaryDot.className = "w-2.5 h-2.5 rounded-full bg-fern";
+        problemSummaryCountText.className = "text-xs font-bold text-fern uppercase font-mono";
+        problemSummaryCountText.textContent = "All Discrepancies Resolved";
+        problemSummaryActionText.className = "text-[10px] font-mono text-fern/80";
+        problemSummaryActionText.textContent = "Verified Clear";
+      } else {
+        problemSummaryBar.className = "flex items-center justify-between p-3 bg-brick-light border border-brick/30 rounded-[3px] transition-colors duration-200";
+        problemSummaryDot.className = "w-2.5 h-2.5 rounded-full bg-brick animate-ping";
+        problemSummaryCountText.className = "text-xs font-bold text-brick uppercase font-mono";
+        problemSummaryActionText.className = "text-[10px] font-mono text-brick/80";
+        problemSummaryActionText.textContent = "Requires Resolution";
+      }
+    }
+
+    // 8. DYNAMIC CONFLICT RESOLUTION LOGIC
+    function resolveAuthorConflict() {
+      state.authorProblemResolved = true;
+      state.authorResolutionType = 'ipni';
+
+      currentStoredBadge.textContent = "Verified (IPNI)";
+      currentStoredBadge.className = "text-fern font-semibold";
+      currentStoredDisplay.innerHTML = 'Betula pendula <span class="not-italic text-fern font-sans font-bold">Roth</span>';
+
+      btnApplyAuthor.innerHTML = `<svg class="w-3.5 h-3.5 stroke-2 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"></path></svg> Applied`;
+      btnApplyAuthor.className = "px-2.5 py-1 text-xs font-mono font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-[2px] cursor-default pointer-events-none";
+
+      btnApplyManualAuthor.textContent = "Apply Manual Fix";
+      btnApplyManualAuthor.disabled = false;
+      btnApplyManualAuthor.className = "px-2.5 py-1.5 text-xs font-mono font-semibold bg-stone-800 text-white hover:bg-stone-900 active:bg-black rounded-[2px] shadow-xs min-h-[34px] tap-highlight-transparent whitespace-nowrap transition-all";
+
+      authorConflictCard.className = "bg-surface border-2 border-emerald-300/80 rounded-[3px] p-3.5 shadow-sm space-y-3 transition-colors duration-200";
+      const conflictHeader = document.getElementById('conflictHeaderTitle');
+      conflictHeader.className = "text-[11px] font-bold uppercase font-mono text-fern tracking-tight flex items-center gap-1";
+      conflictHeader.innerHTML = `<svg class="w-3.5 h-3.5 text-fern stroke-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Conflict 1: Resolved`;
+
+      setAuthorFlagCardState(false);
+
+      state.totalActiveProblems = Math.max(0, state.totalActiveProblems - 1);
+      state.activeConflictsCount = Math.max(0, state.activeConflictsCount - 1);
+      updateBadgesAndCounters();
+
+      flashSyncStatus("Author_Problem resolved: Taxon author set to 'Roth'");
+      markModified();
+    }
+
+    function applyManualAuthorFix() {
+      const input = document.getElementById('customAuthorInput');
+      const val = input.value.trim();
+      if (!val) {
+        input.focus();
+        flashSyncStatus("Please enter an author string first");
+        return;
+      }
+
+      state.authorProblemResolved = true;
+      state.authorResolutionType = 'manual';
+
+      currentStoredBadge.textContent = "Manual Override";
+      currentStoredBadge.className = "text-ink font-semibold";
+      currentStoredDisplay.innerHTML = `Betula pendula <span class="not-italic text-ink font-mono font-bold">${val}</span>`;
+
+      btnApplyManualAuthor.innerHTML = `<svg class="w-3.5 h-3.5 stroke-2 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"></path></svg> Applied`;
+      btnApplyManualAuthor.className = "px-2.5 py-1.5 text-xs font-mono font-semibold bg-stone-200 text-stone-700 rounded-[2px] min-h-[34px] cursor-default pointer-events-none whitespace-nowrap";
+
+      btnApplyAuthor.innerHTML = "Apply Fix";
+      btnApplyAuthor.disabled = false;
+      btnApplyAuthor.className = "px-2.5 py-1 text-xs font-mono font-semibold bg-fern text-white rounded-[2px] shadow-xs hover:bg-fern/90 active:scale-95 min-h-[34px] tap-highlight-transparent transition-all flex items-center gap-1";
+
+      authorConflictCard.className = "bg-surface border-2 border-stone-300 rounded-[3px] p-3.5 shadow-sm space-y-3 transition-colors duration-200";
+      const conflictHeader = document.getElementById('conflictHeaderTitle');
+      conflictHeader.className = "text-[11px] font-bold uppercase font-mono text-ink tracking-tight flex items-center gap-1";
+      conflictHeader.innerHTML = `<svg class="w-3.5 h-3.5 text-ink stroke-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Conflict 1: Overridden`;
+
+      setAuthorFlagCardState(false);
+
+      state.totalActiveProblems = Math.max(0, state.totalActiveProblems - 1);
+      state.activeConflictsCount = Math.max(0, state.activeConflictsCount - 1);
+      updateBadgesAndCounters();
+
+      flashSyncStatus(`Author_Problem resolved: Manual override '${val}'`);
+      markModified();
+    }
+
+    function setAuthorFlagCardState(isFlagged) {
+      if (!flagAuthorProblem) return;
+      const statusLabel = flagAuthorProblem.querySelector('.status-label');
+      const titleSpan = flagAuthorProblem.querySelector('span:first-child');
+      const codeSpan = flagAuthorProblem.querySelector('span:nth-child(2)');
+
+      if (isFlagged) {
+        flagAuthorProblem.setAttribute('data-active', 'true');
+        flagAuthorProblem.className = "flag-pill text-left p-2.5 rounded-[2px] border border-brick bg-brick-light text-brick transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between";
+        titleSpan.className = "text-xs font-semibold text-brick block";
+        if (codeSpan) codeSpan.className = "font-mono text-[9px] text-brick/80";
+        statusLabel.className = "text-[10px] font-mono text-brick font-bold status-label mt-1";
+        statusLabel.textContent = "Flagged";
+      } else {
+        flagAuthorProblem.setAttribute('data-active', 'false');
+        flagAuthorProblem.className = "flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between";
+        titleSpan.className = "text-xs font-semibold text-ink block";
+        if (codeSpan) codeSpan.className = "font-mono text-[9px] text-subdued";
+        statusLabel.className = "text-[10px] font-mono text-subdued status-label mt-1";
+        statusLabel.textContent = "Clear";
+      }
+    }
+
+    function revertAuthorConflictUI() {
+      state.authorProblemResolved = false;
+      state.authorResolutionType = null;
+
+      currentStoredBadge.textContent = "Flagged Typo";
+      currentStoredBadge.className = "text-brick font-semibold";
+      currentStoredDisplay.innerHTML = 'Betula pendula <span id="currentAuthorDisplayPart" class="not-italic text-brick font-mono line-through">Rothe</span>';
+
+      btnApplyAuthor.innerHTML = "Apply Fix";
+      btnApplyAuthor.disabled = false;
+      btnApplyAuthor.className = "px-2.5 py-1 text-xs font-mono font-semibold bg-fern text-white rounded-[2px] shadow-xs hover:bg-fern/90 active:scale-95 min-h-[34px] tap-highlight-transparent transition-all flex items-center gap-1";
+
+      btnApplyManualAuthor.innerHTML = "Apply Manual Fix";
+      btnApplyManualAuthor.disabled = false;
+      btnApplyManualAuthor.className = "px-2.5 py-1.5 text-xs font-mono font-semibold bg-stone-800 text-white hover:bg-stone-900 active:bg-black rounded-[2px] shadow-xs min-h-[34px] tap-highlight-transparent whitespace-nowrap transition-all flex items-center gap-1";
+
+      authorConflictCard.className = "bg-surface border-2 border-brick/40 rounded-[3px] p-3.5 shadow-sm space-y-3 transition-colors duration-200";
+      const conflictHeader = document.getElementById('conflictHeaderTitle');
+      conflictHeader.className = "text-[11px] font-bold uppercase font-mono text-brick tracking-tight flex items-center gap-1";
+      conflictHeader.innerHTML = `<svg class="w-3.5 h-3.5 text-brick stroke-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"></path></svg> Conflict 1: Authority Citation`;
+
+      setAuthorFlagCardState(true);
+    }
+
+    // 9. PROBLEM & CHECKLIST TOGGLES
+    function toggleProblemButton(btn) {
+      const isActive = btn.getAttribute('data-active') === 'true';
+      const isAuthorProblem = btn.getAttribute('data-field') === 'Author_Problem';
+      const statusLabel = btn.querySelector('.status-label');
+      const titleSpan = btn.querySelector('span:first-child');
+      const codeSpan = btn.querySelector('span:nth-child(2)');
+
+      if (!isActive) {
+        btn.setAttribute('data-active', 'true');
+        btn.className = "flag-pill text-left p-2.5 rounded-[2px] border border-brick bg-brick-light text-brick transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between";
+        titleSpan.className = "text-xs font-semibold text-brick block";
+        if (codeSpan) codeSpan.className = "font-mono text-[9px] text-brick/80";
+        statusLabel.className = "text-[10px] font-mono text-brick font-bold status-label mt-1";
+        statusLabel.textContent = "Flagged";
+        state.totalActiveProblems++;
+
+        if (isAuthorProblem) {
+          revertAuthorConflictUI();
+          state.activeConflictsCount = Math.min(2, state.activeConflictsCount + 1);
+        }
+      } else {
+        btn.setAttribute('data-active', 'false');
+        btn.className = "flag-pill text-left p-2.5 rounded-[2px] border border-bordercol bg-alabaster hover:bg-stone-100 transition-colors tap-highlight-transparent min-h-[44px] flex flex-col justify-between";
+        titleSpan.className = "text-xs font-semibold text-ink block";
+        if (codeSpan) codeSpan.className = "font-mono text-[9px] text-subdued";
+        statusLabel.className = "text-[10px] font-mono text-subdued status-label mt-1";
+        statusLabel.textContent = "Clear";
+        state.totalActiveProblems = Math.max(0, state.totalActiveProblems - 1);
+
+        if (isAuthorProblem) {
+          resolveAuthorConflict();
+          return;
+        }
+      }
+
+      updateBadgesAndCounters();
+      markModified();
+    }
+
+    function toggleFlag(type, isChecked) {
+      markModified();
+      flashSyncStatus(isChecked ? "Discrepancy Flagged" : "Flag Cleared");
+    }
+
+    // 10. AUTO-SAVE & MODIFICATION FEEDBACK
+    function markModified() {
+      state.hasModifications = true;
+      btnUndo.classList.remove('hidden');
+      btnUndo.classList.add('flex');
+      flashSyncStatus("Changes Saved Locally");
+    }
+
+    function flashSyncStatus(msg) {
+      footerSyncText.textContent = msg;
+      footerSyncText.classList.add('text-fern', 'font-semibold');
+      setTimeout(() => {
+        footerSyncText.classList.remove('text-fern', 'font-semibold');
+        footerSyncText.textContent = "All Changes Synced";
+      }, 2500);
+    }
+
+    // 11. UNDO HANDLER
+    btnUndo.addEventListener('click', () => {
+      if (state.authorProblemResolved) {
+        revertAuthorConflictUI();
+        state.totalActiveProblems++;
+        state.activeConflictsCount = Math.min(2, state.activeConflictsCount + 1);
+        updateBadgesAndCounters();
+      }
+      setLoanStatus('available');
+      applyPreset('04', '02', 'A', '12');
+      btnUndo.classList.add('hidden');
+      btnUndo.classList.remove('flex');
+      flashSyncStatus("Edits Reverted to Original Audit State");
+    });
+
+    // 12. RECORD STEPPERS
+    document.getElementById('btnNext').addEventListener('click', () => {
+      if (state.recordIndex < state.totalRecords) {
+        state.recordIndex++;
+        document.getElementById('currentRecordNum').textContent = state.recordIndex;
+        flashSyncStatus(`Loaded Record #${state.recordIndex}`);
+      }
+    });
+
+    document.getElementById('btnPrev').addEventListener('click', () => {
+      if (state.recordIndex > 1) {
+        state.recordIndex--;
+        document.getElementById('currentRecordNum').textContent = state.recordIndex;
+        flashSyncStatus(`Loaded Record #${state.recordIndex}`);
+      }
+    });
+
+    // 13. FULLSCREEN PHOTO VIEWER MODAL
+    function openPhotoViewer() {
+      photoViewerModal.classList.remove('hidden');
+      resetImageTransform();
+    }
+
+    function closePhotoViewer() {
+      photoViewerModal.classList.add('hidden');
+    }
+
+    function changeZoom(delta) {
+      state.zoom = Math.max(0.75, Math.min(3.0, state.zoom + delta));
+      applyImageTransform();
+    }
+
+    function rotateImage() {
+      state.rotation = (state.rotation + 90) % 360;
+      applyImageTransform();
+    }
+
+    function resetImageTransform() {
+      state.zoom = 1.0;
+      state.rotation = 0;
+      applyImageTransform();
+    }
+
+    function applyImageTransform() {
+      zoomTarget.style.transform = `scale(${state.zoom}) rotate(${state.rotation}deg)`;
+      zoomLevelDisplay.textContent = `${Math.round(state.zoom * 100)}%`;
+    }
+
+    function simulateScan() {
+      flashSyncStatus("Barcode Scanned: MATCH CONFIRMED");
+    }
+  </script>
+<script>
+  // High-Efficiency Stepper State
+  const locState = {
+    buildings: ['Main Vault A', 'Annex B', 'Vault C (Cold)', 'Herbarium East'],
+    bldgIndex: 1,
+    cab: 4,
+    shelf: 2,
+    boxes: ['Box A', 'Box B', 'Box C', 'Box D'],
+    boxIndex: 0,
+    folder: 12,
+    vessel: 'Herbarium Folder'
+  };
+
+  function updateLocationDisplay() {
+    const bldgName = locState.buildings[locState.bldgIndex];
+    const cabStr = locState.cab < 10 ? '0' + locState.cab : locState.cab.toString();
+    const shStr = locState.shelf < 10 ? '0' + locState.shelf : locState.shelf.toString();
+    const boxStr = locState.boxes[locState.boxIndex];
+    const fldStr = locState.folder.toString();
+
+    const bldgEl = document.getElementById('stepperBuildingValue');
+    const cabEl = document.getElementById('stepperCabValue');
+    const shelfEl = document.getElementById('stepperShelfValue');
+    const boxEl = document.getElementById('stepperBoxValue');
+    const breadTrail = document.getElementById('breadTrail');
+    const headerLocSummary = document.getElementById('headerLocSummary');
+
+    if (bldgEl) bldgEl.textContent = bldgName;
+    if (cabEl) cabEl.textContent = 'Cab ' + cabStr;
+    if (shelfEl) shelfEl.textContent = 'Sh ' + shStr;
+    if (boxEl) boxEl.textContent = boxStr;
+    if (breadTrail) breadTrail.textContent = `${bldgName} › Cab ${cabStr} › Sh ${shStr} › ${boxStr} › Fld ${fldStr}`;
+    if (headerLocSummary) headerLocSummary.textContent = `Cab ${cabStr} · Sh ${shStr} · ${boxStr}`;
+
+    if (typeof markModified === 'function') markModified();
+  }
+
+  function stepBuilding(delta) {
+    locState.bldgIndex = (locState.bldgIndex + delta + locState.buildings.length) % locState.buildings.length;
+    updateLocationDisplay();
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Building set to ${locState.buildings[locState.bldgIndex]}`);
+  }
+
+  function stepCabinet(delta) {
+    locState.cab = Math.max(1, Math.min(16, locState.cab + delta));
+    updateLocationDisplay();
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Cabinet set to Cab 0${locState.cab}`);
+  }
+
+  function stepShelf(delta) {
+    locState.shelf = Math.max(1, Math.min(8, locState.shelf + delta));
+    updateLocationDisplay();
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Shelf set to Sh 0${locState.shelf}`);
+  }
+
+  function stepBox(delta) {
+    locState.boxIndex = (locState.boxIndex + delta + locState.boxes.length) % locState.boxes.length;
+    updateLocationDisplay();
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Containment set to ${locState.boxes[locState.boxIndex]}`);
+  }
+
+  function copyFromPrevious() {
+    locState.bldgIndex = 1; // Annex B
+    locState.cab = 4;
+    locState.shelf = 2;
+    locState.boxIndex = 0; // Box A
+    locState.folder = 12;
+    locState.vessel = 'Herbarium Folder';
+    updateLocationDisplay();
+    
+    const notice = document.getElementById('copyStatusNotice');
+    if (notice) {
+      notice.textContent = '✓ Copied (#0893)';
+      notice.className = 'text-fern font-bold';
+      setTimeout(() => {
+        notice.textContent = 'Ready';
+        notice.className = 'text-fern font-medium';
+      }, 3000);
+    }
+    if (typeof flashSyncStatus === 'function') flashSyncStatus('Copied: Annex B · Cab 04 · Sh 02 · Box A');
+  }
+
+  function selectPreset(bldg, cab, shelf, boxLetter, btn) {
+    locState.bldgIndex = locState.buildings.indexOf(bldg) >= 0 ? locState.buildings.indexOf(bldg) : 1;
+    locState.cab = cab;
+    locState.shelf = shelf;
+    locState.boxIndex = boxLetter === 'B' ? 1 : 0;
+    updateLocationDisplay();
+
+    document.querySelectorAll('.preset-chip').forEach(chip => {
+      chip.className = 'preset-chip whitespace-nowrap px-2.5 py-1.5 bg-surface border border-stone-300 hover:border-ink active:bg-stone-100 rounded-[2px] text-xs font-mono font-medium text-muted hover:text-ink shadow-2xs flex items-center gap-1.5 transition-all tap-highlight-transparent min-h-[36px]';
+      const dot = chip.querySelector('span.rounded-full');
+      if (dot) dot.remove();
+    });
+
+    if (btn) {
+      btn.className = 'preset-chip whitespace-nowrap px-2.5 py-1.5 bg-white border border-ink text-ink font-semibold rounded-[2px] text-xs font-mono shadow-2xs flex items-center gap-1.5 transition-all tap-highlight-transparent min-h-[36px]';
+      const dot = document.createElement('span');
+      dot.className = 'w-1.5 h-1.5 rounded-full bg-fern';
+      btn.prepend(dot);
+    }
+
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Preset loaded: Cab 0${cab} · Sh 0${shelf}`);
+  }
+
+  function saveCurrentAsPreset() {
+    if (typeof flashSyncStatus === 'function') flashSyncStatus('Current coordinates saved to Quick Presets');
+  }
+
+  function selectVessel(name, btn) {
+    locState.vessel = name;
+    document.querySelectorAll('.vessel-card').forEach(card => {
+      card.className = 'vessel-card text-left p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink transition-all tap-highlight-transparent min-h-[44px] flex items-center justify-between';
+      const check = card.querySelector('span:last-child');
+      if (check) check.classList.add('hidden');
+    });
+    if (btn) {
+      btn.className = 'vessel-card text-left p-2.5 rounded-[2px] border-2 border-ink bg-stone-100 text-ink transition-all tap-highlight-transparent min-h-[44px] flex items-center justify-between shadow-xs';
+      const check = btn.querySelector('span:last-child');
+      if (check) check.classList.remove('hidden');
+    }
+    const subtitle = document.getElementById('vesselSubtitle');
+    if (subtitle) subtitle.textContent = 'Active: ' + name;
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Vessel set to: ${name}`);
+  }
+</script>
+
+
+
+<script>
+  // Live Search Controller
+  const mockVaultSpecimens = [
+    { id: '#2024-BOT-0894', taxon: 'Betula pendula Roth', loc: 'Cab 04 · Sh 02 · Fl -1', idx: 13 },
+    { id: '#2024-BOT-0893', taxon: 'Betula pubescens Ehrh.', loc: 'Cab 04 · Sh 02 · Fl -1', idx: 12 },
+    { id: '#2024-BOT-0892', taxon: 'Alnus glutinosa (L.) Gaertn.', loc: 'Cab 04 · Sh 01 · Fl -1', idx: 11 },
+    { id: '#2024-BOT-0895', taxon: 'Corylus avellana L.', loc: 'Cab 04 · Sh 03 · Fl -1', idx: 14 },
+    { id: '#2024-BOT-0720', taxon: 'Pinus sylvestris L.', loc: 'Cab 03 · Sh 05 · Fl 1', idx: 45 }
+  ];
+
+  function handleLiveSearch(query) {
+    const clearBtn = document.getElementById('btnClearSearch');
+    const dropdown = document.getElementById('searchDropdown');
+    const resultsList = document.getElementById('searchResultsList');
+    const countLabel = document.getElementById('searchResultsCount');
+    const trimmed = query.trim().toLowerCase();
+
+    if (clearBtn) {
+      if (trimmed) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+    }
+
+    if (!trimmed) {
+      if (dropdown) dropdown.classList.add('hidden');
+      return;
+    }
+
+    const matched = mockVaultSpecimens.filter(s => 
+      s.id.toLowerCase().includes(trimmed) ||
+      s.taxon.toLowerCase().includes(trimmed) ||
+      s.loc.toLowerCase().includes(trimmed)
+    );
+
+    if (countLabel) {
+      countLabel.textContent = `${matched.length} Match${matched.length === 1 ? '' : 'es'} in Vault 04`;
+    }
+
+    if (resultsList) {
+      if (matched.length === 0) {
+        resultsList.innerHTML = `<div class="text-subdued py-1.5 px-2 text-[11px]">No specimens found for "${query.replace(/"/g, '')}"</div>`;
+      } else {
+        resultsList.innerHTML = matched.map(m => `
+          <button type="button" onclick="selectSearchResult(${m.idx}, '${m.id}')" class="w-full flex items-center justify-between p-1.5 rounded-[2px] hover:bg-stone-100 text-left transition-colors tap-highlight-transparent">
+            <div class="truncate">
+              <span class="font-bold text-ink mr-1">${m.id}</span>
+              <span class="font-serif italic text-muted text-[11px]">${m.taxon}</span>
+            </div>
+            <span class="text-[10px] text-subdued whitespace-nowrap ml-2">#${m.idx}</span>
+          </button>
+        `).join('');
+      }
+    }
+
+    if (dropdown) dropdown.classList.remove('hidden');
+  }
+
+  function clearLiveSearch() {
+    const input = document.getElementById('vaultLiveSearch');
+    const clearBtn = document.getElementById('btnClearSearch');
+    const dropdown = document.getElementById('searchDropdown');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    if (clearBtn) clearBtn.classList.add('hidden');
+    if (dropdown) dropdown.classList.add('hidden');
+  }
+
+  function selectSearchResult(idx, code) {
+    if (typeof state !== 'undefined') {
+      state.recordIndex = idx;
+      const recDisplay = document.getElementById('currentRecordNum');
+      if (recDisplay) recDisplay.textContent = idx;
+    }
+    const input = document.getElementById('vaultLiveSearch');
+    if (input) input.value = code;
+    const dropdown = document.getElementById('searchDropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+    if (typeof flashSyncStatus === 'function') flashSyncStatus(`Loaded Specimen ${code}`);
+  }
+
+  // Keyboard shortcut listener (Cmd/Ctrl + K)
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      const input = document.getElementById('vaultLiveSearch');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+  });
+
+  // Close search dropdown on outside click
+  document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('searchDropdown');
+    const searchInput = document.getElementById('vaultLiveSearch');
+    if (dropdown && !dropdown.contains(e.target) && e.target !== searchInput) {
+      dropdown.classList.add('hidden');
+    }
+  });
+</script>
+
+</body></html>

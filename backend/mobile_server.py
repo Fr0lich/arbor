@@ -6861,7 +6861,7 @@ INDEX_TEMPLATE_V2 = """
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Arbor Mobile Companion</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" rel="stylesheet">
@@ -6870,12 +6870,28 @@ INDEX_TEMPLATE_V2 = """
       theme: {
         extend: {
           colors: {
+            alabaster: '#f3f3f3',
+            surface: '#ffffff',
+            bordercol: '#d4d8d5',
+            borderdark: '#b3b9b4',
+            ink: {
+              DEFAULT: '#191e1a',
+              muted: '#535d56',
+              faint: '#848f87'
+            },
+            muted: '#535d56',
+            subdued: '#848f87',
             fern: {
               DEFAULT: '#3a7d44',
               dark: '#2c6034',
-              light: '#eff7f1',
+              light: '#eaf4ec',
               border: '#a4cca9'
             },
+            'fern-light': '#eaf4ec',
+            brick: '#c93a40',
+            'brick-light': '#fdf2f2',
+            slate: '#4a7b9d',
+            'slate-light': '#f0f6fa',
             ember: {
               DEFAULT: '#d95c14',
               dark: '#b84a0c',
@@ -6883,36 +6899,46 @@ INDEX_TEMPLATE_V2 = """
               border: '#f8c2a3'
             },
             canvas: '#f3f3f3',
-            surface: '#ffffff',
             tonal1: '#f8f9fa',
             tonal2: '#eceeec',
             tonal3: '#dfe3e0',
-            bordercol: '#d4d8d5',
-            borderdark: '#b3b9b4',
-            ink: {
-              DEFAULT: '#191e1a',
-              muted: '#535d56',
-              faint: '#848f87'
-            }
           },
           fontFamily: {
             sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
             serif: ['Lora', 'Georgia', 'serif'],
-            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+            mono: ['"JetBrains Mono"', 'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
           }
         }
       }
     }
   </script>
   <style>
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .tap-highlight-transparent {
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tab-slider {
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    body {
+      touch-action: pan-y;
+      overscroll-behavior-y: none;
+    }
+    #tabTrack {
+      transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
     .touch-target-min { min-height: 44px; min-width: 44px; }
     .touch-press:active { transform: scale(0.985); filter: brightness(0.97); }
     .search-active:focus-within {
       border-color: #d95c14 !important;
       box-shadow: 0 0 0 2px rgba(217, 92, 20, 0.2) !important;
     }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: #f3f3f3; }
     ::-webkit-scrollbar-thumb { background: #c8ccc9; border-radius: 2px; }
@@ -6941,114 +6967,113 @@ INDEX_TEMPLATE_V2 = """
       </button>
     </div>
 
-    <!-- Persistent App Header & Search Bar -->
-    <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 pt-3 pb-2.5 shadow-xs shrink-0">
-      <div class="flex items-center justify-between mb-2.5">
-        <div class="flex items-center gap-2">
-          <div class="w-7 h-7 rounded-[2px] bg-fern text-white flex items-center justify-center font-serif font-bold text-sm">
-            A
-          </div>
-          <div>
-            <h1 class="font-serif font-bold text-base text-ink leading-tight">
-              Arbor Companion
-            </h1>
-            <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
-              Connecting to database...
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-1.5">
-          <!-- Settings Modal Trigger -->
-          <button
-            type="button"
-            onclick="openSettingsModal()"
-            class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-            title="Settings"
-          >
-            <span class="text-ink text-sm font-mono">⚙️</span>
-          </button>
-
-          <!-- Recent Changes Drawer Trigger -->
-          <button
-            type="button"
-            onclick="openRecentEditsModal()"
-            class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-            title="Recent Changes"
-          >
-            <span class="text-ink text-sm font-mono">↩</span>
-          </button>
-
-          <!-- Screen Wake Lock / Walk Mode Toggle -->
-          <button
-            type="button"
-            id="btnWakeLock"
-            onclick="toggleWakeLock()"
-            class="p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center"
-            title="Toggle Walk Mode (Prevent Screen Sleep)"
-          >
-            <span id="wakeLockIcon" class="text-sm leading-none">🌙</span>
-          </button>
-
-          <!-- Desktop Connection Pill Button -->
-          <button
-            type="button"
-            onclick="openModal('connectionModal')"
-            id="connStatusBtn"
-            class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
-            title="Desktop Connection Status"
-            aria-live="polite"
-          >
-            <span class="relative flex h-2 w-2">
-              <span id="connPingDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember"></span>
-              <span id="connPingDot" class="relative inline-flex rounded-full h-2 w-2 bg-ember"></span>
-            </span>
-            <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
-              Connecting...
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Persistent Search Input Box -->
-      <div class="relative flex items-center gap-2">
-        <div class="relative flex-1 flex items-center bg-tonal1 border border-bordercol rounded-[2px] transition-all search-active">
-          <span class="text-ink-faint ml-2.5 shrink-0 text-xs">🔍</span>
-          <input
-            type="text"
-            id="searchBox"
-            oninput="debounceSearch()"
-            placeholder="Search taxonomy, accession, collector, cabinet..."
-            class="w-full bg-transparent px-2.5 py-2 font-sans text-xs text-ink placeholder:text-ink-faint outline-none"
-          />
-          <button
-            type="button"
-            id="searchClearBtn"
-            onclick="clearSearch()"
-            class="hidden p-1 mr-1.5 text-ink-faint hover:text-ink text-xs font-bold"
-          >
-            ✕
-          </button>
-        </div>
-
-        <!-- Advanced Filter Modal Trigger -->
-        <button
-          type="button"
-          id="btnFilterModalTrigger"
-          onclick="openFilterModal()"
-          class="relative p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-          title="Advanced Filter"
-        >
-          <span class="text-ink text-sm font-mono">⚙</span>
-          <span id="filterActiveBadge" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-fern rounded-full ring-2 ring-surface"></span>
-        </button>
-      </div>
-    </header>
-
     <!-- ========================================== -->
     <!-- VIEW: SPECIMEN LIST                        -->
     <!-- ========================================== -->
     <div id="listView" class="flex-1 flex flex-col h-full bg-canvas overflow-hidden">
+      <!-- Master App Header (List View Only) -->
+      <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 pt-3 pb-2.5 shadow-xs shrink-0">
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-[2px] bg-fern text-white flex items-center justify-center font-serif font-bold text-sm">
+              A
+            </div>
+            <div>
+              <h1 class="font-serif font-bold text-base text-ink leading-tight">
+                Arbor Companion
+              </h1>
+              <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
+                Connecting to database...
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <!-- Settings Modal Trigger -->
+            <button
+              type="button"
+              onclick="openSettingsModal()"
+              class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+              title="Settings"
+            >
+              <span class="text-ink text-sm font-mono">⚙️</span>
+            </button>
+
+            <!-- Recent Changes Drawer Trigger -->
+            <button
+              type="button"
+              onclick="openRecentEditsModal()"
+              class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+              title="Recent Changes"
+            >
+              <span class="text-ink text-sm font-mono">↩</span>
+            </button>
+
+            <!-- Screen Wake Lock / Walk Mode Toggle -->
+            <button
+              type="button"
+              id="btnWakeLock"
+              onclick="toggleWakeLock()"
+              class="btn-wake-lock p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center"
+              title="Toggle Walk Mode (Prevent Screen Sleep)"
+            >
+              <span id="wakeLockIcon" class="wake-lock-icon text-sm leading-none">🌙</span>
+            </button>
+
+            <!-- Desktop Connection Pill Button -->
+            <button
+              type="button"
+              onclick="openModal('connectionModal')"
+              id="connStatusBtn"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
+              title="Desktop Connection Status"
+              aria-live="polite"
+            >
+              <span class="relative flex h-2 w-2">
+                <span id="connPingDotAnimate" class="conn-ping-dot-animate animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember"></span>
+                <span id="connPingDot" class="conn-ping-dot relative inline-flex rounded-full h-2 w-2 bg-ember"></span>
+              </span>
+              <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
+                Connecting...
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- List Search Input Box -->
+        <div class="relative flex items-center gap-2">
+          <div class="relative flex-1 flex items-center bg-tonal1 border border-bordercol rounded-[2px] transition-all search-active">
+            <span class="text-ink-faint ml-2.5 shrink-0 text-xs">🔍</span>
+            <input
+              type="text"
+              id="searchBox"
+              oninput="debounceSearch()"
+              placeholder="Search taxonomy, accession, collector, cabinet..."
+              class="w-full bg-transparent px-2.5 py-2 font-sans text-xs text-ink placeholder:text-ink-faint outline-none"
+            />
+            <button
+              type="button"
+              id="searchClearBtn"
+              onclick="clearSearch()"
+              class="hidden p-1 mr-1.5 text-ink-faint hover:text-ink text-xs font-bold"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- Advanced Filter Modal Trigger -->
+          <button
+            type="button"
+            id="btnFilterModalTrigger"
+            onclick="openFilterModal()"
+            class="relative p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
+            title="Advanced Filter"
+          >
+            <span class="text-ink text-sm font-mono">⚙</span>
+            <span id="filterActiveBadge" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-fern rounded-full ring-2 ring-surface"></span>
+          </button>
+        </div>
+      </header>
       <!-- List View Filter & Sort Controls -->
       <div class="bg-surface border-b border-bordercol px-4 pt-1.5 pb-2 shadow-xs shrink-0">
         <!-- Filter Pill Tabs -->
@@ -7157,336 +7182,785 @@ INDEX_TEMPLATE_V2 = """
     <!-- ========================================== -->
     <!-- VIEW: SPECIMEN DETAIL                      -->
     <!-- ========================================== -->
-        <div id="detailView" class="hidden flex-1 flex flex-col h-full bg-canvas overflow-hidden relative">
-      <!-- Sticky Top Header -->
-      <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 py-2.5 shadow-xs shrink-0 flex items-center justify-between">
-        <button
-          type="button"
-          onclick="showListView()"
-          class="flex items-center gap-1.5 text-xs font-sans font-medium text-ink hover:text-fern py-1 px-1.5 -ml-1 rounded-[2px] transition-colors touch-target-min"
-        >
-          <span class="font-bold text-sm">&lt;</span>
-          <span>Vault List</span>
-        </button>
-
-        <div class="flex items-center gap-2">
-          <!-- Undo Button (shown conditionally after edit) -->
-          <button
-            type="button"
-            id="btnMobileUndo"
-            onclick="undoLastEdit()"
-            class="hidden items-center gap-1 text-[11px] font-sans font-bold bg-ember-light text-ember-dark border border-ember-border px-2 py-1 rounded-[2px] hover:bg-ember/10 transition-colors touch-target-min"
-          >
-            <span>↩</span>
-            <span>Undo</span>
+    <div id="detailView" class="hidden flex-1 flex flex-col h-full bg-alabaster overflow-hidden relative font-sans text-ink">
+      <!-- 1. STICKY TOP NAVIGATION BAR (Unified with Walk Mode, Steppers, Undo, Search) -->
+      <header class="flex-none bg-surface border-b border-bordercol px-3 py-2 flex flex-col gap-2 z-30 shadow-xs">
+        <div class="flex items-center justify-between gap-2">
+          <!-- Back button -->
+          <button type="button" aria-label="Return to Vault List" class="flex items-center gap-1.5 px-2 py-1.5 min-h-[36px] -ml-1 text-xs font-semibold text-muted hover:text-ink active:bg-stone-100 rounded-[3px] transition-colors tap-highlight-transparent flex-none" id="btnBack" onclick="showListView()">
+            <svg class="w-4 h-4 text-ink stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M15.75 19.5L8.25 12l7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span class="font-mono" id="detailBackVaultLabel">Vault List</span>
           </button>
 
-          <span class="font-mono text-xs text-ink-muted" id="detailNavIndex">
-            1 of 1
-          </span>
-          <div class="flex items-center border border-bordercol rounded-[2px] bg-tonal1 overflow-hidden">
-            <button
-              type="button"
-              id="btnPrevSpecimen"
-              onclick="navSpecimen(-1)"
-              class="p-1.5 hover:bg-tonal2 disabled:opacity-30 text-ink transition-colors touch-target-min"
-              title="Previous specimen"
-            >
-              <span class="font-bold text-xs">&lt;</span>
+          <!-- Center/Right controls: Undo + Walk Mode + Recent Changes + Counter + Steppers -->
+          <div class="flex items-center gap-1.5 flex-none">
+            <!-- Undo Button -->
+            <button type="button" class="items-center gap-1 px-2 py-1 h-[30px] text-[10px] font-mono font-medium text-ember bg-orange-50 border border-orange-200 rounded-[3px] active:scale-95 transition-all hidden" id="btnMobileUndo" onclick="undoLastEdit()" title="Undo last edit">
+              <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              <span>Undo</span>
             </button>
-            <div class="w-[1px] h-4 bg-bordercol"></div>
-            <button
-              type="button"
-              id="btnNextSpecimen"
-              onclick="navSpecimen(1)"
-              class="p-1.5 hover:bg-tonal2 disabled:opacity-30 text-ink transition-colors touch-target-min"
-              title="Next specimen"
-            >
-              <span class="font-bold text-xs">&gt;</span>
+
+            <!-- Walk Mode Toggle in Detail -->
+            <button type="button" onclick="toggleWakeLock()" class="btn-wake-lock p-1.5 rounded-[3px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center text-xs" title="Toggle Walk Mode (Prevent Screen Sleep)">
+              <span class="wake-lock-icon text-xs leading-none">🌙</span>
             </button>
+
+            <!-- Recent Changes in Detail -->
+            <button type="button" onclick="openRecentEditsModal()" class="p-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[3px] text-ink transition-colors touch-target-min flex items-center justify-center text-xs" title="Recent Changes">
+              <span class="text-ink text-xs font-mono">↩</span>
+            </button>
+
+            <!-- Specimen index counter -->
+            <span class="text-[11px] font-mono font-medium text-subdued tracking-tight bg-stone-100 px-2 py-1 rounded-[3px] border border-bordercol/60 flex items-center">
+              <span class="text-ink font-semibold" id="currentRecordNum">1</span><span class="text-stone-400 mx-0.5">/</span><span id="totalRecordsNum">1</span>
+            </span>
+
+            <!-- Segmented Next/Prev Steppers -->
+            <div class="inline-flex rounded-[3px] border border-bordercol bg-alabaster p-0.5 shadow-2xs">
+              <button type="button" class="w-7 h-7 flex items-center justify-center rounded-[2px] hover:bg-surface text-ink active:bg-stone-200 transition-colors tap-highlight-transparent disabled:opacity-30" id="btnPrevSpecimen" onclick="navSpecimen(-1)" title="Previous Specimen">
+                <svg class="w-3.5 h-3.5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
+              <div class="w-[1px] bg-bordercol my-0.5"></div>
+              <button type="button" class="w-7 h-7 flex items-center justify-center rounded-[2px] hover:bg-surface text-ink active:bg-stone-200 transition-colors tap-highlight-transparent disabled:opacity-30" id="btnNextSpecimen" onclick="navSpecimen(1)" title="Next Specimen">
+                <svg class="w-3.5 h-3.5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Search Bar -->
+        <div class="relative flex items-center w-full">
+          <div class="absolute left-2.5 pointer-events-none text-muted flex items-center">
+            <svg class="w-3.5 h-3.5 stroke-[2.2] text-subdued" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </div>
+          <input id="vaultLiveSearch" type="text" placeholder="Search specimen, barcode, taxon..." class="w-full text-xs font-mono pl-8 pr-16 py-1.5 min-h-[34px] bg-alabaster hover:bg-white focus:bg-white border border-bordercol rounded-[3px] text-ink focus:border-ink focus:outline-none transition-all placeholder:text-stone-400 placeholder:font-sans" oninput="handleLiveSearch(this.value)" onkeydown="if(event.key==='Escape'){clearLiveSearch();}" autocomplete="off">
+          <!-- Shortcut / Clear Container -->
+          <div class="absolute right-1.5 flex items-center gap-1">
+            <button id="btnClearSearch" type="button" onclick="clearLiveSearch()" class="hidden text-[11px] font-mono text-stone-400 hover:text-ink px-1.5 py-0.5 rounded hover:bg-stone-100 transition-colors" title="Clear search">✕</button>
+            <kbd class="hidden sm:inline-flex text-[9px] font-mono font-medium text-subdued bg-stone-100 border border-stone-200 px-1 py-0.5 rounded pointer-events-none">⌘K</kbd>
+          </div>
+          <!-- Live Filter Floating Hint Dropdown -->
+          <div id="searchDropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-surface border border-bordercol rounded-[3px] shadow-lg z-50 p-2 text-xs font-mono space-y-1 max-h-60 overflow-y-auto">
+            <div class="flex items-center justify-between text-[10px] text-subdued border-b border-stone-100 pb-1">
+              <span id="searchResultsCount">Matches</span>
+              <span class="text-fern font-medium">Live index</span>
+            </div>
+            <div id="searchResultsList" class="space-y-0.5 pt-0.5">
+              <!-- Dynamic results pop up here -->
+            </div>
           </div>
         </div>
       </header>
 
-      <!-- Compact Sticky Context Header -->
-      <div class="sticky top-[45px] z-20 bg-surface border-b border-bordercol px-4 py-2 shadow-xs shrink-0">
-        <div class="flex items-center justify-between gap-2">
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="font-mono text-xs font-bold text-fern-dark tracking-wider" id="detailAccession">
-                #---
-              </span>
-              <div id="detailReviewStatusBadge">
-                <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-[2px] text-[10px] font-sans font-medium bg-tonal1 text-ink-muted border border-bordercol">
-                  🕒 UNREVIEWED
-                </span>
-              </div>
-            </div>
-            <h2 id="detailScientificName" class="font-serif italic font-bold text-sm sm:text-base text-ink truncate mt-0.5" title="">
-              Loading specimen...
-            </h2>
+      <!-- 2. STICKY SPECIMEN IDENTIFICATION HEADER -->
+      <section class="flex-none bg-surface border-b border-bordercol px-4 pt-3 pb-3 z-20 shadow-xs">
+        <!-- Accession Bar & Status Badge -->
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-xs font-bold text-ink tracking-tight px-1.5 py-0.5 bg-stone-100 border border-bordercol rounded-[2px]" id="detailAccession">
+              #---
+            </span>
           </div>
-          <!-- Hidden helper elements for JS compatibility -->
-          <div class="hidden" id="detailTaxonSubline">
-            <span id="detailAuthor"></span>
-            <span id="detailFamily"></span>
-            <span id="detailTopLocation"></span>
+          <!-- Interactive Quick Status Pill -->
+          <button type="button" class="flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300" id="badgeStatus" onclick="toggleReviewed()">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+            <span id="badgeStatusText">UNREVIEWED</span>
+          </button>
+        </div>
+        <!-- Taxon Scientific Title -->
+        <h1 class="text-[19px] leading-tight font-serif font-semibold italic text-ink tracking-tight flex items-baseline gap-1.5 truncate" id="detailScientificName">
+          Loading specimen...
+        </h1>
+        <!-- Metadata summary sub-line -->
+        <div class="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-xs text-muted">
+          <div class="flex items-center gap-1">
+            <span class="text-subdued font-medium">Fam:</span>
+            <span class="font-medium text-ink" id="detailFamily">—</span>
+          </div>
+          <span class="text-bordercol">•</span>
+          <div class="flex items-center gap-1">
+            <span class="text-subdued font-medium">Auth:</span>
+            <span class="font-medium text-ink font-mono text-[11px]" id="detailAuthor">—</span>
+          </div>
+          <span class="text-bordercol">•</span>
+          <div class="flex items-center gap-1 font-mono text-[11px]">
+            <span class="text-subdued font-sans">Loc:</span>
+            <span class="text-ink font-semibold" id="headerLocSummary">Unrecorded</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- Segmented Tab Bar -->
-      <div class="sticky top-[95px] z-20 bg-surface border-b border-bordercol px-3 py-1.5 shrink-0">
-        <nav class="flex items-center p-0.5 bg-tonal1 rounded-[4px] border border-bordercol/60 gap-1 text-xs font-sans font-semibold" role="tablist">
-          <button
-            type="button"
-            id="tabBtnLocation"
-            role="tab"
-            aria-selected="true"
-            onclick="switchDetailTab('location')"
-            class="flex-1 py-1.5 px-2 rounded-[3px] text-center transition-all flex items-center justify-center gap-1.5 bg-surface text-fern-dark font-bold shadow-xs border border-bordercol/80"
-          >
-            <span>📍</span>
+      <!-- 3. SEGMENTED TAB CONTROLLER (Sticky) -->
+      <nav class="flex-none bg-alabaster border-b border-bordercol px-3 pt-2 pb-1.5 z-20">
+        <div class="relative bg-stone-200/90 p-1 rounded-[4px] flex items-center justify-between text-xs font-medium text-muted shadow-inner">
+          <!-- Sliding active indicator pill -->
+          <div class="tab-slider absolute top-1 bottom-1 w-[calc((100%-8px)/3)] bg-surface rounded-[2px] shadow-sm border border-stone-300 pointer-events-none translate-x-0" id="tabIndicator" style="transform: translateX(0%);"></div>
+          <!-- Tab 1: Location (Active Default) -->
+          <button type="button" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent font-semibold text-ink" data-tab-index="0" onclick="switchTab(0)">
+            <svg class="w-3.5 h-3.5 text-current stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
             <span>Location</span>
-            <span id="tabBadgeLocation" class="hidden px-1.5 py-0.2 text-[9px] rounded-full bg-ember text-white font-mono leading-none">0</span>
           </button>
-          <button
-            type="button"
-            id="tabBtnDetails"
-            role="tab"
-            aria-selected="false"
-            onclick="switchDetailTab('details')"
-            class="flex-1 py-1.5 px-2 rounded-[3px] text-center transition-all flex items-center justify-center gap-1.5 text-ink-muted hover:text-ink hover:bg-surface/50"
-          >
-            <span>🧬</span>
+          <!-- Tab 2: Details & Archival Scans -->
+          <button type="button" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent text-muted" data-tab-index="1" onclick="switchTab(1)">
+            <svg class="w-3.5 h-3.5 text-current stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
             <span>Details</span>
-            <span id="tabBadgeDetails" class="hidden px-1.5 py-0.2 text-[9px] rounded-full bg-ember text-white font-mono leading-none">0</span>
           </button>
-          <button
-            type="button"
-            id="tabBtnProblems"
-            role="tab"
-            aria-selected="false"
-            onclick="switchDetailTab('problems')"
-            class="flex-1 py-1.5 px-2 rounded-[3px] text-center transition-all flex items-center justify-center gap-1.5 text-ink-muted hover:text-ink hover:bg-surface/50 relative"
-          >
-            <span>⚠</span>
+          <!-- Tab 3: Problems & Conflicts -->
+          <button type="button" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent text-muted" data-tab-index="2" onclick="switchTab(2)">
+            <svg class="w-3.5 h-3.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
             <span>Problems</span>
-            <span id="tabBadgeProblems" class="hidden px-1.5 py-0.2 text-[10px] rounded-full bg-[#C62828] text-white font-mono font-bold leading-none animate-pulse">0</span>
+            <span class="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-stone-300 text-stone-700 shadow-xs hidden" id="tabProblemBadge">0</span>
           </button>
-        </nav>
-      </div>
+        </div>
+      </nav>
 
       <!-- Presence Warning Banner (Shown when another worker is viewing this object) -->
-      <div id="detailPresenceBanner" class="hidden mx-3.5 mt-3 flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-300 rounded-[2px] text-amber-900 text-xs font-sans font-medium shrink-0">
+      <div id="detailPresenceBanner" class="hidden mx-3.5 mt-2 flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-300 rounded-[2px] text-amber-900 text-xs font-sans font-medium shrink-0 z-10">
         <span class="text-sm">⚠️</span>
         <span id="detailPresenceText">Warning: Another worker is currently viewing this record.</span>
       </div>
 
-      <!-- Scrollable Tabbed Specimen Form Content -->
-      <main id="detailMainScroll" class="flex-1 overflow-y-auto p-3.5 space-y-3.5 pb-36">
+      <!-- 4. HORIZONTAL SWIPEABLE TAB PANELS CONTAINER -->
+      <div class="flex-1 overflow-hidden relative" id="swipeArea">
+        <div class="h-full flex w-[300%]" id="tabTrack" style="transform: translateX(0%);">
 
-        <!-- ========================================== -->
-        <!-- TAB 1: LOCATION                            -->
-        <!-- ========================================== -->
-        <div id="tabContentLocation" class="space-y-3.5">
-          <!-- Rendered dynamically by renderDynamicForm() -->
-        </div>
+          <!-- ================= PANEL 1: LOCATION ================= -->
+          <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentLocation">
+            <!-- 1. UTILITY BAR: REPETITION KILLER -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-2.5 shadow-2xs">
+              <button class="w-full py-2.5 px-3 bg-stone-100 hover:bg-stone-200/80 active:bg-stone-300 border border-stone-300 rounded-[3px] flex items-center justify-between text-left transition-all tap-highlight-transparent min-h-[44px]" id="btnCopyPrevSpecimen" onclick="handleCopyPreviousSpecimen()" type="button">
+                <div class="flex items-center gap-2 truncate">
+                  <span class="text-base leading-none" id="copyIconSpan">📋</span>
+                  <div class="truncate">
+                    <span class="text-xs font-bold text-ink block truncate" id="copyTitleSpan">Copy from Previous Specimen</span>
+                    <span class="text-[10px] font-mono text-muted block truncate" id="copySubtitleSpan">Tap to duplicate physical coordinates</span>
+                  </div>
+                </div>
+                <span class="text-[10px] font-mono font-bold px-2 py-1 bg-surface border border-stone-300 text-muted rounded-[2px] shadow-2xs whitespace-nowrap ml-2" id="copyActionTag">1-Tap Fill</span>
+              </button>
+            </div>
 
-        <!-- ========================================== -->
-        <!-- TAB 2: DETAILS (Photos + Registration)     -->
-        <!-- ========================================== -->
-        <div id="tabContentDetails" class="hidden space-y-3.5">
-          <!-- Archival Scans / Photo Gallery Card -->
-          <div class="bg-surface border border-bordercol rounded-[2px] p-3 space-y-2.5">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-1.5 text-xs font-sans font-semibold text-ink">
-                <span>📷</span>
-                <span>Attached Archival Scans</span>
-                <span id="photoCountBadge" class="font-mono text-[10px] text-ink-muted bg-tonal1 border border-tonal3 px-1.5 py-0.2 rounded-[2px]">
-                  0 available
+            <!-- 2. MAIN LOCATION CARD -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-xs space-y-3.5">
+              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+                <div>
+                  <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Physical Coordinate Audit</h2>
+                  <p class="text-[10px] font-mono text-subdued">Thumb-optimized targets · Rapid field audit</p>
+                </div>
+                <span class="text-[10px] font-mono text-fern font-semibold flex items-center gap-1" id="locSyncIndicator">
+                  <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  Synced
                 </span>
               </div>
 
-              <button
-                type="button"
-                onclick="openFullscreenPhoto()"
-                class="text-[11px] font-sans font-medium text-fern hover:text-fern-dark flex items-center gap-1 transition-colors touch-target-min py-1 px-1"
-              >
-                <span>↗</span>
-                <span>Fullscreen</span>
-              </button>
+              <!-- SECTION A: BUILDING SELECTOR -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued">Building / Vault Facility</label>
+                  <button class="text-[10px] font-mono text-slate hover:text-ink flex items-center gap-0.5 tap-highlight-transparent" id="btnToggleOtherBldg" onclick="toggleCustomBuildingInput()" type="button">+ Other</button>
+                </div>
+                <div class="grid grid-cols-2 gap-2" id="buildingChipsGrid">
+                  <button class="bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs border-bordercol bg-stone-50 hover:bg-stone-100 text-ink" data-building="Økern" onclick="setBuildingSelection('Økern', this)" type="button">
+                    <span>Økern</span>
+                  </button>
+                  <button class="bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs" data-building="Lid's hus" onclick="setBuildingSelection(&quot;Lid's hus&quot;, this)" type="button">
+                    <span>Lid's hus</span>
+                  </button>
+                </div>
+                <!-- Inline Manual Custom Building -->
+                <div class="hidden pt-1 space-y-1" id="customBuildingWrap">
+                  <div class="flex items-center gap-1.5">
+                    <input class="flex-1 text-xs font-mono px-2.5 py-1.5 min-h-[38px] bg-alabaster border border-bordercol rounded-[2px] text-ink focus:bg-white focus:border-ink focus:outline-none" id="customBuildingInput" oninput="onCustomBuildingInput(this.value)" placeholder="Specify facility name or field annex..." type="text">
+                    <button class="px-2.5 py-1.5 min-h-[38px] text-xs font-mono font-semibold bg-stone-800 text-white rounded-[2px] active:bg-black tap-highlight-transparent" onclick="applyCustomBuilding()" type="button">Set</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- SECTION B: PHYSICAL STEPPER GRID (Floor, Cabinet, Shelf) -->
+              <div class="space-y-2 pt-1">
+                <div class="flex items-center justify-between text-[10px] font-mono uppercase font-bold text-subdued">
+                  <span>Spatial Coordinates</span>
+                  <span class="text-[9px] text-muted lowercase">tap number for keypad</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                  <!-- FLOOR STEPPER -->
+                  <div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
+                    <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Floor</span>
+                    <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
+                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayFloorVal" onclick="activateDirectInput('Floor')">—</span>
+                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputFloorVal" inputmode="numeric" onblur="finishDirectInput('Floor')" onkeydown="if(event.key==='Enter')finishDirectInput('Floor')" pattern="[0-9-]*" type="text">
+                    </div>
+                    <div class="grid grid-cols-2 gap-1">
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', -1)" type="button">−</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', 1)" type="button">+</button>
+                    </div>
+                  </div>
+                  <!-- CABINET STEPPER -->
+                  <div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
+                    <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Cabinet</span>
+                    <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
+                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayCabVal" onclick="activateDirectInput('Cab')">—</span>
+                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputCabVal" inputmode="numeric" onblur="finishDirectInput('Cab')" onkeydown="if(event.key==='Enter')finishDirectInput('Cab')" pattern="[0-9]*" type="text">
+                    </div>
+                    <div class="grid grid-cols-2 gap-1">
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', -1)" type="button">−</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', 1)" type="button">+</button>
+                    </div>
+                  </div>
+                  <!-- SHELF STEPPER -->
+                  <div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
+                    <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Shelf / Extra</span>
+                    <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
+                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayShelfVal" onclick="activateDirectInput('Shelf')">—</span>
+                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputShelfVal" inputmode="numeric" onblur="finishDirectInput('Shelf')" onkeydown="if(event.key==='Enter')finishDirectInput('Shelf')" pattern="[0-9]*" type="text">
+                    </div>
+                    <div class="grid grid-cols-2 gap-1">
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', -1)" type="button">−</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', 1)" type="button">+</button>
+                    </div>
+                  </div>
+                </div>
+                <!-- Live Verified Breadcrumb Trail -->
+                <div class="bg-stone-100 border border-bordercol/60 rounded-[2px] px-2.5 py-1.5 flex items-center justify-between text-[11px] font-mono mt-1">
+                  <div class="flex items-center gap-1 text-ink truncate">
+                    <span class="text-subdued uppercase text-[9px] font-sans font-bold">Live:</span>
+                    <span class="font-semibold truncate" id="liveLocBreadcrumb">Unrecorded</span>
+                  </div>
+                  <span class="text-[10px] font-mono text-fern font-bold whitespace-nowrap ml-1" id="locValidBadge">✓ Validated</span>
+                </div>
+              </div>
+
+              <!-- SECTION C: STORED AS SECTION -->
+              <div class="space-y-2 pt-1 border-t border-stone-100">
+                <div class="flex items-center justify-between">
+                  <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued flex items-center gap-1.5">
+                    <span>Stored as</span>
+                  </label>
+                  <span class="text-[10px] font-mono text-ink font-semibold truncate max-w-[170px]" id="activeStoredAsLabel">Free standing</span>
+                </div>
+                <!-- 2x2 Quick-Select Option Grid -->
+                <div class="grid grid-cols-2 gap-2 text-xs font-mono" id="storageQuickGrid">
+                  <button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Free standing" onclick="handleStorageOptionSelect('Free standing', this)" type="button">
+                    <span class="font-semibold truncate">Free standing</span>
+                    <span class="w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5"></span>
+                  </button>
+                  <button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Petridish" onclick="handleStorageOptionSelect('Petridish', this)" type="button">
+                    <span class="font-medium truncate">Petridish</span>
+                    <span class="w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5"></span>
+                  </button>
+                  <button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Mounted on wooden platform" onclick="handleStorageOptionSelect('Mounted on wooden platform', this)" type="button">
+                    <span class="font-medium truncate">Mounted on platform</span>
+                    <span class="w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5"></span>
+                  </button>
+                  <button class="min-h-[44px] p-2.5 rounded-[2px] border border-dashed border-stone-400 hover:border-ink bg-stone-50 hover:bg-white text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" id="btnMoreStorageModal" onclick="openStoredAsBottomSheet()" type="button">
+                    <span class="font-semibold truncate text-muted" id="moreStorageBtnLabel">More...</span>
+                    <svg class="w-3.5 h-3.5 text-muted flex-none ml-1.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19.5 8.25l-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  </button>
+                </div>
+                <!-- Manual 'Stored as' Text Override -->
+                <div class="pt-1 space-y-1">
+                  <div class="relative flex items-center">
+                    <input class="w-full text-xs font-mono bg-alabaster border border-bordercol rounded-[2px] pl-2.5 pr-8 py-2 min-h-[38px] text-ink focus:bg-white focus:border-ink focus:outline-none transition-colors" id="manualStorageInput" oninput="onManualStorageChange(this.value)" placeholder="Or enter manual storage type..." type="text">
+                    <button class="absolute right-2 text-stone-400 hover:text-ink hidden tap-highlight-transparent p-1 leading-none text-xs font-mono font-bold" id="btnClearManualStorage" onclick="clearManualStorage()" title="Clear manual storage" type="button">✕</button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- Photo Container -->
-            <div
-              id="photoMainContainer"
-              onclick="loadInitialPhoto()"
-              class="relative w-full h-16 bg-ink/5 rounded-[2px] border border-bordercol overflow-hidden cursor-pointer group flex items-center justify-center transition-all duration-300"
-            >
-              <div id="photoPlaceholder" class="p-2 text-center text-xs text-ink-muted flex flex-col items-center gap-0.5">
-                <span class="text-xl">📷</span>
-                <p class="font-semibold text-fern" id="photoPlaceholderText">Tap to Load Archival Scans</p>
+            <!-- 3. COMPACT REPOSITORY STATUS -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-3 shadow-xs space-y-2">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-fern" id="loanStatusPillDot"></span>
+                  <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Availability Status</h2>
+                </div>
+                <span class="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] bg-fern-light text-fern border border-fern/30" id="loanStateIndicatorTag">In Repository</span>
               </div>
-              <img
-                id="specimenImg"
-                src=""
-                alt="Archival Specimen Plate"
-                class="hidden w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-200"
-                onload="onPhotoLoaded()"
-                onerror="onPhotoError()"
-              />
-              <div id="photoWatermark" class="hidden absolute bottom-1.5 left-1.5 bg-white/90 backdrop-blur-xs font-mono text-[9px] text-ink-muted px-1.5 py-0.5 rounded-[1px] border border-bordercol">
-                Archival Scan
+              <div class="grid grid-cols-2 p-1 bg-stone-100 border border-stone-200 rounded-[3px] gap-1">
+                <button class="py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-white text-ink border border-stone-300 min-h-[36px]" id="btnStatusAvailable" onclick="setLoanStatus(false)" type="button">
+                  <svg class="w-3.5 h-3.5 text-fern stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  <span>In Repository / Available</span>
+                </button>
+                <button class="py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]" id="btnStatusLoan" onclick="setLoanStatus(true)" type="button">
+                  <svg class="w-3.5 h-3.5 text-amber-600 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  <span>Loaned Out</span>
+                </button>
               </div>
-            </div>
-
-            <!-- Thumbnail Strip -->
-            <div id="photoThumbStrip" class="hidden flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              <!-- Thumbnails injected dynamically -->
+              <div class="p-2 bg-fern-light border border-fern/20 rounded-[2px] flex items-center justify-between text-[11px]" id="availableStatusBox">
+                <div class="flex items-center gap-1.5 text-fern font-medium">
+                  <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  <span>Ready for physical curation & inspection</span>
+                </div>
+                <span class="text-[10px] font-mono text-fern/90 bg-white/70 px-1 py-0.2 rounded border border-fern/20 font-bold">CIRC: CLEAR</span>
+              </div>
+              <div class="hidden p-2.5 bg-amber-50 border border-amber-300 rounded-[2px] space-y-1 text-xs" id="loanedStatusBox">
+                <div class="flex items-center justify-between text-[11px] font-mono text-amber-900 font-bold">
+                  <span>EXTERNAL LOAN</span>
+                  <span id="loanDateDisplay">Active</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Registration Groups Accordions -->
-          <div id="detailRegAccordionsContainer" class="space-y-3.5">
-            <!-- Rendered dynamically by renderDynamicForm() -->
+          <!-- ================= PANEL 2: DETAILS & ARCHIVAL SCANS ================= -->
+          <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentDetails">
+            <!-- Specimen Photo Card & Inspection Trigger -->
+            <div class="bg-surface border border-bordercol rounded-[3px] overflow-hidden shadow-sm">
+              <div class="relative bg-stone-900 group">
+                <div class="cursor-pointer relative h-48 w-full flex items-center justify-center bg-stone-800 overflow-hidden" onclick="openPhotoViewer()">
+                  <img id="specimenImg" src="" alt="Archival Specimen Plate" class="hidden w-full h-full object-contain p-1 transition-transform duration-300 group-hover:scale-105" onload="onPhotoLoaded()" onerror="onPhotoError()" />
+                  <div id="photoPlaceholder" class="p-4 text-center text-xs text-stone-400 flex flex-col items-center gap-1">
+                    <span class="text-2xl">📷</span>
+                    <p class="font-semibold text-fern-light" id="photoPlaceholderText">Tap to Load Archival Scans</p>
+                  </div>
+                  <!-- Tap to inspect badge -->
+                  <div class="absolute bottom-2.5 right-2.5 bg-black/75 backdrop-blur-xs text-white text-[10px] font-mono px-2 py-1 rounded-[2px] flex items-center gap-1">
+                    <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                    <span>Tap to Zoom</span>
+                  </div>
+                </div>
+                <!-- Photo bar actions -->
+                <div class="px-3 py-2 bg-surface flex items-center justify-between border-t border-bordercol text-xs">
+                  <div class="flex items-center gap-1.5 text-muted">
+                    <span class="font-mono text-[11px] font-medium text-ink" id="photoCountBadge">0 available</span>
+                  </div>
+                  <button type="button" class="font-medium text-slate hover:text-ink flex items-center gap-1 tap-highlight-transparent min-h-[36px]" onclick="openPhotoViewer()">
+                    <span>Fullscreen Viewer</span>
+                    <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Academic Taxonomic Profile Card -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3" id="taxonHierarchyCard">
+              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-sm">🧬</span>
+                  <div>
+                    <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Taxonomic Hierarchy</h2>
+                    <p class="text-[10px] font-mono text-subdued">Botanical nomenclature & authority</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span id="taxonAlertSummaryBadge" class="hidden text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-[2px] bg-brick-light text-brick border border-brick/30 flex items-center gap-1">
+                    <svg class="w-3 h-3 text-brick stroke-2 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
+                    </svg>
+                    <span id="taxonAlertSummaryText">0 Flagged</span>
+                  </span>
+                  <span class="text-[10px] font-mono text-fern font-medium flex items-center gap-1 bg-fern-light px-1.5 py-0.5 rounded-[2px] border border-fern/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-fern"></span>Matched
+                  </span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2.5 text-xs">
+                <!-- Genus -->
+                <div class="space-y-1 relative" id="fieldWrapper_Genus">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Genus">Genus</label>
+                    <div class="flex items-center gap-1" id="fieldControls_Genus">
+                      <span id="fieldAlert_Genus" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                    </div>
+                  </div>
+                  <input id="input_Genus" type="text" data-section="registration" data-field="Genus" class="w-full text-sm font-serif italic text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Genus', 'registration', this.value)" onblur="saveCurrentEdits()">
+                  <div id="unval_container_registration_Genus" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                    <input type="text" id="unval_input_registration_Genus" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Genus', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                  </div>
+                  <div id="history_container_Genus" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                </div>
+
+                <!-- Species -->
+                <div class="space-y-1 relative" id="fieldWrapper_Species">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Species">Species</label>
+                    <div class="flex items-center gap-1" id="fieldControls_Species">
+                      <span id="fieldAlert_Species" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                    </div>
+                  </div>
+                  <input id="input_Species" type="text" data-section="registration" data-field="Species" class="w-full text-sm font-serif italic text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Species', 'registration', this.value)" onblur="saveCurrentEdits()">
+                  <div id="unval_container_registration_Species" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                    <input type="text" id="unval_input_registration_Species" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Species', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                  </div>
+                  <div id="history_container_Species" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                </div>
+
+                <!-- Family -->
+                <div class="space-y-1 relative" id="fieldWrapper_Family">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Family">Family</label>
+                    <div class="flex items-center gap-1" id="fieldControls_Family">
+                      <span id="fieldAlert_Family" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                    </div>
+                  </div>
+                  <input id="input_Family" type="text" data-section="registration" data-field="Family" class="w-full text-xs font-sans font-medium text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Family', 'registration', this.value)" onblur="saveCurrentEdits()">
+                  <div id="unval_container_registration_Family" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                    <input type="text" id="unval_input_registration_Family" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Family', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                  </div>
+                  <div id="history_container_Family" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                </div>
+
+                <!-- Author -->
+                <div class="space-y-1 relative" id="fieldWrapper_Author">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Author">Author</label>
+                    <div class="flex items-center gap-1" id="fieldControls_Author">
+                      <span id="fieldAlert_Author" class="hidden text-[9px] font-mono font-bold text-brick bg-brick-light border border-brick/40 px-1 py-0.2 rounded-[2px] cursor-pointer tap-highlight-transparent" onclick="switchTab(2)" title="View in Problems tab">⚠</span>
+                    </div>
+                  </div>
+                  <div class="relative flex items-center">
+                    <input id="input_Author" type="text" data-section="registration" data-field="Author" class="w-full text-xs font-mono font-medium text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Author', 'registration', this.value)" onblur="saveCurrentEdits()">
+                    <button type="button" onclick="switchTab(2)" class="hidden absolute right-1.5 text-brick hover:text-ink tap-highlight-transparent" id="btnAuthorAlertIcon" title="Authority Citation. Tap to view conflict resolver in Problems tab.">
+                      <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
+                      </svg>
+                    </button>
+                  </div>
+                  <div id="unval_container_registration_Author" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                    <input type="text" id="unval_input_registration_Author" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Author', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                  </div>
+                  <div id="history_container_Author" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                </div>
+
+                <!-- Higher Classification / Rank (Full width row) -->
+                <div class="col-span-2 space-y-1 relative" id="fieldWrapper_Higher_Classification">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Higher_Classification">Higher Classification / Rank</label>
+                    <div class="flex items-center gap-1" id="fieldControls_Higher_Classification">
+                      <span id="fieldAlert_Higher_Classification" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                    </div>
+                  </div>
+                  <input id="input_Higher_Classification" type="text" data-section="registration" data-field="Higher Classification" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Higher Classification', 'registration', this.value)" onblur="saveCurrentEdits()">
+                  <div id="unval_container_registration_Higher_Classification" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                    <input type="text" id="unval_input_registration_Higher_Classification" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Higher Classification', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                  </div>
+                  <div id="history_container_Higher_Classification" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Collector & Provenance Data Card (Fixed card - NO Field No as requested) -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3" id="collectorProvenanceCard">
+              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-sm">📦</span>
+                  <div>
+                    <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Collector & Provenance Data</h2>
+                    <p class="text-[10px] font-mono text-subdued">Archival acquisition & locality records</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-2.5 text-xs">
+                <div class="grid grid-cols-2 gap-2.5">
+                  <!-- Collector -->
+                  <div class="space-y-1 relative" id="fieldWrapper_Collector">
+                    <div class="flex items-center justify-between">
+                      <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Collector">
+                        <span>👤 Collector</span>
+                      </label>
+                      <div class="flex items-center gap-1" id="fieldControls_Collector">
+                        <span id="fieldAlert_Collector" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                      </div>
+                    </div>
+                    <input id="input_Collector" type="text" data-section="registration" data-field="Collector" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Collector', 'registration', this.value)" onblur="saveCurrentEdits()">
+                    <div id="unval_container_registration_Collector" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                      <input type="text" id="unval_input_registration_Collector" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Collector', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                    </div>
+                    <div id="history_container_Collector" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                  </div>
+
+                  <!-- Collection Date -->
+                  <div class="space-y-1 relative" id="fieldWrapper_Collection_Date">
+                    <div class="flex items-center justify-between">
+                      <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Collection_Date">
+                        <span>📅 Date</span>
+                      </label>
+                      <div class="flex items-center gap-1" id="fieldControls_Collection_Date">
+                        <span id="fieldAlert_Collection_Date" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                      </div>
+                    </div>
+                    <input id="input_Collection_Date" type="text" data-section="registration" data-field="Collection Date" placeholder="YYYY-MM-DD" class="w-full text-xs font-mono text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Collection Date', 'registration', this.value)" onblur="saveCurrentEdits()">
+                    <div id="unval_container_registration_Collection_Date" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                      <input type="text" id="unval_input_registration_Collection_Date" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Collection Date', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                    </div>
+                    <div id="history_container_Collection_Date" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                  </div>
+                </div>
+
+                <!-- Collection Place / Locality (Full width) -->
+                <div class="space-y-1 relative" id="fieldWrapper_Collection_Place">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Collection_Place">
+                      <span>📍 Collection Place / Locality</span>
+                    </label>
+                    <div class="flex items-center gap-1" id="fieldControls_Collection_Place">
+                      <span id="fieldAlert_Collection_Place" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                    </div>
+                  </div>
+                  <input id="input_Collection_Place" type="text" data-section="registration" data-field="Collection Place" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Collection Place', 'registration', this.value)" onblur="saveCurrentEdits()">
+                  <div id="unval_container_registration_Collection_Place" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                    <input type="text" id="unval_input_registration_Collection_Place" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Collection Place', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                  </div>
+                  <div id="history_container_Collection_Place" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Object Preparation & Field Inscriptions Card (Fixed card) -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3" id="objectInscriptionsCard">
+              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-sm">🌿</span>
+                  <div>
+                    <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Object & Field Inscriptions</h2>
+                    <p class="text-[10px] font-mono text-subdued">Physical characteristics & label transcriptions</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-2.5 text-xs">
+                <div class="grid grid-cols-2 gap-2.5">
+                  <!-- Plant Part -->
+                  <div class="space-y-1 relative" id="fieldWrapper_Plant_Part">
+                    <div class="flex items-center justify-between">
+                      <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Plant_Part">Plant Part</label>
+                      <div class="flex items-center gap-1" id="fieldControls_Plant_Part">
+                        <span id="fieldAlert_Plant_Part" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                      </div>
+                    </div>
+                    <input id="input_Plant_Part" type="text" data-section="registration" data-field="Plant Part" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Plant Part', 'registration', this.value)" onblur="saveCurrentEdits()">
+                    <div id="unval_container_registration_Plant_Part" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                      <input type="text" id="unval_input_registration_Plant_Part" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Plant Part', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                    </div>
+                    <div id="history_container_Plant_Part" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                  </div>
+
+                  <!-- Variant -->
+                  <div class="space-y-1 relative" id="fieldWrapper_Variant">
+                    <div class="flex items-center justify-between">
+                      <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Variant">Variant</label>
+                      <div class="flex items-center gap-1" id="fieldControls_Variant">
+                        <span id="fieldAlert_Variant" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                      </div>
+                    </div>
+                    <input id="input_Variant" type="text" data-section="registration" data-field="Variant" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Variant', 'registration', this.value)" onblur="saveCurrentEdits()">
+                    <div id="unval_container_registration_Variant" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                      <input type="text" id="unval_input_registration_Variant" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Variant', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                    </div>
+                    <div id="history_container_Variant" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                  </div>
+                </div>
+
+                <!-- Box Label Inscription (Multiline Textarea) -->
+                <div class="space-y-1 relative" id="fieldWrapper_Box_Label">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Box_Label">
+                      <span>🏷 Box Label Inscription</span>
+                    </label>
+                    <div class="flex items-center gap-1" id="fieldControls_Box_Label">
+                      <span id="fieldAlert_Box_Label" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                    </div>
+                  </div>
+                  <textarea id="input_Box_Label" data-section="registration" data-field="Box Label" rows="2" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] p-2.5 transition-colors focus:outline-none resize-none" oninput="onFieldInputDirect('Box Label', 'registration', this.value)" onblur="saveCurrentEdits()"></textarea>
+                  <div id="unval_container_registration_Box_Label" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                    <input type="text" id="unval_input_registration_Box_Label" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Box Label', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                  </div>
+                  <div id="history_container_Box_Label" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                </div>
+
+                <!-- Registration Comment (Multiline Textarea) -->
+                <div class="space-y-1 relative" id="fieldWrapper_Comment">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Comment">
+                      <span>📝 Registration Comment</span>
+                    </label>
+                    <div class="flex items-center gap-1" id="fieldControls_Comment">
+                      <span id="fieldAlert_Comment" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
+                    </div>
+                  </div>
+                  <textarea id="input_Comment" data-section="registration" data-field="Comment" rows="2" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] p-2.5 transition-colors focus:outline-none resize-none" oninput="onFieldInputDirect('Comment', 'registration', this.value)" onblur="saveCurrentEdits()"></textarea>
+                  <div id="unval_container_registration_Comment" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
+                    <input type="text" id="unval_input_registration_Comment" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Comment', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
+                  </div>
+                  <div id="history_container_Comment" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. Dynamic Container for Any Additional Registration Fields -->
+            <div id="detailRegAccordionsContainer" class="space-y-3.5">
+              <!-- Rendered dynamically by renderDynamicForm() if schema has extra custom fields -->
+            </div>
+          </div>
+
+          <!-- ================= PANEL 3: PROBLEMS & CONFLICT RESOLVER ================= -->
+          <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentProblems">
+            <!-- Problem Summary Bar -->
+            <div class="flex items-center justify-between p-3 bg-stone-100 border border-stone-200 rounded-[3px] transition-colors duration-200" id="problemSummaryBar">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-fern" id="problemSummaryDot"></span>
+                <span class="text-xs font-bold text-ink uppercase font-mono" id="problemSummaryCountText">0 Active Discrepancies</span>
+              </div>
+              <span class="text-[10px] font-mono text-muted" id="problemSummaryActionText">Verified Clear</span>
+            </div>
+
+            <!-- Dynamic Active Conflict Cards Container -->
+            <div id="historicalConflictsContainer" class="space-y-3">
+              <!-- Rendered dynamically by renderHistoricalConflicts() -->
+            </div>
+
+            <!-- Quick Issue Flag Toggles Grid -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3">
+              <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">DATA INTEGRITY FLAGS (11 SCHEMA FIELDS)</h2>
+              <div class="grid grid-cols-2 gap-2" id="flagGrid">
+                <!-- Dynamically rendered problem pills -->
+              </div>
+            </div>
+
+            <!-- Curator Field Note Input -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-3 space-y-2 shadow-sm">
+              <label class="block text-[11px] font-bold text-ink uppercase tracking-wider">Curator Field Note / Observation</label>
+              <textarea class="w-full text-xs font-sans p-2 bg-alabaster border border-bordercol rounded-[2px] text-ink focus:bg-white focus:border-ink focus:outline-none resize-none" id="curatorNote" oninput="onCuratorNoteChange(this.value)" onblur="saveCurrentEdits()" placeholder="Record physical observations, glue deterioration, or accession anomalies..." rows="2"></textarea>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 5. STICKY BOTTOM ACTION BAR (Thumb Ergonomics) -->
+      <footer class="flex-none bg-surface border-t border-bordercol p-3 z-30 shadow-lg">
+        <div class="flex items-center justify-between px-1 mb-2 text-[11px] font-mono">
+          <!-- Live Host Connectivity Indicator -->
+          <div class="flex items-center gap-1.5 text-muted">
+            <span class="relative flex h-2 w-2">
+              <span id="footerConnDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span id="footerConnDot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span class="font-medium" id="footerTickerHost">Vault Host Sync</span>
+          </div>
+          <!-- Sync status ticker -->
+          <div class="text-muted flex items-center gap-1" id="footerSyncStatus">
+            <span class="font-mono text-fern-dark font-medium hidden" id="footerSyncStatusText">✓ Edit saved</span>
           </div>
         </div>
-
-        <!-- ========================================== -->
-        <!-- TAB 3: PROBLEMS & DISCREPANCIES            -->
-        <!-- ========================================== -->
-        <div id="tabContentProblems" class="hidden space-y-3.5">
-          <!-- Tier 1: Quick Problem Flags Checklist -->
-          <div id="problemFlagsCard" class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-2.5 shadow-xs">
-            <div class="flex items-center justify-between border-b border-tonal2 pb-2">
-              <div class="flex items-center gap-2">
-                <span class="text-[#C62828] font-bold text-sm">⚑</span>
-                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
-                  Quick Problem Flags
-                </h3>
-              </div>
-              <button
-                type="button"
-                onclick="openAddDiscrepancyModal()"
-                class="text-xs font-medium text-ink-muted hover:text-ink flex items-center gap-1 border border-bordercol bg-tonal1 hover:bg-tonal2 px-2 py-0.5 rounded-[2px] transition-colors touch-target-min"
-              >
-                <span>+</span>
-                <span>Flag Custom Issue</span>
-              </button>
-            </div>
-            <div id="problemTogglesContainer" class="grid grid-cols-2 gap-2 text-xs pt-1">
-              <!-- Dynamically generated from ui_sections.problems -->
-            </div>
-          </div>
-
-          <!-- Tier 2: Active Resolution Queue -->
-          <div id="activeIssuesCard" class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
-            <div class="flex items-center justify-between border-b border-tonal2 pb-2">
-              <div class="flex items-center gap-2">
-                <span class="text-[#C62828] font-bold text-sm">⚠</span>
-                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
-                  Active Resolution Queue
-                </h3>
-              </div>
-              <span id="activeIssuesCountBadge" class="hidden font-mono text-[10px] text-white bg-[#C62828] px-1.5 py-0.2 rounded-[2px] font-bold">
-                0
-              </span>
-            </div>
-
-            <!-- Problem Cards Injected Dynamically by renderProblemsTab() -->
-            <div id="problemResolverContainer" class="space-y-3">
-              <!-- Rendered dynamically -->
-            </div>
-          </div>
-
-          <!-- Tier 3: Historical Archive Conflicts -->
-          <div id="historicalSectionCard" class="bg-surface border border-bordercol rounded-[2px] p-3.5 space-y-3 shadow-xs">
-            <div class="flex items-center justify-between border-b border-tonal2 pb-2">
-              <div class="flex items-center gap-2">
-                <span class="text-[#0284C7] font-bold text-sm">📜</span>
-                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">
-                  Historical Archive Conflicts
-                </h3>
-              </div>
-              <span id="histConflictBadge" class="font-mono text-[10px] text-ink-muted bg-tonal1 border border-tonal3 px-1.5 py-0.2 rounded-[2px]">
-                0 conflicts
-              </span>
-            </div>
-
-            <!-- Historical comparison cards injected by renderHistoricalConflicts() -->
-            <div id="historicalConflictsContainer" class="space-y-2.5">
-              <!-- Rendered dynamically -->
-            </div>
-          </div>
-
-          <!-- Hidden fallback elements for compatibility -->
-          <div id="detailProblemBanner" class="hidden"><div id="detailProblemBadges" class="hidden"></div></div>
-          <div id="activeDiscrepanciesList" class="hidden"></div>
-        </div>
-
-        <!-- Hidden container fallback to prevent null reference if accessed -->
-        <div id="detailAccordionsContainer" class="hidden"></div>
-
-      </main>
-
-      <!-- Sticky Action Bar (Fixed to Screen Bottom) -->
-      <footer class="fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-bordercol shadow-[0_-4px_16px_rgba(0,0,0,0.08)] max-w-md mx-auto">
-        <div class="px-4 py-2.5">
-          <!-- Mini Status Ticker Bar -->
-          <div class="flex items-center justify-between text-[11px] mb-2 pb-1.5 border-b border-tonal2">
-            <div class="flex items-center gap-1.5" aria-live="polite">
-              <span class="relative flex h-2 w-2">
-                <span id="footerConnDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern"></span>
-                <span id="footerConnDot" class="relative inline-flex rounded-full h-2 w-2 bg-fern"></span>
-              </span>
-              <span class="font-mono text-ink-muted" id="footerTickerHost">
-                Host Connected
-              </span>
-            </div>
-
-            <div class="flex items-center gap-1" id="footerSyncStatus">
-              <span class="font-mono text-fern-dark font-medium hidden" id="footerSyncStatusText">✓ Edit saved</span>
-            </div>
-          </div>
-
-          <!-- Primary Action Button: Full-Width Mark Reviewed -->
-          <button
-            type="button"
-            id="btnMarkReviewed"
-            onclick="toggleReviewed()"
-            class="w-full py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm flex items-center justify-center gap-2 border-2 transition-all touch-target-min touch-press bg-surface text-ink border-bordercol hover:bg-tonal1 shadow-xs"
-          >
-            <span class="text-fern-dark text-base">✓</span>
-            <span id="btnReviewedLabel">Mark Reviewed</span>
-          </button>
-        </div>
+        <!-- High-Contrast Primary Audit Action: MARK REVIEWED -->
+        <button type="button" class="w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-white text-ink border-2 border-ink hover:bg-stone-50" id="btnPrimaryReview" onclick="toggleReviewed()">
+          <svg class="w-5 h-5 stroke-[2.2] text-current" fill="none" id="primaryReviewIcon" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"></circle>
+            <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <span id="primaryReviewText">MARK AS REVIEWED</span>
+        </button>
       </footer>
     </div>
 
     <!-- ========================================== -->
-    <!-- MODAL: FULLSCREEN PHOTO VIEWER             -->
+    <!-- 5. INTERACTIVE MORE... BOTTOM SHEET MODAL   -->
     <!-- ========================================== -->
-    <div id="photoViewerModal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col">
+    <div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end animate-fade-in hidden" id="storedAsBottomSheet" onclick="if(event.target===this)closeStoredAsBottomSheet()">
+      <div class="bg-surface border-t border-bordercol rounded-t-xl p-4 space-y-3 max-h-[80vh] overflow-y-auto shadow-2xl transition-transform duration-200">
+        <div class="flex items-center justify-between pb-2 border-b border-stone-200">
+          <div>
+            <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Additional Storage Vessels</h3>
+            <p class="text-[10px] font-mono text-subdued">Select botanical archival method</p>
+          </div>
+          <button class="p-1 text-muted hover:text-ink min-h-[36px] min-w-[36px] flex items-center justify-center font-mono text-sm" onclick="closeStoredAsBottomSheet()" type="button">✕</button>
+        </div>
+        <div class="space-y-1.5 font-mono text-xs">
+          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Herbarium Sheet')" type="button">
+            <div class="truncate">
+              <span class="font-bold block text-ink">Herbarium Sheet</span>
+              <span class="text-[10px] text-muted block">Cardstock 420x297mm archival standard</span>
+            </div>
+            <span class="text-xs text-muted">Select</span>
+          </button>
+          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Standard Box / Bin')" type="button">
+            <div class="truncate">
+              <span class="font-bold block text-ink">Standard Box / Bin</span>
+              <span class="text-[10px] text-muted block">Acid-free corrugated storage box</span>
+            </div>
+            <span class="text-xs text-muted">Select</span>
+          </button>
+          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Liquid / Glass Jar')" type="button">
+            <div class="truncate">
+              <span class="font-bold block text-ink">Liquid / Glass Jar</span>
+              <span class="text-[10px] text-muted block">70% EtOH spirit fluid preservative</span>
+            </div>
+            <span class="text-xs text-muted">Select</span>
+          </button>
+          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Capsule / Seed Envelope')" type="button">
+            <div class="truncate">
+              <span class="font-bold block text-ink">Capsule / Seed Envelope</span>
+              <span class="text-[10px] text-muted block">Glassine carpo-taxonomic pouch</span>
+            </div>
+            <span class="text-xs text-muted">Select</span>
+          </button>
+          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Microscope Slide')" type="button">
+            <div class="truncate">
+              <span class="font-bold block text-ink">Microscope Slide</span>
+              <span class="text-[10px] text-muted block">Canada balsam histological mount</span>
+            </div>
+            <span class="text-xs text-muted">Select</span>
+          </button>
+          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Oversized Folder')" type="button">
+            <div class="truncate">
+              <span class="font-bold block text-ink">Oversized Folder</span>
+              <span class="text-[10px] text-muted block">Double-width herbarium portfolio</span>
+            </div>
+            <span class="text-xs text-muted">Select</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 6. MODAL: FULLSCREEN PHOTO VIEWER          -->
+    <!-- ========================================== -->
+    <div id="photoViewerModal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col select-none">
       <!-- Modal Header -->
-      <header class="p-3 bg-black/40 text-white flex items-center justify-between border-b border-white/10 shrink-0">
-        <div class="flex items-center gap-2 text-xs font-mono">
-          <span class="text-fern-light font-bold" id="photoViewerTitle">Specimen Plate</span>
-          <span class="text-white/60" id="photoViewerCounter">(1/1)</span>
+      <header class="p-3.5 bg-stone-950/80 text-white flex items-center justify-between border-b border-stone-800 shrink-0">
+        <div>
+          <div class="text-xs font-mono font-bold text-stone-200" id="photoViewerTitle">Specimen Plate</div>
+          <div class="text-[11px] font-serif italic text-stone-400" id="photoViewerCounter">(1/1)</div>
         </div>
         <button
           type="button"
-          onclick="closeModal('photoViewerModal')"
-          class="p-2 text-white/80 hover:text-white rounded-[2px] text-lg font-bold touch-target-min"
+          onclick="closePhotoViewer()"
+          class="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-400 hover:text-white rounded-[3px] bg-stone-800/80 active:bg-stone-700 touch-target-min"
         >
-          ✕
+          <svg class="w-5 h-5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
         </button>
       </header>
 
       <!-- Viewport -->
       <div
         id="photoViewport"
-        class="flex-1 relative overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
+        class="flex-1 relative overflow-hidden flex items-center justify-center p-4 cursor-grab active:cursor-grabbing select-none"
         onmousedown="startPhotoDrag(event)"
         ontouchstart="startPhotoTouch(event)"
       >
@@ -7500,16 +7974,16 @@ INDEX_TEMPLATE_V2 = """
       </div>
 
       <!-- Controls Footer -->
-      <footer class="p-3 bg-black/60 text-white flex items-center justify-between border-t border-white/10 shrink-0 text-xs font-mono">
-        <div class="flex items-center gap-2">
-          <button type="button" onclick="zoomPhoto(-0.5)" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min">− Zoom</button>
-          <span id="zoomLevelDisplay" class="text-white/80 min-w-[40px] text-center">1.0x</span>
-          <button type="button" onclick="zoomPhoto(0.5)" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min">+ Zoom</button>
+      <footer class="flex-none p-3.5 bg-stone-950/90 border-t border-stone-800 flex items-center justify-between text-xs font-mono text-white">
+        <div class="flex items-center gap-1.5 bg-stone-900 p-1 rounded-[3px] border border-stone-800">
+          <button type="button" onclick="zoomPhoto(-0.5)" class="px-3 py-2 min-h-[44px] min-w-[44px] text-white hover:bg-stone-800 rounded active:bg-stone-700 flex items-center justify-center font-bold text-base">− Zoom</button>
+          <span id="zoomLevelDisplay" class="px-2 text-stone-300 text-xs min-w-[40px] text-center">1.0x</span>
+          <button type="button" onclick="zoomPhoto(0.5)" class="px-3 py-2 min-h-[44px] min-w-[44px] text-white hover:bg-stone-800 rounded active:bg-stone-700 flex items-center justify-center font-bold text-base">+ Zoom</button>
         </div>
 
         <div class="flex items-center gap-2">
-          <button type="button" onclick="rotatePhoto()" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min" title="Rotate 90°">↻ Rotate</button>
-          <button type="button" onclick="resetPhotoTransform()" class="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-[2px] touch-target-min">Reset</button>
+          <button type="button" onclick="rotatePhoto()" class="px-3 py-2 min-h-[44px] flex items-center gap-1.5 bg-stone-900 border border-stone-800 text-stone-200 rounded-[3px] active:bg-stone-800" title="Rotate 90°">↻ Rotate</button>
+          <button type="button" onclick="resetPhotoTransform()" class="px-3 py-2 min-h-[44px] bg-stone-800 text-stone-300 rounded-[3px] active:bg-stone-700">Reset</button>
         </div>
       </footer>
     </div>
@@ -8662,8 +9136,8 @@ INDEX_TEMPLATE_V2 = """
     function updateConnectionState(state) {
       const badge = document.getElementById('pingBadge');
       const footerHost = document.getElementById('footerTickerHost');
-      const dotHeader = document.getElementById('connPingDot');
-      const dotHeaderAnim = document.getElementById('connPingDotAnimate');
+      const dotsHeader = document.querySelectorAll('.conn-ping-dot');
+      const dotsHeaderAnim = document.querySelectorAll('.conn-ping-dot-animate');
       const dotFooter = document.getElementById('footerConnDot');
       const dotFooterAnim = document.getElementById('footerConnDotAnimate');
       const offlineBanner = document.getElementById('offlineBanner');
@@ -8675,13 +9149,17 @@ INDEX_TEMPLATE_V2 = """
         if (badge) badge.textContent = 'Live';
         if (footerHost) footerHost.textContent = 'Host Connected';
         if (offlineBanner) offlineBanner.classList.add('hidden');
-        [dotHeader, dotFooter].forEach(d => { if (d) d.className = 'relative inline-flex rounded-full h-2 w-2 bg-fern'; });
-        [dotHeaderAnim, dotFooterAnim].forEach(d => { if (d) d.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern'; });
+        dotsHeader.forEach(d => { d.className = 'conn-ping-dot relative inline-flex rounded-full h-2 w-2 bg-fern'; });
+        dotsHeaderAnim.forEach(d => { d.className = 'conn-ping-dot-animate animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern'; });
+        if (dotFooter) dotFooter.className = 'relative inline-flex rounded-full h-2 w-2 bg-fern';
+        if (dotFooterAnim) dotFooterAnim.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern';
       } else if (state === 'connecting') {
         if (badge) badge.textContent = 'Connecting...';
         if (footerHost) footerHost.textContent = 'Connecting to host...';
-        [dotHeader, dotFooter].forEach(d => { if (d) d.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember'; });
-        [dotHeaderAnim, dotFooterAnim].forEach(d => { if (d) d.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember'; });
+        dotsHeader.forEach(d => { d.className = 'conn-ping-dot relative inline-flex rounded-full h-2 w-2 bg-ember'; });
+        dotsHeaderAnim.forEach(d => { d.className = 'conn-ping-dot-animate animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember'; });
+        if (dotFooter) dotFooter.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember';
+        if (dotFooterAnim) dotFooterAnim.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember';
       } else {
         if (badge) badge.textContent = 'Offline';
         if (footerHost) footerHost.textContent = 'Host Disconnected';
@@ -8693,8 +9171,10 @@ INDEX_TEMPLATE_V2 = """
           bannerContent.innerHTML = `<span class="text-sm">⚠</span><span>Connection to host lost. Reconnecting...</span>`;
         }
         if (retryBtn) retryBtn.classList.remove('hidden');
-        [dotHeader, dotFooter].forEach(d => { if (d) d.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember-dark'; });
-        [dotHeaderAnim, dotFooterAnim].forEach(d => { if (d) d.className = 'hidden'; });
+        dotsHeader.forEach(d => { d.className = 'conn-ping-dot relative inline-flex rounded-full h-2 w-2 bg-ember-dark'; });
+        dotsHeaderAnim.forEach(d => { d.className = 'conn-ping-dot-animate hidden'; });
+        if (dotFooter) dotFooter.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember-dark';
+        if (dotFooterAnim) dotFooterAnim.className = 'hidden';
         if (syncStatusText) syncStatusText.classList.add('hidden');
       }
     }
@@ -8906,18 +9386,24 @@ INDEX_TEMPLATE_V2 = """
     }
 
     function updateWakeLockUI(active) {
-      const btn = document.getElementById('btnWakeLock');
-      const icon = document.getElementById('wakeLockIcon');
-      if (!btn || !icon) return;
-      if (active) {
-        btn.className = 'p-2 rounded-[2px] border transition-all touch-target-min bg-amber-400 text-black border-amber-600 ring-2 ring-amber-300 shadow-xs font-bold flex items-center justify-center';
-        icon.innerText = '☀️';
-        icon.classList.add('animate-spin-slow');
-      } else {
-        btn.className = 'p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center';
-        icon.innerText = '🌙';
-        icon.classList.remove('animate-spin-slow');
-      }
+      const btns = document.querySelectorAll('.btn-wake-lock');
+      const icons = document.querySelectorAll('.wake-lock-icon');
+      btns.forEach(btn => {
+        if (active) {
+          btn.className = 'btn-wake-lock p-2 rounded-[2px] border transition-all touch-target-min bg-amber-400 text-black border-amber-600 ring-2 ring-amber-300 shadow-xs font-bold flex items-center justify-center';
+        } else {
+          btn.className = 'btn-wake-lock p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center';
+        }
+      });
+      icons.forEach(icon => {
+        if (active) {
+          icon.innerText = '☀️';
+          icon.classList.add('animate-spin-slow');
+        } else {
+          icon.innerText = '🌙';
+          icon.classList.remove('animate-spin-slow');
+        }
+      });
     }
 
     async function acquireWakeLock(silent = false) {
@@ -9371,11 +9857,39 @@ INDEX_TEMPLATE_V2 = """
       return str.substring(0, idx) + '<mark class="bg-ember-light text-ember font-semibold px-0.5 rounded-[1px]">' + match + '</mark>' + str.substring(idx + q.length);
     }
 
+    async function quickToggleReviewed(oid, event) {
+      if (event) event.stopPropagation();
+      const item = objectList.find(o => String(o.id) === String(oid));
+      if (!item) return;
+      const wasReviewed = (item.review_status === 'reviewed') || (item.reviewed === true) || (item.is_reviewed === true);
+      const newStatus = wasReviewed ? 'pending' : 'reviewed';
+      item.review_status = newStatus;
+      item.reviewed = (newStatus === 'reviewed');
+      item.is_reviewed = (newStatus === 'reviewed');
+      renderList();
+
+      try {
+        await apiFetch(`/api/object/${encodeURIComponent(oid)}`, {
+          method: 'POST',
+          body: JSON.stringify({ review_status: newStatus })
+        });
+        if (currentRecord && String(currentRecord.id) === String(oid)) {
+          currentRecord.review_status = newStatus;
+          isReviewed = (newStatus === 'reviewed');
+          updateReviewButtonUI();
+        }
+        showToast(newStatus === 'reviewed' ? `✓ #${item.accession_number || oid} marked Reviewed` : `Unmarked #${item.accession_number || oid}`);
+        fetchList();
+      } catch (e) {
+        showToast('Failed to update status', true);
+      }
+    }
+
     function renderList() {
       const container = document.getElementById('specimenListContainer');
       if (objectList.length === 0) {
         container.innerHTML = `
-          <div class="bg-surface border border-bordercol rounded-[2px] p-8 text-center mt-4">
+          <div class="bg-surface border border-bordercol rounded-[3px] p-8 text-center mt-4 shadow-xs">
             <span class="text-3xl text-ink-faint">🌿</span>
             <p class="font-serif font-bold text-base text-ink mt-2">No specimens match filter</p>
             <p class="font-sans text-xs text-ink-muted mt-1">If no database is currently loaded, please open an Excel database in Arbor Desktop.</p>
@@ -9394,6 +9908,7 @@ INDEX_TEMPLATE_V2 = """
 
       container.innerHTML = sorted.map(s => {
         const statusBadge = renderStatusBadge(s);
+        const isRev = (s.review_status === 'reviewed') || (s.reviewed === true) || (s.is_reviewed === true);
 
         let locStr = [];
         if (s.location) {
@@ -9402,43 +9917,70 @@ INDEX_TEMPLATE_V2 = """
           if (s.location.cabinet) locStr.push(`Cab ${s.location.cabinet}`);
           if (s.location.stored_as) locStr.push(s.location.stored_as);
         }
-        const locDisplay = locStr.join(' • ') || 'Location unrecorded';
+        const locDisplay = locStr.join(' · ') || 'Location unrecorded';
+
+        // Active cabinet highlight
+        const isMatchingActiveCab = Boolean(
+          activeCabinet.building && s.location &&
+          s.location.building === activeCabinet.building &&
+          String(s.location.floor || '') === String(activeCabinet.floor || '') &&
+          String(s.location.cabinet || '') === String(activeCabinet.cabinet || '')
+        );
+
+        const cardBorder = isMatchingActiveCab ? 'border-fern/60 ring-1 ring-fern/30 bg-surface' : 'border-bordercol hover:border-borderdark bg-surface';
 
         return `
           <div
             onclick="loadSpecimen('${s.id}')"
-            class="bg-surface border border-bordercol hover:border-borderdark rounded-[2px] p-3.5 transition-all cursor-pointer touch-press shadow-xs"
+            class="${cardBorder} border rounded-[3px] p-3 transition-all cursor-pointer touch-press shadow-2xs space-y-2"
           >
-            <div class="flex items-center justify-between mb-1.5">
-              <div class="flex items-center gap-1.5">
-                <span class="font-mono text-xs font-bold text-ink-muted">
-                  ${highlightMatch(s.accession_number || s.id, searchQuery)}
+            <!-- Top row: Accession, Family, Status, 1-Tap Quick Review -->
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 truncate">
+                <span class="font-mono text-xs font-bold text-ink bg-stone-100 px-1.5 py-0.5 rounded-[2px] border border-stone-200 shrink-0">
+                  #${highlightMatch(s.accession_number || s.id, searchQuery)}
                 </span>
-                ${s.family ? `<span class="font-sans text-[10px] text-ink-faint bg-tonal1 px-1.5 py-0.2 rounded-[1px] border border-tonal3">${highlightMatch(s.family, searchQuery)}</span>` : ''}
+                ${s.family ? `<span class="font-sans text-[10px] text-muted bg-stone-50 border border-stone-200 px-1.5 py-0.5 rounded-[2px] truncate">${highlightMatch(s.family, searchQuery)}</span>` : ''}
               </div>
-              <div class="flex items-center gap-1">
+
+              <div class="flex items-center gap-1.5 shrink-0">
                 ${statusBadge}
-                ${s.has_unvalidated ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded-[2px] text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40">UNVAL</span>` : ''}
+                ${s.has_unvalidated ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded-[2px] text-[10px] font-bold bg-amber-500/20 text-amber-600 border border-amber-500/40">UNVAL</span>` : ''}
+                
+                <!-- Quick Review Toggle Button -->
+                <button
+                  type="button"
+                  onclick="quickToggleReviewed('${s.id}', event)"
+                  class="w-7 h-7 flex items-center justify-center rounded-[2px] border transition-colors tap-highlight-transparent ${isRev ? 'bg-fern text-white border-fern hover:bg-fern-dark' : 'bg-stone-100 text-stone-400 border-stone-200 hover:text-ink hover:bg-stone-200'}"
+                  title="${isRev ? 'Mark Unreviewed' : 'Mark Reviewed'}"
+                >
+                  <svg class="w-4 h-4 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
               </div>
             </div>
 
-            <h2 class="font-serif italic font-bold text-base text-ink leading-snug">
-              ${highlightMatch(s.scientific_name, searchQuery)}
-            </h2>
-
-            <div class="flex items-center gap-2 text-xs font-sans text-ink-muted mt-0.5">
-              ${s.author ? `<span class="text-ink font-medium">${highlightMatch(s.author, searchQuery)}</span>` : ''}
-              ${s.collector ? `<span>•</span> <span class="truncate max-w-[140px]">👤 ${highlightMatch(s.collector, searchQuery)}</span>` : ''}
+            <!-- Middle row: Scientific Name, Author, Collector -->
+            <div>
+              <h2 class="font-serif italic font-bold text-base text-ink leading-snug">
+                ${highlightMatch(s.scientific_name || 'Unidentified Specimen', searchQuery)}
+              </h2>
+              <div class="flex items-center gap-2 text-xs font-sans text-muted mt-0.5 truncate">
+                ${s.author ? `<span class="text-ink font-mono text-[11px]">${highlightMatch(s.author, searchQuery)}</span>` : ''}
+                ${s.collector ? `<span>•</span><span class="truncate max-w-[150px]">👤 ${highlightMatch(s.collector, searchQuery)}</span>` : ''}
+              </div>
             </div>
 
-            <div class="flex items-center justify-between mt-2.5 pt-2 border-t border-tonal2 text-xs">
-              <div class="flex items-center gap-1.5 text-ink truncate max-w-[240px]">
-                <span class="text-fern text-xs">📍</span>
-                <span class="font-mono text-[11px] text-ink-muted truncate">${locDisplay}</span>
+            <!-- Bottom row: Physical Location & Inspect link -->
+            <div class="flex items-center justify-between pt-1.5 border-t border-stone-100 text-xs">
+              <div class="flex items-center gap-1 text-ink truncate max-w-[260px]">
+                <span class="text-xs ${isMatchingActiveCab ? 'text-fern font-bold' : 'text-stone-400'}">📍</span>
+                <span class="font-mono text-[11px] ${isMatchingActiveCab ? 'text-fern font-semibold' : 'text-muted'} truncate">${locDisplay}</span>
               </div>
-              <div class="flex items-center gap-1 text-[11px] font-sans font-medium text-fern shrink-0">
+              <div class="flex items-center gap-0.5 text-[11px] font-mono font-medium text-slate hover:text-ink shrink-0">
                 <span>Inspect</span>
-                <span>&gt;</span>
+                <span class="text-xs">→</span>
               </div>
             </div>
           </div>
@@ -9505,9 +10047,81 @@ INDEX_TEMPLATE_V2 = """
     // ==========================================
     // SPECIMEN DETAIL VIEW & DYNAMIC FORM ENGINE
     // ==========================================
+    // ==========================================
+    // SPECIMEN DETAIL VIEW & TAB CONTROLLER
+    // ==========================================
+    let currentTabIndex = 0;
+
+    function switchTab(index) {
+      currentTabIndex = index;
+      const tabTrack = document.getElementById('tabTrack');
+      const tabIndicator = document.getElementById('tabIndicator');
+      const buttons = document.querySelectorAll('.tab-btn');
+
+      if (tabTrack) {
+        tabTrack.style.transform = `translateX(-${index * 33.333333}%)`;
+      }
+      if (tabIndicator) {
+        tabIndicator.style.transform = `translateX(${index * 100}%)`;
+      }
+
+      buttons.forEach((btn, idx) => {
+        if (idx === index) {
+          btn.classList.add('font-semibold', 'text-ink');
+          btn.classList.remove('text-muted');
+        } else {
+          btn.classList.remove('font-semibold', 'text-ink');
+          btn.classList.add('text-muted');
+        }
+      });
+
+      // Scroll active panel to top
+      const panels = [
+        document.getElementById('tabContentLocation'),
+        document.getElementById('tabContentDetails'),
+        document.getElementById('tabContentProblems')
+      ];
+      if (panels[index]) panels[index].scrollTop = 0;
+    }
+
+    // Swipe Gesture Engine for Mobile Panels
+    function initSwipeGestures() {
+      const swipeArea = document.getElementById('swipeArea');
+      if (!swipeArea) return;
+
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchEndX = 0;
+      let touchEndY = 0;
+
+      swipeArea.addEventListener('touchstart', (e) => {
+        if (!e.touches || e.touches.length === 0) return;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }, { passive: true });
+
+      swipeArea.addEventListener('touchend', (e) => {
+        if (!e.changedTouches || e.changedTouches.length === 0) return;
+        touchEndX = e.changedTouches[0].clientX;
+        touchEndY = e.changedTouches[0].clientY;
+        handleSwipeGesture();
+      }, { passive: true });
+
+      function handleSwipeGesture() {
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 45) {
+          if (deltaX < 0 && currentTabIndex < 2) {
+            switchTab(currentTabIndex + 1);
+          } else if (deltaX > 0 && currentTabIndex > 0) {
+            switchTab(currentTabIndex - 1);
+          }
+        }
+      }
+    }
+
     async function loadSpecimen(oid, fromHistory = false) {
       // Flush any pending debounced save for the outgoing specimen BEFORE currentOid changes.
-      // Without this, navigating via prev/next saves the old form data under the new specimen's OID.
       if (autoSaveTimer !== null) {
         clearTimeout(autoSaveTimer);
         autoSaveTimer = null;
@@ -9536,56 +10150,49 @@ INDEX_TEMPLATE_V2 = """
 
       showDetailView();
 
-      // Reset scroll position to top
-      document.querySelector('#detailView main').scrollTop = 0;
+      // Reset active tab to Location (0)
+      switchTab(0);
 
       // Update Nav Index
-      const idx = objectList.findIndex(o => o.id === oid);
+      const idx = objectList.findIndex(o => String(o.id) === String(oid));
       if (idx !== -1) {
-        document.getElementById('detailNavIndex').textContent = `${idx + 1} of ${objectList.length}`;
-        document.getElementById('btnPrevSpecimen').disabled = (idx === 0);
-        document.getElementById('btnNextSpecimen').disabled = (idx === objectList.length - 1);
+        const curRecNum = document.getElementById('currentRecordNum');
+        const totRecNum = document.getElementById('totalRecordsNum');
+        if (curRecNum) curRecNum.textContent = idx + 1;
+        if (totRecNum) totRecNum.textContent = objectList.length;
+
+        const btnPrev = document.getElementById('btnPrevSpecimen');
+        const btnNext = document.getElementById('btnNextSpecimen');
+        if (btnPrev) btnPrev.disabled = (idx === 0);
+        if (btnNext) btnNext.disabled = (idx === objectList.length - 1);
       }
 
-      // Set Instant Loading State (Clears stale specimen data)
-      document.getElementById('detailAccession').textContent = `#${oid}`;
-      document.getElementById('detailScientificName').innerHTML = '<span class="text-ink-muted animate-pulse font-serif italic">Loading specimen record...</span>';
-      document.getElementById('detailAuthor').textContent = '';
-      document.getElementById('detailFamily').textContent = '';
-      document.getElementById('detailTopLocation').textContent = 'Location: Retrieving...';
-      document.getElementById('detailReviewStatusBadge').innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-medium bg-tonal2 text-ink-muted border border-bordercol animate-pulse">⏳ LOADING</span>';
-      
-      // Skeleton placeholders for tabs
-      const locTab = document.getElementById('tabContentLocation');
-      const regTab = document.getElementById('detailRegAccordionsContainer');
-      const legAcc = document.getElementById('detailAccordionsContainer');
-      const skeletonHtml = `
-        <div class="bg-surface border border-bordercol rounded-[2px] p-4 space-y-3 animate-pulse">
-          <div class="h-4 bg-tonal2 rounded-[2px] w-1/3"></div>
-          <div class="h-9 bg-tonal1 rounded-[2px] w-full"></div>
-          <div class="h-9 bg-tonal1 rounded-[2px] w-full"></div>
-        </div>
-      `;
-      if (locTab) locTab.innerHTML = skeletonHtml;
-      if (regTab) regTab.innerHTML = skeletonHtml;
-      if (legAcc) legAcc.innerHTML = skeletonHtml;
-
-      // Reset Photo State
-      document.getElementById('photoPlaceholder').classList.remove('hidden');
-      document.getElementById('specimenImg').classList.add('hidden');
-      document.getElementById('photoWatermark').classList.add('hidden');
-      document.getElementById('specimenImg').src = '';
-      const thumbStrip = document.getElementById('photoThumbStrip');
-      if (thumbStrip) {
-        thumbStrip.classList.add('hidden');
-        thumbStrip.innerHTML = '';
-      }
+      // Instant Loading State
+      const accEl = document.getElementById('detailAccession');
+      if (accEl) accEl.textContent = `#${oid}`;
+      const sciEl = document.getElementById('detailScientificName');
+      if (sciEl) sciEl.innerHTML = '<span class="text-stone-400 animate-pulse font-serif italic">Loading specimen record...</span>';
+      const authEl = document.getElementById('detailAuthor');
+      if (authEl) authEl.textContent = '—';
+      const famEl = document.getElementById('detailFamily');
+      if (famEl) famEl.textContent = '—';
+      const headerLoc = document.getElementById('headerLocSummary');
+      if (headerLoc) headerLoc.textContent = 'Retrieving...';
 
       // Hide Undo button on explicit specimen navigation
       const undoBtn = document.getElementById('btnMobileUndo');
       if (undoBtn) {
-          undoBtn.classList.add('hidden');
-          undoBtn.classList.remove('flex');
+        undoBtn.classList.add('hidden');
+        undoBtn.classList.remove('flex');
+      }
+
+      // Reset Photo State
+      const photoPlace = document.getElementById('photoPlaceholder');
+      const photoImg = document.getElementById('specimenImg');
+      if (photoPlace) photoPlace.classList.remove('hidden');
+      if (photoImg) {
+        photoImg.classList.add('hidden');
+        photoImg.src = '';
       }
 
       try {
@@ -9598,64 +10205,58 @@ INDEX_TEMPLATE_V2 = """
         }
 
         // Top Summary Info
-        document.getElementById('detailAccession').textContent = `#${data.accession_number || data.id}`;
-        document.getElementById('detailScientificName').textContent = data.scientific_name || 'Specimen';
-        document.getElementById('detailAuthor').textContent = data.registration ? (data.registration.Author || '') : '';
-        document.getElementById('detailFamily').textContent = data.registration ? (data.registration.Family || '') : '';
+        if (accEl) accEl.textContent = `#${data.accession_number || data.id}`;
+        if (sciEl) sciEl.textContent = data.scientific_name || 'Specimen';
+        if (authEl) authEl.textContent = (data.registration && data.registration.Author) ? data.registration.Author : '—';
+        if (famEl) famEl.textContent = (data.registration && data.registration.Family) ? data.registration.Family : '—';
 
-        let locStr = [];
-        if (data.observation) {
-          if (data.observation.Building) locStr.push(data.observation.Building);
-          if (data.observation.Floor) locStr.push(`Floor ${data.observation.Floor}`);
-          if (data.observation.Cabinet) locStr.push(`Cab ${data.observation.Cabinet}`);
-          if (data.observation["Stored as"]) locStr.push(data.observation["Stored as"]);
-        }
-        document.getElementById('detailTopLocation').textContent = locStr.length > 0 ? `Location: ${locStr.join(' • ')}` : 'Location: Unrecorded';
+        // Direct Taxonomy Inputs (Tab 2 Header)
+        const inGen = document.getElementById('input_Genus');
+        const inSp = document.getElementById('input_Species');
+        const inFam = document.getElementById('input_Family');
+        const inAuth = document.getElementById('input_Author');
+        if (inGen) inGen.value = (data.registration && data.registration.Genus) || '';
+        if (inSp) inSp.value = (data.registration && data.registration.Species) || '';
+        if (inFam) inFam.value = (data.registration && data.registration.Family) || '';
+        if (inAuth) inAuth.value = (data.registration && data.registration.Author) || '';
 
+        // Refresh Location UI (Tab 1)
+        refreshLocUI();
+
+        // Update Review Button Status
         updateReviewButtonUI();
 
-        // Load Photos & Thumbnails
+        // Load Photos
         photoUrls = (data.images && data.images.online_urls) ? data.images.online_urls : [];
-        document.getElementById('photoCountBadge').textContent = `${photoUrls.length} available`;
-        const mainContainer = document.getElementById('photoMainContainer');
-        const placeholder = document.getElementById('photoPlaceholder');
-        const specimenImg = document.getElementById('specimenImg');
-        const watermark = document.getElementById('photoWatermark');
-
-        // Reset to collapsed state
-        mainContainer.classList.remove('h-52');
-        mainContainer.classList.add('h-16');
-        mainContainer.setAttribute('onclick', 'loadInitialPhoto()');
-        const placeholderText = document.getElementById('photoPlaceholderText');
+        const photoBadge = document.getElementById('photoCountBadge');
+        if (photoBadge) photoBadge.textContent = `${photoUrls.length} available`;
 
         if (photoUrls.length > 0) {
           currentPhotoIdx = 0;
-          placeholder.innerHTML = `
-            <span class="text-xl">📷</span>
-            <p class="font-semibold text-fern" id="photoPlaceholderText">Tap to Load ${photoUrls.length} Archival Scan${photoUrls.length > 1 ? 's' : ''}</p>
-          `;
-          placeholder.classList.remove('hidden');
-          specimenImg.classList.add('hidden');
-          watermark.classList.add('hidden');
-          mainContainer.classList.add('cursor-pointer');
-          mainContainer.classList.remove('cursor-default');
-          const strip = document.getElementById('photoThumbStrip');
-          if (strip) { strip.classList.add('hidden'); strip.innerHTML = ''; }
+          if (photoPlace) {
+            photoPlace.innerHTML = `
+              <span class="text-2xl">📷</span>
+              <p class="font-semibold text-fern-light" id="photoPlaceholderText">Tap to Load ${photoUrls.length} Archival Scan${photoUrls.length > 1 ? 's' : ''}</p>
+            `;
+            photoPlace.classList.remove('hidden');
+          }
+          if (photoImg) {
+            photoImg.src = photoUrls[0];
+            photoImg.classList.remove('hidden');
+            if (photoPlace) photoPlace.classList.add('hidden');
+          }
         } else {
-          placeholder.innerHTML = `
-            <span class="text-xl text-ink-faint">📷</span>
-            <p class="font-sans text-[11px] font-semibold text-ink-muted">No Archival Scans Attached</p>
-          `;
-          placeholder.classList.remove('hidden');
-          specimenImg.classList.add('hidden');
-          watermark.classList.add('hidden');
-          mainContainer.classList.remove('cursor-pointer');
-          mainContainer.classList.add('cursor-default');
-          const strip = document.getElementById('photoThumbStrip');
-          if (strip) { strip.classList.add('hidden'); strip.innerHTML = ''; }
+          if (photoPlace) {
+            photoPlace.innerHTML = `
+              <span class="text-2xl text-stone-500">📷</span>
+              <p class="font-sans text-[11px] font-semibold text-stone-400">No Archival Scans Attached</p>
+            `;
+            photoPlace.classList.remove('hidden');
+          }
+          if (photoImg) photoImg.classList.add('hidden');
         }
 
-        // Render Dynamic Forms Driven by config.py
+        // Render Dynamic Form Accordions for Registration Groups
         currentUnvalidatedMap = {};
         if (data.unvalidated_sources && Array.isArray(data.unvalidated_sources)) {
           data.unvalidated_sources.forEach(u => {
@@ -9663,64 +10264,14 @@ INDEX_TEMPLATE_V2 = """
           });
         }
         renderDynamicForm(activeSchema, data);
+        updateTaxonProblemAlerts(data);
 
-        // Update Problem Summary Banner
-        const banner = document.getElementById('detailProblemBanner');
-        const badgeContainer = document.getElementById('detailProblemBadges');
-        const activeProbFields = [];
-        const unknownFields = [];
-
-        if (activeSchema && activeSchema.ui_sections) {
-          const allFields = (activeSchema.ui_sections.registration || []).concat(activeSchema.ui_sections.location || []);
-          allFields.forEach(f => {
-            const val = (data.registration && data.registration[f.name] !== undefined) ? data.registration[f.name] : (data.observation ? data.observation[f.name] : '');
-            if (isFieldProblemActive(f.name, 'registration', data) || isFieldProblemActive(f.name, 'observation', data)) {
-              if (!activeProbFields.includes(f.name)) activeProbFields.push(f.name);
-            } else if (isValueUnknown(val)) {
-              if (!unknownFields.includes(f.name)) unknownFields.push(f.name);
-            }
-          });
-        }
-
-        if (activeProbFields.length > 0 || unknownFields.length > 0) {
-          banner.classList.remove('hidden');
-          let chipsHtml = '';
-          activeProbFields.forEach(fName => {
-            const inputId = `input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-            chipsHtml += `
-              <button
-                type="button"
-                onclick="scrollToField('${inputId}', '${fName}')"
-                class="px-2 py-1 bg-[#C62828] text-white text-[11px] font-bold rounded-[2px] shadow-xs flex items-center gap-1 touch-press hover:bg-[#b71c1c]"
-                title="Jump to ${fName}"
-              >
-                <span>⚠</span>
-                <span>${fName}</span>
-              </button>
-            `;
-          });
-          unknownFields.forEach(fName => {
-            const inputId = `input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-            chipsHtml += `
-              <button
-                type="button"
-                onclick="scrollToField('${inputId}', '${fName}')"
-                class="px-2 py-1 bg-[#FBC02D] text-[#2c302e] text-[11px] font-bold rounded-[2px] shadow-xs flex items-center gap-1 touch-press hover:bg-[#f9a825]"
-                title="Jump to ${fName}"
-              >
-                <span>?</span>
-                <span>${fName}</span>
-              </button>
-            `;
-          });
-          badgeContainer.innerHTML = chipsHtml;
-        } else {
-          banner.classList.add('hidden');
-          badgeContainer.innerHTML = '';
-        }
-
-        // Render Problems & Discrepancies
-        renderDiscrepancies(data);
+        // Render Problems (Tab 3)
+        renderProblemFlagGrid(data);
+        const curNote = document.getElementById('curatorNote');
+        if (curNote) curNote.value = (data.observation && data.observation.Comment) ? data.observation.Comment : '';
+        updateProblemSummaryBar(data);
+        renderHistoricalConflicts(data);
 
         // Fetch Historical Data
         revertState = {};
@@ -9728,564 +10279,607 @@ INDEX_TEMPLATE_V2 = """
 
       } catch (err) {
         console.error("Failed to load specimen details:", err);
-        document.getElementById('detailScientificName').textContent = 'Error Loading Specimen';
+        if (sciEl) sciEl.textContent = 'Error Loading Specimen';
         showToast('Failed to load specimen data from host', true);
       }
     }
 
     function navSpecimen(offset) {
-      const idx = objectList.findIndex(o => o.id === currentOid);
+      const idx = objectList.findIndex(o => String(o.id) === String(currentOid));
       if (idx !== -1 && objectList[idx + offset]) {
         loadSpecimen(objectList[idx + offset].id);
       }
     }
 
-    function isFieldProblemActive(fieldName, section, record) {
-      if (!record) return false;
-      const issues = record.flagged_issues || [];
-      if (issues.some(iss => (iss.field === fieldName || iss.id === fieldName) && !iss.resolved)) {
-        return true;
-      }
-      const obs = record.observation || {};
-      const reg = record.registration || {};
-
-      // 1. Direct Problem Column Check (e.g. Genus_Problem)
-      const directProb = `${fieldName}_Problem`;
-      if (obs[directProb] === true || String(obs[directProb]).toLowerCase() === 'true' || obs[directProb] === '1' ||
-          reg[directProb] === true || String(reg[directProb]).toLowerCase() === 'true' || reg[directProb] === '1') {
-        return true;
-      }
-
-      // 2. Mapped Problem Columns from Schema
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-        for (const p of activeSchema.ui_sections.problems) {
-          const target = p.maps_to || p.target;
-          if (target === fieldName || (!target && p.name.replace(/_Problem$/, '') === fieldName)) {
-            const pVal = (obs[p.name] !== undefined) ? obs[p.name] : reg[p.name];
-            if (pVal === true || String(pVal).toLowerCase() === 'true' || pVal === '1' || pVal === 'x') {
-              return true;
-            }
-          }
-        }
-      }
-
-      // 3. Location section general problem
-      if (section === 'observation' && (obs.Loc_Problem === true || String(obs.Loc_Problem).toLowerCase() === 'true' || obs.Loc_Problem === '1')) {
-        return true;
-      }
-
-      return false;
-    }
-
-    function isValueUnknown(val) {
-      if (val === null || val === undefined) return false;
-      const s = String(val).trim().toLowerCase();
-      return ['ukjent', 'unknown', '?', '-', 'nan',
-              'unknown:missing', 'unknown:indecipherable',
-              'unknown:undigitized', 'withheld'].includes(s);
-    }
-
-    function scrollToField(inputId, fName) {
-      let el = document.getElementById(inputId);
-      if (!el && fName) {
-        el = document.getElementById(`input_observation_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`) ||
-             document.getElementById(`input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`);
-      }
-      if (el) {
-        if (document.getElementById('tabContentLocation') && document.getElementById('tabContentLocation').contains(el)) {
-          switchDetailTab('location');
-        } else if (document.getElementById('tabContentDetails') && document.getElementById('tabContentDetails').contains(el)) {
-          switchDetailTab('details');
-        } else if (document.getElementById('tabContentProblems') && document.getElementById('tabContentProblems').contains(el)) {
-          switchDetailTab('problems');
-        }
-
-        const accordion = el.closest('.accordion');
-        if (accordion) {
-          const content = accordion.querySelector('.acc-content');
-          const icon = accordion.querySelector('.acc-icon');
-          if (content && content.classList.contains('hidden')) {
-            content.classList.remove('hidden');
-            content.classList.add('block');
-            accordion.classList.add('acc-open');
-            if (icon) icon.textContent = '▲';
-          }
-        }
-        setTimeout(() => {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.focus();
-          el.classList.add('ring-2', 'ring-ember');
-          setTimeout(() => el.classList.remove('ring-2', 'ring-ember'), 1500);
-        }, 60);
-      }
-    }
-
-        async function toggleFieldProblem(fieldName) {
+    // ==========================================
+    // LOCATION TAB 1 LOGIC & BINDINGS
+    // ==========================================
+    function refreshLocUI() {
       if (!currentRecord) return;
-      if (currentRecord.flagged_issues) {
-        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.field !== fieldName && i.id !== fieldName);
-      }
-      currentRecord.observation = currentRecord.observation || {};
-      const probCol = `${fieldName}_Problem`;
-      if (currentRecord.observation[probCol] !== undefined) {
-        currentRecord.observation[probCol] = false;
-      }
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-        for (const p of activeSchema.ui_sections.problems) {
-          if (p.maps_to === fieldName || p.target === fieldName) {
-            currentRecord.observation[p.name] = false;
-          }
+      const obs = currentRecord.observation || {};
+
+      // Building
+      const bldg = obs.Building || '';
+      const chips = document.querySelectorAll('.bldg-chip');
+      let matchedStandard = false;
+      chips.forEach(chip => {
+        const bName = chip.getAttribute('data-building');
+        if (bName === bldg) {
+          matchedStandard = true;
+          chip.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-stone-800 text-white border-stone-800';
+        } else {
+          chip.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs';
         }
-      }
-      if (fieldName === 'Location') {
-        currentRecord.observation.Loc_Problem = false;
+      });
+
+      const customWrap = document.getElementById('customBuildingWrap');
+      const customInput = document.getElementById('customBuildingInput');
+      if (!matchedStandard && bldg) {
+        if (customWrap) customWrap.classList.remove('hidden');
+        if (customInput) customInput.value = bldg;
       }
 
-      renderDynamicForm(activeSchema, currentRecord);
-      renderDiscrepancies(currentRecord);
-      updateReviewButtonUI();
-      await saveCurrentEdits();
-      showToast(`Resolved problem for ${fieldName}`);
+      // Steppers: Floor, Cabinet, Shelf/Extra
+      const flVal = (obs.Floor !== undefined && obs.Floor !== null && String(obs.Floor).trim() !== '') ? String(obs.Floor) : '—';
+      const cabVal = (obs.Cabinet !== undefined && obs.Cabinet !== null && String(obs.Cabinet).trim() !== '') ? String(obs.Cabinet) : '—';
+      const shelfVal = (obs.Extra !== undefined && obs.Extra !== null && String(obs.Extra).trim() !== '') ? String(obs.Extra) : (obs.Shelf !== undefined ? String(obs.Shelf) : '—');
+
+      const dispFl = document.getElementById('displayFloorVal');
+      const dispCab = document.getElementById('displayCabVal');
+      const dispShelf = document.getElementById('displayShelfVal');
+      if (dispFl) dispFl.textContent = flVal;
+      if (dispCab) dispCab.textContent = cabVal;
+      if (dispShelf) dispShelf.textContent = shelfVal;
+
+      // Breadcrumbs & Header Location
+      let locParts = [];
+      if (bldg) locParts.push(bldg);
+      if (flVal !== '—') locParts.push(`Fl ${flVal}`);
+      if (cabVal !== '—') locParts.push(`Cab ${cabVal}`);
+      if (shelfVal !== '—') locParts.push(`Shelf ${shelfVal}`);
+
+      const locSummaryStr = locParts.length > 0 ? locParts.join(' · ') : 'Unrecorded';
+      const headerLoc = document.getElementById('headerLocSummary');
+      if (headerLoc) headerLoc.textContent = locSummaryStr;
+      const liveBreadcrumb = document.getElementById('liveLocBreadcrumb');
+      if (liveBreadcrumb) liveBreadcrumb.textContent = locSummaryStr;
+
+      const locValidBadge = document.getElementById('locValidBadge');
+      if (locValidBadge) {
+        if (obs.Loc_Problem) {
+          locValidBadge.textContent = '⚠ Discrepancy';
+          locValidBadge.className = 'text-[10px] font-mono text-brick font-bold whitespace-nowrap ml-1';
+        } else if (locParts.length > 0) {
+          locValidBadge.textContent = '✓ Validated';
+          locValidBadge.className = 'text-[10px] font-mono text-fern font-bold whitespace-nowrap ml-1';
+        } else {
+          locValidBadge.textContent = '○ Unset';
+          locValidBadge.className = 'text-[10px] font-mono text-muted whitespace-nowrap ml-1';
+        }
+      }
+
+      // Stored As
+      const storedVal = obs['Stored as'] || '';
+      const activeStoredLabel = document.getElementById('activeStoredAsLabel');
+      if (activeStoredLabel) activeStoredLabel.textContent = storedVal || 'Unspecified';
+
+      const manualStorage = document.getElementById('manualStorageInput');
+      const clearManualStorageBtn = document.getElementById('btnClearManualStorage');
+      if (manualStorage && manualStorage !== document.activeElement) {
+        manualStorage.value = storedVal;
+      }
+      if (clearManualStorageBtn) {
+        if (storedVal) clearManualStorageBtn.classList.remove('hidden');
+        else clearManualStorageBtn.classList.add('hidden');
+      }
+
+      // Quick storage grid buttons
+      const storageBtns = document.querySelectorAll('.storage-quick-btn');
+      let matchedQuickStorage = false;
+      storageBtns.forEach(sBtn => {
+        const sName = sBtn.getAttribute('data-storage-name');
+        const dot = sBtn.querySelector('span:last-child');
+        if (sName === storedVal) {
+          matchedQuickStorage = true;
+          sBtn.className = 'storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border-2 border-ink bg-stone-100 text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-xs';
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-ink border border-ink flex-none ml-1.5';
+        } else {
+          sBtn.className = 'storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs';
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5';
+        }
+      });
+
+      const moreStorageLabel = document.getElementById('moreStorageBtnLabel');
+      if (moreStorageLabel) {
+        if (!matchedQuickStorage && storedVal) {
+          moreStorageLabel.textContent = storedVal;
+          moreStorageLabel.className = 'font-bold truncate text-ink';
+        } else {
+          moreStorageLabel.textContent = 'More...';
+          moreStorageLabel.className = 'font-semibold truncate text-muted';
+        }
+      }
+
+      // Copy Previous Specimen Button Readout
+      const currIdx = objectList.findIndex(o => String(o.id) === String(currentOid));
+      const copyBtn = document.getElementById('btnCopyPrevSpecimen');
+      const copyTitle = document.getElementById('copyTitleSpan');
+      const copySubtitle = document.getElementById('copySubtitleSpan');
+      if (copyBtn && copyTitle && copySubtitle) {
+        if (currIdx > 0) {
+          const prevObj = objectList[currIdx - 1];
+          const prevLoc = prevObj.location || {};
+          const prevLocStr = [prevLoc.building, prevLoc.floor ? `Fl ${prevLoc.floor}` : '', prevLoc.cabinet ? `Cab ${prevLoc.cabinet}` : '', prevLoc.stored_as].filter(Boolean).join(' · ');
+          copyTitle.textContent = `Copy from #${prevObj.accession_number || prevObj.id}`;
+          copySubtitle.textContent = prevLocStr || 'Duplicate previous specimen coordinates';
+          copyBtn.disabled = false;
+          copyBtn.classList.remove('opacity-40');
+        } else {
+          copyTitle.textContent = 'Copy from Previous Specimen';
+          copySubtitle.textContent = 'No preceding specimen in active batch';
+          copyBtn.disabled = true;
+          copyBtn.classList.add('opacity-40');
+        }
+      }
+
+      // Availability / Loan Status
+      const isLoaned = Boolean(obs['Loaned out'] === true || String(obs['Loaned out']).toLowerCase() === 'true' || obs['Loaned out'] === '1');
+      const btnAvail = document.getElementById('btnStatusAvailable');
+      const btnLoan = document.getElementById('btnStatusLoan');
+      const availBox = document.getElementById('availableStatusBox');
+      const loanBox = document.getElementById('loanedStatusBox');
+      const loanPillDot = document.getElementById('loanStatusPillDot');
+      const loanIndicatorTag = document.getElementById('loanStateIndicatorTag');
+      const loanDateDisp = document.getElementById('loanDateDisplay');
+
+      if (isLoaned) {
+        if (btnAvail) btnAvail.className = 'py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]';
+        if (btnLoan) btnLoan.className = 'py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-white text-ink border border-stone-300 min-h-[36px]';
+        if (availBox) availBox.classList.add('hidden');
+        if (loanBox) loanBox.classList.remove('hidden');
+        if (loanPillDot) loanPillDot.className = 'w-2 h-2 rounded-full bg-amber-500';
+        if (loanIndicatorTag) {
+          loanIndicatorTag.textContent = 'Loaned Out';
+          loanIndicatorTag.className = 'text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] bg-amber-50 text-amber-800 border border-amber-300';
+        }
+        if (loanDateDisp) loanDateDisp.textContent = obs['Loaned out date'] || 'Active';
+      } else {
+        if (btnAvail) btnAvail.className = 'py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-white text-ink border border-stone-300 min-h-[36px]';
+        if (btnLoan) btnLoan.className = 'py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]';
+        if (availBox) availBox.classList.remove('hidden');
+        if (loanBox) loanBox.classList.add('hidden');
+        if (loanPillDot) loanPillDot.className = 'w-2 h-2 rounded-full bg-fern';
+        if (loanIndicatorTag) {
+          loanIndicatorTag.textContent = 'In Repository';
+          loanIndicatorTag.className = 'text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] bg-fern-light text-fern border border-fern/30';
+        }
+      }
+    }
+
+    async function handleCopyPreviousSpecimen() {
+      const currIdx = objectList.findIndex(o => String(o.id) === String(currentOid));
+      if (currIdx <= 0) return;
+      const prevObj = objectList[currIdx - 1];
+
+      try {
+        const fullPrev = await apiFetch(`/api/object/${encodeURIComponent(prevObj.id)}`);
+        const prevObs = (fullPrev && fullPrev.observation) ? fullPrev.observation : {};
+
+        if (!currentRecord.observation) currentRecord.observation = {};
+        if (prevObs.Building) { currentRecord.observation.Building = prevObs.Building; markDirty('Building'); }
+        if (prevObs.Floor !== undefined) { currentRecord.observation.Floor = prevObs.Floor; markDirty('Floor'); }
+        if (prevObs.Cabinet !== undefined) { currentRecord.observation.Cabinet = prevObs.Cabinet; markDirty('Cabinet'); }
+        if (prevObs['Stored as'] !== undefined) { currentRecord.observation['Stored as'] = prevObs['Stored as']; markDirty('Stored as'); }
+        if (prevObs.Extra !== undefined) { currentRecord.observation.Extra = prevObs.Extra; markDirty('Extra'); }
+
+        refreshLocUI();
+        triggerAutoSave();
+        showToast(`✓ Copied location from #${prevObj.accession_number || prevObj.id}`);
+      } catch (err) {
+        showToast('Failed to copy previous location', true);
+      }
+    }
+
+    function setBuildingSelection(bldgName, btn) {
+      if (!currentRecord) return;
+      if (!currentRecord.observation) currentRecord.observation = {};
+      currentRecord.observation.Building = bldgName;
+      markDirty('Building');
+
+      const customWrap = document.getElementById('customBuildingWrap');
+      if (customWrap) customWrap.classList.add('hidden');
+
+      refreshLocUI();
+      triggerAutoSave();
+    }
+
+    function toggleCustomBuildingInput() {
+      const wrap = document.getElementById('customBuildingWrap');
+      const input = document.getElementById('customBuildingInput');
+      if (!wrap) return;
+      wrap.classList.toggle('hidden');
+      if (!wrap.classList.contains('hidden') && input) {
+        input.focus();
+      }
+    }
+
+    function onCustomBuildingInput(val) {
+      if (!currentRecord) return;
+      if (!currentRecord.observation) currentRecord.observation = {};
+      currentRecord.observation.Building = val.trim();
+      markDirty('Building');
+    }
+
+    function applyCustomBuilding() {
+      const input = document.getElementById('customBuildingInput');
+      if (input && input.value.trim()) {
+        setBuildingSelection(input.value.trim());
+        showToast(`Facility set: ${input.value.trim()}`);
+      }
+    }
+
+    function adjustCoordinate(field, delta) {
+      if (!currentRecord) return;
+      if (!currentRecord.observation) currentRecord.observation = {};
+      const obs = currentRecord.observation;
+
+      if (field === 'floor') {
+        let current = parseInt(obs.Floor, 10);
+        if (isNaN(current)) current = 1;
+        let next = current + delta;
+        if (next === 0) next = delta > 0 ? 1 : -1;
+        obs.Floor = String(next);
+        markDirty('Floor');
+      } else if (field === 'cab') {
+        let current = parseInt(obs.Cabinet, 10);
+        if (isNaN(current)) current = 1;
+        let next = Math.max(1, current + delta);
+        obs.Cabinet = String(next);
+        markDirty('Cabinet');
+      } else if (field === 'shelf') {
+        let current = parseInt(obs.Extra, 10);
+        if (isNaN(current)) current = 1;
+        let next = Math.max(1, current + delta);
+        obs.Extra = String(next);
+        markDirty('Extra');
+      }
+
+      refreshLocUI();
+      triggerAutoSave();
+    }
+
+    function activateDirectInput(field) {
+      const disp = document.getElementById(`display${field}Val`);
+      const inp = document.getElementById(`input${field}Val`);
+      if (!disp || !inp || !currentRecord) return;
+
+      const obs = currentRecord.observation || {};
+      let val = '';
+      if (field === 'Floor') val = obs.Floor || '';
+      else if (field === 'Cab') val = obs.Cabinet || '';
+      else if (field === 'Shelf') val = obs.Extra || obs.Shelf || '';
+
+      disp.classList.add('hidden');
+      inp.classList.remove('hidden');
+      inp.value = val;
+      inp.focus();
+      inp.select();
+    }
+
+    function finishDirectInput(field) {
+      const disp = document.getElementById(`display${field}Val`);
+      const inp = document.getElementById(`input${field}Val`);
+      if (!disp || !inp || !currentRecord) return;
+
+      const val = inp.value.trim();
+      if (!currentRecord.observation) currentRecord.observation = {};
+
+      if (field === 'Floor') {
+        currentRecord.observation.Floor = val;
+        markDirty('Floor');
+      } else if (field === 'Cab') {
+        currentRecord.observation.Cabinet = val;
+        markDirty('Cabinet');
+      } else if (field === 'Shelf') {
+        currentRecord.observation.Extra = val;
+        markDirty('Extra');
+      }
+
+      inp.classList.add('hidden');
+      disp.classList.remove('hidden');
+
+      refreshLocUI();
+      triggerAutoSave();
+    }
+
+    function handleStorageOptionSelect(storageName, btn) {
+      if (!currentRecord) return;
+      if (!currentRecord.observation) currentRecord.observation = {};
+      currentRecord.observation['Stored as'] = storageName;
+      markDirty('Stored as');
+
+      refreshLocUI();
+      triggerAutoSave();
+    }
+
+    function openStoredAsBottomSheet() {
+      const sheet = document.getElementById('storedAsBottomSheet');
+      if (sheet) sheet.classList.remove('hidden');
+    }
+
+    function closeStoredAsBottomSheet() {
+      const sheet = document.getElementById('storedAsBottomSheet');
+      if (sheet) sheet.classList.add('hidden');
+    }
+
+    function selectModalStorageOption(storageName) {
+      closeStoredAsBottomSheet();
+      handleStorageOptionSelect(storageName);
+    }
+
+    function onManualStorageChange(val) {
+      if (!currentRecord) return;
+      if (!currentRecord.observation) currentRecord.observation = {};
+      currentRecord.observation['Stored as'] = val;
+      markDirty('Stored as');
+
+      const clearBtn = document.getElementById('btnClearManualStorage');
+      if (clearBtn) {
+        if (val) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+      }
+
+      const activeStoredLabel = document.getElementById('activeStoredAsLabel');
+      if (activeStoredLabel) activeStoredLabel.textContent = val || 'Unspecified';
+
+      triggerAutoSave();
+    }
+
+    function clearManualStorage() {
+      const inp = document.getElementById('manualStorageInput');
+      if (inp) inp.value = '';
+      onManualStorageChange('');
+    }
+
+    function setLoanStatus(isLoaned) {
+      if (!currentRecord) return;
+      if (!currentRecord.observation) currentRecord.observation = {};
+      currentRecord.observation['Loaned out'] = isLoaned;
+      markDirty('Loaned out');
+
+      if (isLoaned) {
+        const today = new Date().toISOString().split('T')[0];
+        currentRecord.observation['Loaned out date'] = today;
+        markDirty('Loaned out date');
+      } else {
+        currentRecord.observation['Loaned out date'] = '';
+        markDirty('Loaned out date');
+      }
+
+      refreshLocUI();
+      triggerAutoSave();
     }
 
     // ==========================================
-    // DYNAMIC SCHEMA-DRIVEN FORM GENERATOR
+    // DETAILS TAB 2 & DYNAMIC REGISTRATION FORMS
     // ==========================================
-    let currentDetailTab = 'location';
+    function onFieldInputDirect(fieldName, section, value) {
+      if (!currentRecord) return;
+      if (!currentRecord[section]) currentRecord[section] = {};
+      currentRecord[section][fieldName] = value;
+      markDirty(fieldName);
 
-    function switchDetailTab(tabId) {
-      currentDetailTab = tabId;
-      const tabs = ['location', 'details', 'problems'];
-      tabs.forEach(t => {
-        const contentEl = document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
-        const btnEl = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
-        if (t === tabId) {
-          if (contentEl) contentEl.classList.remove('hidden');
-          if (btnEl) {
-            btnEl.setAttribute('aria-selected', 'true');
-            btnEl.className = 'flex-1 py-1.5 px-2 rounded-[3px] text-center transition-all flex items-center justify-center gap-1.5 bg-surface text-fern-dark font-bold shadow-xs border border-bordercol/80';
+      if (fieldName === 'Genus' || fieldName === 'Species') {
+        const gen = (currentRecord.registration && currentRecord.registration.Genus) || '';
+        const sp = (currentRecord.registration && currentRecord.registration.Species) || '';
+        const nameStr = [gen, sp].filter(Boolean).join(' ') || 'Specimen';
+        const nameEl = document.getElementById('detailScientificName');
+        if (nameEl) nameEl.textContent = nameStr;
+      } else if (fieldName === 'Author') {
+        const authEl = document.getElementById('detailAuthor');
+        if (authEl) authEl.textContent = value || '—';
+      } else if (fieldName === 'Family') {
+        const famEl = document.getElementById('detailFamily');
+        if (famEl) famEl.textContent = value || '—';
+      }
+
+      triggerAutoSave();
+    }
+
+    function updateTaxonProblemAlerts(record) {
+      const fields = ['Genus', 'Species', 'Family', 'Author'];
+      let flaggedCount = 0;
+
+      fields.forEach(f => {
+        const isProb = isFieldProblemActive(f, 'registration', record);
+        const alertEl = document.getElementById(`fieldAlert_${f}`);
+        const inputEl = document.getElementById(`input_${f}`);
+
+        if (isProb) {
+          flaggedCount++;
+          if (alertEl) alertEl.classList.remove('hidden');
+          if (inputEl) {
+            inputEl.classList.add('border-brick', 'bg-red-50/50');
+            inputEl.classList.remove('border-bordercol', 'bg-alabaster');
           }
         } else {
-          if (contentEl) contentEl.classList.add('hidden');
-          if (btnEl) {
-            btnEl.setAttribute('aria-selected', 'false');
-            btnEl.className = 'flex-1 py-1.5 px-2 rounded-[3px] text-center transition-all flex items-center justify-center gap-1.5 text-ink-muted hover:text-ink hover:bg-surface/50';
+          if (alertEl) alertEl.classList.add('hidden');
+          if (inputEl) {
+            inputEl.classList.remove('border-brick', 'bg-red-50/50');
+            inputEl.classList.add('border-bordercol', 'bg-alabaster');
           }
         }
       });
-      const mainEl = document.getElementById('detailMainScroll') || document.querySelector('#detailView main');
-      if (mainEl) mainEl.scrollTop = 0;
+
+      const authAlertIcon = document.getElementById('btnAuthorAlertIcon');
+      const authSubtext = document.getElementById('subtext_Author');
+      const isAuthProb = isFieldProblemActive('Author', 'registration', record);
+      if (authAlertIcon) {
+        if (isAuthProb) authAlertIcon.classList.remove('hidden');
+        else authAlertIcon.classList.add('hidden');
+      }
+      if (authSubtext) {
+        if (isAuthProb) authSubtext.classList.remove('hidden');
+        else authSubtext.classList.add('hidden');
+      }
+
+      const summaryBadge = document.getElementById('taxonAlertSummaryBadge');
+      const summaryText = document.getElementById('taxonAlertSummaryText');
+      if (summaryBadge && summaryText) {
+        if (flaggedCount > 0) {
+          summaryBadge.classList.remove('hidden');
+          summaryText.textContent = `${flaggedCount} Flagged`;
+        } else {
+          summaryBadge.classList.add('hidden');
+        }
+      }
     }
 
     function renderDynamicForm(schema, record) {
-      const locContainer = document.getElementById('tabContentLocation');
-      const regContainer = document.getElementById('detailRegAccordionsContainer');
-      const legacyContainer = document.getElementById('detailAccordionsContainer');
+      if (!record) return;
+      const regData = record.registration || {};
 
-      if (!schema || !schema.ui_sections) {
-        if (locContainer) locContainer.innerHTML = '';
-        if (regContainer) regContainer.innerHTML = '';
-        if (legacyContainer) legacyContainer.innerHTML = '';
+      // Fixed Pinned Fields across the Botanical Cards
+      const pinnedFields = [
+        { field: 'Genus', id: 'input_Genus', wrapper: 'fieldWrapper_Genus', ctrl: 'fieldControls_Genus', alert: 'fieldAlert_Genus' },
+        { field: 'Species', id: 'input_Species', wrapper: 'fieldWrapper_Species', ctrl: 'fieldControls_Species', alert: 'fieldAlert_Species' },
+        { field: 'Family', id: 'input_Family', wrapper: 'fieldWrapper_Family', ctrl: 'fieldControls_Family', alert: 'fieldAlert_Family' },
+        { field: 'Author', id: 'input_Author', wrapper: 'fieldWrapper_Author', ctrl: 'fieldControls_Author', alert: 'fieldAlert_Author' },
+        { field: 'Higher Classification', id: 'input_Higher_Classification', wrapper: 'fieldWrapper_Higher_Classification', ctrl: 'fieldControls_Higher_Classification', alert: 'fieldAlert_Higher_Classification' },
+        { field: 'Collector', id: 'input_Collector', wrapper: 'fieldWrapper_Collector', ctrl: 'fieldControls_Collector', alert: 'fieldAlert_Collector' },
+        { field: 'Collection Date', id: 'input_Collection_Date', wrapper: 'fieldWrapper_Collection_Date', ctrl: 'fieldControls_Collection_Date', alert: 'fieldAlert_Collection_Date' },
+        { field: 'Collection Place', id: 'input_Collection_Place', wrapper: 'fieldWrapper_Collection_Place', ctrl: 'fieldControls_Collection_Place', alert: 'fieldAlert_Collection_Place' },
+        { field: 'Plant Part', id: 'input_Plant_Part', wrapper: 'fieldWrapper_Plant_Part', ctrl: 'fieldControls_Plant_Part', alert: 'fieldAlert_Plant_Part' },
+        { field: 'Variant', id: 'input_Variant', wrapper: 'fieldWrapper_Variant', ctrl: 'fieldControls_Variant', alert: 'fieldAlert_Variant' },
+        { field: 'Box Label', id: 'input_Box_Label', wrapper: 'fieldWrapper_Box_Label', ctrl: 'fieldControls_Box_Label', alert: 'fieldAlert_Box_Label' },
+        { field: 'Comment', id: 'input_Comment', wrapper: 'fieldWrapper_Comment', ctrl: 'fieldControls_Comment', alert: 'fieldAlert_Comment' }
+      ];
+
+      const pinnedNames = new Set(pinnedFields.map(p => p.field));
+
+      // Populate fixed inputs
+      pinnedFields.forEach(p => {
+        const inp = document.getElementById(p.id);
+        const fVal = regData[p.field] !== undefined ? regData[p.field] : '';
+        if (inp && inp !== document.activeElement) {
+          inp.value = fVal;
+        }
+
+        const hasProb = isFieldProblemActive(p.field, 'registration', record);
+        const hasUkn = isValueUnknown(fVal);
+        const alertEl = document.getElementById(p.alert);
+        if (alertEl) {
+          if (hasProb) {
+            alertEl.classList.remove('hidden');
+            alertEl.textContent = '⚠';
+          } else if (hasUkn) {
+            alertEl.classList.remove('hidden');
+            alertEl.textContent = '?';
+          } else {
+            alertEl.classList.add('hidden');
+          }
+        }
+
+        if (inp) {
+          if (hasProb) {
+            inp.classList.add('border-brick', 'bg-red-50/50');
+            inp.classList.remove('border-bordercol', 'bg-alabaster', 'border-amber-400', 'bg-amber-50');
+          } else if (hasUkn) {
+            inp.classList.add('border-amber-400', 'bg-amber-50');
+            inp.classList.remove('border-bordercol', 'bg-alabaster', 'border-brick', 'bg-red-50/50');
+          } else {
+            inp.classList.remove('border-brick', 'bg-red-50/50', 'border-amber-400', 'bg-amber-50');
+            inp.classList.add('border-bordercol', 'bg-alabaster');
+          }
+        }
+
+        // Unvalidated & History control injection
+        const ctrlEl = document.getElementById(p.ctrl);
+        if (ctrlEl) {
+          const isUnval = (currentUnvalidatedMap && currentUnvalidatedMap[p.field] !== undefined);
+          const fClean = p.field.replace(/[^a-zA-Z0-9_]/g, '_');
+          const hasHist = historicalData && historicalData[p.field] && Object.keys(historicalData[p.field]).length > 0;
+
+          ctrlEl.innerHTML = `
+            ${alertEl ? alertEl.outerHTML : ''}
+            ${hasHist ? `
+              <button
+                type="button"
+                id="history_toggle_${fClean}"
+                onclick="toggleHistoryContainer('${p.field}')"
+                class="min-h-[26px] px-1.5 py-0.5 text-[10px] font-mono font-medium text-amber-800 bg-amber-50 border border-amber-300 rounded-[2px] tap-highlight-transparent flex items-center gap-0.5"
+                title="View historical value suggestions"
+              >
+                <span>📖</span><span>Hist</span>
+              </button>
+            ` : ''}
+            <button
+              type="button"
+              id="unval_btn_registration_${fClean}"
+              onclick="toggleUnvalidatedField('registration', '${p.field}')"
+              class="min-h-[26px] px-1.5 py-0.5 text-[10px] font-bold rounded-[2px] tap-highlight-transparent flex items-center justify-center transition-all ${isUnval ? 'bg-amber-500/20 text-amber-600 border border-amber-500/40' : 'text-stone-400 hover:bg-stone-100 border border-bordercol'}"
+              title="Toggle Unvalidated Source for ${p.field}"
+            >
+              <span>${isUnval ? '❓' : '?'}</span>
+            </button>
+          `;
+        }
+
+        // Unvalidated input values
+        const fClean = p.field.replace(/[^a-zA-Z0-9_]/g, '_');
+        const unvalCont = document.getElementById(`unval_container_registration_${fClean}`);
+        const unvalInp = document.getElementById(`unval_input_registration_${fClean}`);
+        if (currentUnvalidatedMap && currentUnvalidatedMap[p.field] !== undefined) {
+          if (unvalCont) unvalCont.classList.remove('hidden');
+          if (unvalInp && unvalInp !== document.activeElement) unvalInp.value = currentUnvalidatedMap[p.field] || '';
+        } else {
+          if (unvalCont) unvalCont.classList.add('hidden');
+        }
+      });
+
+      // Dynamic additional registration fields (excluding Field No / Innsammling Nr. and pinned fields)
+      const regContainer = document.getElementById('detailRegAccordionsContainer');
+      if (!regContainer) return;
+
+      const uiSec = schema ? schema.ui_sections : null;
+      const regFields = (uiSec && uiSec.registration) ? uiSec.registration : [];
+      const excludedFields = new Set(['Innsammling Nr.', 'Innsammling Nr', 'Field No', 'Field No.', 'Online photo 1', 'Online photo 2', 'Online photo 3', 'UID']);
+
+      const extraFields = regFields.filter(f => !pinnedNames.has(f.name) && !excludedFields.has(f.name));
+
+      if (extraFields.length === 0) {
+        regContainer.innerHTML = '';
         return;
       }
 
-      const uiSec = schema.ui_sections;
-      const regGroups = uiSec.reg_groups || [];
-      const regFields = uiSec.registration || [];
-      const locFields = uiSec.location || [];
-
-      let regHtml = '';
-      let totalRegProblems = 0;
-
-      // 1. Render Registration Groups from config.py
-      regGroups.forEach((grp, gIdx) => {
-        const isTaxonomy = grp.name.toLowerCase().includes('tax');
-        const icon = isTaxonomy ? '🧬' : (grp.name.toLowerCase().includes('collect') ? '📦' : (grp.name.toLowerCase().includes('obj') ? '🌿' : (grp.name.toLowerCase().includes('note') ? '📝' : '🔒')));
-
-        let grpProbCount = 0;
-        let grpUknCount = 0;
-        let fieldsHtml = '';
-
-        grp.fields.forEach(fName => {
-          const fDef = regFields.find(f => f.name === fName) || { name: fName, type: 'text' };
-          const val = (record.registration && record.registration[fName] !== undefined) ? record.registration[fName] : '';
-          if (isFieldProblemActive(fName, 'registration', record)) {
-            grpProbCount++;
-            totalRegProblems++;
-          }
-          else if (isValueUnknown(val)) grpUknCount++;
-          fieldsHtml += renderFieldInput(fDef, val, 'registration', record);
-        });
-
-        const isOpen = (grpProbCount > 0 || grpUknCount > 0);
-
-        let badgesHtml = '';
-        if (grpProbCount > 0) {
-          badgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#C62828] text-white flex items-center gap-0.5 shadow-xs"><span>⚠</span><span>${grpProbCount}</span></span>`;
-        }
-        if (grpUknCount > 0) {
-          badgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#FBC02D] text-[#2c302e] flex items-center gap-0.5 shadow-xs"><span>?</span><span>${grpUknCount}</span></span>`;
-        }
-
-        regHtml += `
-          <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion ${isOpen ? 'acc-open' : ''}">
-            <button
-              type="button"
-              onclick="toggleAccordion(this)"
-              class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press border-b border-bordercol text-left"
-            >
-              <div class="flex items-center gap-2.5">
-                <span class="text-base">${icon}</span>
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <h3 class="font-bold text-xs text-ink uppercase tracking-wider">${grp.name}</h3>
-                    ${badgesHtml}
-                  </div>
-                  <p class="text-[10px] text-ink-muted">${grp.fields.join(' • ')}</p>
-                </div>
+      let extraHtml = `
+        <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+            <div class="flex items-center gap-1.5">
+              <span class="text-sm">📋</span>
+              <div>
+                <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Additional Catalog Fields</h2>
+                <p class="text-[10px] font-mono text-subdued">Extended museum schema attributes</p>
               </div>
-              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">${isOpen ? '▲' : '▼'}</span>
-            </button>
-            <div class="p-3.5 space-y-3 acc-content ${isOpen ? 'block' : 'hidden'}">
-              ${fieldsHtml}
             </div>
           </div>
-        `;
+          <div class="space-y-3">
+      `;
+
+      extraFields.forEach(fDef => {
+        const val = regData[fDef.name] !== undefined ? regData[fDef.name] : '';
+        extraHtml += renderFieldInput(fDef, val, 'registration', record);
       });
 
-      // Render any ungrouped registration fields (ensures 100% of schema fields are always editable)
-      const groupedFieldNames = new Set(regGroups.flatMap(g => g.fields || []));
-      const ungroupedFields = regFields.filter(f => !groupedFieldNames.has(f.name));
-      if (ungroupedFields.length > 0) {
-        let ungrpProbCount = 0;
-        let ungrpUknCount = 0;
-        let ungrpFieldsHtml = '';
-
-        ungroupedFields.forEach(fDef => {
-          const val = (record.registration && record.registration[fDef.name] !== undefined) ? record.registration[fDef.name] : '';
-          if (isFieldProblemActive(fDef.name, 'registration', record)) {
-            ungrpProbCount++;
-            totalRegProblems++;
-          } else if (isValueUnknown(val)) {
-            ungrpUknCount++;
-          }
-          ungrpFieldsHtml += renderFieldInput(fDef, val, 'registration', record);
-        });
-
-        const isUngrpOpen = (ungrpProbCount > 0 || ungrpUknCount > 0);
-        let ungrpBadgesHtml = '';
-        if (ungrpProbCount > 0) {
-          ungrpBadgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#C62828] text-white flex items-center gap-0.5 shadow-xs"><span>⚠</span><span>${ungrpProbCount}</span></span>`;
-        }
-        if (ungrpUknCount > 0) {
-          ungrpBadgesHtml += `<span class="px-1.5 py-0.5 rounded-[2px] text-[11px] font-bold bg-[#FBC02D] text-[#2c302e] flex items-center gap-0.5 shadow-xs"><span>?</span><span>${ungrpUknCount}</span></span>`;
-        }
-
-        regHtml += `
-          <div class="bg-surface border border-bordercol rounded-[2px] shadow-xs overflow-hidden accordion ${isUngrpOpen ? 'acc-open' : ''}">
-            <button
-              type="button"
-              onclick="toggleAccordion(this)"
-              class="w-full p-3 flex items-center justify-between bg-tonal1 hover:bg-tonal2 transition focus:outline-none touch-press border-b border-bordercol text-left"
-            >
-              <div class="flex items-center gap-2.5">
-                <span class="text-base">📋</span>
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <h3 class="font-bold text-xs text-ink uppercase tracking-wider">Additional Fields</h3>
-                    ${ungrpBadgesHtml}
-                  </div>
-                  <p class="text-[10px] text-ink-muted">${ungroupedFields.map(f => f.name).join(' • ')}</p>
-                </div>
-              </div>
-              <span class="acc-icon text-ink-muted font-bold transition-transform duration-200 text-xs">${isUngrpOpen ? '▲' : '▼'}</span>
-            </button>
-            <div class="p-3.5 space-y-3 acc-content ${isUngrpOpen ? 'block' : 'hidden'}">
-              ${ungrpFieldsHtml}
-            </div>
+      extraHtml += `
           </div>
-        `;
-      }
+        </div>
+      `;
 
-      // 2. Render Physical Location Group (Optimized for Batch Herbarium Audits)
-      let locHtml = '';
-      let locProbCount = 0;
-      let locUknCount = 0;
-
-      if (locFields.length > 0) {
-        const obs = record.observation || {};
-        const curBld = obs.Building || '';
-        const curFl = obs.Floor || '';
-        const curCab = obs.Cabinet || '';
-        const curStored = obs["Stored as"] || '';
-        const curExtra = obs.Extra || '';
-        const isLocProb = Boolean(obs.Loc_Problem === true || String(obs.Loc_Problem).toLowerCase() === 'true' || obs.Loc_Problem === '1');
-        const isLoaned = Boolean(obs["Loaned out"] === true || String(obs["Loaned out"]).toLowerCase() === 'true' || obs["Loaned out"] === '1');
-        const loanDate = obs["Loaned out date"] || '';
-
-        if (isLocProb) locProbCount++;
-        if (isValueUnknown(curStored)) locUknCount++;
-        if (isValueUnknown(curExtra)) locUknCount++;
-
-        const matchesActiveCab = Boolean(
-          (curBld && curBld === activeCabinet.building) &&
-          (curFl && curFl === activeCabinet.floor) &&
-          (curCab && curCab === activeCabinet.cabinet)
-        );
-
-        const cabDisplay = (activeCabinet.building || activeCabinet.floor || activeCabinet.cabinet)
-          ? `${activeCabinet.building || 'Any Building'} • Fl ${activeCabinet.floor || '?'} • Cab ${activeCabinet.cabinet || 'Unset'}`
-          : 'No Active Cabinet Set';
-
-        const bldDef = locFields.find(f => f.name === "Building") || {
-          name: "Building",
-          type: "choice",
-          choices: ["Lid's hus", "Økern", "Annet"]
-        };
-        const floorDef = locFields.find(f => f.name === "Floor") || {
-          name: "Floor",
-          type: "choice",
-          choices: ["4", "3", "2", "1", "-1", "-2"]
-        };
-
-        const bldOptionsHtml = ['<option value="">Select building...</option>']
-          .concat((bldDef.choices || []).map(c => `<option value="${c}" ${String(curBld) === String(c) ? 'selected' : ''}>${c}</option>`))
-          .join('');
-
-        const floorOptionsHtml = ['<option value="">Select floor...</option>']
-          .concat((floorDef.choices || []).map(c => `<option value="${c}" ${String(curFl) === String(c) ? 'selected' : ''}>${c}</option>`))
-          .join('');
-
-        // Find any other custom location fields defined in the schema (e.g. Room, Shelf, Section, etc.)
-        const standardLocNames = new Set(["Building", "Floor", "Cabinet", "Stored as", "Extra", "Loaned out", "Loaned out date", "Loc_Problem"]);
-        const customLocFields = locFields.filter(f => !standardLocNames.has(f.name));
-        let customLocFieldsHtml = '';
-        if (customLocFields.length > 0) {
-          customLocFields.forEach(fDef => {
-            const val = (obs[fDef.name] !== undefined) ? obs[fDef.name] : '';
-            if (isFieldProblemActive(fDef.name, 'observation', record)) locProbCount++;
-            else if (isValueUnknown(val)) locUknCount++;
-            customLocFieldsHtml += renderFieldInput(fDef, val, 'observation', record);
-          });
-        }
-
-        const storedAsDef = locFields.find(f => f.name === "Stored as") || {
-          name: "Stored as",
-          type: "choice",
-          choices: ["Mounted on wooden platform", "Petridish", "in plastic box", "in paper box", "Free standing", "in plastic bag"]
-        };
-
-        const storedOptionsHtml = ['<option value="">Select storage container...</option>']
-          .concat((storedAsDef.choices || []).map(c => `<option value="${c}" ${String(curStored) === String(c) ? 'selected' : ''}>${c}</option>`))
-          .join('');
-
-        locHtml = `
-          <div class="space-y-3">
-            <!-- 1. Active Cabinet Workstation Card -->
-            <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-2.5">
-              <div class="flex items-center justify-between border-b border-tonal2 pb-2">
-                <div class="flex items-center gap-1.5">
-                  <span class="text-fern font-bold text-xs">🔒</span>
-                  <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Active Cabinet Workstation</h3>
-                </div>
-                <button type="button" onclick="openPresetSettings()" class="text-[11px] font-sans font-medium text-fern hover:text-fern-dark touch-press">
-                  ⚙ Switch Cabinet / Presets
-                </button>
-              </div>
-
-              <div class="p-2.5 bg-tonal1 border border-bordercol rounded-[2px] flex items-center justify-between gap-2">
-                <div class="min-w-0 flex-1">
-                  <div class="font-mono text-xs font-bold text-ink truncate">${cabDisplay}</div>
-                  <p class="font-sans text-[10px] text-ink-muted mt-0.5">Current: <span id="activeCabCurrentReadout" class="font-mono">${curBld || '—'} • Fl ${curFl || '—'} • Cab ${curCab || '—'}</span></p>
-                </div>
-                <div id="activeCabBtnContainer" class="shrink-0">
-                  ${matchesActiveCab ? `
-                    <span class="px-2.5 py-1 text-[10px] font-bold bg-fern text-white rounded-[2px] shadow-xs shrink-0 flex items-center gap-1">
-                      <span>✓</span><span>In Active Cab</span>
-                    </span>
-                  ` : `
-                    <button type="button" onclick="applyActiveCabinet()" class="min-h-[36px] px-3 py-1.5 text-xs font-bold bg-fern hover:bg-fern-dark text-white rounded-[2px] shadow-xs shrink-0 touch-press touch-target-min">
-                      Apply to Specimen
-                    </button>
-                  `}
-                </div>
-              </div>
-
-              <div class="flex items-center justify-between pt-0.5 text-[11px]">
-                <button type="button" onclick="setAsActiveCabinet()" class="text-ink-muted hover:text-ink hover:underline touch-press">
-                  Save current specimen location as Active Cabinet
-                </button>
-              </div>
-            </div>
-
-            <!-- 2. Physical Coordinates & Direct Overrides -->
-            <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-3">
-              <div class="border-b border-tonal2 pb-1.5 flex items-center justify-between">
-                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Physical Coordinates</h3>
-                <span class="text-[10px] text-ink-muted">Direct Edit / Override</span>
-              </div>
-
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div class="space-y-1">
-                  <label for="input_observation_Building" class="text-xs font-bold text-ink">Building:</label>
-                  <select
-                    id="input_observation_Building"
-                    data-section="observation"
-                    data-field="Building"
-                    onchange="onLocationCoordChange('Building', this.value)"
-                    class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs outline-none bg-surface text-ink focus:border-fern cursor-pointer"
-                  >
-                    ${bldOptionsHtml}
-                  </select>
-                </div>
-
-                <div class="space-y-1">
-                  <label for="input_observation_Floor" class="text-xs font-bold text-ink">Floor:</label>
-                  <select
-                    id="input_observation_Floor"
-                    data-section="observation"
-                    data-field="Floor"
-                    onchange="onLocationCoordChange('Floor', this.value)"
-                    class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs outline-none bg-surface text-ink focus:border-fern cursor-pointer"
-                  >
-                    ${floorOptionsHtml}
-                  </select>
-                </div>
-
-                <div class="space-y-1">
-                  <label for="input_observation_Cabinet" class="text-xs font-bold text-ink">Cabinet:</label>
-                  <input
-                    type="text"
-                    id="input_observation_Cabinet"
-                    data-section="observation"
-                    data-field="Cabinet"
-                    value="${curCab}"
-                    placeholder="e.g. 14A, C-02..."
-                    oninput="onLocationCoordChange('Cabinet', this.value)"
-                    onblur="saveCurrentEdits()"
-                    class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs outline-none bg-surface text-ink focus:border-fern"
-                  />
-                </div>
-              </div>
-              ${customLocFieldsHtml}
-            </div>
-
-            <!-- 3. Frequently Edited Object Storage Medium -->
-            <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-3">
-              <div class="border-b border-tonal2 pb-1.5">
-                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Storage Preparation & Shelf Note</h3>
-              </div>
-
-              <div class="space-y-1">
-                <label for="input_observation_Stored_as" class="text-xs font-bold text-ink">Stored as (Mounting / Container):</label>
-                <select
-                  id="input_observation_Stored_as"
-                  data-section="observation"
-                  data-field="Stored as"
-                  onchange="markDirty('Stored as'); triggerAutoSave()"
-                  onblur="saveCurrentEdits()"
-                  class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-3 py-2 text-xs outline-none bg-surface text-ink focus:border-fern cursor-pointer"
-                >
-                  ${storedOptionsHtml}
-                </select>
-              </div>
-
-              <div class="space-y-1">
-                <label for="input_observation_Extra" class="text-xs font-bold text-ink">Extra (Box # / Tray / Sub-shelf placement):</label>
-                <input
-                  type="text"
-                  id="input_observation_Extra"
-                  data-section="observation"
-                  data-field="Extra"
-                  value="${curExtra}"
-                  placeholder="e.g. Box 3, Upper Shelf, Tray 12..."
-                  oninput="markDirty('Extra'); triggerAutoSave()"
-                  onblur="saveCurrentEdits()"
-                  class="w-full min-h-[44px] border border-bordercol rounded-[2px] px-3 py-2 text-xs outline-none bg-surface text-ink focus:border-fern"
-                />
-              </div>
-            </div>
-
-            <!-- 4. Location Problem & Loan Controls -->
-            <div class="bg-surface border border-bordercol rounded-[2px] p-3.5 shadow-xs space-y-2.5">
-              <div class="border-b border-tonal2 pb-1.5">
-                <h3 class="font-sans font-bold text-xs text-ink uppercase tracking-wider">Location Status & Loans</h3>
-              </div>
-
-              <!-- Location Discrepancy Toggle -->
-              <label class="touch-target-min min-h-[44px] flex items-center gap-2.5 p-2.5 border rounded-[2px] transition-colors touch-press cursor-pointer ${isLocProb ? 'border-[#C62828] bg-red-50 text-[#C62828] font-bold' : 'border-bordercol bg-surface text-ink hover:bg-tonal1'}">
-                <input
-                  type="checkbox"
-                  id="input_observation_Loc_Problem"
-                  data-section="observation"
-                  data-field="Loc_Problem"
-                  ${isLocProb ? 'checked' : ''}
-                  onchange="toggleLocationProblem(this.checked)"
-                  class="w-4 h-4 text-[#C62828] rounded-[2px] border-bordercol focus:ring-[#C62828] cursor-pointer shrink-0"
-                />
-                <span class="text-xs select-none">⚑ Location Discrepancy (Wrong Cabinet / Missing)</span>
-              </label>
-
-              <!-- Loan Status Toggle Card (Desktop Parity) -->
-              <div class="border rounded-[2px] p-2.5 space-y-1.5 ${isLoaned ? 'border-l-4 border-l-[#FBC02D] bg-[#fef9c3]/40 border-bordercol' : 'border-l-4 border-l-fern bg-surface border-bordercol'}">
-                <div class="flex items-center justify-between">
-                  <label class="flex items-center gap-2 text-xs font-bold text-ink cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      id="input_observation_Loaned_out"
-                      data-section="observation"
-                      data-field="Loaned out"
-                      ${isLoaned ? 'checked' : ''}
-                      onchange="toggleLoanStatus(this.checked)"
-                      class="w-4 h-4 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
-                    />
-                    <span>${isLoaned ? 'Loaned Out to External Institution' : 'In Collection (Not Loaned)'}</span>
-                  </label>
-                  ${loanDate ? `<span class="font-mono text-[10px] text-ink-muted">Date: ${loanDate}</span>` : ''}
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-
-      if (locContainer) locContainer.innerHTML = locHtml;
-      if (regContainer) regContainer.innerHTML = regHtml;
-
-      // Update Badges on Tab Bar
-      const probBadge = document.getElementById('tabBadgeProblems');
-      const issues = (record.flagged_issues || []).filter(iss => !iss.resolved);
-      let quickFlagCount = 0;
-      if (uiSec.problems) {
-        uiSec.problems.forEach(p => {
-          if (record.observation && (String(record.observation[p.name]).toLowerCase() === 'true' || record.observation[p.name] === true || record.observation[p.name] === '1')) {
-            quickFlagCount++;
-          }
-        });
-      }
-      const totalProblems = issues.length + locProbCount + totalRegProblems + quickFlagCount;
-
-      if (probBadge) {
-        if (totalProblems > 0) {
-          probBadge.textContent = totalProblems;
-          probBadge.classList.remove('hidden');
-        } else {
-          probBadge.classList.add('hidden');
-        }
-      }
-
-      const locBadge = document.getElementById('tabBadgeLocation');
-      if (locBadge) {
-        if (locProbCount > 0) {
-          locBadge.textContent = locProbCount;
-          locBadge.classList.remove('hidden');
-        } else {
-          locBadge.classList.add('hidden');
-        }
-      }
+      regContainer.innerHTML = extraHtml;
     }
 
-        function renderFieldInput(field, value, section, record) {
+    function renderFieldInput(field, value, section, record) {
       const fName = field.name;
       const fType = field.type || 'text';
       const isReadOnly = !!field.readonly;
@@ -10298,36 +10892,16 @@ INDEX_TEMPLATE_V2 = """
       const hasUkn = isValueUnknown(value);
 
       const problemBadge = hasProb
-        ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-[#C62828] text-white shadow-xs ml-1" title="Problem Flagged">⚠</span>`
+        ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-brick text-white shadow-2xs ml-1" title="Problem Flagged">⚠</span>`
         : (hasUkn
-          ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-[#FBC02D] text-[#2c302e] shadow-xs ml-1" title="Unknown Value">?</span>`
+          ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-amber-400 text-stone-900 shadow-2xs ml-1" title="Unknown Value">?</span>`
           : '');
 
       const inputStyle = hasProb
-        ? 'border-l-4 border-l-[#C62828] bg-ember-light border-ember text-ember-dark font-medium focus:border-ember'
+        ? 'border-l-4 border-l-brick bg-red-50/50 border-brick text-brick-dark font-medium focus:border-brick'
         : (hasUkn
-          ? 'border-l-4 border-l-[#FBC02D] bg-[#fef9c3] border-[#fde047] text-[#854d0e] font-medium focus:border-[#eab308]'
-          : 'border-bordercol bg-surface text-ink focus:border-fern');
-
-      const flagBtn = hasProb
-        ? `<button
-            type="button"
-            onclick="toggleFieldProblem('${fName}')"
-            class="min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-bold text-white bg-[#C62828] hover:bg-[#b71c1c] border border-[#C62828] rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1 shadow-xs"
-            title="Problem active for ${fName} (tap to resolve)"
-          >
-            <span>⚑</span>
-            <span>Flagged</span>
-          </button>`
-        : `<button
-            type="button"
-            onclick="openAddDiscrepancyModal('${fName}')"
-            class="min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-medium text-ink-muted hover:text-ember bg-tonal1 hover:bg-tonal2 border border-bordercol rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1"
-            title="Flag discrepancy for ${fName}"
-          >
-            <span>⚑</span>
-            <span>Flag</span>
-          </button>`;
+          ? 'border-l-4 border-l-amber-400 bg-amber-50 border-amber-300 text-amber-900 font-medium focus:border-amber-400'
+          : 'border-bordercol bg-alabaster hover:bg-white focus:bg-white text-ink focus:border-ink');
 
       const isUnval = (currentUnvalidatedMap && currentUnvalidatedMap[fName] !== undefined);
       const unvalComment = (currentUnvalidatedMap && currentUnvalidatedMap[fName]) || '';
@@ -10341,7 +10915,7 @@ INDEX_TEMPLATE_V2 = """
           type="button"
           id="${unvalBtnId}"
           onclick="toggleUnvalidatedField('${section}', '${fName}')"
-          class="min-h-[44px] px-2 py-1 text-xs font-bold rounded-[2px] touch-target-min touch-press ml-1 flex items-center justify-center transition-all ${isUnval ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40' : 'text-ink-faint hover:bg-tonal2 border border-bordercol'}"
+          class="min-h-[38px] px-2 py-1 text-xs font-bold rounded-[2px] tap-highlight-transparent ml-1 flex items-center justify-center transition-all ${isUnval ? 'bg-amber-500/20 text-amber-600 border border-amber-500/40' : 'text-stone-400 hover:bg-stone-100 border border-bordercol'}"
           title="Toggle Unvalidated Source for ${fName}"
         >
           <span>${isUnval ? '❓' : '?'}</span>
@@ -10349,8 +10923,8 @@ INDEX_TEMPLATE_V2 = """
       `;
 
       const unvalContainerHtml = `
-        <div id="${unvalContainerId}" class="${isUnval ? '' : 'hidden'} mt-1.5 p-2 bg-amber-500/10 border border-amber-500/30 rounded-[2px]">
-          <label for="${unvalInputId}" class="block text-[10px] font-bold text-amber-600 dark:text-amber-400 mb-1">Unvalidated Note:</label>
+        <div id="${unvalContainerId}" class="${isUnval ? '' : 'hidden'} mt-1.5 p-2 bg-amber-50 border border-amber-300 rounded-[2px]">
+          <label for="${unvalInputId}" class="block text-[10px] font-bold text-amber-800 mb-1">Unvalidated Note:</label>
           <input
             type="text"
             id="${unvalInputId}"
@@ -10358,7 +10932,7 @@ INDEX_TEMPLATE_V2 = """
             placeholder="Explain why source is unvalidated..."
             oninput="markDirty('${fName}'); onUnvalCommentChange('${fName}', this.value); triggerAutoSave()"
             onblur="saveCurrentEdits()"
-            class="w-full bg-surface border border-amber-500/30 rounded-[2px] px-2.5 py-1.5 text-xs outline-none text-ink"
+            class="w-full bg-white border border-amber-300 rounded-[2px] px-2.5 py-1.5 text-xs outline-none text-ink"
           />
         </div>
       `;
@@ -10368,18 +10942,17 @@ INDEX_TEMPLATE_V2 = """
           type="button"
           id="${toggleBtnId}"
           onclick="toggleHistoryContainer('${fName}')"
-          class="hidden min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-medium text-ember bg-ember-light border border-ember-border rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1"
+          class="hidden min-h-[38px] px-2.5 py-1 text-xs font-mono font-medium text-amber-800 bg-amber-50 border border-amber-300 rounded-[2px] tap-highlight-transparent ml-1 flex items-center gap-1"
           title="View historical value suggestions"
         >
           <span>📖</span>
           <span>History</span>
         </button>
-        ${!isReadOnly ? flagBtn : ''}
         ${!isReadOnly ? unvalBtn : ''}
       `;
 
       const historyContainerHtml = `
-        <div id="${containerId}" class="hidden mt-2 p-2.5 bg-tonal1 border border-bordercol rounded-[2px] shadow-xs">
+        <div id="${containerId}" class="hidden mt-2 p-2.5 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs">
            <!-- History suggestions injected here -->
         </div>
       `;
@@ -10392,8 +10965,8 @@ INDEX_TEMPLATE_V2 = """
 
         return `
           <div class="space-y-1">
-            <div class="flex items-center justify-between min-h-[32px]">
-              <label for="${inputId}" class="text-xs font-bold text-ink flex items-center gap-1">
+            <div class="flex items-center justify-between min-h-[28px]">
+              <label for="${inputId}" class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1">
                 <span>${fName}</span>
                 ${problemBadge}
               </label>
@@ -10404,7 +10977,7 @@ INDEX_TEMPLATE_V2 = """
               data-section="${section}"
               data-field="${fName}"
               onchange="markDirty('${fName}'); triggerAutoSave()" onblur="saveCurrentEdits()"
-              class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none cursor-pointer ${inputStyle}"
+              class="w-full min-h-[42px] border rounded-[2px] px-2.5 py-1.5 text-xs outline-none cursor-pointer ${inputStyle}"
             >
               ${optionsHtml}
             </select>
@@ -10419,14 +10992,14 @@ INDEX_TEMPLATE_V2 = """
         const isChecked = (String(value).toLowerCase() === 'true' || value === true || value === '1' || value === 'yes');
         return `
           <div class="space-y-1">
-            <div class="flex items-center justify-between min-h-[44px] py-1 ${hasProb ? 'bg-ember-light p-2 rounded-[2px] border border-ember' : ''}">
+            <div class="flex items-center justify-between min-h-[42px] py-1 ${hasProb ? 'bg-red-50 p-2 rounded-[2px] border border-brick' : ''}">
               <label for="${inputId}" class="flex-1 text-xs font-bold text-ink cursor-pointer flex items-center gap-1">
                 <span>${fName}</span>
                 ${problemBadge}
               </label>
               <div class="flex items-center gap-1.5">
                 ${historyControls}
-                <label class="min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer">
+                <label class="min-w-[42px] min-h-[42px] flex items-center justify-center cursor-pointer">
                   <input
                     type="checkbox"
                     id="${inputId}"
@@ -10449,8 +11022,8 @@ INDEX_TEMPLATE_V2 = """
       if (fType === 'multiline') {
         return `
           <div class="space-y-1">
-            <div class="flex items-center justify-between min-h-[32px]">
-              <label for="${inputId}" class="text-xs font-bold text-ink flex items-center gap-1">
+            <div class="flex items-center justify-between min-h-[28px]">
+              <label for="${inputId}" class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1">
                 <span>${fName}</span>
                 ${problemBadge}
               </label>
@@ -10462,7 +11035,7 @@ INDEX_TEMPLATE_V2 = """
               data-field="${fName}"
               rows="2"
               oninput="markDirty('${fName}'); triggerAutoSave()" onblur="saveCurrentEdits()"
-              class="w-full border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}"
+              class="w-full border rounded-[2px] px-2.5 py-1.5 text-xs outline-none ${inputStyle}"
             >${value || ''}</textarea>
             ${historyContainerHtml}
             ${unvalContainerHtml}
@@ -10470,14 +11043,14 @@ INDEX_TEMPLATE_V2 = """
         `;
       }
 
-      // Standard Text or Readonly
+      // Standard Text
       return `
         <div class="space-y-1">
-          <div class="flex items-center justify-between min-h-[32px]">
-            <label for="${inputId}" class="text-xs font-bold text-ink flex items-center gap-1">
+          <div class="flex items-center justify-between min-h-[28px]">
+            <label for="${inputId}" class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1">
               <span>${fName}</span>
               ${problemBadge}
-              ${isReadOnly ? '<span class="text-[9px] text-ink-faint font-normal font-mono">(Locked)</span>' : ''}
+              ${isReadOnly ? '<span class="text-[9px] text-stone-400 font-normal font-mono">(Locked)</span>' : ''}
             </label>
             <div class="flex items-center">${historyControls}</div>
           </div>
@@ -10487,7 +11060,7 @@ INDEX_TEMPLATE_V2 = """
             data-section="${section}"
             data-field="${fName}"
             value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full min-h-[44px] bg-tonal1 border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink-muted font-mono outline-none"' : `class="w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}" oninput="markDirty('${fName}'); handleVocabInput(this, '${fName}')" onchange="markDirty('${fName}'); handleVocabChange(this)" onblur="saveCurrentEdits()"`}
+            ${isReadOnly ? 'readonly class="w-full min-h-[42px] bg-stone-100 border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs text-muted font-mono outline-none"' : `class="w-full min-h-[42px] border rounded-[2px] px-2.5 py-1.5 text-xs outline-none ${inputStyle}" oninput="markDirty('${fName}'); handleVocabInput(this, '${fName}')" onchange="markDirty('${fName}'); handleVocabChange(this)" onblur="saveCurrentEdits()"`}
             ${activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName] && !isReadOnly ? `list="datalist_${section}_${fName}"` : ''}
           />
           ${activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName] && !isReadOnly ? `
@@ -10513,14 +11086,14 @@ INDEX_TEMPLATE_V2 = """
         if (container) container.classList.add('hidden');
         if (btn) {
           btn.innerHTML = '<span>?</span>';
-          btn.className = 'min-h-[44px] px-2 py-1 text-xs font-bold rounded-[2px] touch-target-min touch-press ml-1 flex items-center justify-center transition-all text-ink-faint hover:bg-tonal2 border border-bordercol';
+          btn.className = 'min-h-[38px] px-2 py-1 text-xs font-bold rounded-[2px] tap-highlight-transparent ml-1 flex items-center justify-center transition-all text-stone-400 hover:bg-stone-100 border border-bordercol';
         }
       } else {
         currentUnvalidatedMap[fName] = (input ? input.value : '') || '';
         if (container) container.classList.remove('hidden');
         if (btn) {
           btn.innerHTML = '<span>❓</span>';
-          btn.className = 'min-h-[44px] px-2 py-1 text-xs font-bold rounded-[2px] touch-target-min touch-press ml-1 flex items-center justify-center transition-all bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40';
+          btn.className = 'min-h-[38px] px-2 py-1 text-xs font-bold rounded-[2px] tap-highlight-transparent ml-1 flex items-center justify-center transition-all bg-amber-500/20 text-amber-600 border border-amber-500/40';
         }
         if (input) input.focus();
       }
@@ -10548,6 +11121,721 @@ INDEX_TEMPLATE_V2 = """
       }
     }
 
+    function isFieldProblemActive(fieldName, section, record) {
+      if (!record) return false;
+      const issues = record.flagged_issues || [];
+      if (issues.some(iss => (iss.field === fieldName || iss.id === fieldName) && !iss.resolved)) {
+        return true;
+      }
+      const obs = record.observation || {};
+      const reg = record.registration || {};
+
+      // Direct Problem Column Check (e.g. Genus_Problem)
+      const directProb = `${fieldName}_Problem`;
+      if (obs[directProb] === true || String(obs[directProb]).toLowerCase() === 'true' || obs[directProb] === '1' ||
+          reg[directProb] === true || String(reg[directProb]).toLowerCase() === 'true' || reg[directProb] === '1') {
+        return true;
+      }
+
+      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+        for (const p of activeSchema.ui_sections.problems) {
+          const target = p.maps_to || p.target;
+          if (target === fieldName || (!target && p.name.replace(/_Problem$/, '').replace(/_problem$/, '') === fieldName)) {
+            const pVal = (obs[p.name] !== undefined) ? obs[p.name] : reg[p.name];
+            if (pVal === true || String(pVal).toLowerCase() === 'true' || pVal === '1' || pVal === 'x') {
+              return true;
+            }
+          }
+        }
+      }
+
+      if (section === 'observation' && (obs.Loc_Problem === true || String(obs.Loc_Problem).toLowerCase() === 'true' || obs.Loc_Problem === '1')) {
+        return true;
+      }
+
+      return false;
+    }
+
+    function isValueUnknown(val) {
+      if (val === null || val === undefined) return false;
+      const s = String(val).trim().toLowerCase();
+      return ['ukjent', 'unknown', '?', '-', 'nan',
+              'unknown:missing', 'unknown:indecipherable',
+              'unknown:undigitized', 'withheld'].includes(s);
+    }
+
+    // ==========================================
+    // PROBLEMS TAB 3 & HISTORICAL CONFLICTS
+    // ==========================================
+    const SCHEMA_11_PROBLEMS = [
+      { name: 'Genus_Problem', label: 'Genus' },
+      { name: 'Species_Problem', label: 'Species' },
+      { name: 'Family_Problem', label: 'Family' },
+      { name: 'Author_Problem', label: 'Author' },
+      { name: 'PlantPart_Problem', label: 'Plant Part' },
+      { name: 'Collector_Problem', label: 'Collector' },
+      { name: 'Collection_Date_Problem', label: 'Collection Date' },
+      { name: 'Collection_Place_Problem', label: 'Collection Place' },
+      { name: 'Box_Label_Problem', label: 'Box Label' },
+      { name: 'Images_Problem', label: 'Images' },
+      { name: 'Other_problem', label: 'Other' }
+    ];
+
+    function renderProblemFlagGrid(record) {
+      const container = document.getElementById('flagGrid');
+      if (!container) return;
+
+      const obs = (record && record.observation) ? record.observation : {};
+
+      container.innerHTML = SCHEMA_11_PROBLEMS.map(p => {
+        const isFlagged = Boolean(obs[p.name] === true || String(obs[p.name]).toLowerCase() === 'true' || obs[p.name] === '1');
+        return `
+          <button
+            type="button"
+            onclick="toggle11ProblemFlag('${p.name}')"
+            class="min-h-[44px] p-2.5 rounded-[3px] border text-xs font-mono font-medium flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs ${isFlagged ? 'bg-red-50 text-brick border-brick font-bold' : 'bg-stone-50 text-ink border-stone-200 hover:bg-stone-100'}"
+            title="Toggle ${p.label} problem flag"
+          >
+            <span class="truncate">${p.label}</span>
+            <span class="text-xs ${isFlagged ? 'text-brick font-bold' : 'text-stone-400'}">${isFlagged ? '⚠' : '○'}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    async function toggle11ProblemFlag(flagName) {
+      if (!currentRecord) return;
+      if (!currentRecord.observation) currentRecord.observation = {};
+      const curVal = Boolean(currentRecord.observation[flagName] === true || String(currentRecord.observation[flagName]).toLowerCase() === 'true' || currentRecord.observation[flagName] === '1');
+      const newVal = !curVal;
+      currentRecord.observation[flagName] = newVal;
+      markDirty(flagName);
+
+      const baseName = flagName.replace(/_Problem$/, '').replace(/_problem$/, '');
+      if (!newVal && currentRecord.flagged_issues) {
+        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.field !== baseName && i.field !== flagName);
+      }
+
+      renderProblemFlagGrid(currentRecord);
+      updateTaxonProblemAlerts(currentRecord);
+      renderHistoricalConflicts(currentRecord);
+      updateProblemSummaryBar(currentRecord);
+      updateReviewButtonUI();
+
+      triggerAutoSave();
+      showToast(newVal ? `⚠ Flagged ${baseName} problem` : `✓ Cleared ${baseName} problem`);
+    }
+
+    function onCuratorNoteChange(val) {
+      if (!currentRecord) return;
+      if (!currentRecord.observation) currentRecord.observation = {};
+      currentRecord.observation.Comment = val;
+      markDirty('Comment');
+      triggerAutoSave();
+    }
+
+    function updateProblemSummaryBar(record) {
+      const summaryBar = document.getElementById('problemSummaryBar');
+      const summaryDot = document.getElementById('problemSummaryDot');
+      const countText = document.getElementById('problemSummaryCountText');
+      const actionText = document.getElementById('problemSummaryActionText');
+      const tabBadge = document.getElementById('tabProblemBadge');
+
+      if (!record) return;
+      const obs = record.observation || {};
+
+      let activeCount = 0;
+      SCHEMA_11_PROBLEMS.forEach(p => {
+        if (obs[p.name] === true || String(obs[p.name]).toLowerCase() === 'true' || obs[p.name] === '1') {
+          activeCount++;
+        }
+      });
+
+      const issues = (record.flagged_issues || []).filter(i => !i.resolved);
+      const total = activeCount + issues.length;
+
+      if (tabBadge) {
+        if (total > 0) {
+          tabBadge.textContent = total;
+          tabBadge.classList.remove('hidden');
+        } else {
+          tabBadge.classList.add('hidden');
+        }
+      }
+
+      if (countText && actionText && summaryDot && summaryBar) {
+        if (total > 0) {
+          countText.textContent = `${total} Active Discrepanc${total === 1 ? 'y' : 'ies'}`;
+          actionText.textContent = 'Action Needed';
+          summaryDot.className = 'w-2.5 h-2.5 rounded-full bg-brick animate-pulse';
+          summaryBar.className = 'flex items-center justify-between p-3 bg-red-50 border border-brick/30 rounded-[3px] transition-colors duration-200';
+        } else {
+          countText.textContent = '0 Active Discrepancies';
+          actionText.textContent = 'Verified Clear';
+          summaryDot.className = 'w-2.5 h-2.5 rounded-full bg-fern';
+          summaryBar.className = 'flex items-center justify-between p-3 bg-stone-100 border border-stone-200 rounded-[3px] transition-colors duration-200';
+        }
+      }
+    }
+
+    function renderHistoricalConflicts(record) {
+      const container = document.getElementById('historicalConflictsContainer');
+      if (!container) return;
+
+      if (!historicalData || Object.keys(historicalData).length === 0) {
+        container.innerHTML = `
+          <div class="p-3 bg-surface border border-bordercol rounded-[3px] flex items-center gap-2 text-xs font-mono text-muted">
+            <span class="text-stone-400">ℹ</span>
+            <span>No historical archive comparisons available for this specimen.</span>
+          </div>
+        `;
+        return;
+      }
+
+      let conflictCount = 0;
+      let conflictCardsHtml = '';
+
+      for (const [field, valuesMap] of Object.entries(historicalData)) {
+        if (!valuesMap || Object.keys(valuesMap).length === 0) continue;
+
+        let currentVal = '';
+        if (record && record.registration && record.registration[field] !== undefined) {
+          currentVal = record.registration[field];
+        } else if (record && record.observation && record.observation[field] !== undefined) {
+          currentVal = record.observation[field];
+        }
+        const currentValClean = (currentVal !== null && currentVal !== undefined) ? String(currentVal).trim() : '';
+        const currentValStr = currentValClean !== '' ? currentValClean : '[BLANK]';
+
+        for (const [histVal, sources] of Object.entries(valuesMap)) {
+          const histValClean = String(histVal).trim();
+          const isMatching = currentValClean.toLowerCase() === histValClean.toLowerCase();
+
+          if (!isMatching) {
+            conflictCount++;
+            const encodedVal = histVal.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const sourceStr = sources.join(', ');
+            const fClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
+
+            conflictCardsHtml += `
+              <div class="bg-surface border border-bordercol border-l-4 border-l-slate rounded-[3px] p-3.5 space-y-2.5 shadow-2xs">
+                <div class="flex items-center justify-between border-b border-stone-100 pb-1.5">
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${field}</span>
+                    <span class="px-1.5 py-0.2 rounded-[2px] text-[10px] font-mono font-bold bg-slate text-white">
+                      Archive Conflict
+                    </span>
+                  </div>
+                  <span class="text-[11px] font-mono text-muted">Current: <strong class="text-ink font-mono">${currentValStr}</strong></span>
+                </div>
+
+                <div class="p-2.5 bg-stone-50 border border-stone-200 rounded-[2px] flex items-center justify-between gap-2 text-xs">
+                  <div class="min-w-0 flex-1">
+                    <div class="font-mono font-bold text-slate">${encodedVal}</div>
+                    <p class="text-[10px] font-mono text-muted mt-0.5">Archive Sources: <span class="text-ink font-medium">${sourceStr}</span></p>
+                  </div>
+                  <button
+                    type="button"
+                    onclick="applyHistoricalAndFix('${field}', '${encodedVal}', '')"
+                    class="min-h-[38px] px-3 py-1.5 bg-slate hover:bg-stone-700 text-white font-mono font-bold text-xs rounded-[2px] transition-colors shrink-0 tap-highlight-transparent"
+                    title="Accept historical archive value"
+                  >
+                    Accept Value
+                  </button>
+                </div>
+
+                <!-- Direct manual override -->
+                <div class="flex items-center gap-1.5 pt-1">
+                  <input
+                    type="text"
+                    id="fix_input_${fClean}"
+                    value="${currentValClean.replace(/"/g, '&quot;')}"
+                    placeholder="Enter manual corrected value..."
+                    class="flex-1 bg-alabaster border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs font-mono text-ink outline-none focus:bg-white focus:border-ink"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();fixProblemInline('${field}', 'registration', '');}"
+                  />
+                  <button
+                    type="button"
+                    onclick="fixProblemInline('${field}', 'registration', '')"
+                    class="min-h-[36px] px-3 py-1.5 bg-stone-800 text-white font-mono font-bold text-xs rounded-[2px] shrink-0 tap-highlight-transparent"
+                  >
+                    Override
+                  </button>
+                </div>
+              </div>
+            `;
+          }
+        }
+      }
+
+      if (conflictCount === 0) {
+        container.innerHTML = `
+          <div class="p-3 bg-surface border border-fern/30 border-l-4 border-l-fern rounded-[3px] flex items-center gap-2 text-xs font-sans text-ink">
+            <span class="text-sm font-bold text-fern">✓</span>
+            <span class="font-medium text-muted">All active specimen values match historical archival databases.</span>
+          </div>
+        `;
+      } else {
+        container.innerHTML = conflictCardsHtml;
+      }
+    }
+
+    async function fixProblemInline(fieldName, section, issueId) {
+      if (!currentRecord) return;
+      const fClean = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
+      const inputEl = document.getElementById(`fix_input_${fClean}`);
+      if (!inputEl) return;
+      const newVal = inputEl.value.trim();
+
+      onFieldInputDirect(fieldName, section, newVal);
+
+      // Clear problem flag on field
+      const probCol = `${fieldName}_Problem`;
+      if (currentRecord.observation && currentRecord.observation[probCol] !== undefined) {
+        currentRecord.observation[probCol] = false;
+        markDirty(probCol);
+      }
+      if (currentRecord.flagged_issues) {
+        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issueId && i.field !== fieldName);
+      }
+
+      triggerAutoSave();
+      showToast(`Fixed ${fieldName}: ${newVal || '[BLANK]'}`);
+
+      renderDynamicForm(activeSchema, currentRecord);
+      updateTaxonProblemAlerts(currentRecord);
+      renderProblemFlagGrid(currentRecord);
+      updateProblemSummaryBar(currentRecord);
+      renderHistoricalConflicts(currentRecord);
+      updateReviewButtonUI();
+    }
+
+    async function applyHistoricalAndFix(fieldName, value, issueId) {
+      await applyHistoricalValue(fieldName, value);
+      const probCol = `${fieldName}_Problem`;
+      if (currentRecord && currentRecord.observation && currentRecord.observation[probCol] !== undefined) {
+        currentRecord.observation[probCol] = false;
+        markDirty(probCol);
+      }
+      if (currentRecord && currentRecord.flagged_issues) {
+        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issueId && i.field !== fieldName);
+      }
+      triggerAutoSave();
+      renderDynamicForm(activeSchema, currentRecord);
+      updateTaxonProblemAlerts(currentRecord);
+      renderProblemFlagGrid(currentRecord);
+      updateProblemSummaryBar(currentRecord);
+      renderHistoricalConflicts(currentRecord);
+      updateReviewButtonUI();
+    }
+
+    function renderDiscrepancies(record) {
+      renderProblemFlagGrid(record);
+      renderHistoricalConflicts(record);
+      updateProblemSummaryBar(record);
+    }
+
+    function populateDiscrepancyFields() {
+      const select = document.getElementById('discrepancyFieldSelect');
+      if (!select || !activeSchema || !activeSchema.ui_sections) return;
+      const reg = (activeSchema.ui_sections.registration || []).map(f => f.name);
+      const loc = (activeSchema.ui_sections.location || []).map(f => f.name);
+      const all = ['General Specimen Issue'].concat(reg).concat(loc);
+      select.innerHTML = all.map(f => `<option value="${f}">${f}</option>`).join('');
+    }
+
+    function openAddDiscrepancyModal(fieldName) {
+      if (fieldName) {
+        const select = document.getElementById('discrepancyFieldSelect');
+        if (select) select.value = fieldName;
+      }
+      openModal('addDiscrepancyModal');
+    }
+
+    async function submitDiscrepancy(e) {
+      e.preventDefault();
+      const field = document.getElementById('discrepancyFieldSelect').value;
+      const reason = document.getElementById('discrepancyReasonInput').value.trim();
+      const severity = document.querySelector('input[name="severity"]:checked').value;
+
+      if (!reason) return;
+
+      currentRecord.flagged_issues = currentRecord.flagged_issues || [];
+      currentRecord.flagged_issues.push({
+        id: `flag_${Date.now()}`,
+        field: field,
+        severity: severity,
+        reason: reason,
+        resolved: false
+      });
+
+      const matchProb = `${field}_Problem`;
+      if (currentRecord.observation) {
+        currentRecord.observation[matchProb] = true;
+        markDirty(matchProb);
+      }
+
+      closeModal('addDiscrepancyModal');
+      document.getElementById('discrepancyReasonInput').value = '';
+      renderDynamicForm(activeSchema, currentRecord);
+      updateTaxonProblemAlerts(currentRecord);
+      renderProblemFlagGrid(currentRecord);
+      updateProblemSummaryBar(currentRecord);
+      renderHistoricalConflicts(currentRecord);
+      await saveCurrentEdits();
+      showToast('Discrepancy flagged on host');
+    }
+
+    async function resolveDiscrepancy(issId) {
+      if (!currentRecord || !currentRecord.flagged_issues) return;
+      currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issId);
+      renderDynamicForm(activeSchema, currentRecord);
+      updateTaxonProblemAlerts(currentRecord);
+      renderProblemFlagGrid(currentRecord);
+      updateProblemSummaryBar(currentRecord);
+      renderHistoricalConflicts(currentRecord);
+      await saveCurrentEdits();
+      showToast('Discrepancy resolved');
+    }
+
+    // ==========================================
+    // LIVE SEARCH BAR & KEYBOARD SHORTCUTS
+    // ==========================================
+    function handleLiveSearch(query) {
+      const clearBtn = document.getElementById('btnClearSearch');
+      const dropdown = document.getElementById('searchDropdown');
+      const countEl = document.getElementById('searchResultsCount');
+      const listEl = document.getElementById('searchResultsList');
+
+      const q = (query || '').trim().toLowerCase();
+      if (clearBtn) {
+        if (q) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+      }
+
+      if (!q) {
+        if (dropdown) dropdown.classList.add('hidden');
+        return;
+      }
+
+      const matches = objectList.filter(o => {
+        const acc = String(o.accession_number || o.id || '').toLowerCase();
+        const name = String(o.scientific_name || '').toLowerCase();
+        const fam = String(o.family || '').toLowerCase();
+        const auth = String(o.author || '').toLowerCase();
+        return acc.includes(q) || name.includes(q) || fam.includes(q) || auth.includes(q);
+      }).slice(0, 8);
+
+      if (dropdown && countEl && listEl) {
+        countEl.textContent = `${matches.length} Match${matches.length === 1 ? '' : 'es'}`;
+        if (matches.length > 0) {
+          listEl.innerHTML = matches.map(m => `
+            <button
+              type="button"
+              onclick="selectSearchResult('${m.id}')"
+              class="w-full p-2 rounded-[2px] hover:bg-stone-100 flex items-center justify-between text-left text-xs font-mono transition-colors tap-highlight-transparent min-h-[38px]"
+            >
+              <div class="truncate">
+                <span class="font-bold text-ink">${highlightMatch(m.accession_number || m.id, q)}</span>
+                <span class="italic text-muted ml-1">${highlightMatch(m.scientific_name, q)}</span>
+              </div>
+              <span class="text-[10px] text-muted shrink-0">${m.review_status === 'reviewed' ? '✓ OK' : '○'}</span>
+            </button>
+          `).join('');
+        } else {
+          listEl.innerHTML = '<div class="p-3 text-center text-xs text-muted font-sans">No matching specimens</div>';
+        }
+        dropdown.classList.remove('hidden');
+      }
+    }
+
+    function clearLiveSearch() {
+      const input = document.getElementById('vaultLiveSearch');
+      const clearBtn = document.getElementById('btnClearSearch');
+      const dropdown = document.getElementById('searchDropdown');
+      if (input) input.value = '';
+      if (clearBtn) clearBtn.classList.add('hidden');
+      if (dropdown) dropdown.classList.add('hidden');
+    }
+
+    function selectSearchResult(oid) {
+      clearLiveSearch();
+      loadSpecimen(oid);
+    }
+
+    // Global ⌘K / Ctrl+K listener
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const detailSearch = document.getElementById('vaultLiveSearch');
+        const listSearch = document.getElementById('searchBox');
+        if (detailSearch && !document.getElementById('detailView').classList.contains('hidden')) {
+          detailSearch.focus();
+          detailSearch.select();
+        } else if (listSearch) {
+          listSearch.focus();
+          listSearch.select();
+        }
+      }
+    });
+
+    // ==========================================
+    // REVIEW STATUS & PRIMARY ACTION
+    // ==========================================
+    function updateReviewButtonUI() {
+      const btn = document.getElementById('btnPrimaryReview');
+      const text = document.getElementById('primaryReviewText');
+      const icon = document.getElementById('primaryReviewIcon');
+      const badge = document.getElementById('badgeStatus');
+      const badgeText = document.getElementById('badgeStatusText');
+
+      if (isReviewed) {
+        if (btn) {
+          btn.className = 'w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-fern text-white border-2 border-fern-dark';
+        }
+        if (text) text.textContent = '✓ REVIEWED (TAP TO UNDO)';
+        if (icon) {
+          icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />';
+        }
+        if (badge) {
+          badge.className = 'flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-fern-light text-fern border-fern/40';
+        }
+        if (badgeText) badgeText.textContent = 'REVIEWED';
+      } else {
+        if (btn) {
+          btn.className = 'w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-white text-ink border-2 border-ink hover:bg-stone-50';
+        }
+        if (text) text.textContent = 'MARK AS REVIEWED';
+        if (icon) {
+          icon.innerHTML = '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"></circle><path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"></path>';
+        }
+        if (badge) {
+          badge.className = 'flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300';
+        }
+        if (badgeText) badgeText.textContent = 'UNREVIEWED';
+      }
+
+      if (currentRecord) {
+        currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+      }
+    }
+
+    async function toggleReviewed() {
+      isReviewed = !isReviewed;
+      updateReviewButtonUI();
+      await saveCurrentEdits();
+      showToast(isReviewed ? '✓ Specimen marked as Reviewed' : 'Specimen marked Unreviewed');
+    }
+
+    // ==========================================
+    // AUTO-SAVE & STATE ENGINE
+    // ==========================================
+    function handleVocabInput(input, fName) {
+      markDirty(fName);
+      triggerAutoSave();
+    }
+
+    function handleVocabChange(input) {
+      if (input.value && input.value.trim() !== '') {
+        const val = input.value.trim();
+        const fName = input.getAttribute('data-field');
+        if (val !== '?') {
+          if (activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName]) {
+            const match = activeSchema.vocabulary[fName].find(v => v.toLowerCase() === val.toLowerCase());
+            if (match) {
+              input.value = match;
+            } else {
+              input.value = val;
+            }
+          } else {
+            input.value = val;
+          }
+        }
+      }
+      const fName = input.getAttribute('data-field');
+      markDirty(fName);
+      triggerAutoSave();
+    }
+
+    function markDirty(fieldName) {
+      if (fieldName) dirtyFields.add(fieldName);
+    }
+
+    function triggerAutoSave() {
+      const syncStatus = document.getElementById('footerSyncStatus');
+      if (syncStatus) {
+        syncStatus.innerHTML = `<span class='flex items-center gap-1.5 font-mono text-ember font-medium animate-pulse'><svg class="animate-spin h-3 w-3 text-ember" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Saving changes...</span></span>`;
+      }
+      const btnRev = document.getElementById('btnPrimaryReview');
+      if (btnRev) btnRev.disabled = true;
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(saveCurrentEdits, 800);
+    }
+
+    async function saveCurrentEdits() {
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = null;
+      }
+      if (!currentOid) return;
+
+      if (isSaving) {
+        hasPendingSave = true;
+        return;
+      }
+      isSaving = true;
+
+      try {
+        while (true) {
+          hasPendingSave = false;
+          const btnRev = document.getElementById('btnPrimaryReview');
+
+          const regPayload = {};
+          const obsPayload = {};
+
+          // Collect registration fields
+          document.querySelectorAll('[data-section="registration"]').forEach(input => {
+            const f = input.getAttribute('data-field');
+            if (dirtyFields.has(f)) {
+              regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
+            }
+          });
+
+          // Collect observation fields
+          document.querySelectorAll('[data-section="observation"]').forEach(input => {
+            const f = input.getAttribute('data-field');
+            if (dirtyFields.has(f)) {
+              obsPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
+            }
+          });
+
+          // Merge problem flags & observation state
+          if (currentRecord && currentRecord.observation) {
+            Object.keys(currentRecord.observation).forEach(k => {
+              if (k.endsWith('_Problem') || k.endsWith('_problem') || k.startsWith('Unknown_') || ['Building', 'Floor', 'Cabinet', 'Stored as', 'Extra', 'Comment', 'Loaned out', 'Loaned out date', 'Loc_Problem'].includes(k)) {
+                if (dirtyFields.has(k)) {
+                  obsPayload[k] = currentRecord.observation[k];
+                }
+              }
+            });
+          }
+
+          dirtyFields.clear();
+
+          const unvalSourcesList = Object.entries(currentUnvalidatedMap || {}).map(([field, comment]) => ({ field, comment }));
+
+          const payload = {
+            id: currentOid,
+            reviewed: isReviewed,
+            registration: regPayload,
+            observation: obsPayload,
+            unvalidated_sources: unvalSourcesList,
+            timestamp: new Date().toISOString()
+          };
+
+          if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
+            queueMutation(payload);
+            if (btnRev) btnRev.disabled = false;
+
+            if (currentRecord) {
+              currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+              currentRecord.unvalidated_sources = unvalSourcesList;
+              updateReviewButtonUI();
+            }
+
+            const listItem = objectList.find(o => String(o.id) === String(currentOid));
+            if (listItem) {
+              listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+              listItem.has_unvalidated = (unvalSourcesList.length > 0);
+            }
+
+            if (!hasPendingSave) break;
+            continue;
+          }
+
+          if (btnRev) btnRev.disabled = false;
+
+          try {
+            const res = await apiFetch('/api/update', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            });
+
+            if (res && (res._status === 409 || res.status === 409 || (typeof res.error === 'string' && res.error.includes('Conflict')))) {
+              showToast(`⚠️ ${res.error || 'Conflict: Host modified this record'}`, true);
+              const syncStatus = document.getElementById('footerSyncStatus');
+              if (syncStatus) {
+                syncStatus.innerHTML = '<span class="font-mono text-ember font-medium" id="footerSyncStatusText">⚠️ Host conflict</span>';
+              }
+              if (btnRev) btnRev.disabled = false;
+              if (!hasPendingSave) break;
+              continue;
+            }
+
+            if (res && res.error && res.error !== 'Failed to fetch') {
+              showToast(`⚠️ ${res.error}`, true);
+              if (btnRev) btnRev.disabled = false;
+              if (!hasPendingSave) break;
+              continue;
+            }
+
+            if (!res || res.error === 'Failed to fetch' || (Object.keys(res).length === 0)) {
+              throw new Error('Network failure');
+            }
+
+            const syncStatus = document.getElementById('footerSyncStatus');
+            if (syncStatus) {
+              syncStatus.innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
+            }
+            if (btnRev) btnRev.disabled = false;
+            const undoBtn = document.getElementById('btnMobileUndo');
+            if (undoBtn) undoBtn.classList.remove('hidden');
+            if (undoBtn) undoBtn.classList.add('flex');
+
+            if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
+              if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
+              if (res.has_history !== undefined) currentRecord.has_history = res.has_history;
+              if (res.has_unknown !== undefined) currentRecord.has_unknown = res.has_unknown;
+              if (res.review_status !== undefined) currentRecord.review_status = res.review_status;
+              updateReviewButtonUI();
+
+              const listItem = objectList.find(o => String(o.id) === String(currentOid));
+              if (listItem) {
+                if (res.has_flags !== undefined) listItem.has_flags = res.has_flags;
+                if (res.has_history !== undefined) listItem.has_history = res.has_history;
+                if (res.has_unknown !== undefined) listItem.has_unknown = res.has_unknown;
+                if (res.review_status !== undefined) listItem.review_status = res.review_status;
+              }
+            }
+
+            if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
+              const textEl = document.getElementById('footerSyncStatusText');
+              if (textEl) textEl.classList.add('hidden');
+            }
+          } catch (err) {
+            queueMutation(payload);
+            if (btnRev) btnRev.disabled = false;
+
+            if (currentRecord) {
+              currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
+              updateReviewButtonUI();
+            }
+
+            const listItem = objectList.find(o => String(o.id) === String(currentOid));
+            if (listItem) {
+              listItem.review_status = isReviewed ? 'reviewed' : 'pending';
+            }
+          }
+
+          if (!hasPendingSave) {
+            break;
+          }
+        }
+      } finally {
+        isSaving = false;
+      }
+    }
+
     // ==========================================
     // UNDO & RECENT EDITS
     // ==========================================
@@ -10568,13 +11856,15 @@ INDEX_TEMPLATE_V2 = """
           }
 
           if (document.getElementById('recentEditsModal') && !document.getElementById('recentEditsModal').classList.contains('hidden')) {
-              await openRecentEditsModal();
+            await openRecentEditsModal();
           }
 
           if (currentRecord && String(res.restored.id) === String(currentOid)) {
             Object.assign(currentRecord, res.restored);
             isReviewed = currentRecord.review_status === 'reviewed';
+            refreshLocUI();
             renderDynamicForm(activeSchema, currentRecord);
+            updateTaxonProblemAlerts(currentRecord);
             renderDiscrepancies(currentRecord);
             updateReviewButtonUI();
           }
@@ -10605,25 +11895,25 @@ INDEX_TEMPLATE_V2 = """
           listContainer.innerHTML = res.edits.map(edit => `
             <div class="bg-surface border border-bordercol rounded-[2px] p-3 text-sm flex flex-col gap-2 shadow-xs">
               <div class="flex items-center justify-between">
-                <span class="font-mono text-xs font-medium text-ink bg-tonal1 px-1.5 py-0.5 rounded-[2px]">${edit.oid}</span>
-                <span class="text-[10px] text-ink-muted">${edit.time}</span>
+                <span class="font-mono text-xs font-medium text-ink bg-stone-100 px-1.5 py-0.5 rounded-[2px]">${edit.oid}</span>
+                <span class="text-[10px] text-muted">${edit.time}</span>
               </div>
-              <div class="text-xs text-ink break-words">${edit.summary}</div>
-              <div class="flex justify-end border-t border-tonal2 mt-1 pt-2">
-                 <button type="button" onclick="undoLastEdit('${edit.oid}')" class="text-[11px] font-bold text-ember hover:bg-ember/10 px-2 py-1 border border-ember-border bg-ember-light rounded-[2px] touch-press">Revert</button>
+              <div class="text-xs text-ink break-words font-mono">${edit.summary}</div>
+              <div class="flex justify-end border-t border-stone-100 mt-1 pt-2">
+                <button type="button" onclick="undoLastEdit('${edit.oid}')" class="text-[11px] font-bold text-ember hover:bg-orange-100 px-2 py-1 border border-orange-200 bg-orange-50 rounded-[2px] tap-highlight-transparent">Revert</button>
               </div>
             </div>
           `).join('');
         } else {
           listContainer.innerHTML = `
-            <div class="text-center p-6 text-ink-faint text-xs">
+            <div class="text-center p-6 text-stone-400 text-xs">
               <div class="text-2xl mb-2">∅</div>
               No recent edits in this session.
             </div>
           `;
         }
       } catch (err) {
-        listContainer.innerHTML = `<div class="text-center p-4 text-ember text-xs">Error loading history.</div>`;
+        listContainer.innerHTML = `<div class="text-center p-4 text-brick text-xs">Error loading history.</div>`;
       }
 
       modal.classList.remove('hidden');
@@ -10634,60 +11924,8 @@ INDEX_TEMPLATE_V2 = """
     }
 
     // ==========================================
-    // LOCATION PRESETS LOGIC
+    // SETTINGS & LOCATION PRESETS
     // ==========================================
-    function applyLocPreset() {
-      const select = document.getElementById('locPresetSelect');
-      if (!select) return;
-      const pName = select.value;
-      if (!pName || pName === "Default") return;
-
-      const presetData = locationPresets[pName];
-      if (!presetData) return;
-
-      lastSelectedPreset = pName;
-      let changed = false;
-
-      // Ensure activeSchema and location fields exist
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
-        activeSchema.ui_sections.location.forEach(field => {
-          const inputId = `input_observation_${field.name.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-          const input = document.getElementById(inputId);
-          if (input && presetData[field.name] !== undefined) {
-             const newVal = presetData[field.name];
-             if (input.type === 'checkbox') {
-               const checkedVal = (String(newVal).toLowerCase() === 'true' || newVal === true || newVal === '1');
-               if (input.checked !== checkedVal) {
-                  input.checked = checkedVal;
-                  changed = true;
-                  markDirty(field.name);
-               }
-             } else {
-               if (input.value !== newVal) {
-                 input.value = newVal;
-                 changed = true;
-                 markDirty(field.name);
-               }
-             }
-          }
-        });
-      }
-
-      if (changed) {
-        if (currentRecord && currentRecord.observation && activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
-          activeSchema.ui_sections.location.forEach(field => {
-            if (presetData[field.name] !== undefined) {
-              currentRecord.observation[field.name] = presetData[field.name];
-            }
-          });
-        }
-        showToast(`Applied Preset: ${pName}`);
-        triggerAutoSave();
-        if (typeof updateDetailProblemBanner === 'function' && currentRecord) updateDetailProblemBanner(currentRecord);
-        if (typeof renderDiscrepancies === 'function' && currentRecord) renderDiscrepancies(currentRecord);
-      }
-    }
-
     async function openSettingsModal() {
       openModal('settingsModal');
       const input = document.getElementById('settingImageUrlPattern');
@@ -10739,14 +11977,14 @@ INDEX_TEMPLATE_V2 = """
 
       const keys = Object.keys(locationPresets).filter(k => k !== 'Default');
       if (keys.length === 0) {
-        container.innerHTML = '<p class="text-xs text-ink-faint italic py-2">No custom presets saved yet.</p>';
+        container.innerHTML = '<p class="text-xs text-stone-400 italic py-2 font-mono">No custom presets saved yet.</p>';
         return;
       }
 
       container.innerHTML = keys.map(k => `
-        <div class="flex items-center justify-between p-2.5 border-b border-bordercol bg-surface hover:bg-tonal1 rounded-[2px] transition-colors mb-1 shadow-xs">
-          <span class="text-sm font-sans text-ink">${k}</span>
-          <button type="button" onclick="deleteLocPreset('${k}')" class="px-2 py-1 text-xs font-bold text-ember border border-ember bg-ember-light hover:bg-ember rounded-[2px] hover:text-white transition-colors cursor-pointer touch-press">Delete</button>
+        <div class="flex items-center justify-between p-2.5 border-b border-bordercol bg-surface hover:bg-stone-50 rounded-[2px] transition-colors mb-1 shadow-2xs">
+          <span class="text-sm font-mono text-ink">${k}</span>
+          <button type="button" onclick="deleteLocPreset('${k}')" class="px-2 py-1 text-xs font-mono font-bold text-brick border border-brick/40 bg-brick-light hover:bg-brick rounded-[2px] hover:text-white transition-colors cursor-pointer tap-highlight-transparent">Delete</button>
         </div>
       `).join('');
     }
@@ -10765,8 +12003,7 @@ INDEX_TEMPLATE_V2 = """
           if (lastSelectedPreset === name) lastSelectedPreset = "Default";
           renderPresetSettingsList();
           showToast(`Preset deleted.`);
-          // Repopulate dynamic form to update select options
-          renderDynamicForm(activeSchema, currentRecord);
+          refreshLocUI();
         } else {
           showToast(`Failed to delete preset.`, true);
         }
@@ -10799,20 +12036,14 @@ INDEX_TEMPLATE_V2 = """
         return;
       }
 
-      const vals = {};
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
-        activeSchema.ui_sections.location.forEach(field => {
-          const inputId = `input_observation_${field.name.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-          const input = document.getElementById(inputId);
-          if (input) {
-             if (input.type === 'checkbox') {
-               vals[field.name] = input.checked ? "True" : "False";
-             } else {
-               vals[field.name] = input.value;
-             }
-          }
-        });
-      }
+      const obs = (currentRecord && currentRecord.observation) ? currentRecord.observation : {};
+      const vals = {
+        Building: obs.Building || '',
+        Floor: obs.Floor || '',
+        Cabinet: obs.Cabinet || '',
+        'Stored as': obs['Stored as'] || '',
+        Extra: obs.Extra || ''
+      };
 
       try {
         const res = await apiFetch('/api/presets', {
@@ -10827,13 +12058,6 @@ INDEX_TEMPLATE_V2 = """
           toggleNewPresetForm();
           renderPresetSettingsList();
           showToast(`Preset "${name}" saved.`);
-          // Repopulate dynamic form to update select options and set it to active
-          renderDynamicForm(activeSchema, currentRecord);
-          // Set dropdown
-          setTimeout(() => {
-             const sel = document.getElementById('locPresetSelect');
-             if(sel) sel.value = name;
-          }, 50);
         } else {
           showToast(`Failed to save preset.`, true);
         }
@@ -10844,982 +12068,68 @@ INDEX_TEMPLATE_V2 = """
     }
 
     // ==========================================
-    // DISCREPANCY & PROBLEM HELPERS
+    // FULLSCREEN PHOTO VIEWER MODAL
     // ==========================================
-    const UNKNOWN_TOKENS = new Set([
-      "?", "-", "nan", "unknown", "ukjent", "[unknown]", "[ukjent]",
-      "unknown:missing", "unknown:indecipherable", "unknown:undigitized",
-      "withheld", "n/a", "none"
-    ]);
-
-    function isValueUnknown(val) {
-      if (val === null || val === undefined) return false;
-      const s = String(val).trim().toLowerCase();
-      if (!s) return false;
-      return UNKNOWN_TOKENS.has(s);
-    }
-
-    function isFieldProblemActive(fieldName, section, record) {
-      if (!record) return false;
-      if (record.flagged_issues && record.flagged_issues.some(i => !i.resolved && i.field === fieldName)) {
-        return true;
-      }
-      if (record.observation) {
-        const directProb = record.observation[`${fieldName}_Problem`];
-        if (directProb === true || String(directProb).toLowerCase() === 'true' || directProb === '1') {
-          return true;
-        }
-        if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-          const match = activeSchema.ui_sections.problems.find(p => p.maps_to === fieldName || p.target === fieldName || p.name === `${fieldName}_Problem`);
-          if (match) {
-            const v = record.observation[match.name];
-            if (v === true || String(v).toLowerCase() === 'true' || v === '1') {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    }
-
-    async function toggleFieldProblem(fieldName) {
-      if (!currentRecord) return;
-      const probCol = `${fieldName}_Problem`;
-      currentRecord.observation = currentRecord.observation || {};
-      const curVal = (currentRecord.observation[probCol] === true || String(currentRecord.observation[probCol]).toLowerCase() === 'true' || currentRecord.observation[probCol] === '1');
-      const newVal = !curVal;
-      currentRecord.observation[probCol] = newVal;
-      markDirty(probCol);
-
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-        activeSchema.ui_sections.problems.forEach(p => {
-          if (p.maps_to === fieldName || p.target === fieldName || p.name === probCol) {
-            currentRecord.observation[p.name] = newVal;
-            markDirty(p.name);
-          }
-        });
-      }
-
-      if (!newVal && currentRecord.flagged_issues) {
-        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.field !== fieldName);
-      }
-
-      renderDynamicForm(activeSchema, currentRecord);
-      updateDetailProblemBanner(currentRecord);
-      renderDiscrepancies(currentRecord);
-      await saveCurrentEdits();
-      showToast(newVal ? `Flagged problem on ${fieldName}` : `Cleared problem on ${fieldName}`);
-    }
-
-    // ==========================================
-    // DISCREPANCY & PROBLEM TOGGLES
-    // ==========================================
-    function renderDiscrepancies(record) {
-      renderProblemsTab(record);
-      renderHistoricalConflicts(record);
-
-      // Quick Toggles from ui_sections.problems (Tier 1)
-      const togglesContainer = document.getElementById('problemTogglesContainer');
-      if (togglesContainer && activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-        const probs = activeSchema.ui_sections.problems;
-        togglesContainer.innerHTML = probs.map(p => {
-          const pName = p.name;
-          const pLabel = pName.replace('_Problem', '').replace(/_/g, ' ');
-          const isFlagged = (record && record.observation && (String(record.observation[pName]).toLowerCase() === 'true' || record.observation[pName] === true || record.observation[pName] === '1'));
-          return `
-            <label class="touch-target-min min-h-[44px] flex items-center gap-2 p-2.5 border rounded-[2px] transition-colors touch-press cursor-pointer ${isFlagged ? 'border-red-300 bg-red-50 text-[#C62828] font-semibold' : 'border-bordercol bg-surface text-ink hover:bg-tonal1'}">
-              <input
-                type="checkbox"
-                id="prob_${pName}"
-                ${isFlagged ? 'checked' : ''}
-                onchange="toggleProblemFlag('${pName}')"
-                class="w-4 h-4 text-[#C62828] rounded-[2px] border-bordercol focus:ring-[#C62828] cursor-pointer shrink-0"
-              />
-              <span class="truncate font-sans text-xs select-none">${pLabel}</span>
-            </label>
-          `;
-        }).join('');
-      }
-    }
-
-    function renderProblemsTab(record) {
-      const container = document.getElementById('problemResolverContainer');
-      const badge = document.getElementById('activeIssuesCountBadge');
-      if (!container) return;
-      if (!record) {
-        container.innerHTML = '<p class="text-xs text-ink-faint italic py-1">No specimen selected.</p>';
-        if (badge) badge.classList.add('hidden');
+    function openPhotoViewer() {
+      if (!photoUrls || photoUrls.length === 0) {
+        showToast('No photo scans attached to this specimen');
         return;
       }
-
-      const issues = record.flagged_issues || [];
-      const problemFields = [];
-      const seenFields = new Set();
-
-      function getSubstantiveFieldName(rawField) {
-        if (!rawField) return 'General';
-        if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-          const match = activeSchema.ui_sections.problems.find(p => p.name === rawField);
-          if (match && (match.maps_to || match.target)) return match.maps_to || match.target;
-        }
-        if (rawField.endsWith('_Problem')) {
-          const stripped = rawField.replace(/_Problem$/, '').replace(/_/g, ' ');
-          if (activeSchema && activeSchema.ui_sections) {
-            const allReg = activeSchema.ui_sections.registration || [];
-            const allLoc = activeSchema.ui_sections.location || [];
-            const found = allReg.find(f => f.name.toLowerCase() === stripped.toLowerCase()) || allLoc.find(f => f.name.toLowerCase() === stripped.toLowerCase());
-            if (found) return found.name;
-          }
-          return stripped;
-        }
-        return rawField;
-      }
-
-      // 1. Add flagged custom issues
-      issues.forEach(iss => {
-        if (!iss.resolved) {
-          const rawName = iss.field || 'General';
-          const fName = getSubstantiveFieldName(rawName);
-          seenFields.add(fName);
-          const isReg = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.registration && activeSchema.ui_sections.registration.some(f => f.name === fName));
-          problemFields.push({
-            field: fName,
-            section: isReg ? 'registration' : 'observation',
-            type: 'flagged_issue',
-            issueId: iss.id,
-            reason: iss.reason || 'Flagged discrepancy'
-          });
-        }
-      });
-
-      // 2. Add schema problem fields
-      if (activeSchema && activeSchema.ui_sections) {
-        const regFields = activeSchema.ui_sections.registration || [];
-        const locFields = activeSchema.ui_sections.location || [];
-
-        regFields.forEach(f => {
-          if (f.name.endsWith('_Problem')) return;
-          if (!seenFields.has(f.name)) {
-            const val = (record.registration && record.registration[f.name] !== undefined) ? record.registration[f.name] : '';
-            const isProb = isFieldProblemActive(f.name, 'registration', record);
-            const isUkn = isValueUnknown(val);
-            if (isProb || isUkn) {
-              seenFields.add(f.name);
-              problemFields.push({
-                field: f.name,
-                section: 'registration',
-                type: isProb ? 'active_problem' : 'unknown_value',
-                issueId: null,
-                reason: isProb ? 'Problem flag active' : 'Unknown / Missing value'
-              });
-            }
-          }
-        });
-
-        locFields.forEach(f => {
-          if (f.name.endsWith('_Problem') || (activeSchema.ui_sections.problems && activeSchema.ui_sections.problems.some(p => p.name === f.name))) return;
-          if (!seenFields.has(f.name)) {
-            const val = (record.observation && record.observation[f.name] !== undefined) ? record.observation[f.name] : '';
-            const isProb = isFieldProblemActive(f.name, 'observation', record);
-            const isUkn = isValueUnknown(val);
-            if (isProb || isUkn) {
-              seenFields.add(f.name);
-              problemFields.push({
-                field: f.name,
-                section: 'observation',
-                type: isProb ? 'active_problem' : 'unknown_value',
-                issueId: null,
-                reason: isProb ? 'Problem flag active' : 'Unknown / Missing value'
-              });
-            }
-          }
-        });
-      }
-
-      // Update count badge
-      if (badge) {
-        if (problemFields.length > 0) {
-          badge.textContent = `${problemFields.length} active issue${problemFields.length === 1 ? '' : 's'}`;
-          badge.classList.remove('hidden');
-        } else {
-          badge.classList.add('hidden');
-        }
-      }
-
-      if (problemFields.length === 0) {
-        container.innerHTML = `
-          <div class="p-3 bg-surface border border-fern/40 border-l-[3px] border-l-fern rounded-[2px] flex items-center gap-2.5 text-xs font-sans text-ink">
-            <span class="text-sm font-bold text-fern">✓</span>
-            <span class="font-medium text-ink-muted">All specimen fields validated. No active problem flags.</span>
-          </div>
-        `;
-        return;
-      }
-
-      let cardsHtml = '';
-      problemFields.forEach(p => {
-        const fName = p.field;
-        const fClean = fName.replace(/[^a-zA-Z0-9_]/g, '_');
-        let currentVal = '';
-        if (p.section === 'registration' && record.registration && record.registration[fName] !== undefined) {
-          currentVal = record.registration[fName];
-        } else if (record.observation && record.observation[fName] !== undefined) {
-          currentVal = record.observation[fName];
-        }
-        const currentValStr = (currentVal !== null && currentVal !== undefined && String(currentVal).trim() !== '') ? String(currentVal) : '[BLANK]';
-        const escapedCurrentVal = String(currentVal || '').replace(/"/g, '&quot;');
-
-        const isUnknown = p.type === 'unknown_value';
-        const borderLeftClass = isUnknown ? 'border-l-[3px] border-l-[#FBC02D]' : 'border-l-[3px] border-l-[#C62828]';
-        const badgeClass = isUnknown ? 'bg-[#FBC02D] text-[#2c302e]' : 'bg-[#C62828] text-white';
-        const badgeLabel = isUnknown ? 'UKN' : 'ERR';
-
-        // Check if historical suggestions exist for this field
-        let histSuggestionsHtml = '';
-        if (historicalData && historicalData[fName] && Object.keys(historicalData[fName]).length > 0) {
-          const suggestions = historicalData[fName];
-          let sugItems = '';
-          for (const [sugVal, sources] of Object.entries(suggestions)) {
-            const encodedVal = sugVal.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            const sourceStr = sources.join(', ');
-            sugItems += `
-              <div class="p-2 bg-surface border border-bordercol rounded-[2px] flex items-center justify-between gap-2 text-xs">
-                <div class="min-w-0 flex-1">
-                  <span class="font-mono font-bold text-fern-dark">${encodedVal}</span>
-                  <p class="text-[10px] text-ink-muted">Source: <span class="font-medium text-ink">${sourceStr}</span></p>
-                </div>
-                <button
-                  type="button"
-                  onclick="applyHistoricalAndFix('${fName}', '${encodedVal}', '${p.issueId || ''}')"
-                  class="min-h-[34px] px-3 py-1 bg-fern hover:bg-fern-dark text-white font-bold text-xs rounded-[2px] shadow-xs shrink-0 touch-target-min touch-press"
-                  title="Apply historical suggestion & clear flag"
-                >
-                  Apply Fix
-                </button>
-              </div>
-            `;
-          }
-
-          histSuggestionsHtml = `
-            <div class="pt-2 border-t border-tonal2 space-y-1.5">
-              <p class="font-mono text-[10px] uppercase font-bold text-ink-muted flex items-center gap-1">
-                <span>📜</span><span>Historical Suggestions:</span>
-              </p>
-              <div class="space-y-1.5">
-                ${sugItems}
-              </div>
-            </div>
-          `;
-        }
-
-        cardsHtml += `
-          <div class="bg-surface border border-bordercol ${borderLeftClass} rounded-[2px] p-3 space-y-2.5 shadow-2xs">
-            <!-- Card Header -->
-            <div class="flex items-start justify-between gap-2 border-b border-tonal2 pb-2">
-              <div>
-                <div class="flex items-center gap-1.5">
-                  <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${fName}</span>
-                  <span class="px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold ${badgeClass}">
-                    ${badgeLabel}
-                  </span>
-                  <span class="text-[11px] text-ink-muted">${p.reason}</span>
-                </div>
-                <p class="text-xs font-mono text-ink-muted mt-0.5">Current: <span class="font-semibold text-ink font-mono">${currentValStr}</span></p>
-              </div>
-              <button
-                type="button"
-                onclick="${p.issueId ? `resolveDiscrepancy('${p.issueId}')` : `toggleFieldProblem('${fName}')`}"
-                class="text-[11px] font-medium text-ink-muted hover:text-[#C62828] px-2 py-1 rounded-[2px] border border-bordercol hover:bg-tonal1 transition-colors touch-target-min shrink-0"
-                title="Clear flag without changing value"
-              >
-                ✕ Clear Flag
-              </button>
-            </div>
-
-            <!-- Inline Direct Fix Editor -->
-            <div class="space-y-1.5">
-              <label class="block font-mono text-[10px] uppercase font-bold text-ink-muted">Manual Override / Corrected Value:</label>
-              <div class="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  id="fix_input_${fClean}"
-                  value="${escapedCurrentVal}"
-                  placeholder="Enter corrected value..."
-                  class="flex-1 bg-surface border border-bordercol rounded-[2px] px-2.5 py-2 text-xs font-mono text-ink outline-none focus:border-fern focus:ring-1 focus:ring-fern"
-                  onkeydown="if(event.key==='Enter'){event.preventDefault();fixProblemInline('${fName}', '${p.section}', '${p.issueId || ''}');}"
-                />
-                <button
-                  type="button"
-                  onclick="fixProblemInline('${fName}', '${p.section}', '${p.issueId || ''}')"
-                  class="min-h-[36px] px-3 py-2 bg-fern hover:bg-fern-dark text-white font-bold text-xs rounded-[2px] shadow-xs shrink-0 touch-target-min touch-press flex items-center gap-1"
-                >
-                  <span>✓</span>
-                  <span>Save</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Historical Suggestions if available -->
-            ${histSuggestionsHtml}
-          </div>
-        `;
-      });
-
-      container.innerHTML = cardsHtml;
+      photoZoom = 1;
+      photoRotation = 0;
+      photoPan = { x: 0, y: 0 };
+      updatePhotoTransform();
+      const modalImg = document.getElementById('photoViewerImg');
+      if (modalImg) modalImg.src = photoUrls[currentPhotoIdx] || photoUrls[0];
+      const title = document.getElementById('photoViewerTitle');
+      if (title) title.textContent = `Specimen Plate #${currentRecord ? (currentRecord.accession_number || currentRecord.id) : ''}`;
+      const counter = document.getElementById('photoViewerCounter');
+      if (counter) counter.textContent = `(${currentPhotoIdx + 1}/${photoUrls.length})`;
+      openModal('photoViewerModal');
     }
 
-    function renderHistoricalConflicts(record) {
-      const container = document.getElementById('historicalConflictsContainer');
-      const badge = document.getElementById('histConflictBadge');
-      if (!container) return;
-
-      if (!historicalData || Object.keys(historicalData).length === 0) {
-        container.innerHTML = '<p class="text-xs text-ink-faint italic py-1">No historical archive records found for this specimen.</p>';
-        if (badge) badge.textContent = '0 comparisons';
-        return;
-      }
-
-      let conflictCount = 0;
-      let matchCount = 0;
-      let conflictCardsHtml = '';
-
-      for (const [field, valuesMap] of Object.entries(historicalData)) {
-        if (!valuesMap || Object.keys(valuesMap).length === 0) continue;
-
-        let currentVal = '';
-        if (record && record.registration && record.registration[field] !== undefined) {
-          currentVal = record.registration[field];
-        } else if (record && record.observation && record.observation[field] !== undefined) {
-          currentVal = record.observation[field];
-        }
-        const currentValClean = (currentVal !== null && currentVal !== undefined) ? String(currentVal).trim() : '';
-        const currentValStr = currentValClean !== '' ? currentValClean : '[BLANK]';
-
-        // Check each archive suggestion for conflict vs match
-        for (const [histVal, sources] of Object.entries(valuesMap)) {
-          const histValClean = String(histVal).trim();
-          const isMatching = currentValClean.toLowerCase() === histValClean.toLowerCase();
-
-          if (isMatching) {
-            matchCount++;
-          } else {
-            conflictCount++;
-            const encodedVal = histVal.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            const sourceStr = sources.join(', ');
-
-            let undoBtn = '';
-            if (revertState && revertState.hasOwnProperty(field)) {
-              const orig = revertState[field].replace(/'/g, "\\'").replace(/"/g, '&quot;');
-              undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[11px] text-ember hover:underline font-bold bg-ember-light px-2 py-0.5 border border-ember-border rounded-[2px] touch-press">Undo</button>`;
-            }
-
-            conflictCardsHtml += `
-              <div class="bg-surface border border-bordercol border-l-[3px] border-l-[#0284C7] rounded-[2px] p-3 space-y-2.5 shadow-2xs">
-                <div class="flex items-center justify-between border-b border-tonal2 pb-1.5">
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${field}</span>
-                    <span class="px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-[#0284C7] text-white">
-                      Archive Conflict
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    ${undoBtn}
-                    <span class="text-[11px] font-mono text-ink-muted">Current: <strong class="text-ink font-mono">${currentValStr}</strong></span>
-                  </div>
-                </div>
-
-                <div class="p-2.5 bg-sky-50/50 border border-sky-200/80 rounded-[2px] flex items-center justify-between gap-2 text-xs">
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-1.5">
-                      <span class="font-mono font-bold text-[#0284C7]">${encodedVal}</span>
-                    </div>
-                    <p class="text-[10px] text-ink-muted mt-0.5">Archive Sources: <span class="font-mono">${sourceStr}</span></p>
-                  </div>
-                  <button
-                    type="button"
-                    onclick="applyHistoricalAndFix('${field}', '${encodedVal}', '')"
-                    class="min-h-[34px] px-3 py-1.5 bg-[#0284C7] hover:bg-sky-700 text-white font-bold text-xs rounded-[2px] transition-colors shrink-0 touch-target-min touch-press"
-                    title="Accept historical archive value"
-                  >
-                    Accept Value
-                  </button>
-                </div>
-              </div>
-            `;
-          }
-        }
-      }
-
-      if (badge) {
-        badge.textContent = `${conflictCount} conflict${conflictCount === 1 ? '' : 's'}`;
-      }
-
-      let summaryHtml = '';
-      if (matchCount > 0) {
-        summaryHtml = `
-          <div class="p-2.5 bg-tonal1/70 border border-bordercol rounded-[2px] flex items-center gap-2 text-xs text-ink-muted">
-            <span class="text-fern font-bold text-sm">✓</span>
-            <span><strong>${matchCount}</strong> archive field${matchCount === 1 ? '' : 's'} match active specimen data.</span>
-          </div>
-        `;
-      }
-
-      if (conflictCount === 0) {
-        container.innerHTML = `
-          ${summaryHtml}
-          <div class="p-3 bg-surface border border-sky-200 border-l-[3px] border-l-[#0284C7] rounded-[2px] flex items-center gap-2 text-xs font-sans text-ink">
-            <span class="text-sm font-bold text-[#0284C7]">ℹ</span>
-            <span class="font-medium text-ink-muted">No historical archive conflicts detected.</span>
-          </div>
-        `;
-      } else {
-        container.innerHTML = summaryHtml + conflictCardsHtml;
-      }
-    }
-
-    async function fixProblemInline(fieldName, section, issueId) {
-      if (!currentRecord) return;
-      const fClean = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
-      const inputEl = document.getElementById(`fix_input_${fClean}`);
-      if (!inputEl) return;
-      const newVal = inputEl.value.trim();
-
-      // 1. Update form inputs in details/location tabs
-      const targetInputs = document.querySelectorAll(`[data-field="${fieldName}"]`);
-      targetInputs.forEach(inp => {
-        if (inp.type === 'checkbox') {
-          inp.checked = (newVal.toLowerCase() === 'true' || newVal === '1' || newVal === 'yes');
-        } else {
-          inp.value = newVal;
-        }
-      });
-
-      // 2. Update record
-      if (section === 'registration') {
-        currentRecord.registration = currentRecord.registration || {};
-        currentRecord.registration[fieldName] = newVal;
-      } else {
-        currentRecord.observation = currentRecord.observation || {};
-        currentRecord.observation[fieldName] = newVal;
-      }
-      markDirty(fieldName);
-
-      // 3. Clear problem flag on field
-      if (currentRecord.observation) {
-        const probCol = `${fieldName}_Problem`;
-        if (currentRecord.observation[probCol] !== undefined) {
-          currentRecord.observation[probCol] = false;
-          const probToggle = document.getElementById(`prob_${probCol}`);
-          if (probToggle) probToggle.checked = false;
-          markDirty(probCol);
-        }
-      }
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-        activeSchema.ui_sections.problems.forEach(p => {
-          if (p.maps_to === fieldName || p.target === fieldName || p.name === `${fieldName}_Problem`) {
-            if (currentRecord.observation) currentRecord.observation[p.name] = false;
-          }
-        });
-      }
-
-      // 4. Resolve flagged issue if issueId exists or matches field
-      if (currentRecord.flagged_issues) {
-        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issueId && i.field !== fieldName);
-      }
-
-      triggerAutoSave();
-      showToast(`Fixed problem for ${fieldName}: ${newVal || '[BLANK]'}`);
-
-      // Refresh UI
-      renderDynamicForm(activeSchema, currentRecord);
-      renderProblemsTab(currentRecord);
-      renderHistoricalConflicts(currentRecord);
-      updateReviewButtonUI();
-    }
-
-    async function applyHistoricalAndFix(fieldName, value, issueId) {
-      await applyHistoricalValue(fieldName, value);
-      // Clear problem flag on field
-      if (currentRecord && currentRecord.observation) {
-        const probCol = `${fieldName}_Problem`;
-        if (currentRecord.observation[probCol] !== undefined) {
-          currentRecord.observation[probCol] = false;
-          const probToggle = document.getElementById(`prob_${probCol}`);
-          if (probToggle) probToggle.checked = false;
-          markDirty(probCol);
-        }
-      }
-      if (currentRecord && currentRecord.flagged_issues) {
-        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issueId && i.field !== fieldName);
-      }
-      triggerAutoSave();
-      renderDynamicForm(activeSchema, currentRecord);
-      renderProblemsTab(currentRecord);
-      renderHistoricalConflicts(currentRecord);
-      updateReviewButtonUI();
-    }
-
-    function populateDiscrepancyFields() {
-      const select = document.getElementById('discrepancyFieldSelect');
-      if (!activeSchema || !activeSchema.ui_sections) return;
-      const reg = (activeSchema.ui_sections.registration || []).map(f => f.name);
-      const loc = (activeSchema.ui_sections.location || []).map(f => f.name);
-      const all = ['General Specimen Issue'].concat(reg).concat(loc);
-      select.innerHTML = all.map(f => `<option value="${f}">${f}</option>`).join('');
-    }
-
-    function openAddDiscrepancyModal(fieldName) {
-      if (fieldName) {
-        document.getElementById('discrepancyFieldSelect').value = fieldName;
-      }
-      openModal('addDiscrepancyModal');
-    }
-
-    function updateDetailProblemBanner(data) {
-      const banner = document.getElementById('detailProblemBanner');
-      const badgeContainer = document.getElementById('detailProblemBadges');
-      if (!banner || !badgeContainer || !data) return;
-      const activeProbFields = [];
-      const unknownFields = [];
-
-      if (activeSchema && activeSchema.ui_sections) {
-        const allFields = (activeSchema.ui_sections.registration || []).concat(activeSchema.ui_sections.location || []);
-        allFields.forEach(f => {
-          const val = (data.registration && data.registration[f.name] !== undefined) ? data.registration[f.name] : (data.observation ? data.observation[f.name] : '');
-          if (isFieldProblemActive(f.name, 'registration', data) || isFieldProblemActive(f.name, 'observation', data)) {
-            if (!activeProbFields.includes(f.name)) activeProbFields.push(f.name);
-          } else if (isValueUnknown(val)) {
-            if (!unknownFields.includes(f.name)) unknownFields.push(f.name);
-          }
-        });
-      }
-
-      if (activeProbFields.length > 0 || unknownFields.length > 0) {
-        banner.classList.remove('hidden');
-        let chipsHtml = '';
-        activeProbFields.forEach(fName => {
-          const inputId = `input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-          chipsHtml += `
-            <button
-              type="button"
-              onclick="scrollToField('${inputId}', '${fName}')"
-              class="px-2 py-1 bg-[#C62828] text-white text-[11px] font-bold rounded-[2px] shadow-xs flex items-center gap-1 touch-press hover:bg-[#b71c1c]"
-              title="Jump to ${fName}"
-            >
-              <span>⚠</span>
-              <span>${fName}</span>
-            </button>
-          `;
-        });
-        unknownFields.forEach(fName => {
-          const inputId = `input_registration_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-          chipsHtml += `
-            <button
-              type="button"
-              onclick="scrollToField('${inputId}', '${fName}')"
-              class="px-2 py-1 bg-[#FBC02D] text-[#2c302e] text-[11px] font-bold rounded-[2px] shadow-xs flex items-center gap-1 touch-press hover:bg-[#f9a825]"
-              title="Jump to ${fName}"
-            >
-              <span>?</span>
-              <span>${fName}</span>
-            </button>
-          `;
-        });
-        badgeContainer.innerHTML = chipsHtml;
-      } else {
-        banner.classList.add('hidden');
-        badgeContainer.innerHTML = '';
-      }
-    }
-
-    async function submitDiscrepancy(e) {
-      e.preventDefault();
-      const field = document.getElementById('discrepancyFieldSelect').value;
-      const reason = document.getElementById('discrepancyReasonInput').value.trim();
-      const severity = document.querySelector('input[name="severity"]:checked').value;
-
-      if (!reason) return;
-
-      // Add to flagged issues locally and trigger save
-      currentRecord.flagged_issues = currentRecord.flagged_issues || [];
-      currentRecord.flagged_issues.push({
-        id: `flag_${Date.now()}`,
-        field: field,
-        severity: severity,
-        reason: reason,
-        resolved: false
-      });
-
-      // Match corresponding problem toggle if it exists
-      const matchProb = `${field}_Problem`;
-      if (currentRecord.observation) {
-        currentRecord.observation[matchProb] = true;
-        markDirty(matchProb);
-      }
-
-      closeModal('addDiscrepancyModal');
-      document.getElementById('discrepancyReasonInput').value = '';
-      renderDynamicForm(activeSchema, currentRecord);
-      updateDetailProblemBanner(currentRecord);
-      renderDiscrepancies(currentRecord);
-      await saveCurrentEdits();
-      showToast('Discrepancy flagged on host');
-    }
-
-    async function resolveDiscrepancy(issId) {
-      if (!currentRecord || !currentRecord.flagged_issues) return;
-      currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issId);
-      renderDynamicForm(activeSchema, currentRecord);
-      updateDetailProblemBanner(currentRecord);
-      renderDiscrepancies(currentRecord);
-      await saveCurrentEdits();
-      showToast('Discrepancy resolved');
-    }
-
-    async function toggleProblemFlag(probName) {
-      const el = document.getElementById(`prob_${probName}`);
-      if (!el || !currentRecord) return;
-      currentRecord.observation = currentRecord.observation || {};
-      currentRecord.observation[probName] = el.checked;
-      markDirty(probName);
-
-      const probs = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) ? activeSchema.ui_sections.problems : [];
-      let hasProb = false;
-      for (const p of probs) {
-        const v = currentRecord.observation[p.name];
-        if (v === true || String(v).toLowerCase() === 'true' || v === '1') {
-          hasProb = true;
-          break;
-        }
-      }
-      currentRecord.has_flags = hasProb;
-      updateReviewButtonUI();
-      renderDynamicForm(activeSchema, currentRecord);
-      updateDetailProblemBanner(currentRecord);
-
-      await saveCurrentEdits();
-    }
-
-    // ==========================================
-    // AUTO-SAVE & PRIMARY ACTION: MARK REVIEWED
-    // ==========================================
-
-
-    function handleVocabInput(input, fName) {
-      markDirty(fName);
-      triggerAutoSave();
-    }
-
-    function handleVocabChange(input) {
-      if (input.value && input.value.trim() !== '') {
-        const val = input.value.trim();
-        const fName = input.getAttribute('data-field');
-        if (val !== '?') {
-            // Check if matches vocab but different casing
-            if (activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName]) {
-                const match = activeSchema.vocabulary[fName].find(v => v.toLowerCase() === val.toLowerCase());
-                if (match) {
-                    input.value = match;
-                } else {
-                    input.value = val; // Trimmed
-                }
-            } else {
-                input.value = val; // Trimmed
-            }
-        }
-      }
-      const fName = input.getAttribute('data-field');
-      markDirty(fName);
-      triggerAutoSave();
-    }
-
-    function markDirty(fieldName) {
-      if (fieldName) dirtyFields.add(fieldName);
-    }
-
-    function triggerAutoSave() {
-      const syncStatus = document.getElementById('footerSyncStatus');
-      syncStatus.innerHTML = `<span class='flex items-center gap-1.5 font-mono text-ember font-medium animate-pulse'><svg class="animate-spin h-3 w-3 text-ember" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Saving changes...</span></span>`;
-      const btnRev = document.getElementById('btnMarkReviewed');
-      if (btnRev) btnRev.disabled = true;
-      clearTimeout(autoSaveTimer);
-      autoSaveTimer = setTimeout(saveCurrentEdits, 800);  // 800ms per guide requirement
-    }
-
-    async function saveCurrentEdits() {
-      if (autoSaveTimer) {
-        clearTimeout(autoSaveTimer);
-        autoSaveTimer = null;
-      }
-      if (!currentOid) return;
-
-      if (isSaving) {
-        hasPendingSave = true;
-        return;
-      }
-      isSaving = true;
-
-      try {
-        while (true) {
-          hasPendingSave = false;
-          const btnRev = document.getElementById('btnMarkReviewed');
-
-          const regPayload = {};
-          const obsPayload = {};
-
-          // Collect all dynamic inputs
-          document.querySelectorAll('[data-section="registration"]').forEach(input => {
-            const f = input.getAttribute('data-field');
-            if (dirtyFields.has(f)) {
-              regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
-            }
-          });
-
-          document.querySelectorAll('[data-section="observation"]').forEach(input => {
-            const f = input.getAttribute('data-field');
-            if (dirtyFields.has(f)) {
-              if (input.type === 'checkbox') {
-                obsPayload[f] = input.checked;
-              } else {
-                obsPayload[f] = input.value;
-              }
-            }
-          });
-
-          // Merge problem flags
-          if (currentRecord && currentRecord.observation) {
-            Object.keys(currentRecord.observation).forEach(k => {
-              if (k.endsWith('_Problem') || k.startsWith('Unknown_')) {
-                if (dirtyFields.has(k)) {
-                  obsPayload[k] = currentRecord.observation[k];
-                }
-              }
-            });
-          }
-
-          // If nothing was dirtied, and review status wasn't checked, we technically don't need to save,
-          // but the server handles empty updates gracefully.
-          dirtyFields.clear();
-
-          const unvalSourcesList = Object.entries(currentUnvalidatedMap || {}).map(([field, comment]) => ({ field, comment }));
-
-          const payload = {
-            id: currentOid,
-            reviewed: isReviewed,
-            registration: regPayload,
-            observation: obsPayload,
-            unvalidated_sources: unvalSourcesList,
-            timestamp: new Date().toISOString()
-          };
-
-          if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
-            queueMutation(payload);
-            if (btnRev) btnRev.disabled = false;
-
-            // Optimistically update UI models to prevent local interruption
-            if (currentRecord) {
-              currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-              currentRecord.unvalidated_sources = unvalSourcesList;
-              updateReviewButtonUI();
-            }
-
-            const listItem = objectList.find(o => String(o.id) === String(currentOid));
-            if (listItem) {
-              listItem.review_status = isReviewed ? 'reviewed' : 'pending';
-              listItem.has_unvalidated = (unvalSourcesList.length > 0);
-            }
-
-            if (!hasPendingSave) break;
-            continue;
-          }
-          if (btnRev) btnRev.disabled = false;
-
-          try {
-            const res = await apiFetch('/api/update', {
-              method: 'POST',
-              body: JSON.stringify(payload)
-            });
-
-            // Check for conflict response (409) or conflict message
-            if (res && (res._status === 409 || res.status === 409 || (typeof res.error === 'string' && res.error.includes('Conflict')))) {
-              showToast(`⚠️ ${res.error || 'Conflict: Host modified this record'}`, true);
-              const syncStatus = document.getElementById('footerSyncStatus');
-              if (syncStatus) {
-                syncStatus.innerHTML = '<span class="font-mono text-ember font-medium" id="footerSyncStatusText">⚠️ Host conflict</span>';
-              }
-              if (btnRev) btnRev.disabled = false;
-              if (!hasPendingSave) break;
-              continue;
-            }
-
-            if (res && res.error && res.error !== 'Failed to fetch') {
-              showToast(`⚠️ ${res.error}`, true);
-              if (btnRev) btnRev.disabled = false;
-              if (!hasPendingSave) break;
-              continue;
-            }
-
-            // Handle case where fetch returns a network error or empty object instead of throwing
-            if (!res || res.error === 'Failed to fetch' || (Object.keys(res).length === 0)) {
-               throw new Error('Network failure');
-            }
-
-            document.getElementById('footerSyncStatus').innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
-            if (btnRev) btnRev.disabled = false;
-            const undoBtn = document.getElementById('btnMobileUndo');
-            if (undoBtn) undoBtn.classList.remove('hidden');
-            if (undoBtn) undoBtn.classList.add('flex');
-
-            if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
-              if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
-              if (res.has_history !== undefined) currentRecord.has_history = res.has_history;
-              if (res.has_unknown !== undefined) currentRecord.has_unknown = res.has_unknown;
-              if (res.review_status !== undefined) currentRecord.review_status = res.review_status;
-              updateReviewButtonUI();
-
-              const listItem = objectList.find(o => String(o.id) === String(currentOid));
-              if (listItem) {
-                if (res.has_flags !== undefined) listItem.has_flags = res.has_flags;
-                if (res.has_history !== undefined) listItem.has_history = res.has_history;
-                if (res.has_unknown !== undefined) listItem.has_unknown = res.has_unknown;
-                if (res.review_status !== undefined) listItem.review_status = res.review_status;
-              }
-            }
-
-            // Hide 'Edit saved' message if we determine we're actually disconnected
-            if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
-                document.getElementById('footerSyncStatusText').classList.add('hidden');
-            }
-          } catch (err) {
-            queueMutation(payload);
-            if (btnRev) btnRev.disabled = false;
-
-            // Optimistically update UI models to prevent local interruption
-            if (currentRecord) {
-              currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-              updateReviewButtonUI();
-            }
-
-            const listItem = objectList.find(o => String(o.id) === String(currentOid));
-            if (listItem) {
-              listItem.review_status = isReviewed ? 'reviewed' : 'pending';
-            }
-          }
-
-          if (!hasPendingSave) {
-            break;
-          }
-        }
-      } finally {
-        isSaving = false;
-      }
-    }
-
-    function updateReviewButtonUI() {
-      const btn = document.getElementById('btnMarkReviewed');
-      const label = document.getElementById('btnReviewedLabel');
-      const badgeContainer = document.getElementById('detailReviewStatusBadge');
-
-      if (isReviewed) {
-        btn.className = 'w-full py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm flex items-center justify-center gap-2 border-2 transition-all touch-target-min touch-press bg-fern text-white border-fern-dark shadow-md';
-        label.textContent = '✓ Reviewed (Tap to undo)';
-      } else {
-        btn.className = 'w-full py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm flex items-center justify-center gap-2 border-2 transition-all touch-target-min touch-press bg-surface text-ink border-bordercol hover:bg-tonal1 shadow-xs';
-        label.textContent = 'Mark Reviewed';
-      }
-
-      if (currentRecord) {
-        currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-        badgeContainer.innerHTML = renderStatusBadge(currentRecord);
-      } else {
-        badgeContainer.innerHTML = renderStatusBadge({ review_status: isReviewed ? 'reviewed' : 'pending' });
-      }
-    }
-
-    async function toggleReviewed() {
-      isReviewed = !isReviewed;
-      updateReviewButtonUI();
-      await saveCurrentEdits();
-      showToast(isReviewed ? '✓ Specimen marked as Reviewed' : 'Specimen marked Unreviewed');
-    }
-
-    // ==========================================
-    // FULLSCREEN PHOTO VIEWER MODAL & THUMBNAIL STRIP
-    // ==========================================
-    function renderPhotoThumbnails() {
-      const strip = document.getElementById('photoThumbStrip');
-      if (!strip) return;
-      if (!photoUrls || photoUrls.length <= 1) {
-        strip.classList.add('hidden');
-        strip.innerHTML = '';
-        return;
-      }
-
-      strip.classList.remove('hidden');
-      strip.innerHTML = photoUrls.map((url, idx) => `
-        <button
-          type="button"
-          onclick="selectSpecimenPhoto(${idx})"
-          class="min-w-[44px] min-h-[44px] w-12 h-12 rounded-[2px] border-2 overflow-hidden shrink-0 touch-target-min touch-press transition-all ${idx === currentPhotoIdx ? 'border-fern ring-2 ring-fern-border' : 'border-bordercol opacity-70 hover:opacity-100'}"
-          title="View Scan ${idx + 1}"
-          aria-label="View archival scan ${idx + 1}"
-        >
-          <img src="${url}" alt="Thumbnail ${idx + 1}" class="w-full h-full object-cover" />
-        </button>
-      `).join('');
+    function closePhotoViewer() {
+      closeModal('photoViewerModal');
     }
 
     function loadInitialPhoto() {
       if (!photoUrls || photoUrls.length === 0) return;
-      const mainContainer = document.getElementById('photoMainContainer');
       const placeholder = document.getElementById('photoPlaceholder');
-      const specimenImg = document.getElementById('specimenImg');
+      const img = document.getElementById('specimenImg');
 
-      mainContainer.classList.remove('h-16');
-      mainContainer.classList.add('h-52');
-      mainContainer.setAttribute('onclick', 'openFullscreenPhoto()');
-
-      placeholder.innerHTML = `
-        <span class="text-2xl text-ink-faint animate-spin-slow">⏳</span>
-        <p class="font-semibold text-fern">Loading...</p>
-      `;
-
-      specimenImg.src = photoUrls[0];
-      renderPhotoThumbnails();
+      if (placeholder) {
+        placeholder.innerHTML = `
+          <span class="text-2xl text-stone-400 animate-spin-slow">⏳</span>
+          <p class="font-semibold text-fern-light">Loading plate scan...</p>
+        `;
+      }
+      if (img) {
+        img.src = photoUrls[0];
+      }
     }
 
     function selectSpecimenPhoto(idx) {
       if (!photoUrls || !photoUrls[idx]) return;
       currentPhotoIdx = idx;
       const mainImg = document.getElementById('specimenImg');
-      mainImg.src = photoUrls[idx];
-      document.getElementById('photoPlaceholder').classList.add('hidden');
-      mainImg.classList.remove('hidden');
-      renderPhotoThumbnails();
-    }
-
-    function openFullscreenPhoto() {
-      if (!photoUrls || photoUrls.length === 0) return;
-      photoZoom = 1;
-      photoRotation = 0;
-      photoPan = { x: 0, y: 0 };
-      updatePhotoTransform();
-      document.getElementById('photoViewerImg').src = photoUrls[currentPhotoIdx] || photoUrls[0];
-      document.getElementById('photoViewerCounter').textContent = `(${currentPhotoIdx + 1}/${photoUrls.length})`;
-      openModal('photoViewerModal');
+      if (mainImg) mainImg.src = photoUrls[idx];
     }
 
     function onPhotoLoaded() {
-      document.getElementById('photoPlaceholder').classList.add('hidden');
-      document.getElementById('specimenImg').classList.remove('hidden');
-      document.getElementById('photoWatermark').classList.remove('hidden');
+      const placeholder = document.getElementById('photoPlaceholder');
+      const img = document.getElementById('specimenImg');
+      if (placeholder) placeholder.classList.add('hidden');
+      if (img) img.classList.remove('hidden');
     }
 
     function onPhotoError() {
-      document.getElementById('photoPlaceholder').innerHTML = `
-        <span class="text-2xl text-ink-faint">📷</span>
-        <p class="font-semibold text-ink-muted">Photo scan unavailable</p>
-      `;
+      const placeholder = document.getElementById('photoPlaceholder');
+      if (placeholder) {
+        placeholder.innerHTML = `
+          <span class="text-2xl text-stone-500">📷</span>
+          <p class="font-semibold text-stone-400">Photo scan unavailable</p>
+        `;
+      }
     }
 
     function zoomPhoto(delta) {
@@ -11842,8 +12152,11 @@ INDEX_TEMPLATE_V2 = """
 
     function updatePhotoTransform() {
       const img = document.getElementById('photoViewerImg');
-      document.getElementById('zoomLevelDisplay').textContent = `${photoZoom.toFixed(1)}x`;
-      img.style.transform = `scale(${photoZoom}) rotate(${photoRotation}deg) translate(${photoPan.x}px, ${photoPan.y}px)`;
+      const zoomDisp = document.getElementById('zoomLevelDisplay');
+      if (zoomDisp) zoomDisp.textContent = `${photoZoom.toFixed(1)}x`;
+      if (img) {
+        img.style.transform = `scale(${photoZoom}) rotate(${photoRotation}deg) translate(${photoPan.x}px, ${photoPan.y}px)`;
+      }
     }
 
     function startPhotoDrag(e) {
@@ -11869,7 +12182,7 @@ INDEX_TEMPLATE_V2 = """
     }
 
     function startPhotoTouch(e) {
-      if (e.touches.length === 1 && photoZoom > 1) {
+      if (e.touches && e.touches.length === 1 && photoZoom > 1) {
         isDraggingPhoto = true;
         photoDragStart = { x: e.touches[0].clientX - photoPan.x, y: e.touches[0].clientY - photoPan.y };
         window.addEventListener('touchmove', onPhotoTouchMove);
@@ -11878,7 +12191,7 @@ INDEX_TEMPLATE_V2 = """
     }
 
     function onPhotoTouchMove(e) {
-      if (isDraggingPhoto && e.touches.length === 1 && photoZoom > 1) {
+      if (isDraggingPhoto && e.touches && e.touches.length === 1 && photoZoom > 1) {
         photoPan = { x: e.touches[0].clientX - photoDragStart.x, y: e.touches[0].clientY - photoDragStart.y };
         updatePhotoTransform();
       }
@@ -11889,6 +12202,9 @@ INDEX_TEMPLATE_V2 = """
       window.removeEventListener('touchmove', onPhotoTouchMove);
       window.removeEventListener('touchend', stopPhotoTouch);
     }
+
+    // Initialize swipe gestures and application
+    initSwipeGestures();
 
     // Initialize application
     init();
