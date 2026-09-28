@@ -3652,6 +3652,16 @@ INDEX_TEMPLATE = """
             ></textarea>
           </div>
 
+          <div class="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-[2px] space-y-2">
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" id="discrepancyUnvalCheck" onchange="document.getElementById('discrepancyUnvalContainer').classList.toggle('hidden', !this.checked)" class="w-4 h-4 text-amber-600 rounded cursor-pointer">
+              <span class="text-xs font-bold text-amber-800 dark:text-amber-300">Flag as Unvalidated Source</span>
+            </label>
+            <div id="discrepancyUnvalContainer" class="hidden">
+              <input type="text" id="discrepancyUnvalNoteInput" placeholder="Explain why source is unvalidated (optional)..." class="w-full bg-surface border border-amber-500/30 rounded-[2px] px-2.5 py-1.5 text-xs text-ink outline-none">
+            </div>
+          </div>
+
           <div class="flex items-center justify-end gap-2 pt-2 border-t border-tonal2">
             <button
               type="button"
@@ -3741,6 +3751,106 @@ INDEX_TEMPLATE = """
         >
           Done
         </button>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: ICEDIG MISSING DATA BOTTOM SHEET   -->
+    <!-- ========================================== -->
+    <div id="icedigBottomSheetModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div class="bg-surface border-t sm:border border-bordercol rounded-t-xl sm:rounded-[2px] w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in slide-in-from-bottom duration-150">
+        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
+          <div class="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+            <span class="text-sm font-bold">∅</span>
+            <h2 id="icedigModalTitle" class="font-serif font-bold text-sm text-ink">
+              Missing Data Status
+            </h2>
+          </div>
+          <button
+            type="button"
+            onclick="closeIcedigBottomSheet()"
+            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div class="p-4 space-y-3 overflow-y-auto">
+          <div id="icedigOverwriteNotice" class="hidden p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-[2px] text-xs text-amber-800 dark:text-amber-300 font-medium">
+            ⚠️ Overwriting current value: <span id="icedigCurrentValPreview" class="font-bold"></span>
+          </div>
+
+          <div class="text-[11px] font-sans text-ink-muted uppercase tracking-wider font-bold">
+            Select ICEDIG D4.1 Standard Code:
+          </div>
+
+          <div class="space-y-2">
+            <button
+              type="button"
+              onclick="applyIcedigChoice('unknown:missing')"
+              class="w-full text-left p-3 rounded-[2px] border border-bordercol bg-surface hover:bg-amber-500/10 hover:border-amber-400 transition-colors cursor-pointer touch-press"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-xs text-ink">📄 Blank on Physical Label</span>
+                <code class="text-[10px] bg-tonal1 px-1.5 py-0.5 rounded text-ink-muted font-mono">unknown:missing</code>
+              </div>
+              <p class="text-[11px] text-ink-muted mt-0.5">Information was looked for but is genuinely absent on the physical specimen label.</p>
+            </button>
+
+            <button
+              type="button"
+              onclick="applyIcedigChoice('unknown:indecipherable')"
+              class="w-full text-left p-3 rounded-[2px] border border-bordercol bg-surface hover:bg-amber-500/10 hover:border-amber-400 transition-colors cursor-pointer touch-press"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-xs text-ink">🔍 Illegible / Damaged Label</span>
+                <code class="text-[10px] bg-tonal1 px-1.5 py-0.5 rounded text-ink-muted font-mono">unknown:indecipherable</code>
+              </div>
+              <p class="text-[11px] text-ink-muted mt-0.5">Text is physically present but cannot be read due to handwriting, fading, or damage.</p>
+            </button>
+
+            <button
+              type="button"
+              onclick="applyIcedigChoice('unknown:undigitized')"
+              class="w-full text-left p-3 rounded-[2px] border border-bordercol bg-surface hover:bg-amber-500/10 hover:border-amber-400 transition-colors cursor-pointer touch-press"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-xs text-ink">⏭️ Skipped in Digitization</span>
+                <code class="text-[10px] bg-tonal1 px-1.5 py-0.5 rounded text-ink-muted font-mono">unknown:undigitized</code>
+              </div>
+              <p class="text-[11px] text-ink-muted mt-0.5">Field was intentionally omitted from this digitization workflow pass.</p>
+            </button>
+
+            <button
+              type="button"
+              onclick="applyIcedigChoice('withheld')"
+              class="w-full text-left p-3 rounded-[2px] border border-bordercol bg-surface hover:bg-amber-500/10 hover:border-amber-400 transition-colors cursor-pointer touch-press"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-xs text-ink">🔒 Sensitive / Withheld</span>
+                <code class="text-[10px] bg-tonal1 px-1.5 py-0.5 rounded text-ink-muted font-mono">withheld</code>
+              </div>
+              <p class="text-[11px] text-ink-muted mt-0.5">Data exists but is redacted for policy, privacy, or species protection reasons.</p>
+            </button>
+          </div>
+
+          <div class="pt-2 border-t border-bordercol flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onclick="applyIcedigChoice('')"
+              class="px-3 py-2 text-xs text-ink-muted hover:text-ember rounded border border-bordercol hover:bg-tonal1 cursor-pointer touch-press"
+            >
+              Clear Field (Blank)
+            </button>
+            <button
+              type="button"
+              onclick="closeIcedigBottomSheet()"
+              class="px-4 py-2 bg-tonal1 hover:bg-tonal2 text-ink text-xs font-bold rounded border border-bordercol cursor-pointer touch-press"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -4069,12 +4179,130 @@ INDEX_TEMPLATE = """
       }
     }
 
+    let toastTimeout = null;
+    let currentToastUndoCb = null;
+
     function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
-      toast.textContent = msg;
+      if (!toast) return;
+      if (toastTimeout) clearTimeout(toastTimeout);
+      currentToastUndoCb = null;
+      toast.innerHTML = `<span>${msg}</span>`;
       toast.className = `fixed bottom-24 left-4 right-4 max-w-sm mx-auto ${isError ? 'bg-ember-dark' : 'bg-fern-dark'} text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity`;
       toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2200);
+      toastTimeout = setTimeout(() => toast.classList.add('hidden'), 2200);
+    }
+
+    function showToastWithUndo(msg, undoCallback) {
+      const toast = document.getElementById('toast');
+      if (!toast) return;
+      if (toastTimeout) clearTimeout(toastTimeout);
+      currentToastUndoCb = undoCallback;
+      toast.innerHTML = `
+        <div class="flex items-center justify-between gap-3 px-1">
+          <span class="truncate">${msg}</span>
+          <button type="button" onclick="triggerToastUndo()" class="underline font-bold text-amber-300 hover:text-white text-xs uppercase tracking-wider cursor-pointer touch-press">
+            UNDO
+          </button>
+        </div>
+      `;
+      toast.className = `fixed bottom-24 left-4 right-4 max-w-sm mx-auto bg-stone-900 text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-xl border border-bordercol z-50 transition-opacity`;
+      toast.classList.remove('hidden');
+      toastTimeout = setTimeout(() => {
+        toast.classList.add('hidden');
+        currentToastUndoCb = null;
+      }, 5000);
+    }
+
+    function triggerToastUndo() {
+      if (typeof currentToastUndoCb === 'function') {
+        currentToastUndoCb();
+        currentToastUndoCb = null;
+      }
+      const toast = document.getElementById('toast');
+      if (toast) toast.classList.add('hidden');
+    }
+
+    let currentIcedigTarget = null;
+    let icedigUndoState = null;
+
+    function openIcedigBottomSheet(section, fName) {
+      const inputId = `input_${section}_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      const inputEl = document.getElementById(inputId);
+      const currentVal = inputEl ? inputEl.value : '';
+
+      currentIcedigTarget = { section, fName, inputId, previousVal: currentVal };
+
+      const titleEl = document.getElementById('icedigModalTitle');
+      if (titleEl) titleEl.textContent = `Missing Data Status: ${fName}`;
+
+      const noticeEl = document.getElementById('icedigOverwriteNotice');
+      const previewEl = document.getElementById('icedigCurrentValPreview');
+      if (noticeEl && previewEl) {
+        if (currentVal && !isValueUnknown(currentVal)) {
+          previewEl.textContent = `"${currentVal}"`;
+          noticeEl.classList.remove('hidden');
+        } else {
+          noticeEl.classList.add('hidden');
+        }
+      }
+
+      openModal('icedigBottomSheetModal');
+    }
+
+    function closeIcedigBottomSheet() {
+      closeModal('icedigBottomSheetModal');
+      currentIcedigTarget = null;
+    }
+
+    function applyIcedigChoice(code) {
+      if (!currentIcedigTarget) return;
+      const { section, fName, inputId, previousVal } = currentIcedigTarget;
+      const inputEl = document.getElementById(inputId);
+
+      if (inputEl) {
+        inputEl.value = code;
+        markDirty(fName);
+
+        const hasUkn = isValueUnknown(code);
+        inputEl.className = `w-full min-h-[44px] border rounded-[2px] px-3 py-2 text-xs outline-none ${
+          hasUkn
+            ? 'border-l-4 border-l-[#FBC02D] bg-[#fef9c3] border-[#fde047] text-[#854d0e] font-medium focus:border-[#eab308]'
+            : 'border-bordercol bg-surface text-ink focus:border-fern'
+        }`;
+
+        // Update local currentRecord if available
+        if (currentRecord) {
+          if (section === 'registration' && currentRecord.registration) {
+            currentRecord.registration[fName] = code;
+          } else if (section === 'observation' && currentRecord.observation) {
+            currentRecord.observation[fName] = code;
+          }
+        }
+
+        // Save undo state & show toast
+        icedigUndoState = { section, fName, inputId, valueToRestore: previousVal };
+        showToastWithUndo(`Set ${fName} to ${code || 'blank'}`, () => {
+          if (icedigUndoState && icedigUndoState.inputId === inputId) {
+            inputEl.value = icedigUndoState.valueToRestore;
+            markDirty(fName);
+            if (currentRecord) {
+              if (section === 'registration' && currentRecord.registration) {
+                currentRecord.registration[fName] = icedigUndoState.valueToRestore;
+              } else if (section === 'observation' && currentRecord.observation) {
+                currentRecord.observation[fName] = icedigUndoState.valueToRestore;
+              }
+            }
+            triggerAutoSave();
+            saveCurrentEdits();
+          }
+        });
+
+        triggerAutoSave();
+        saveCurrentEdits();
+      }
+
+      closeIcedigBottomSheet();
     }
 
     function openModal(id) {
@@ -5841,38 +6069,16 @@ INDEX_TEMPLATE = """
             <span>Flag</span>
           </button>`;
 
-      const isUnval = (currentUnvalidatedMap && currentUnvalidatedMap[fName] !== undefined);
-      const unvalComment = (currentUnvalidatedMap && currentUnvalidatedMap[fName]) || '';
-      const fKey = fName.replace(/[ ]+/g, '_');
-      const unvalBtnId = `unval_btn_${section}_${fKey}`;
-      const unvalContainerId = `unval_container_${section}_${fKey}`;
-      const unvalInputId = `unval_input_${section}_${fKey}`;
-
-      const unvalBtn = `
+      const icedigBtn = `
         <button
           type="button"
-          id="${unvalBtnId}"
-          onclick="toggleUnvalidatedField('${section}', '${fName}')"
-          class="min-h-[44px] px-2 py-1 text-xs font-bold rounded-[2px] touch-target-min touch-press ml-1 flex items-center justify-center transition-all ${isUnval ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40' : 'text-ink-faint hover:bg-tonal2 border border-bordercol'}"
-          title="Toggle Unvalidated Source for ${fName}"
+          onclick="openIcedigBottomSheet('${section}', '${fName}')"
+          class="min-h-[44px] px-2.5 py-1.5 text-xs font-sans font-medium text-ink-muted hover:text-amber-700 bg-tonal1 hover:bg-amber-500/10 border border-bordercol rounded-[2px] touch-target-min touch-press ml-1 flex items-center gap-1"
+          title="Set ICEDIG Missing Data Status for ${fName}"
         >
-          <span>${isUnval ? '❓' : '?'}</span>
+          <span>∅</span>
+          <span>Unknown</span>
         </button>
-      `;
-
-      const unvalContainerHtml = `
-        <div id="${unvalContainerId}" class="${isUnval ? '' : 'hidden'} mt-1.5 p-2 bg-amber-500/10 border border-amber-500/30 rounded-[2px]">
-          <label for="${unvalInputId}" class="block text-[10px] font-bold text-amber-600 dark:text-amber-400 mb-1">Unvalidated Note:</label>
-          <input
-            type="text"
-            id="${unvalInputId}"
-            value="${unvalComment}"
-            placeholder="Explain why source is unvalidated..."
-            oninput="markDirty('${fName}'); onUnvalCommentChange('${fName}', this.value); triggerAutoSave()"
-            onblur="saveCurrentEdits()"
-            class="w-full bg-surface border border-amber-500/30 rounded-[2px] px-2.5 py-1.5 text-xs outline-none text-ink"
-          />
-        </div>
       `;
 
       const historyControls = `
@@ -5887,7 +6093,7 @@ INDEX_TEMPLATE = """
           <span>History</span>
         </button>
         ${!isReadOnly ? flagBtn : ''}
-        ${!isReadOnly ? unvalBtn : ''}
+        ${!isReadOnly && fType !== 'checkbox' && fType !== 'bool' ? icedigBtn : ''}
       `;
 
       const historyContainerHtml = `
@@ -5921,7 +6127,6 @@ INDEX_TEMPLATE = """
               ${optionsHtml}
             </select>
             ${historyContainerHtml}
-            ${unvalContainerHtml}
           </div>
         `;
       }
@@ -5952,7 +6157,6 @@ INDEX_TEMPLATE = """
               </div>
             </div>
             ${historyContainerHtml}
-            ${unvalContainerHtml}
           </div>
         `;
       }
@@ -5977,7 +6181,6 @@ INDEX_TEMPLATE = """
               class="w-full border rounded-[2px] px-3 py-2 text-xs outline-none ${inputStyle}"
             >${value || ''}</textarea>
             ${historyContainerHtml}
-            ${unvalContainerHtml}
           </div>
         `;
       }
@@ -6008,7 +6211,6 @@ INDEX_TEMPLATE = """
           </datalist>
           ` : ''}
           ${historyContainerHtml}
-          ${unvalContainerHtml}
         </div>
       `;
     }
@@ -6419,6 +6621,16 @@ INDEX_TEMPLATE = """
       if (fieldName) {
         document.getElementById('discrepancyFieldSelect').value = fieldName;
       }
+      const unvalCheck = document.getElementById('discrepancyUnvalCheck');
+      const unvalInput = document.getElementById('discrepancyUnvalNoteInput');
+      const unvalCont = document.getElementById('discrepancyUnvalContainer');
+      if (unvalCheck && unvalInput && unvalCont) {
+        const hasUnval = (currentUnvalidatedMap && fieldName && currentUnvalidatedMap[fieldName] !== undefined);
+        unvalCheck.checked = !!hasUnval;
+        unvalInput.value = hasUnval ? currentUnvalidatedMap[fieldName] : '';
+        if (hasUnval) unvalCont.classList.remove('hidden');
+        else unvalCont.classList.add('hidden');
+      }
       openModal('addDiscrepancyModal');
     }
 
@@ -6486,6 +6698,18 @@ INDEX_TEMPLATE = """
       const severity = document.querySelector('input[name="severity"]:checked').value;
 
       if (!reason) return;
+
+      // Handle unvalidated source if checked
+      const unvalCheck = document.getElementById('discrepancyUnvalCheck');
+      const unvalNote = document.getElementById('discrepancyUnvalNoteInput');
+      if (unvalCheck && unvalCheck.checked) {
+        if (!currentUnvalidatedMap) currentUnvalidatedMap = {};
+        currentUnvalidatedMap[field] = (unvalNote ? unvalNote.value.trim() : '') || reason;
+        markDirty(field);
+      } else if (unvalCheck && !unvalCheck.checked && currentUnvalidatedMap && currentUnvalidatedMap[field] !== undefined) {
+        delete currentUnvalidatedMap[field];
+        markDirty(field);
+      }
 
       // Add to flagged issues locally and trigger save
       currentRecord.flagged_issues = currentRecord.flagged_issues || [];

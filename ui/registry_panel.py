@@ -11,10 +11,7 @@ def _bind_icedig_context_menu(ui, widget, field_name):
     from ui.context_menu import ContextMenuManager
     import config
     def _build_menu(event):
-        # Only show menu if current value is a known unknown token
         current_val = ui.reg_vars.get(field_name, tk.StringVar()).get().strip().lower()
-        if current_val not in config.ALL_UNKNOWN_TOKENS:
-            return None  # Don't show menu for real data
         items = []
         # Submenu items — one per ICEDIG code
         submenu_items = []
@@ -23,24 +20,66 @@ def _bind_icedig_context_menu(ui, widget, field_name):
             submenu_items.append({
                 "label": label,
                 "command": lambda c=_code: _apply_icedig_code(ui, field_name, c),
-                "state": "normal" if current_val != c else "disabled",
+                "state": "normal" if current_val != _code else "disabled",
             })
         items.append({
             "label": "Set ICEDIG status",
             "submenu": submenu_items,
             "state": "normal",
         })
-        items.append({"separator": True})
-        items.append({
-            "label": 'Clear (restore to "unknown")',
-            "command": lambda: _apply_icedig_code(ui, field_name, "unknown"),
-            "state": "normal" if current_val in config.ICEDIG_UNKNOWN_CODES else "disabled",
-        })
+        if current_val in config.ALL_UNKNOWN_TOKENS or current_val:
+            items.append({"separator": True})
+            items.append({
+                "label": "Clear Field Value",
+                "command": lambda: _apply_icedig_code(ui, field_name, ""),
+                "state": "normal",
+            })
         return items
+    widget._icedig_menu_builder = _build_menu
     ContextMenuManager.bind(widget, _build_menu)
 
+def _bind_icedig_shortcuts(ui, widget, field_name):
+    """Bind shorthand expansion (?m, ?i, ?u, ?w) and Ctrl+Shift hotkeys to a registration Entry widget."""
+    shorthands = {
+        "?m": "unknown:missing",
+        "?missing": "unknown:missing",
+        "?i": "unknown:indecipherable",
+        "?illegible": "unknown:indecipherable",
+        "?u": "unknown:undigitized",
+        "?undigitized": "unknown:undigitized",
+        "?w": "withheld",
+        "?withheld": "withheld",
+        "??": "unknown",
+        "?unk": "unknown",
+    }
+
+    def _check_shorthand(event=None):
+        var = ui.reg_vars.get(field_name)
+        val = var.get().strip().lower() if var else ""
+        if not val and hasattr(widget, "get"):
+            try:
+                val = widget.get().strip().lower()
+            except Exception:
+                pass
+        if val in shorthands:
+            _apply_icedig_code(ui, field_name, shorthands[val])
+
+    widget.bind("<KeyRelease>", _check_shorthand, add="+")
+    widget.bind("<FocusOut>", _check_shorthand, add="+")
+    widget._check_shorthand = _check_shorthand
+
+    widget.bind("<Control-Shift-M>", lambda e: (_apply_icedig_code(ui, field_name, "unknown:missing"), "break")[1])
+    widget.bind("<Control-Shift-m>", lambda e: (_apply_icedig_code(ui, field_name, "unknown:missing"), "break")[1])
+    widget.bind("<Control-Shift-I>", lambda e: (_apply_icedig_code(ui, field_name, "unknown:indecipherable"), "break")[1])
+    widget.bind("<Control-Shift-i>", lambda e: (_apply_icedig_code(ui, field_name, "unknown:indecipherable"), "break")[1])
+    widget.bind("<Control-Shift-U>", lambda e: (_apply_icedig_code(ui, field_name, "unknown:undigitized"), "break")[1])
+    widget.bind("<Control-Shift-u>", lambda e: (_apply_icedig_code(ui, field_name, "unknown:undigitized"), "break")[1])
+    widget.bind("<Control-Shift-W>", lambda e: (_apply_icedig_code(ui, field_name, "withheld"), "break")[1])
+    widget.bind("<Control-Shift-w>", lambda e: (_apply_icedig_code(ui, field_name, "withheld"), "break")[1])
+    widget.bind("<Control-Shift-BackSpace>", lambda e: (_apply_icedig_code(ui, field_name, ""), "break")[1])
+
 def _apply_icedig_code(ui, field_name, code):
-    """Write an ICEDIG code (or 'unknown') into a registration field and commit."""
+    """Write an ICEDIG code (or 'unknown'/empty) into a registration field and commit."""
     var = ui.reg_vars.get(field_name)
     if var is None:
         return
@@ -390,6 +429,7 @@ class RegistryPanel:
 
                 if ftype not in ("multiline", "checkbox", "choice") and not field.get("readonly"):
                     _bind_icedig_context_menu(ui, widget, name)
+                    _bind_icedig_shortcuts(ui, widget, name)
 
                 ui.reg_entries[name] = widget
                 ui.reg_entry_list.append(widget)

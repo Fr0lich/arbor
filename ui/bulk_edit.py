@@ -153,6 +153,22 @@ class BulkEditWindow:
         
         reg_fields = self.app.config["ui_sections"]["registration"]
         
+        def _create_icedig_preset_menu(parent, v_var, e_var):
+            mb = tk.Menubutton(parent, text="∅ ▾", font=("Segoe UI", sc(8), "bold"), bg="#f2f5f1", fg="#2c302e", relief="solid", bd=1, cursor="hand2", padx=sc(4), pady=sc(1))
+            m = tk.Menu(mb, tearoff=0)
+            for code, label in config.ICEDIG_CODE_LABELS.items():
+                def _set(c=code):
+                    v_var.set(c)
+                    e_var.set(True)
+                m.add_command(label=label, command=_set)
+            m.add_separator()
+            def _clear():
+                v_var.set("")
+                e_var.set(True)
+            m.add_command(label="Clear Field (empty)", command=_clear)
+            mb.configure(menu=m)
+            return mb
+
         for field in reg_fields:
             name = field["name"]
             ftype = field.get("type", "text")
@@ -178,13 +194,17 @@ class BulkEditWindow:
                     font=("Hanken Grotesk", sc(9.5)), cursor="hand2"
                 ).grid(row=row, column=1, sticky="w", padx=sc(5))
             else:
+                entry_frame = tk.Frame(self.inner_edit, bg="#ffffff")
+                entry_frame.grid(row=row, column=1, sticky="ew", padx=sc(5))
                 tk.Entry(
-                    self.inner_edit, textvariable=val_var,
+                    entry_frame, textvariable=val_var,
                     relief="flat", bd=0,
                     highlightthickness=1, highlightbackground="#d1d1d1",
                     highlightcolor="#000000", insertbackground="#000000",
                     bg="#ffffff", fg="#2c302e"
-                ).grid(row=row, column=1, sticky="ew", padx=sc(5))
+                ).pack(side="left", fill="x", expand=True)
+                preset_mb = _create_icedig_preset_menu(entry_frame, val_var, enable_var)
+                preset_mb.pack(side="right", padx=(sc(4), 0))
             
             row += 1
 

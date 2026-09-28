@@ -747,7 +747,9 @@ class ObjectProblemResolver:
         entry = tk.Entry(entry_frame, textvariable=res_var, font=FONT_MONO, bg=COLORS["surface"], fg=COLORS["text"], highlightbackground=COLORS["border"], highlightthickness=1, relief="flat")
         entry.pack(side="left", fill="x", expand=True, ipady=sc(4))
         
-        def _apply(f=field, rv=res_var, cv=current_val, c=card, h=header):
+        def _apply(forced_val=None, f=field, rv=res_var, cv=current_val, c=card, h=header):
+            if forced_val is not None:
+                rv.set(forced_val)
             new_val = rv.get().strip()
             if new_val and new_val != cv:
                 if hasattr(self.main_app, "push_undo_state"):
@@ -759,7 +761,7 @@ class ObjectProblemResolver:
                         pass
 
                 reg_changed_fields = [f]
-                reg_changed_values = [f'{f}: "{cv}"  "{new_val}"']
+                reg_changed_values = [f'{f}: "{cv}" -> "{new_val}"']
                 prob_changed_fields = []
                 prob_changed_values = []
  
@@ -794,7 +796,7 @@ class ObjectProblemResolver:
 
                         if old_prob:
                             prob_changed_fields.append(pc)
-                            prob_changed_values.append(f'{pc}: "True"  "False"')
+                            prob_changed_values.append(f'{pc}: "True" -> "False"')
                         self.main_app.problem_vars[pc].set(False)
 
                         if getattr(self.main_app, "_cached_obs_dict", None) is not None and self.oid in self.main_app._cached_obs_dict:
@@ -826,8 +828,14 @@ class ObjectProblemResolver:
                     w.configure(bg=COLORS["success"])
                 h.configure(bg=COLORS["success"])
                 
-        btn_apply = tk.Button(entry_frame, text="APPLY", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(16), command=_apply, cursor="hand2")
-        btn_apply.pack(side="right", padx=(sc(8), 0))
+        btn_apply = tk.Button(entry_frame, text="APPLY", font=FONT_UI_BOLD, fg=COLORS["on_primary"], bg=COLORS["primary"], relief="flat", bd=0, padx=sc(12), command=_apply, cursor="hand2")
+        btn_apply.pack(side="right", padx=(sc(6), 0))
+
+        btn_illegible = tk.Button(entry_frame, text="🔍 Illegible", font=FONT_MONO_SM, fg=COLORS["text"], bg=COLORS["surface_dim"], relief="solid", bd=1, highlightthickness=0, padx=sc(8), command=lambda: _apply("unknown:indecipherable"), cursor="hand2")
+        btn_illegible.pack(side="right", padx=(sc(4), 0))
+
+        btn_blank = tk.Button(entry_frame, text="📄 Blank", font=FONT_MONO_SM, fg=COLORS["text"], bg=COLORS["surface_dim"], relief="solid", bd=1, highlightthickness=0, padx=sc(8), command=lambda: _apply("unknown:missing"), cursor="hand2")
+        btn_blank.pack(side="right", padx=(sc(4), 0))
         
         entry.bind("<Return>", lambda e, f=_apply: f())
         
