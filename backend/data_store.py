@@ -89,7 +89,7 @@ class ObjectDataStore:
 
 
     def get_object_payload(self, oid: str, reg_columns=None) -> Dict[str, Any]:
-        with self.lock:
+        with getattr(self.app, 'df_lock', self.lock):
             # Type coerce OID if needed (int fallback)
             if hasattr(self.app, "df_reg") and self.app.df_reg is not None and oid not in self.app.df_reg.index:
                 try:
