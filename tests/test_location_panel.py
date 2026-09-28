@@ -23,6 +23,7 @@ def test_location_panel_init_vertical(tk_root):
     assert "Building" in data
     assert "Floor" in data
     assert "Cabinet" in data
+    assert "Shelf" in data
     assert "Extra" in data
     assert "Loaned out" in data
 
@@ -61,6 +62,7 @@ def test_data_get_set(tk_root):
         "Building": "Lid's hus",
         "Floor": "2",
         "Cabinet": "C-12",
+        "Shelf": "3B",
         "Extra": "Lower shelf",
         "Loaned out": "True"
     }
@@ -70,6 +72,7 @@ def test_data_get_set(tk_root):
     assert data["Building"] == "Lid's hus"
     assert data["Floor"] == "2"
     assert data["Cabinet"] == "C-12"
+    assert data["Shelf"] == "3B"
     assert data["Extra"] == "Lower shelf"
     assert data["Loaned out"] == "True"
 

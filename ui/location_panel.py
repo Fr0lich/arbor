@@ -69,6 +69,7 @@ DEFAULT_LOCATION_FIELDS = [
         "choices": ["4", "3", "2", "1", "-1", "-2"]
     },
     {"name": "Cabinet", "type": "text"},
+    {"name": "Shelf", "type": "text"},
     {"name": "Extra", "type": "text"},
     {"name": "Loaned out", "type": "checkbox"},
     {"name": "Loaned out date", "type": "text", "readonly": True}
@@ -483,7 +484,10 @@ class LocationPanel(tk.Frame):
         
         # Fields Stack via SchemaFormBuilder
         field_defs = {f["name"]: f for f in self._get_field_defs()}
-        order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
+        order = ["Stored as", "Building", "Floor", "Cabinet", "Shelf", "Extra"]
+        for f in self._get_field_defs():
+            if f["name"] not in order and f.get("type") not in ("checkbox",) and not f.get("readonly", False):
+                order.append(f["name"])
         active_field_defs = [field_defs[name] for name in order if name in field_defs]
         
         content = tk.Frame(self, bg=c["bg"])
@@ -531,16 +535,19 @@ class LocationPanel(tk.Frame):
         
         tk.Frame(self, bg=c["border"], height=1).pack(fill="x", side="top")
         
-        # 5-Column Grid Content via SchemaFormBuilder
+        # Grid Content via SchemaFormBuilder
         content = tk.Frame(self, bg=c["bg"])
         content.pack(fill="x", padx=sc(8), pady=sc(6))
         
         field_defs = {f["name"]: f for f in self._get_field_defs()}
-        order = ["Stored as", "Building", "Floor", "Cabinet", "Extra"]
+        order = ["Stored as", "Building", "Floor", "Cabinet", "Shelf", "Extra"]
+        for f in self._get_field_defs():
+            if f["name"] not in order and f.get("type") not in ("checkbox",) and not f.get("readonly", False):
+                order.append(f["name"])
         active_field_defs = [field_defs[name] for name in order if name in field_defs]
         
         builder = SchemaFormBuilder(content, self.colors)
-        builder.build_grid(active_field_defs, self.location_vars, columns=5)
+        builder.build_grid(active_field_defs, self.location_vars, columns=len(active_field_defs) or 6)
 
     # -------------------------------------------------------------------------
     # Mode C: Horizontal 2-Row UI (Middle Column Alternate)
@@ -578,7 +585,7 @@ class LocationPanel(tk.Frame):
         builder = SchemaFormBuilder(content, self.colors)
         layout_rows = [
             ["Stored as", "Building", "Floor"],
-            ["Cabinet", "Extra", "Loan status"]
+            ["Cabinet", "Shelf", "Extra", "Loan status"]
         ]
         custom_widgets = {
             "Loan status": self._build_loan_status_card_cell

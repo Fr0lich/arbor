@@ -291,6 +291,7 @@ DATABASE_CONFIGS = {
                 },
 
                 {"name": "Cabinet", "type": "text"},
+                {"name": "Shelf", "type": "text"},
                 {"name": "Extra", "type": "text"},
                 {
                     "name": "Building",

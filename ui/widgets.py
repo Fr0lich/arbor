@@ -1644,12 +1644,14 @@ class TreeviewListboxWrapper(ttk.Frame):
         extra     = _clean(obs_row.get("Extra",     ""))
         stored_as = _clean(obs_row.get("Stored as", ""))
         cabinet   = _clean(obs_row.get("Cabinet",   ""))
+        shelf     = _clean(obs_row.get("Shelf",     ""))
 
         loc_parts = []
         if building: loc_parts.append(building)
         fr = ", ".join(filter(None, [f"Floor {floor}" if floor else "", extra]))
         if fr: loc_parts.append(fr)
-        st = " / ".join(filter(None, [stored_as, f"Cab {cabinet}" if cabinet else ""]))
+        cab_shelf = ", ".join(filter(None, [f"Cab {cabinet}" if cabinet else "", f"Shelf {shelf}" if shelf else ""]))
+        st = " / ".join(filter(None, [stored_as, cab_shelf]))
         if st: loc_parts.append(st)
         loc_text = " \u2022 ".join(loc_parts) if loc_parts else "No location info"
 

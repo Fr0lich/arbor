@@ -85,6 +85,7 @@ def test_location_panel_integration_modes(tk_root):
         "Building": tk.StringVar(value=""),
         "Floor": tk.StringVar(value=""),
         "Cabinet": tk.StringVar(value=""),
+        "Shelf": tk.StringVar(value=""),
         "Extra": tk.StringVar(value=""),
         "Loaned out": tk.StringVar(value="False"),
     }

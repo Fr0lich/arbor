@@ -4534,23 +4534,24 @@ class ObjectProgramUI(
 
         floor = utils.fmt_pandas_val(obs.get("Floor", ""))
         cabinet = utils.fmt_pandas_val(obs.get("Cabinet", ""))
+        shelf = utils.fmt_pandas_val(obs.get("Shelf", ""))
         building = utils.fmt_pandas_val(obs.get("Building", ""))
-        extra = utils.fmt_pandas_val(obs.get(" ", ""))
-
+        extra = utils.fmt_pandas_val(obs.get("Extra", obs.get(" ", "")))
 
         loaned_raw = obs.get("Loaned out", False)
         loaned = utils.parse_bool(loaned_raw)
 
-
-  
-      
-
-
-
         lines = []
 
-        if floor or cabinet:
-            lines.append(f"Floor: {floor}   |   Cabinet: {cabinet}")
+        sub_locs = []
+        if floor:
+            sub_locs.append(f"Floor: {floor}")
+        if cabinet:
+            sub_locs.append(f"Cabinet: {cabinet}")
+        if shelf:
+            sub_locs.append(f"Shelf: {shelf}")
+        if sub_locs:
+            lines.append("   |   ".join(sub_locs))
 
         if building:
             lines.append(f"{building}")
