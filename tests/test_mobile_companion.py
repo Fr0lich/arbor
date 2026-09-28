@@ -1344,6 +1344,65 @@ def test_desktop_smart_commit_preserves_mobile_edits(mock_app_state):
     root.destroy()
 
 
+def test_batch_location_update_api(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    headers = {"X-Session-Token": auth_res.json["token"]}
+
+    # Update 1024 and 1025 with numeric/negative Floor, Cabinet, Shelf
+    payload = {
+        "object_ids": ["1024", "1025"],
+        "location": {
+            "Building": "Main Herbarium",
+            "Floor": -1,
+            "Cabinet": 4,
+            "Shelf": 2
+        }
+    }
+
+    res = client.post('/api/batch_location_update', json=payload, headers=headers)
+    assert res.status_code == 200
+    data = res.json
+    assert data["status"] == "ok"
+    assert data["updated_count"] == 2
+
+    # Verify DataFrame values
+    assert str(mock_app_state.df_obs.at["1024", "Floor"]) == "-1"
+    assert str(mock_app_state.df_obs.at["1024", "Cabinet"]) == "4"
+    assert str(mock_app_state.df_obs.at["1024", "Shelf"]) == "2"
+    assert mock_app_state.df_obs.at["1024", "Building"] == "Main Herbarium"
+
+    assert str(mock_app_state.df_obs.at["1025", "Floor"]) == "-1"
+    assert str(mock_app_state.df_obs.at["1025", "Cabinet"]) == "4"
+    assert str(mock_app_state.df_obs.at["1025", "Shelf"]) == "2"
+
+
+def test_v2_template_features(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    token = auth_res.json["token"]
+    cookie_header = {"Cookie": f"session_token={token}"}
+
+    res = client.get('/v2', headers=cookie_header)
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+
+    # 1. Filter pills toggle and default hidden state
+    assert 'id="filterPillsContainer"' in html
+    assert 'hidden' in html and 'toggleFilterPills' in html
+
+    # 2. Advance to next shelf button
+    assert 'advanceToNextShelf' in html or 'btnAdvanceNextShelf' in html
+
+    # 3. Numeric floor with negative support
+    assert 'type="number"' in html or 'input_observation_Floor' in html
+
+
+
 
 
 

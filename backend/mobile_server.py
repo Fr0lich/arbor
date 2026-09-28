@@ -308,12 +308,15 @@ def _apply_dataframe_updates(target_df, updates, changed_fields, changed_values,
                 df_to_update.at[target_key, k] = coerced
                 changed_fields.append(k)
                 changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
-        elif allowed_columns is not None and k in allowed_columns and resolved_oid is not None:
+        elif resolved_oid is not None and (allowed_columns is None or k in allowed_columns):
             new_v = sanitize_value(v)
             if new_v:
                 # Initialize new column across all rows safely with dtype awareness
                 is_bool_col = any(term in k.lower() for term in ("reviewed", "missing", "problem", "exist"))
-                target_df[k] = False if is_bool_col else ""
+                if is_bool_col:
+                    target_df[k] = pd.Series(False, index=target_df.index, dtype=bool)
+                else:
+                    target_df[k] = pd.Series("", index=target_df.index, dtype=object)
                 coerced = coerce_type(new_v, target_df[k].dtype)
                 target_df.at[resolved_oid, k] = coerced
                 changed_fields.append(k)
@@ -361,7 +364,11 @@ def _resolve_oid_in_df(df, oid):
 def _get_allowed_columns(config):
     """Extract allowed registration and observation columns from active config."""
     allowed_reg_cols = set()
-    allowed_obs_cols = {"Reviewed", "ReviewedAt", "Images_Missing", "Images_Problem", "Online_Images_Exist"}
+    allowed_obs_cols = {
+        "Reviewed", "ReviewedAt", "Images_Missing", "Images_Problem", "Online_Images_Exist",
+        "Building", "Floor", "Cabinet", "Shelf", "Stored as", "Stored_As", "Room", "Drawer", "Box",
+        "Loc_Problem", "Loaned out", "Loaned out date", "Extra", "Comment"
+    }
     if config and isinstance(config, dict):
         ui_sec = config.get("ui_sections", {})
         for item in ui_sec.get("registration", []):
@@ -2455,6 +2462,90 @@ self.addEventListener('fetch', (event) => {
                 "has_history": flags["has_history"],
                 "problems_have_history": flags["problems_have_history"],
                 "has_unknown": flags["has_unknown"],
+                "synced_at": datetime.now().isoformat()
+            })
+
+        @app.route('/api/batch_location_update', methods=['POST'])
+        def batch_location_update():
+            is_auth, client_sid, _ = self._get_current_session()
+            if not is_auth:
+                return jsonify({"error": "Unauthorized"}), 401
+
+            data = request.get_json(silent=True) or {}
+            items = data.get('items') or data.get('object_ids') or []
+            location = data.get('location', {})
+            if not items or not isinstance(items, list):
+                return jsonify({"error": "No items provided in batch"}), 400
+
+            client_timestamp = data.get('timestamp')
+            updated_ids = []
+            errors = []
+
+            with self.app_state.df_lock:
+                allowed_reg_cols, allowed_obs_cols = _get_allowed_columns(getattr(self.app_state, "config", None))
+                allowed_obs_cols.update({"Building", "Floor", "Cabinet", "Shelf", "Stored as", "Stored_As", "Room", "Drawer", "Box"})
+
+                history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
+                prob_cols = []
+                if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                    prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+                problem_to_field = get_problem_to_field_map(self.app_state.config)
+
+                for raw_item in items:
+                    if isinstance(raw_item, dict):
+                        oid = str(raw_item.get('id') or raw_item.get('oid') or '').strip()
+                        item_loc = raw_item.get('location') or location
+                    else:
+                        oid = str(raw_item).strip()
+                        item_loc = location
+
+                    if not oid:
+                        continue
+
+                    obs_updates = dict(item_loc)
+                    if "Stored_As" in obs_updates and "Stored as" not in obs_updates:
+                        obs_updates["Stored as"] = obs_updates.pop("Stored_As")
+
+                    edit_summary, err = _execute_record_update(
+                        self.app_state, oid, {}, obs_updates, None,
+                        allowed_reg_cols=allowed_reg_cols,
+                        allowed_obs_cols=allowed_obs_cols,
+                        recent_edits=self.recent_edits,
+                        client_timestamp=client_timestamp,
+                        session_id=client_sid
+                    )
+                    if err:
+                        errors.append({"id": oid, "error": err})
+                    else:
+                        updated_ids.append(oid)
+                        self.app_state._mobile_last_edited_oid = oid
+
+                if updated_ids:
+                    self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
+                    self.app_state.dirty = True
+
+            for u_oid in updated_ids:
+                self.broadcast_event("record_updated", {"id": str(u_oid)})
+
+            if updated_ids and self.on_edit_callback:
+                try:
+                    loc_summary = f"{location.get('Building', '')} Fl {location.get('Floor', '')} Cab {location.get('Cabinet', '')} Sh {location.get('Shelf', '')}".strip()
+                    self.on_edit_callback(f"Batch ({len(updated_ids)} items)", f"Relocated {len(updated_ids)} items to {loc_summary}")
+                except Exception:
+                    pass
+
+            if updated_ids and self.root_tk:
+                try:
+                    self.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED, mobile_edit=True))
+                except Exception:
+                    pass
+
+            return jsonify({
+                "status": "ok",
+                "success": True,
+                "updated_count": len(updated_ids),
+                "updated_ids": updated_ids,
+                "errors": errors,
                 "synced_at": datetime.now().isoformat()
             })
 
@@ -6859,38 +6950,46 @@ INDEX_TEMPLATE_V2 = """
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Arbor Mobile Companion</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Arbor Companion</title>
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <!-- Google Fonts: Lora (Botanical Latin), Inter (UI), JetBrains Mono (IDs & Coordinates) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" rel="stylesheet">
+
   <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
             alabaster: '#f3f3f3',
+            canvas: '#f3f3f3',
             surface: '#ffffff',
-            bordercol: '#d4d8d5',
-            borderdark: '#b3b9b4',
-            ink: {
-              DEFAULT: '#191e1a',
-              muted: '#535d56',
-              faint: '#848f87'
-            },
+            'surface-subtle': '#fbfbfb',
+            ink: '#191e1a',
+            'ink-muted': '#535d56',
+            'ink-faint': '#848f87',
             muted: '#535d56',
             subdued: '#848f87',
             fern: {
               DEFAULT: '#3a7d44',
-              dark: '#2c6034',
+              dark: '#205438',
               light: '#eaf4ec',
               border: '#a4cca9'
             },
+            'fern-dark': '#205438',
             'fern-light': '#eaf4ec',
-            brick: '#c93a40',
+            brick: {
+              DEFAULT: '#c93a40',
+              light: '#fdf2f2'
+            },
             'brick-light': '#fdf2f2',
-            slate: '#4a7b9d',
+            slate: {
+              DEFAULT: '#4a7b9d',
+              light: '#f0f6fa'
+            },
             'slate-light': '#f0f6fa',
             ember: {
               DEFAULT: '#d95c14',
@@ -6898,474 +6997,352 @@ INDEX_TEMPLATE_V2 = """
               light: '#fff3ec',
               border: '#f8c2a3'
             },
-            canvas: '#f3f3f3',
+            'ember-light': '#fff3ec',
+            bordercol: '#d4d8d5',
+            'bordercol-subtle': '#ecefec',
             tonal1: '#f8f9fa',
-            tonal2: '#eceeec',
-            tonal3: '#dfe3e0',
+            tonal2: '#eceeec'
           },
           fontFamily: {
             sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
             serif: ['Lora', 'Georgia', 'serif'],
-            mono: ['"JetBrains Mono"', 'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+            mono: ['"JetBrains Mono"', 'JetBrains Mono', 'Menlo', 'monospace']
+          },
+          boxShadow: {
+            card: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+            pop: '0 4px 12px rgba(0,0,0,0.08)',
+            dock: '0 -2px 10px rgba(0,0,0,0.05)',
+            '2xs': '0 1px 2px rgba(0,0,0,0.03)'
           }
         }
       }
-    }
+    };
   </script>
+
   <style>
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-    .tap-highlight-transparent {
-      -webkit-tap-highlight-color: transparent;
-    }
-    .tab-slider {
-      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .tap-highlight-transparent { -webkit-tap-highlight-color: transparent; }
+    .tap-active:active { transform: scale(0.985); transition: transform 0.05s ease-out; }
+    .touch-target-min { min-height: 44px; min-width: 44px; }
+    .tab-slider { transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+    #tabTrack { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
     body {
+      background-color: #121413;
       touch-action: pan-y;
       overscroll-behavior-y: none;
+      -webkit-font-smoothing: antialiased;
     }
-    #tabTrack {
-      transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    .mobile-shell {
+      max-width: 440px;
+      min-height: 100vh;
+      margin: 0 auto;
+      background-color: #f3f3f3;
+      position: relative;
+      box-shadow: 0 0 50px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
     }
-    .touch-target-min { min-height: 44px; min-width: 44px; }
-    .touch-press:active { transform: scale(0.985); filter: brightness(0.97); }
-    .search-active:focus-within {
-      border-color: #d95c14 !important;
-      box-shadow: 0 0 0 2px rgba(217, 92, 20, 0.2) !important;
-    }
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track { background: #f3f3f3; }
-    ::-webkit-scrollbar-thumb { background: #c8ccc9; border-radius: 2px; }
-    .acc-open .acc-icon { transform: rotate(180deg); }
-    @keyframes spinSlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .animate-spin-slow { animation: spinSlow 8s linear infinite; }
   </style>
 </head>
-<body class="bg-canvas text-ink min-h-screen antialiased select-none font-sans">
+<body class="min-h-screen py-0 md:py-6 flex justify-center items-center font-sans text-ink select-none">
 
-  <div class="w-full h-screen flex flex-col relative overflow-hidden bg-canvas mx-auto max-w-md border-x border-bordercol shadow-xl">
+  <div class="mobile-shell w-full overflow-hidden border-x border-stone-800 flex flex-col h-screen md:h-[900px] md:max-h-[94vh] relative">
 
-    <!-- Persistent Offline / Disconnected Warning Banner -->
-    <div id="offlineBanner" class="hidden bg-ember-light border-b border-ember-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-ember-dark shrink-0 transition-all shadow-xs" role="alert" aria-live="assertive">
-      <div class="flex items-center gap-2" id="offlineBannerContent">
+    <!-- Offline Banner -->
+    <div id="offlineBanner" class="hidden bg-ember-light border-b border-ember-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-ember-dark shrink-0 z-50">
+      <div class="flex items-center gap-2">
         <span class="text-sm">⚠</span>
-        <span>Connection to host lost. Reconnecting...</span>
+        <span>Host disconnected. Reconnecting...</span>
       </div>
-      <button
-        type="button"
-        id="btnOfflineRetry"
-        onclick="setupEventSource()"
-        class="min-h-[32px] px-2.5 py-1 bg-ember text-white rounded-[2px] font-bold text-[11px] touch-press shrink-0"
-      >
+      <button type="button" onclick="setupEventSource()" class="min-h-[30px] px-2.5 py-1 bg-ember text-white rounded font-bold text-[11px] tap-active">
         Retry
       </button>
     </div>
 
-    <!-- ========================================== -->
-    <!-- VIEW: SPECIMEN LIST                        -->
-    <!-- ========================================== -->
+    <!-- ============================================================= -->
+    <!-- SCREEN 1: VAULT LIST VIEW (#listView)                         -->
+    <!-- ============================================================= -->
     <div id="listView" class="flex-1 flex flex-col h-full bg-canvas overflow-hidden">
-      <!-- Master App Header (List View Only) -->
-      <header class="sticky top-0 z-30 bg-surface border-b border-bordercol px-4 pt-3 pb-2.5 shadow-xs shrink-0">
-        <div class="flex items-center justify-between mb-2.5">
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 rounded-[2px] bg-fern text-white flex items-center justify-center font-serif font-bold text-sm">
+      <!-- 1. Top Header -->
+      <header class="sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-bordercol shrink-0">
+        <div class="px-3.5 pt-3 pb-2 flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <!-- Arbor "A" Badge -->
+            <div class="w-7 h-7 rounded bg-fern-dark flex items-center justify-center text-white font-serif font-bold text-sm shadow-sm ring-1 ring-black/10">
               A
             </div>
             <div>
-              <h1 class="font-serif font-bold text-base text-ink leading-tight">
-                Arbor Companion
-              </h1>
-              <div class="font-mono text-[10px] text-ink-muted truncate max-w-[170px]" id="headerDbName">
-                Connecting to database...
+              <div class="flex items-center space-x-1.5 leading-none">
+                <span class="font-bold text-[13px] tracking-tight text-ink font-sans">Arbor Companion</span>
+                <span class="text-[10px] px-1 py-0.5 rounded bg-emerald-50 text-fern-dark font-mono font-medium border border-fern/30">v2</span>
+              </div>
+              <div class="text-[10.5px] font-mono text-ink-muted tracking-tight truncate max-w-[170px] mt-0.5" id="headerDbName">
+                Loading database...
               </div>
             </div>
           </div>
 
-          <div class="flex items-center gap-1.5">
-            <!-- Settings Modal Trigger -->
-            <button
-              type="button"
-              onclick="openSettingsModal()"
-              class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-              title="Settings"
-            >
-              <span class="text-ink text-sm font-mono">⚙️</span>
+          <!-- Top Utility Controls -->
+          <div class="flex items-center space-x-1.5">
+            <!-- Undo Button -->
+            <button id="btnListUndo" onclick="undoLastEdit()" title="Undo recent edit" class="w-8 h-8 rounded-md bg-stone-100 border border-stone-200 text-stone-600 hover:text-ink flex items-center justify-center tap-active transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2m0 0l-4-4m4 4l4-4M3 10l4-4m-4 4l4 4"/>
+              </svg>
             </button>
 
-            <!-- Recent Changes Drawer Trigger -->
-            <button
-              type="button"
-              onclick="openRecentEditsModal()"
-              class="p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-              title="Recent Changes"
-            >
-              <span class="text-ink text-sm font-mono">↩</span>
+            <!-- Walk Mode (Wake Lock) Toggle -->
+            <button id="btnListWakeLock" onclick="toggleWakeLock()" title="Keep screen awake during audit" class="w-8 h-8 rounded-md bg-stone-100 border border-stone-200 text-stone-600 hover:text-ink flex items-center justify-center tap-active transition-colors">
+              <span id="listWakeLockIcon" class="text-xs">☀️</span>
             </button>
 
-            <!-- Screen Wake Lock / Walk Mode Toggle -->
-            <button
-              type="button"
-              id="btnWakeLock"
-              onclick="toggleWakeLock()"
-              class="btn-wake-lock p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center"
-              title="Toggle Walk Mode (Prevent Screen Sleep)"
-            >
-              <span id="wakeLockIcon" class="wake-lock-icon text-sm leading-none">🌙</span>
+            <!-- Batch Location Registrator Trigger -->
+            <button id="btnOpenBatchLocation" onclick="showBatchLocationView()" title="Open Batch Location Registrator" class="w-8 h-8 rounded-md bg-emerald-50 border border-fern/30 text-fern-dark hover:bg-emerald-100 flex items-center justify-center tap-active transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+              </svg>
             </button>
 
-            <!-- Desktop Connection Pill Button -->
-            <button
-              type="button"
-              onclick="openModal('connectionModal')"
-              id="connStatusBtn"
-              class="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-xs transition-colors touch-target-min"
-              title="Desktop Connection Status"
-              aria-live="polite"
-            >
-              <span class="relative flex h-2 w-2">
-                <span id="connPingDotAnimate" class="conn-ping-dot-animate animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember"></span>
-                <span id="connPingDot" class="conn-ping-dot relative inline-flex rounded-full h-2 w-2 bg-ember"></span>
-              </span>
-              <span class="font-mono text-[11px] font-medium text-ink" id="pingBadge">
-                Connecting...
-              </span>
+            <!-- Settings Trigger -->
+            <button onclick="openSettingsModal()" title="Application Settings" class="w-8 h-8 rounded-md bg-stone-100 border border-stone-200 text-stone-600 hover:text-ink flex items-center justify-center tap-active transition-colors">
+              <span class="text-xs font-mono">⚙️</span>
             </button>
+
+            <!-- Connection Status Pill -->
+            <div onclick="openModal('connectionModal')" class="flex items-center space-x-1 px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[10.5px] font-mono font-medium text-emerald-800 cursor-pointer">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span id="pingBadge">42ms</span>
+            </div>
           </div>
         </div>
 
-        <!-- List Search Input Box -->
-        <div class="relative flex items-center gap-2">
-          <div class="relative flex-1 flex items-center bg-tonal1 border border-bordercol rounded-[2px] transition-all search-active">
-            <span class="text-ink-faint ml-2.5 shrink-0 text-xs">🔍</span>
-            <input
-              type="text"
-              id="searchBox"
+        <!-- Search Bar Row -->
+        <div class="px-3.5 pb-2.5 pt-0.5">
+          <div class="relative flex items-center">
+            <div class="absolute left-3 text-ink-faint pointer-events-none">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+            </div>
+            <input 
+              type="text" 
+              id="searchBox" 
+              placeholder="Search taxonomy, accession, cabinet..." 
               oninput="debounceSearch()"
-              placeholder="Search taxonomy, accession, collector, cabinet..."
-              class="w-full bg-transparent px-2.5 py-2 font-sans text-xs text-ink placeholder:text-ink-faint outline-none"
+              autocomplete="off"
+              spellcheck="false"
+              class="w-full pl-9 pr-16 py-2 bg-stone-100/90 hover:bg-stone-100 focus:bg-white text-xs font-mono text-ink placeholder:text-ink-faint placeholder:font-sans rounded-lg border border-stone-200 focus:border-fern focus:ring-1 focus:ring-fern focus:outline-none transition-all shadow-inner"
             />
-            <button
-              type="button"
-              id="searchClearBtn"
-              onclick="clearSearch()"
-              class="hidden p-1 mr-1.5 text-ink-faint hover:text-ink text-xs font-bold"
-            >
-              ✕
-            </button>
+            <div class="absolute right-2 flex items-center space-x-1">
+              <button id="searchClearBtn" onclick="clearSearch()" class="hidden text-ink-faint hover:text-ink p-1 rounded text-xs font-mono leading-none" title="Clear search">
+                ✕
+              </button>
+              <button id="btnFilterModalTrigger" onclick="openFilterModal()" title="Curatorial Filters" class="relative p-1.5 rounded-md hover:bg-stone-200/70 text-ink-muted hover:text-ink transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                </svg>
+                <span id="filterActiveBadge" class="hidden absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-fern ring-2 ring-white"></span>
+              </button>
+            </div>
           </div>
+        </div>
 
-          <!-- Advanced Filter Modal Trigger -->
-          <button
-            type="button"
-            id="btnFilterModalTrigger"
-            onclick="openFilterModal()"
-            class="relative p-2 bg-surface hover:bg-tonal1 border border-bordercol rounded-[2px] text-ink transition-colors touch-target-min flex items-center justify-center shrink-0"
-            title="Advanced Filter"
-          >
-            <span class="text-ink text-sm font-mono">⚙</span>
-            <span id="filterActiveBadge" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-fern rounded-full ring-2 ring-surface"></span>
+        <!-- 2. Filter Pills Bar (Hidden by Default, Toggleable in Settings) -->
+        <div id="filterPillsContainer" class="hidden px-3.5 pb-2 overflow-x-auto no-scrollbar flex items-center space-x-1.5 border-t border-stone-100 pt-2">
+          <button onclick="setStatusFilter('all')" id="pill-all" class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-ink text-white shadow-sm tap-active transition-all">
+            All <span class="font-mono text-[10px] ml-0.5 opacity-90" id="pillCountAll">(0)</span>
           </button>
+          <button onclick="setStatusFilter('pending')" id="pill-pending" class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-stone-200/80 text-ink-muted hover:bg-stone-300 tap-active transition-all">
+            🕒 Unreviewed <span class="font-mono text-[10px] ml-0.5" id="pillCountPending">(0)</span>
+          </button>
+          <button onclick="setStatusFilter('flagged')" id="pill-flagged" class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-brick-light text-brick border border-brick/30 hover:bg-red-100 tap-active transition-all">
+            ⚠ Flagged <span class="font-mono text-[10px] ml-0.5 font-bold" id="pillCountFlagged">(0)</span>
+          </button>
+          <button onclick="setStatusFilter('reviewed')" id="pill-reviewed" class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-emerald-50 text-fern-dark border border-fern/30 hover:bg-emerald-100 tap-active transition-all">
+            ✓ Reviewed <span class="font-mono text-[10px] ml-0.5" id="pillCountReviewed">(0)</span>
+          </button>
+          <button onclick="setStatusFilter('conflict')" id="pill-conflict" class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100 tap-active transition-all">
+            🔀 Conflicts <span class="font-mono text-[10px] ml-0.5" id="pillCountConflict">(0)</span>
+          </button>
+          <button onclick="setStatusFilter('unknown')" id="pill-unknown" class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100 tap-active transition-all">
+            ? Unknown <span class="font-mono text-[10px] ml-0.5" id="pillCountUnknown">(0)</span>
+          </button>
+          <button onclick="toggleNoImageFilter()" id="pill-no-image" class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-stone-100 text-stone-600 border border-stone-200 hover:bg-stone-200 tap-active transition-all">
+            📷 No Image
+          </button>
+        </div>
+
+        <!-- Metrics & Sort Row -->
+        <div class="px-3.5 py-2 bg-alabaster/70 border-t border-bordercol flex items-center justify-between text-[11px]">
+          <div class="font-mono text-ink-muted">
+            Showing <span class="font-bold text-ink" id="matchingCount">0</span> matching records
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <div class="relative inline-flex items-center">
+              <select id="sortBySelect" onchange="handleSortChange()" class="appearance-none bg-white border border-bordercol rounded-md px-2 py-1 pr-6 text-[10.5px] font-mono text-ink focus:outline-none focus:border-fern shadow-2xs cursor-pointer">
+                <option value="location">⇅ Sort: Physical Location</option>
+                <option value="name_asc">Scientific Name (A–Z)</option>
+                <option value="name_desc">Scientific Name (Z–A)</option>
+                <option value="id_asc">Accession ID (0894...)</option>
+                <option value="flagged_first">Flagged / Problems First</option>
+              </select>
+              <div class="absolute right-1.5 pointer-events-none text-ink-faint">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
-      <!-- List View Filter & Sort Controls -->
-      <div class="bg-surface border-b border-bordercol px-4 pt-1.5 pb-2 shadow-xs shrink-0">
-        <!-- Filter Pill Tabs -->
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1" id="filterPills">
-          <button
-            type="button"
-            onclick="setStatusFilter('all')"
-            id="pill-all"
-            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center justify-center bg-ink text-white border-ink"
-          >
-            All (0)
-          </button>
 
-          <button
-            type="button"
-            onclick="setStatusFilter('pending')"
-            id="pill-pending"
-            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-surface text-ink-muted border-bordercol hover:bg-tonal1"
-          >
-            <span>🕒</span>
-            <span>Unreviewed (0)</span>
-          </button>
+      <!-- 3. Specimen Card Feed -->
+      <main class="flex-1 p-3.5 space-y-2.5 overflow-y-auto pb-24" id="specimenListContainer">
+        <!-- Injected via JS -->
+      </main>
 
-          <button
-            type="button"
-            onclick="setStatusFilter('flagged')"
-            id="pill-flagged"
-            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-ember-light text-ember-dark border-ember-border hover:bg-ember-light/80"
-          >
-            <span>⚠</span>
-            <span>Flagged (0)</span>
-          </button>
-
-          <button
-            type="button"
-            onclick="setStatusFilter('reviewed')"
-            id="pill-reviewed"
-            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-fern-light text-fern-dark border-fern-border hover:bg-fern-light/80"
-          >
-            <span>✓</span>
-            <span>Reviewed (0)</span>
-          </button>
-
-          <button
-            type="button"
-            onclick="setStatusFilter('conflict')"
-            id="pill-conflict"
-            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-[#e0f2fe] text-[#0369a1] border-[#bae6fd] hover:bg-[#bae6fd]"
-          >
-            <span>🔀</span>
-            <span>Conflict (0)</span>
-          </button>
-
-          <button
-            type="button"
-            onclick="setStatusFilter('unknown')"
-            id="pill-unknown"
-            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-[#fef9c3] text-[#854d0e] border-[#fde047] hover:bg-[#fef08a]"
-          >
-            <span>?</span>
-            <span>Unknown (0)</span>
-          </button>
-
-          <div class="w-px h-6 bg-bordercol mx-0.5 shrink-0"></div>
-
-          <button
-            type="button"
-            onclick="toggleNoImageFilter()"
-            id="pill-no-image"
-            class="min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center gap-1.5 bg-surface text-ink-muted border-bordercol hover:bg-tonal1"
-          >
-            <span>📷</span>
-            <span>No Image</span>
-          </button>
-        </div>
-
-        <!-- Results Counter & Sort Dropdown -->
-        <div class="flex items-center justify-between mt-2 pt-2 border-t border-tonal2 text-[11px]">
-          <span class="font-mono text-ink-muted" id="listSummaryText">
-            Showing <strong class="text-ink" id="matchingCount">0</strong> records
-          </span>
-
-          <div class="flex items-center gap-1 text-ink-muted">
-            <span class="text-xs">⇅</span>
-            <select
-              id="sortBySelect"
-              onchange="handleSortChange()"
-              class="bg-transparent font-sans text-[11px] font-medium text-ink outline-none cursor-pointer"
-            >
-              <option value="location">Sort by Physical Location</option>
-              <option value="name-asc">Scientific Name (A-Z)</option>
-              <option value="name-desc">Scientific Name (Z-A)</option>
-              <option value="id-asc">Accession / ID Number</option>
-            </select>
+      <!-- 4. Bottom Vault Progress Dock -->
+      <footer class="sticky bottom-0 z-40 bg-surface/95 backdrop-blur-md border-t border-bordercol px-4 py-2.5 shadow-dock">
+        <div class="flex items-center justify-between text-xs mb-1.5">
+          <div class="flex items-center space-x-1.5 font-mono text-[11px]">
+            <span class="w-2 h-2 rounded-full bg-fern inline-block"></span>
+            <span class="text-ink font-semibold" id="listProgressText">0 / 0 Reviewed</span>
+            <span class="text-ink-muted" id="listProgressPct">(0%)</span>
+          </div>
+          <div class="text-[10px] font-mono text-ink-muted flex items-center space-x-1">
+            <svg class="w-3 h-3 text-fern" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Auto-sync ready</span>
           </div>
         </div>
-      </div>
-
-      <!-- Scrollable List -->
-      <main id="specimenListContainer" class="flex-1 overflow-y-auto p-3 space-y-2.5 pb-24">
-        <!-- Specimen cards injected dynamically -->
-      </main>
+        <div class="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+          <div class="bg-fern h-full transition-all duration-300 rounded-full" id="listProgressBar" style="width: 0%;"></div>
+        </div>
+      </footer>
     </div>
 
 
-    <!-- ========================================== -->
-    <!-- VIEW: SPECIMEN DETAIL                      -->
-    <!-- ========================================== -->
+    <!-- ============================================================= -->
+    <!-- SCREEN 2: SPECIMEN DETAIL VIEW (#detailView)                  -->
+    <!-- ============================================================= -->
     <div id="detailView" class="hidden flex-1 flex flex-col h-full bg-alabaster overflow-hidden relative font-sans text-ink">
-      <!-- 1. STICKY TOP NAVIGATION BAR (Unified with Walk Mode, Steppers, Undo, Search) -->
-      <header class="flex-none bg-surface border-b border-bordercol px-3 py-2 flex flex-col gap-2 z-30 shadow-xs">
-        <div class="flex items-center justify-between gap-2">
-          <!-- Back button -->
-          <button type="button" aria-label="Return to Vault List" class="flex items-center gap-1.5 px-2 py-1.5 min-h-[36px] -ml-1 text-xs font-semibold text-muted hover:text-ink active:bg-stone-100 rounded-[3px] transition-colors tap-highlight-transparent flex-none" id="btnBack" onclick="showListView()">
-            <svg class="w-4 h-4 text-ink stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M15.75 19.5L8.25 12l7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      <!-- 1. Sticky Top Navigation Bar -->
+      <header class="flex-none bg-surface border-b border-bordercol px-3.5 py-2.5 flex items-center justify-between z-30">
+        <!-- Back Button -->
+        <button type="button" onclick="showListView()" class="flex items-center gap-1.5 px-2 py-1.5 min-h-[36px] -ml-1 text-xs font-semibold text-muted hover:text-ink active:bg-stone-100 rounded transition-colors tap-highlight-transparent">
+          <svg class="w-4 h-4 text-ink stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M15.75 19.5L8.25 12l7.5-7.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="font-mono">Vault List</span>
+        </button>
+
+        <!-- Steppers & Controls -->
+        <div class="flex items-center gap-1.5">
+          <!-- Detail Undo Button -->
+          <button id="btnDetailUndo" onclick="undoLastEdit()" title="Undo edit" class="items-center gap-1 px-2 py-1 h-[32px] text-[10.5px] font-mono font-medium text-ember bg-orange-50 border border-orange-200 rounded active:scale-95 transition-all flex">
+            <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <span class="font-mono" id="detailBackVaultLabel">Vault List</span>
+            <span>Undo</span>
           </button>
 
-          <!-- Center/Right controls: Undo + Walk Mode + Recent Changes + Counter + Steppers -->
-          <div class="flex items-center gap-1.5 flex-none">
-            <!-- Undo Button -->
-            <button type="button" class="items-center gap-1 px-2 py-1 h-[30px] text-[10px] font-mono font-medium text-ember bg-orange-50 border border-orange-200 rounded-[3px] active:scale-95 transition-all hidden" id="btnMobileUndo" onclick="undoLastEdit()" title="Undo last edit">
-              <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-              <span>Undo</span>
+          <!-- Specimen Index Counter -->
+          <span class="text-[11px] font-mono font-medium text-subdued tracking-tight bg-stone-100 px-2 py-1.5 rounded border border-bordercol/60">
+            <span class="text-ink font-semibold" id="detailCurrentIdx">1</span><span class="text-stone-400 mx-0.5">/</span><span id="detailTotalCount">1</span>
+          </span>
+
+          <!-- Next / Prev Steppers -->
+          <div class="inline-flex rounded border border-bordercol bg-alabaster p-0.5 shadow-2xs">
+            <button type="button" class="w-7 h-7 flex items-center justify-center rounded hover:bg-surface text-ink active:bg-stone-200 transition-colors tap-highlight-transparent" onclick="navSpecimen(-1)" title="Previous Specimen">
+              <svg class="w-4 h-4 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-
-            <!-- Walk Mode Toggle in Detail -->
-            <button type="button" onclick="toggleWakeLock()" class="btn-wake-lock p-1.5 rounded-[3px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center text-xs" title="Toggle Walk Mode (Prevent Screen Sleep)">
-              <span class="wake-lock-icon text-xs leading-none">🌙</span>
+            <div class="w-[1px] bg-bordercol my-0.5"></div>
+            <button type="button" class="w-7 h-7 flex items-center justify-center rounded hover:bg-surface text-ink active:bg-stone-200 transition-colors tap-highlight-transparent" onclick="navSpecimen(1)" title="Next Specimen">
+              <svg class="w-4 h-4 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-
-            <!-- Recent Changes in Detail -->
-            <button type="button" onclick="openRecentEditsModal()" class="p-1.5 bg-surface hover:bg-tonal1 border border-bordercol rounded-[3px] text-ink transition-colors touch-target-min flex items-center justify-center text-xs" title="Recent Changes">
-              <span class="text-ink text-xs font-mono">↩</span>
-            </button>
-
-            <!-- Specimen index counter -->
-            <span class="text-[11px] font-mono font-medium text-subdued tracking-tight bg-stone-100 px-2 py-1 rounded-[3px] border border-bordercol/60 flex items-center">
-              <span class="text-ink font-semibold" id="currentRecordNum">1</span><span class="text-stone-400 mx-0.5">/</span><span id="totalRecordsNum">1</span>
-            </span>
-
-            <!-- Segmented Next/Prev Steppers -->
-            <div class="inline-flex rounded-[3px] border border-bordercol bg-alabaster p-0.5 shadow-2xs">
-              <button type="button" class="w-7 h-7 flex items-center justify-center rounded-[2px] hover:bg-surface text-ink active:bg-stone-200 transition-colors tap-highlight-transparent disabled:opacity-30" id="btnPrevSpecimen" onclick="navSpecimen(-1)" title="Previous Specimen">
-                <svg class="w-3.5 h-3.5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
-              <div class="w-[1px] bg-bordercol my-0.5"></div>
-              <button type="button" class="w-7 h-7 flex items-center justify-center rounded-[2px] hover:bg-surface text-ink active:bg-stone-200 transition-colors tap-highlight-transparent disabled:opacity-30" id="btnNextSpecimen" onclick="navSpecimen(1)" title="Next Specimen">
-                <svg class="w-3.5 h-3.5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Live Search Bar -->
-        <div class="relative flex items-center w-full">
-          <div class="absolute left-2.5 pointer-events-none text-muted flex items-center">
-            <svg class="w-3.5 h-3.5 stroke-[2.2] text-subdued" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-          </div>
-          <input id="vaultLiveSearch" type="text" placeholder="Search specimen, barcode, taxon..." class="w-full text-xs font-mono pl-8 pr-16 py-1.5 min-h-[34px] bg-alabaster hover:bg-white focus:bg-white border border-bordercol rounded-[3px] text-ink focus:border-ink focus:outline-none transition-all placeholder:text-stone-400 placeholder:font-sans" oninput="handleLiveSearch(this.value)" onkeydown="if(event.key==='Escape'){clearLiveSearch();}" autocomplete="off">
-          <!-- Shortcut / Clear Container -->
-          <div class="absolute right-1.5 flex items-center gap-1">
-            <button id="btnClearSearch" type="button" onclick="clearLiveSearch()" class="hidden text-[11px] font-mono text-stone-400 hover:text-ink px-1.5 py-0.5 rounded hover:bg-stone-100 transition-colors" title="Clear search">✕</button>
-            <kbd class="hidden sm:inline-flex text-[9px] font-mono font-medium text-subdued bg-stone-100 border border-stone-200 px-1 py-0.5 rounded pointer-events-none">⌘K</kbd>
-          </div>
-          <!-- Live Filter Floating Hint Dropdown -->
-          <div id="searchDropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-surface border border-bordercol rounded-[3px] shadow-lg z-50 p-2 text-xs font-mono space-y-1 max-h-60 overflow-y-auto">
-            <div class="flex items-center justify-between text-[10px] text-subdued border-b border-stone-100 pb-1">
-              <span id="searchResultsCount">Matches</span>
-              <span class="text-fern font-medium">Live index</span>
-            </div>
-            <div id="searchResultsList" class="space-y-0.5 pt-0.5">
-              <!-- Dynamic results pop up here -->
-            </div>
           </div>
         </div>
       </header>
 
-      <!-- 2. STICKY SPECIMEN IDENTIFICATION HEADER -->
-      <section class="flex-none bg-surface border-b border-bordercol px-4 pt-3 pb-3 z-20 shadow-xs">
-        <!-- Accession Bar & Status Badge -->
+      <!-- 2. Sticky Specimen Identification Header -->
+      <section class="flex-none bg-surface border-b border-bordercol px-4 pt-3 pb-3 z-20 shadow-2xs">
         <div class="flex items-center justify-between mb-1.5">
           <div class="flex items-center gap-2">
-            <span class="font-mono text-xs font-bold text-ink tracking-tight px-1.5 py-0.5 bg-stone-100 border border-bordercol rounded-[2px]" id="detailAccession">
-              #---
+            <span class="font-mono text-xs font-bold text-ink tracking-tight px-1.5 py-0.5 bg-stone-100 border border-bordercol rounded" id="detailAccession">
+              #2024-BOT-0894
             </span>
           </div>
-          <!-- Interactive Quick Status Pill -->
-          <button type="button" class="flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300" id="badgeStatus" onclick="toggleReviewed()">
-            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+          <!-- Interactive Status Pill -->
+          <button type="button" class="flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300" id="badgeStatus" onclick="toggleReviewed()">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" id="badgeStatusDot"></span>
             <span id="badgeStatusText">UNREVIEWED</span>
           </button>
         </div>
-        <!-- Taxon Scientific Title -->
+
         <h1 class="text-[19px] leading-tight font-serif font-semibold italic text-ink tracking-tight flex items-baseline gap-1.5 truncate" id="detailScientificName">
-          Loading specimen...
+          Betula pendula
         </h1>
-        <!-- Metadata summary sub-line -->
+
         <div class="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-xs text-muted">
           <div class="flex items-center gap-1">
             <span class="text-subdued font-medium">Fam:</span>
-            <span class="font-medium text-ink" id="detailFamily">—</span>
-          </div>
-          <span class="text-bordercol">•</span>
-          <div class="flex items-center gap-1">
-            <span class="text-subdued font-medium">Auth:</span>
-            <span class="font-medium text-ink font-mono text-[11px]" id="detailAuthor">—</span>
+            <span class="font-medium text-ink" id="detailFamily">Betulaceae</span>
           </div>
           <span class="text-bordercol">•</span>
           <div class="flex items-center gap-1 font-mono text-[11px]">
             <span class="text-subdued font-sans">Loc:</span>
-            <span class="text-ink font-semibold" id="headerLocSummary">Unrecorded</span>
+            <span class="text-ink font-semibold" id="headerLocSummary">Cab 04 · Sh 02 · Fl -1</span>
           </div>
         </div>
       </section>
 
-      <!-- 3. SEGMENTED TAB CONTROLLER (Sticky) -->
+      <!-- 3. Segmented Tab Controller (Sticky) -->
       <nav class="flex-none bg-alabaster border-b border-bordercol px-3 pt-2 pb-1.5 z-20">
         <div class="relative bg-stone-200/90 p-1 rounded-[4px] flex items-center justify-between text-xs font-medium text-muted shadow-inner">
-          <!-- Sliding active indicator pill -->
-          <div class="tab-slider absolute top-1 bottom-1 w-[calc((100%-8px)/3)] bg-surface rounded-[2px] shadow-sm border border-stone-300 pointer-events-none translate-x-0" id="tabIndicator" style="transform: translateX(0%);"></div>
-          <!-- Tab 1: Location (Active Default) -->
-          <button type="button" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent font-semibold text-ink" data-tab-index="0" onclick="switchTab(0)">
-            <svg class="w-3.5 h-3.5 text-current stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
-              <path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
+          <div class="tab-slider absolute top-1 bottom-1 w-[calc((100%-8px)/3)] bg-surface rounded shadow-sm border border-stone-300 pointer-events-none translate-x-0" id="tabIndicator" style="transform: translateX(0%);"></div>
+          <button id="tabBtnLocation" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[36px] flex items-center justify-center gap-1.5 font-semibold text-ink tap-highlight-transparent" data-tab-index="0" onclick="switchDetailTab('location')">
+            <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
             <span>Location</span>
           </button>
-          <!-- Tab 2: Details & Archival Scans -->
-          <button type="button" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent text-muted" data-tab-index="1" onclick="switchTab(1)">
-            <svg class="w-3.5 h-3.5 text-current stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
+          <button id="tabBtnDetails" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[36px] flex items-center justify-center gap-1.5 text-muted tap-highlight-transparent" data-tab-index="1" onclick="switchDetailTab('details')">
+            <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             <span>Details</span>
           </button>
-          <!-- Tab 3: Problems & Conflicts -->
-          <button type="button" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[38px] flex items-center justify-center gap-1.5 transition-colors tap-highlight-transparent text-muted" data-tab-index="2" onclick="switchTab(2)">
-            <svg class="w-3.5 h-3.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
+          <button id="tabBtnProblems" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[36px] flex items-center justify-center gap-1.5 text-muted tap-highlight-transparent" data-tab-index="2" onclick="switchDetailTab('problems')">
+            <svg class="w-3.5 h-3.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
             <span>Problems</span>
-            <span class="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-stone-300 text-stone-700 shadow-xs hidden" id="tabProblemBadge">0</span>
+            <span class="font-mono text-[10px] font-bold px-1.5 rounded-full bg-brick text-white shadow-2xs hidden" id="tabProblemBadge">0</span>
           </button>
         </div>
       </nav>
 
-      <!-- Presence Warning Banner (Shown when another worker is viewing this object) -->
-      <div id="detailPresenceBanner" class="hidden mx-3.5 mt-2 flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-300 rounded-[2px] text-amber-900 text-xs font-sans font-medium shrink-0 z-10">
-        <span class="text-sm">⚠️</span>
-        <span id="detailPresenceText">Warning: Another worker is currently viewing this record.</span>
-      </div>
-
-      <!-- 4. HORIZONTAL SWIPEABLE TAB PANELS CONTAINER -->
+      <!-- 4. Horizontal Swipeable Tab Track -->
       <div class="flex-1 overflow-hidden relative" id="swipeArea">
         <div class="h-full flex w-[300%]" id="tabTrack" style="transform: translateX(0%);">
 
-          <!-- ================= PANEL 1: LOCATION ================= -->
+          <!-- ================= TAB 0: LOCATION ================= -->
           <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentLocation">
-            <!-- 1. UTILITY BAR: REPETITION KILLER -->
-            <div class="bg-surface border border-bordercol rounded-[3px] p-2.5 shadow-2xs">
-              <button class="w-full py-2.5 px-3 bg-stone-100 hover:bg-stone-200/80 active:bg-stone-300 border border-stone-300 rounded-[3px] flex items-center justify-between text-left transition-all tap-highlight-transparent min-h-[44px]" id="btnCopyPrevSpecimen" onclick="handleCopyPreviousSpecimen()" type="button">
+            <!-- 1. Copy from Previous Bar -->
+            <div class="bg-surface border border-bordercol rounded p-2.5 shadow-2xs">
+              <button class="w-full py-2.5 px-3 bg-stone-100 hover:bg-stone-200/80 active:bg-stone-300 border border-stone-300 rounded flex items-center justify-between text-left transition-all tap-highlight-transparent min-h-[44px]" id="btnCopyPrevSpecimen" onclick="handleCopyPreviousSpecimen()" type="button">
                 <div class="flex items-center gap-2 truncate">
-                  <span class="text-base leading-none" id="copyIconSpan">📋</span>
+                  <span class="text-base leading-none">📋</span>
                   <div class="truncate">
-                    <span class="text-xs font-bold text-ink block truncate" id="copyTitleSpan">Copy from Previous Specimen</span>
+                    <span class="text-xs font-bold text-ink block truncate" id="copyTitleSpan">Copy from Previous</span>
                     <span class="text-[10px] font-mono text-muted block truncate" id="copySubtitleSpan">Tap to duplicate physical coordinates</span>
                   </div>
                 </div>
-                <span class="text-[10px] font-mono font-bold px-2 py-1 bg-surface border border-stone-300 text-muted rounded-[2px] shadow-2xs whitespace-nowrap ml-2" id="copyActionTag">1-Tap Fill</span>
+                <span class="text-[10px] font-mono font-bold px-2 py-1 bg-surface border border-stone-300 text-muted rounded shadow-2xs whitespace-nowrap ml-2">1-Tap Fill</span>
               </button>
             </div>
 
-            <!-- 2. MAIN LOCATION CARD -->
-            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-xs space-y-3.5">
+            <!-- 2. Main Physical Coordinate Audit Card -->
+            <div class="bg-surface border border-bordercol rounded p-3.5 shadow-xs space-y-3.5">
               <div class="flex items-center justify-between border-b border-stone-100 pb-2">
                 <div>
-                  <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Physical Coordinate Audit</h2>
-                  <p class="text-[10px] font-mono text-subdued">Thumb-optimized targets · Rapid field audit</p>
+                  <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Physical Coordinates Audit</h2>
+                  <p class="text-[10px] font-mono text-subdued">Thumb-optimized steppers · Continuous numeric coordinates</p>
                 </div>
                 <span class="text-[10px] font-mono text-fern font-semibold flex items-center gap-1" id="locSyncIndicator">
-                  <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   Synced
                 </span>
               </div>
@@ -7373,2700 +7350,1318 @@ INDEX_TEMPLATE_V2 = """
               <!-- SECTION A: BUILDING SELECTOR -->
               <div class="space-y-2">
                 <div class="flex items-center justify-between">
-                  <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued">Building / Vault Facility</label>
-                  <button class="text-[10px] font-mono text-slate hover:text-ink flex items-center gap-0.5 tap-highlight-transparent" id="btnToggleOtherBldg" onclick="toggleCustomBuildingInput()" type="button">+ Other</button>
+                  <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued">Building / Facility</label>
+                  <button class="text-[10px] font-mono text-slate hover:text-ink flex items-center gap-0.5 tap-highlight-transparent" onclick="toggleCustomBuildingInput()" type="button">+ Other</button>
                 </div>
                 <div class="grid grid-cols-2 gap-2" id="buildingChipsGrid">
-                  <button class="bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs border-bordercol bg-stone-50 hover:bg-stone-100 text-ink" data-building="Økern" onclick="setBuildingSelection('Økern', this)" type="button">
+                  <button class="bldg-chip min-h-[44px] px-3 py-2 rounded border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs bg-[#1c3829] text-white border-transparent" data-building="Økern" onclick="setBuildingSelection('Økern', this)" type="button">
                     <span>Økern</span>
                   </button>
-                  <button class="bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs" data-building="Lid's hus" onclick="setBuildingSelection(&quot;Lid's hus&quot;, this)" type="button">
+                  <button class="bldg-chip min-h-[44px] px-3 py-2 rounded border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs" data-building="Lid's hus" onclick="setBuildingSelection('Lid\'s hus', this)" type="button">
                     <span>Lid's hus</span>
                   </button>
                 </div>
                 <!-- Inline Manual Custom Building -->
                 <div class="hidden pt-1 space-y-1" id="customBuildingWrap">
                   <div class="flex items-center gap-1.5">
-                    <input class="flex-1 text-xs font-mono px-2.5 py-1.5 min-h-[38px] bg-alabaster border border-bordercol rounded-[2px] text-ink focus:bg-white focus:border-ink focus:outline-none" id="customBuildingInput" oninput="onCustomBuildingInput(this.value)" placeholder="Specify facility name or field annex..." type="text">
-                    <button class="px-2.5 py-1.5 min-h-[38px] text-xs font-mono font-semibold bg-stone-800 text-white rounded-[2px] active:bg-black tap-highlight-transparent" onclick="applyCustomBuilding()" type="button">Set</button>
+                    <input class="flex-1 text-xs font-mono px-2.5 py-1.5 min-h-[38px] bg-alabaster border border-bordercol rounded text-ink focus:bg-white focus:border-ink focus:outline-none" id="input_observation_Building" placeholder="Specify facility name..." type="text">
+                    <button class="px-2.5 py-1.5 min-h-[38px] text-xs font-mono font-semibold bg-stone-800 text-white rounded active:bg-black tap-highlight-transparent" onclick="applyCustomBuilding()" type="button">Set</button>
                   </div>
                 </div>
               </div>
 
-              <!-- SECTION B: PHYSICAL STEPPER GRID (Floor, Cabinet, Shelf) -->
+              <!-- SECTION B: CONTINUOUS NUMERIC STEPPERS (Floor, Cabinet, Shelf) -->
               <div class="space-y-2 pt-1">
                 <div class="flex items-center justify-between text-[10px] font-mono uppercase font-bold text-subdued">
-                  <span>Spatial Coordinates</span>
+                  <span>Physical Coordinates</span>
                   <span class="text-[9px] text-muted lowercase">tap number for keypad</span>
                 </div>
                 <div class="grid grid-cols-3 gap-2">
-                  <!-- FLOOR STEPPER -->
-                  <div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
+                  <!-- FLOOR STEPPER (Signed Integer: -2, -1, 0, 1, 2...) -->
+                  <div class="p-2 bg-stone-50 border border-stone-200 rounded flex flex-col justify-between space-y-1.5 text-center">
                     <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Floor</span>
                     <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
-                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayFloorVal" onclick="activateDirectInput('Floor')">—</span>
-                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputFloorVal" inputmode="numeric" onblur="finishDirectInput('Floor')" onkeydown="if(event.key==='Enter')finishDirectInput('Floor')" pattern="[0-9-]*" type="text">
+                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayFloorVal" onclick="activateDirectInput('Floor')">-1</span>
+                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded py-0.5 text-ink focus:outline-none" id="input_observation_Floor" inputmode="numeric" onblur="finishDirectInput('Floor')" onkeydown="if(event.key==='Enter')finishDirectInput('Floor')" pattern="[0-9-]*" type="text">
                     </div>
                     <div class="grid grid-cols-2 gap-1">
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', -1)" type="button">−</button>
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', 1)" type="button">+</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', -1)" type="button">−</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', 1)" type="button">+</button>
                     </div>
                   </div>
-                  <!-- CABINET STEPPER -->
-                  <div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
+
+                  <!-- CABINET STEPPER (Positive Integer) -->
+                  <div class="p-2 bg-stone-50 border border-stone-200 rounded flex flex-col justify-between space-y-1.5 text-center">
                     <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Cabinet</span>
                     <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
-                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayCabVal" onclick="activateDirectInput('Cab')">—</span>
-                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputCabVal" inputmode="numeric" onblur="finishDirectInput('Cab')" onkeydown="if(event.key==='Enter')finishDirectInput('Cab')" pattern="[0-9]*" type="text">
+                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayCabVal" onclick="activateDirectInput('Cab')">04</span>
+                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded py-0.5 text-ink focus:outline-none" id="input_observation_Cabinet" inputmode="numeric" onblur="finishDirectInput('Cab')" onkeydown="if(event.key==='Enter')finishDirectInput('Cab')" pattern="[0-9]*" type="text">
                     </div>
                     <div class="grid grid-cols-2 gap-1">
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', -1)" type="button">−</button>
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', 1)" type="button">+</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', -1)" type="button">−</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', 1)" type="button">+</button>
                     </div>
                   </div>
-                  <!-- SHELF STEPPER -->
-                  <div class="p-2 bg-stone-50 border border-stone-200 rounded-[3px] flex flex-col justify-between space-y-1.5 text-center">
-                    <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Shelf / Extra</span>
+
+                  <!-- SHELF STEPPER (Positive Integer) -->
+                  <div class="p-2 bg-stone-50 border border-stone-200 rounded flex flex-col justify-between space-y-1.5 text-center">
+                    <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Shelf</span>
                     <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
-                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayShelfVal" onclick="activateDirectInput('Shelf')">—</span>
-                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded-[2px] py-0.5 text-ink focus:outline-none" id="inputShelfVal" inputmode="numeric" onblur="finishDirectInput('Shelf')" onkeydown="if(event.key==='Enter')finishDirectInput('Shelf')" pattern="[0-9]*" type="text">
+                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayShelfVal" onclick="activateDirectInput('Shelf')">02</span>
+                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded py-0.5 text-ink focus:outline-none" id="input_observation_Shelf" inputmode="numeric" onblur="finishDirectInput('Shelf')" onkeydown="if(event.key==='Enter')finishDirectInput('Shelf')" pattern="[0-9]*" type="text">
                     </div>
                     <div class="grid grid-cols-2 gap-1">
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', -1)" type="button">−</button>
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded-[2px] text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', 1)" type="button">+</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', -1)" type="button">−</button>
+                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', 1)" type="button">+</button>
                     </div>
                   </div>
                 </div>
-                <!-- Live Verified Breadcrumb Trail -->
-                <div class="bg-stone-100 border border-bordercol/60 rounded-[2px] px-2.5 py-1.5 flex items-center justify-between text-[11px] font-mono mt-1">
+
+                <!-- Live Breadcrumb Trail -->
+                <div class="bg-stone-100 border border-bordercol/60 rounded px-2.5 py-1.5 flex items-center justify-between text-[11px] font-mono mt-1">
                   <div class="flex items-center gap-1 text-ink truncate">
                     <span class="text-subdued uppercase text-[9px] font-sans font-bold">Live:</span>
-                    <span class="font-semibold truncate" id="liveLocBreadcrumb">Unrecorded</span>
+                    <span class="font-semibold truncate" id="liveLocBreadcrumb">Økern › Floor -1 › Cab 04 › Sh 02</span>
                   </div>
-                  <span class="text-[10px] font-mono text-fern font-bold whitespace-nowrap ml-1" id="locValidBadge">✓ Validated</span>
+                  <span class="text-[10px] font-mono text-fern font-bold whitespace-nowrap ml-1">✓ Validated</span>
                 </div>
               </div>
 
-              <!-- SECTION C: STORED AS SECTION -->
+              <!-- SECTION C: STORED AS 2x2 PRESET MATRIX -->
               <div class="space-y-2 pt-1 border-t border-stone-100">
                 <div class="flex items-center justify-between">
-                  <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued flex items-center gap-1.5">
-                    <span>Stored as</span>
-                  </label>
-                  <span class="text-[10px] font-mono text-ink font-semibold truncate max-w-[170px]" id="activeStoredAsLabel">Free standing</span>
+                  <div class="flex items-center gap-1.5">
+                    <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued">Stored as</label>
+                    <button class="p-1 -my-1 text-stone-400 hover:text-ink rounded flex items-center justify-center" onclick="openPresetsModal()" title="Customize quick presets" type="button">
+                      <svg class="w-3.5 h-3.5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] font-mono text-ink font-semibold truncate max-w-[170px]" id="activeStoredAsLabel">Herbarium Sheet</span>
+                    <button class="text-[10px] font-mono text-slate hover:text-ink tap-highlight-transparent" onclick="openPresetsModal()" type="button">Edit</button>
+                  </div>
                 </div>
-                <!-- 2x2 Quick-Select Option Grid -->
+
                 <div class="grid grid-cols-2 gap-2 text-xs font-mono" id="storageQuickGrid">
-                  <button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Free standing" onclick="handleStorageOptionSelect('Free standing', this)" type="button">
-                    <span class="font-semibold truncate">Free standing</span>
-                    <span class="w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5"></span>
-                  </button>
-                  <button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Petridish" onclick="handleStorageOptionSelect('Petridish', this)" type="button">
-                    <span class="font-medium truncate">Petridish</span>
-                    <span class="w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5"></span>
-                  </button>
-                  <button class="storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" data-storage-name="Mounted on wooden platform" onclick="handleStorageOptionSelect('Mounted on wooden platform', this)" type="button">
-                    <span class="font-medium truncate">Mounted on platform</span>
-                    <span class="w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5"></span>
-                  </button>
-                  <button class="min-h-[44px] p-2.5 rounded-[2px] border border-dashed border-stone-400 hover:border-ink bg-stone-50 hover:bg-white text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs" id="btnMoreStorageModal" onclick="openStoredAsBottomSheet()" type="button">
-                    <span class="font-semibold truncate text-muted" id="moreStorageBtnLabel">More...</span>
-                    <svg class="w-3.5 h-3.5 text-muted flex-none ml-1.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19.5 8.25l-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-                  </button>
+                  <!-- Presets injected dynamically -->
                 </div>
-                <!-- Manual 'Stored as' Text Override -->
+
+                <!-- Manual Storage Override -->
                 <div class="pt-1 space-y-1">
                   <div class="relative flex items-center">
-                    <input class="w-full text-xs font-mono bg-alabaster border border-bordercol rounded-[2px] pl-2.5 pr-8 py-2 min-h-[38px] text-ink focus:bg-white focus:border-ink focus:outline-none transition-colors" id="manualStorageInput" oninput="onManualStorageChange(this.value)" placeholder="Or enter manual storage type..." type="text">
-                    <button class="absolute right-2 text-stone-400 hover:text-ink hidden tap-highlight-transparent p-1 leading-none text-xs font-mono font-bold" id="btnClearManualStorage" onclick="clearManualStorage()" title="Clear manual storage" type="button">✕</button>
+                    <input class="w-full text-xs font-mono bg-alabaster border border-bordercol rounded pl-2.5 pr-8 py-2 min-h-[38px] text-ink focus:bg-white focus:border-ink focus:outline-none" id="manualStorageInput" oninput="onManualStorageChange(this.value)" placeholder="Or enter manual storage type..." type="text">
+                    <button class="absolute right-2 text-stone-400 hover:text-ink hidden p-1 leading-none text-xs font-mono font-bold" id="btnClearManualStorage" onclick="clearManualStorage()" type="button">✕</button>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- 3. COMPACT REPOSITORY STATUS -->
-            <div class="bg-surface border border-bordercol rounded-[3px] p-3 shadow-xs space-y-2">
+            <!-- 3. Availability / Loan Status Card -->
+            <div class="bg-surface border border-bordercol rounded p-3 shadow-2xs space-y-2">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-1.5">
-                  <span class="w-2 h-2 rounded-full bg-fern" id="loanStatusPillDot"></span>
+                  <span class="w-2 h-2 rounded-full bg-fern" id="loanStatusDot"></span>
                   <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Availability Status</h2>
                 </div>
-                <span class="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] bg-fern-light text-fern border border-fern/30" id="loanStateIndicatorTag">In Repository</span>
+                <span class="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-fern-light text-fern border border-fern/30" id="loanStateTag">In Repository</span>
               </div>
-              <div class="grid grid-cols-2 p-1 bg-stone-100 border border-stone-200 rounded-[3px] gap-1">
-                <button class="py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-white text-ink border border-stone-300 min-h-[36px]" id="btnStatusAvailable" onclick="setLoanStatus(false)" type="button">
-                  <svg class="w-3.5 h-3.5 text-fern stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-                  <span>In Repository / Available</span>
+              <div class="grid grid-cols-2 p-1 bg-stone-100 border border-stone-200 rounded gap-1">
+                <button class="py-1.5 px-2 rounded text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-ink border border-stone-300 min-h-[36px]" id="btnStatusAvailable" onclick="setLoanStatus(false)" type="button">
+                  <svg class="w-3.5 h-3.5 text-fern stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <span>In Repository</span>
                 </button>
-                <button class="py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]" id="btnStatusLoan" onclick="setLoanStatus(true)" type="button">
-                  <svg class="w-3.5 h-3.5 text-amber-600 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <button class="py-1.5 px-2 rounded text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]" id="btnStatusLoan" onclick="setLoanStatus(true)" type="button">
+                  <svg class="w-3.5 h-3.5 text-amber-600 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
                   <span>Loaned Out</span>
                 </button>
               </div>
-              <div class="p-2 bg-fern-light border border-fern/20 rounded-[2px] flex items-center justify-between text-[11px]" id="availableStatusBox">
-                <div class="flex items-center gap-1.5 text-fern font-medium">
-                  <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-                  <span>Ready for physical curation & inspection</span>
-                </div>
-                <span class="text-[10px] font-mono text-fern/90 bg-white/70 px-1 py-0.2 rounded border border-fern/20 font-bold">CIRC: CLEAR</span>
-              </div>
-              <div class="hidden p-2.5 bg-amber-50 border border-amber-300 rounded-[2px] space-y-1 text-xs" id="loanedStatusBox">
-                <div class="flex items-center justify-between text-[11px] font-mono text-amber-900 font-bold">
-                  <span>EXTERNAL LOAN</span>
-                  <span id="loanDateDisplay">Active</span>
-                </div>
-              </div>
             </div>
           </div>
 
-          <!-- ================= PANEL 2: DETAILS & ARCHIVAL SCANS ================= -->
+          <!-- ================= TAB 1: DETAILS & ARCHIVAL SCANS ================= -->
           <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentDetails">
-            <!-- Specimen Photo Card & Inspection Trigger -->
-            <div class="bg-surface border border-bordercol rounded-[3px] overflow-hidden shadow-sm">
-              <div class="relative bg-stone-900 group">
-                <div class="cursor-pointer relative h-48 w-full flex items-center justify-center bg-stone-800 overflow-hidden" onclick="openPhotoViewer()">
-                  <img id="specimenImg" src="" alt="Archival Specimen Plate" class="hidden w-full h-full object-contain p-1 transition-transform duration-300 group-hover:scale-105" onload="onPhotoLoaded()" onerror="onPhotoError()" />
-                  <div id="photoPlaceholder" class="p-4 text-center text-xs text-stone-400 flex flex-col items-center gap-1">
-                    <span class="text-2xl">📷</span>
-                    <p class="font-semibold text-fern-light" id="photoPlaceholderText">Tap to Load Archival Scans</p>
-                  </div>
-                  <!-- Tap to inspect badge -->
-                  <div class="absolute bottom-2.5 right-2.5 bg-black/75 backdrop-blur-xs text-white text-[10px] font-mono px-2 py-1 rounded-[2px] flex items-center gap-1">
-                    <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
-                    </svg>
-                    <span>Tap to Zoom</span>
-                  </div>
+            <!-- Image Viewer Container -->
+            <div class="bg-surface border border-bordercol rounded p-3 shadow-2xs space-y-2">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Archival Photo Folio</h3>
+                <span class="text-[10px] font-mono text-muted" id="photoCountDisplay">0 Photos</span>
+              </div>
+              <div class="relative w-full h-48 bg-stone-100 rounded border border-bordercol overflow-hidden flex items-center justify-center cursor-pointer" onclick="openPhotoViewerModal()">
+                <img id="specimenImg" src="" alt="Specimen Scan" class="w-full h-full object-contain hidden" onload="onPhotoLoaded()" onerror="onPhotoError()"/>
+                <div id="photoPlaceholder" class="flex flex-col items-center justify-center text-stone-400">
+                  <span class="text-3xl">📷</span>
+                  <span class="text-xs mt-1">Tap to Inspect Photo</span>
                 </div>
-                <!-- Photo bar actions -->
-                <div class="px-3 py-2 bg-surface flex items-center justify-between border-t border-bordercol text-xs">
-                  <div class="flex items-center gap-1.5 text-muted">
-                    <span class="font-mono text-[11px] font-medium text-ink" id="photoCountBadge">0 available</span>
-                  </div>
-                  <button type="button" class="font-medium text-slate hover:text-ink flex items-center gap-1 tap-highlight-transparent min-h-[36px]" onclick="openPhotoViewer()">
-                    <span>Fullscreen Viewer</span>
-                    <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" stroke-linecap="round" stroke-linejoin="round"></path>
-                    </svg>
-                  </button>
-                </div>
+              </div>
+              <div id="photoThumbnailsRow" class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
+                <!-- Thumbnails injected dynamically -->
               </div>
             </div>
 
-            <!-- 2. Academic Taxonomic Profile Card -->
-            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3" id="taxonHierarchyCard">
-              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
-                <div class="flex items-center gap-1.5">
-                  <span class="text-sm">🧬</span>
-                  <div>
-                    <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Taxonomic Hierarchy</h2>
-                    <p class="text-[10px] font-mono text-subdued">Botanical nomenclature & authority</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <span id="taxonAlertSummaryBadge" class="hidden text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-[2px] bg-brick-light text-brick border border-brick/30 flex items-center gap-1">
-                    <svg class="w-3 h-3 text-brick stroke-2 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
-                    </svg>
-                    <span id="taxonAlertSummaryText">0 Flagged</span>
-                  </span>
-                  <span class="text-[10px] font-mono text-fern font-medium flex items-center gap-1 bg-fern-light px-1.5 py-0.5 rounded-[2px] border border-fern/20">
-                    <span class="w-1.5 h-1.5 rounded-full bg-fern"></span>Matched
-                  </span>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2.5 text-xs">
-                <!-- Genus -->
-                <div class="space-y-1 relative" id="fieldWrapper_Genus">
-                  <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Genus">Genus</label>
-                    <div class="flex items-center gap-1" id="fieldControls_Genus">
-                      <span id="fieldAlert_Genus" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                    </div>
-                  </div>
-                  <input id="input_Genus" type="text" data-section="registration" data-field="Genus" class="w-full text-sm font-serif italic text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Genus', 'registration', this.value)" onblur="saveCurrentEdits()">
-                  <div id="unval_container_registration_Genus" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                    <input type="text" id="unval_input_registration_Genus" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Genus', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                  </div>
-                  <div id="history_container_Genus" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                </div>
-
-                <!-- Species -->
-                <div class="space-y-1 relative" id="fieldWrapper_Species">
-                  <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Species">Species</label>
-                    <div class="flex items-center gap-1" id="fieldControls_Species">
-                      <span id="fieldAlert_Species" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                    </div>
-                  </div>
-                  <input id="input_Species" type="text" data-section="registration" data-field="Species" class="w-full text-sm font-serif italic text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Species', 'registration', this.value)" onblur="saveCurrentEdits()">
-                  <div id="unval_container_registration_Species" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                    <input type="text" id="unval_input_registration_Species" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Species', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                  </div>
-                  <div id="history_container_Species" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                </div>
-
-                <!-- Family -->
-                <div class="space-y-1 relative" id="fieldWrapper_Family">
-                  <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Family">Family</label>
-                    <div class="flex items-center gap-1" id="fieldControls_Family">
-                      <span id="fieldAlert_Family" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                    </div>
-                  </div>
-                  <input id="input_Family" type="text" data-section="registration" data-field="Family" class="w-full text-xs font-sans font-medium text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Family', 'registration', this.value)" onblur="saveCurrentEdits()">
-                  <div id="unval_container_registration_Family" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                    <input type="text" id="unval_input_registration_Family" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Family', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                  </div>
-                  <div id="history_container_Family" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                </div>
-
-                <!-- Author -->
-                <div class="space-y-1 relative" id="fieldWrapper_Author">
-                  <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Author">Author</label>
-                    <div class="flex items-center gap-1" id="fieldControls_Author">
-                      <span id="fieldAlert_Author" class="hidden text-[9px] font-mono font-bold text-brick bg-brick-light border border-brick/40 px-1 py-0.2 rounded-[2px] cursor-pointer tap-highlight-transparent" onclick="switchTab(2)" title="View in Problems tab">⚠</span>
-                    </div>
-                  </div>
-                  <div class="relative flex items-center">
-                    <input id="input_Author" type="text" data-section="registration" data-field="Author" class="w-full text-xs font-mono font-medium text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Author', 'registration', this.value)" onblur="saveCurrentEdits()">
-                    <button type="button" onclick="switchTab(2)" class="hidden absolute right-1.5 text-brick hover:text-ink tap-highlight-transparent" id="btnAuthorAlertIcon" title="Authority Citation. Tap to view conflict resolver in Problems tab.">
-                      <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
-                      </svg>
-                    </button>
-                  </div>
-                  <div id="unval_container_registration_Author" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                    <input type="text" id="unval_input_registration_Author" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Author', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                  </div>
-                  <div id="history_container_Author" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                </div>
-
-                <!-- Higher Classification / Rank (Full width row) -->
-                <div class="col-span-2 space-y-1 relative" id="fieldWrapper_Higher_Classification">
-                  <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Higher_Classification">Higher Classification / Rank</label>
-                    <div class="flex items-center gap-1" id="fieldControls_Higher_Classification">
-                      <span id="fieldAlert_Higher_Classification" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                    </div>
-                  </div>
-                  <input id="input_Higher_Classification" type="text" data-section="registration" data-field="Higher Classification" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Higher Classification', 'registration', this.value)" onblur="saveCurrentEdits()">
-                  <div id="unval_container_registration_Higher_Classification" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                    <input type="text" id="unval_input_registration_Higher_Classification" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Higher Classification', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                  </div>
-                  <div id="history_container_Higher_Classification" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 3. Collector & Provenance Data Card (Fixed card - NO Field No as requested) -->
-            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3" id="collectorProvenanceCard">
-              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
-                <div class="flex items-center gap-1.5">
-                  <span class="text-sm">📦</span>
-                  <div>
-                    <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Collector & Provenance Data</h2>
-                    <p class="text-[10px] font-mono text-subdued">Archival acquisition & locality records</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="space-y-2.5 text-xs">
-                <div class="grid grid-cols-2 gap-2.5">
-                  <!-- Collector -->
-                  <div class="space-y-1 relative" id="fieldWrapper_Collector">
-                    <div class="flex items-center justify-between">
-                      <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Collector">
-                        <span>👤 Collector</span>
-                      </label>
-                      <div class="flex items-center gap-1" id="fieldControls_Collector">
-                        <span id="fieldAlert_Collector" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                      </div>
-                    </div>
-                    <input id="input_Collector" type="text" data-section="registration" data-field="Collector" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Collector', 'registration', this.value)" onblur="saveCurrentEdits()">
-                    <div id="unval_container_registration_Collector" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                      <input type="text" id="unval_input_registration_Collector" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Collector', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                    </div>
-                    <div id="history_container_Collector" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                  </div>
-
-                  <!-- Collection Date -->
-                  <div class="space-y-1 relative" id="fieldWrapper_Collection_Date">
-                    <div class="flex items-center justify-between">
-                      <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Collection_Date">
-                        <span>📅 Date</span>
-                      </label>
-                      <div class="flex items-center gap-1" id="fieldControls_Collection_Date">
-                        <span id="fieldAlert_Collection_Date" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                      </div>
-                    </div>
-                    <input id="input_Collection_Date" type="text" data-section="registration" data-field="Collection Date" placeholder="YYYY-MM-DD" class="w-full text-xs font-mono text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Collection Date', 'registration', this.value)" onblur="saveCurrentEdits()">
-                    <div id="unval_container_registration_Collection_Date" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                      <input type="text" id="unval_input_registration_Collection_Date" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Collection Date', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                    </div>
-                    <div id="history_container_Collection_Date" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                  </div>
-                </div>
-
-                <!-- Collection Place / Locality (Full width) -->
-                <div class="space-y-1 relative" id="fieldWrapper_Collection_Place">
-                  <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Collection_Place">
-                      <span>📍 Collection Place / Locality</span>
-                    </label>
-                    <div class="flex items-center gap-1" id="fieldControls_Collection_Place">
-                      <span id="fieldAlert_Collection_Place" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                    </div>
-                  </div>
-                  <input id="input_Collection_Place" type="text" data-section="registration" data-field="Collection Place" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Collection Place', 'registration', this.value)" onblur="saveCurrentEdits()">
-                  <div id="unval_container_registration_Collection_Place" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                    <input type="text" id="unval_input_registration_Collection_Place" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Collection Place', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                  </div>
-                  <div id="history_container_Collection_Place" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 4. Object Preparation & Field Inscriptions Card (Fixed card) -->
-            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3" id="objectInscriptionsCard">
-              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
-                <div class="flex items-center gap-1.5">
-                  <span class="text-sm">🌿</span>
-                  <div>
-                    <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Object & Field Inscriptions</h2>
-                    <p class="text-[10px] font-mono text-subdued">Physical characteristics & label transcriptions</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="space-y-2.5 text-xs">
-                <div class="grid grid-cols-2 gap-2.5">
-                  <!-- Plant Part -->
-                  <div class="space-y-1 relative" id="fieldWrapper_Plant_Part">
-                    <div class="flex items-center justify-between">
-                      <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Plant_Part">Plant Part</label>
-                      <div class="flex items-center gap-1" id="fieldControls_Plant_Part">
-                        <span id="fieldAlert_Plant_Part" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                      </div>
-                    </div>
-                    <input id="input_Plant_Part" type="text" data-section="registration" data-field="Plant Part" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Plant Part', 'registration', this.value)" onblur="saveCurrentEdits()">
-                    <div id="unval_container_registration_Plant_Part" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                      <input type="text" id="unval_input_registration_Plant_Part" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Plant Part', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                    </div>
-                    <div id="history_container_Plant_Part" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                  </div>
-
-                  <!-- Variant -->
-                  <div class="space-y-1 relative" id="fieldWrapper_Variant">
-                    <div class="flex items-center justify-between">
-                      <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued block" id="label_Variant">Variant</label>
-                      <div class="flex items-center gap-1" id="fieldControls_Variant">
-                        <span id="fieldAlert_Variant" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                      </div>
-                    </div>
-                    <input id="input_Variant" type="text" data-section="registration" data-field="Variant" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] px-2.5 py-1.5 transition-colors focus:outline-none" oninput="onFieldInputDirect('Variant', 'registration', this.value)" onblur="saveCurrentEdits()">
-                    <div id="unval_container_registration_Variant" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                      <input type="text" id="unval_input_registration_Variant" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Variant', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                    </div>
-                    <div id="history_container_Variant" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                  </div>
-                </div>
-
-                <!-- Box Label Inscription (Multiline Textarea) -->
-                <div class="space-y-1 relative" id="fieldWrapper_Box_Label">
-                  <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Box_Label">
-                      <span>🏷 Box Label Inscription</span>
-                    </label>
-                    <div class="flex items-center gap-1" id="fieldControls_Box_Label">
-                      <span id="fieldAlert_Box_Label" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                    </div>
-                  </div>
-                  <textarea id="input_Box_Label" data-section="registration" data-field="Box Label" rows="2" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] p-2.5 transition-colors focus:outline-none resize-none" oninput="onFieldInputDirect('Box Label', 'registration', this.value)" onblur="saveCurrentEdits()"></textarea>
-                  <div id="unval_container_registration_Box_Label" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                    <input type="text" id="unval_input_registration_Box_Label" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Box Label', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                  </div>
-                  <div id="history_container_Box_Label" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                </div>
-
-                <!-- Registration Comment (Multiline Textarea) -->
-                <div class="space-y-1 relative" id="fieldWrapper_Comment">
-                  <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1" id="label_Comment">
-                      <span>📝 Registration Comment</span>
-                    </label>
-                    <div class="flex items-center gap-1" id="fieldControls_Comment">
-                      <span id="fieldAlert_Comment" class="hidden text-[9px] font-mono text-brick font-bold flex items-center gap-0.5">⚠</span>
-                    </div>
-                  </div>
-                  <textarea id="input_Comment" data-section="registration" data-field="Comment" rows="2" class="w-full text-xs font-sans text-ink bg-alabaster hover:bg-white focus:bg-white border border-bordercol focus:border-ink rounded-[2px] p-2.5 transition-colors focus:outline-none resize-none" oninput="onFieldInputDirect('Comment', 'registration', this.value)" onblur="saveCurrentEdits()"></textarea>
-                  <div id="unval_container_registration_Comment" class="hidden mt-1 p-1.5 bg-amber-50 border border-amber-300 rounded-[2px]">
-                    <input type="text" id="unval_input_registration_Comment" placeholder="Unvalidated note..." oninput="onUnvalCommentChange('Comment', this.value); triggerAutoSave()" onblur="saveCurrentEdits()" class="w-full bg-white border border-amber-300 rounded-[2px] px-2 py-1 text-xs outline-none text-ink">
-                  </div>
-                  <div id="history_container_Comment" class="hidden mt-1 p-2 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 5. Dynamic Container for Any Additional Registration Fields -->
-            <div id="detailRegAccordionsContainer" class="space-y-3.5">
-              <!-- Rendered dynamically by renderDynamicForm() if schema has extra custom fields -->
+            <!-- Registration & Observation Metadata Form Fields -->
+            <div class="bg-surface border border-bordercol rounded p-3.5 shadow-2xs space-y-3" id="dynamicFormContainer">
+              <!-- Form fields injected dynamically from schema -->
             </div>
           </div>
 
-          <!-- ================= PANEL 3: PROBLEMS & CONFLICT RESOLVER ================= -->
+          <!-- ================= TAB 2: PROBLEMS & CONFLICTS ================= -->
           <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentProblems">
-            <!-- Problem Summary Bar -->
-            <div class="flex items-center justify-between p-3 bg-stone-100 border border-stone-200 rounded-[3px] transition-colors duration-200" id="problemSummaryBar">
-              <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-fern" id="problemSummaryDot"></span>
-                <span class="text-xs font-bold text-ink uppercase font-mono" id="problemSummaryCountText">0 Active Discrepancies</span>
+            <div class="bg-surface border border-bordercol rounded p-3.5 shadow-2xs space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Curatorial Problems & Flags</h3>
+                <button type="button" onclick="openModal('addDiscrepancyModal')" class="px-2.5 py-1 text-xs font-mono font-bold bg-ember text-white rounded tap-active">
+                  + Flag Issue
+                </button>
               </div>
-              <span class="text-[10px] font-mono text-muted" id="problemSummaryActionText">Verified Clear</span>
-            </div>
 
-            <!-- Dynamic Active Conflict Cards Container -->
-            <div id="historicalConflictsContainer" class="space-y-3">
-              <!-- Rendered dynamically by renderHistoricalConflicts() -->
-            </div>
-
-            <!-- Quick Issue Flag Toggles Grid -->
-            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3">
-              <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">DATA INTEGRITY FLAGS (11 SCHEMA FIELDS)</h2>
-              <div class="grid grid-cols-2 gap-2" id="flagGrid">
-                <!-- Dynamically rendered problem pills -->
+              <!-- Problem Resolver Section -->
+              <div id="problemResolverContainer" class="space-y-2">
+                <!-- Inline problem fixer cards populated here -->
               </div>
-            </div>
 
-            <!-- Curator Field Note Input -->
-            <div class="bg-surface border border-bordercol rounded-[3px] p-3 space-y-2 shadow-sm">
-              <label class="block text-[11px] font-bold text-ink uppercase tracking-wider">Curator Field Note / Observation</label>
-              <textarea class="w-full text-xs font-sans p-2 bg-alabaster border border-bordercol rounded-[2px] text-ink focus:bg-white focus:border-ink focus:outline-none resize-none" id="curatorNote" oninput="onCuratorNoteChange(this.value)" onblur="saveCurrentEdits()" placeholder="Record physical observations, glue deterioration, or accession anomalies..." rows="2"></textarea>
+              <!-- Historical Conflicts Container -->
+              <div id="historicalConflictsContainer" class="space-y-2 pt-2 border-t border-stone-100">
+                <!-- Historical DB conflict cards populated here -->
+              </div>
+
+              <div id="problemsListContainer" class="space-y-2">
+                <!-- General problem items injected dynamically -->
+              </div>
             </div>
           </div>
 
         </div>
       </div>
+    </div>
 
-      <!-- 5. STICKY BOTTOM ACTION BAR (Thumb Ergonomics) -->
-      <footer class="flex-none bg-surface border-t border-bordercol p-3 z-30 shadow-lg">
-        <div class="flex items-center justify-between px-1 mb-2 text-[11px] font-mono">
-          <!-- Live Host Connectivity Indicator -->
-          <div class="flex items-center gap-1.5 text-muted">
-            <span class="relative flex h-2 w-2">
-              <span id="footerConnDotAnimate" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span id="footerConnDot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span class="font-medium" id="footerTickerHost">Vault Host Sync</span>
-          </div>
-          <!-- Sync status ticker -->
-          <div class="text-muted flex items-center gap-1" id="footerSyncStatus">
-            <span class="font-mono text-fern-dark font-medium hidden" id="footerSyncStatusText">✓ Edit saved</span>
+
+    <!-- ============================================================= -->
+    <!-- SCREEN 3: BATCH LOCATION REGISTRATOR (#batchLocationView)     -->
+    <!-- ============================================================= -->
+    <div id="batchLocationView" class="hidden flex-1 flex flex-col h-full bg-surface overflow-hidden relative font-sans text-ink">
+      <!-- 1. Batch Header -->
+      <header class="flex-none bg-surface/90 backdrop-blur-md border-b border-bordercol px-3.5 py-3 flex items-center justify-between z-30 shadow-2xs">
+        <div class="flex items-center gap-2 min-w-0">
+          <button type="button" onclick="showListView()" class="min-h-[38px] min-w-[38px] flex items-center justify-center text-ink hover:text-fern active:scale-95">
+            <svg class="w-5 h-5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.75 19.5L8.25 12l7.5-7.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="flex flex-col min-w-0">
+            <span class="font-serif font-bold text-sm text-ink leading-tight truncate">Batch Location Registrator</span>
+            <span class="font-mono text-[10px] text-muted truncate">Rapid shelf assignment · vascular_plants.csv</span>
           </div>
         </div>
-        <!-- High-Contrast Primary Audit Action: MARK REVIEWED -->
-        <button type="button" class="w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-white text-ink border-2 border-ink hover:bg-stone-50" id="btnPrimaryReview" onclick="toggleReviewed()">
-          <svg class="w-5 h-5 stroke-[2.2] text-current" fill="none" id="primaryReviewIcon" stroke="currentColor" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"></circle>
-            <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
-          <span id="primaryReviewText">MARK AS REVIEWED</span>
+        <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[10.5px] font-mono text-emerald-800">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Live</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- 2. Scrollable Batch Workflow -->
+      <main class="flex-1 overflow-y-auto p-3.5 space-y-3 pb-36">
+        <!-- Target Shelf Anchor Card -->
+        <section class="bg-stone-50 border border-bordercol rounded-lg p-3 space-y-2.5 shadow-2xs">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-[10px] uppercase font-bold text-subdued tracking-wider">Target Physical Anchor</span>
+            <span class="font-mono text-[10px] text-fern font-bold">🔒 Locked Shelf Target</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <!-- Building -->
+            <div class="bg-white rounded p-1.5 border border-bordercol flex items-center justify-between">
+              <span class="font-mono text-[9px] uppercase font-bold text-muted">Bldg</span>
+              <select id="batchBuildingSelect" class="bg-transparent font-mono text-xs font-bold text-ink outline-none text-right">
+                <option value="Økern">Økern</option>
+                <option value="Lid's hus">Lid's hus</option>
+              </select>
+            </div>
+            <!-- Floor (Continuous signed integer) -->
+            <div class="bg-white rounded p-1.5 border border-bordercol flex items-center justify-between">
+              <span class="font-mono text-[9px] uppercase font-bold text-muted">Floor</span>
+              <div class="flex items-center gap-1">
+                <button type="button" class="w-5 h-5 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-xs" onclick="adjustBatchCoord('floor', -1)">−</button>
+                <span class="font-mono text-xs font-bold text-ink px-1 min-w-[20px] text-center" id="batchFloorVal">-1</span>
+                <button type="button" class="w-5 h-5 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-xs" onclick="adjustBatchCoord('floor', 1)">+</button>
+              </div>
+            </div>
+            <!-- Cabinet -->
+            <div class="bg-white rounded p-2 border border-bordercol flex items-center justify-between">
+              <span class="font-mono text-[10px] uppercase font-bold text-muted">Cabinet</span>
+              <div class="flex items-center gap-1.5">
+                <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustBatchCoord('cab', -1)">−</button>
+                <span class="font-mono text-sm font-bold text-ink px-1 min-w-[24px] text-center" id="batchCabVal">04</span>
+                <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustBatchCoord('cab', 1)">+</button>
+              </div>
+            </div>
+            <!-- Shelf -->
+            <div class="bg-white rounded p-2 border-2 border-fern flex items-center justify-between">
+              <span class="font-mono text-[10px] uppercase font-bold text-fern-dark">Shelf</span>
+              <div class="flex items-center gap-1.5">
+                <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustBatchCoord('shelf', -1)">−</button>
+                <span class="font-mono text-sm font-bold text-fern-dark px-1 min-w-[24px] text-center" id="batchShelfVal">02</span>
+                <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustBatchCoord('shelf', 1)">+</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stored As Pill Carousel -->
+          <div class="pt-1">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-mono text-[9px] uppercase text-muted font-bold">Stored As</span>
+              <span class="font-mono text-[10px] text-ink font-semibold" id="batchStoredAsLabel">Herbarium Sheet</span>
+            </div>
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" id="batchStoredAsPills">
+              <button type="button" onclick="selectBatchStoragePill(this, 'Herbarium Sheet')" class="batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border-2 border-fern bg-emerald-50 text-fern-dark font-semibold">
+                Herbarium Sheet
+              </button>
+              <button type="button" onclick="selectBatchStoragePill(this, 'Standard Box')" class="batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted">
+                Standard Box
+              </button>
+              <button type="button" onclick="selectBatchStoragePill(this, 'Free Standing')" class="batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted">
+                Free Standing
+              </button>
+              <button type="button" onclick="selectBatchStoragePill(this, 'Petri dish')" class="batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted">
+                Petri dish
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Advance to Next Shelf Button -->
+        <button type="button" id="btnAdvanceNextShelf" onclick="advanceToNextShelf()" class="w-full py-2.5 px-3 bg-stone-100 hover:bg-emerald-50 text-ink hover:text-fern-dark rounded-lg border border-bordercol hover:border-fern/50 font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-2xs tap-active transition-all">
+          <svg class="w-4 h-4 text-fern stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="btnAdvanceNextShelfText">Advance to Shelf 03</span>
         </button>
+
+        <!-- Rapid Object ID Input Bar -->
+        <section class="space-y-1">
+          <label for="batchIdInput" class="font-mono text-[10px] uppercase text-muted font-bold flex items-center justify-between">
+            <span>Type Object ID</span>
+            <span class="text-fern lowercase">press enter to add</span>
+          </label>
+          <div class="relative flex items-center bg-white rounded-lg shadow-sm border border-bordercol focus-within:border-fern">
+            <span class="pl-3 text-ink-faint font-mono text-xs">#</span>
+            <input 
+              type="text" 
+              id="batchIdInput" 
+              placeholder="e.g. 0894 or 2024-BOT-0894..." 
+              onkeydown="if(event.key==='Enter')addBatchItemFromInput()"
+              autocomplete="off"
+              class="w-full bg-transparent font-mono text-sm text-ink placeholder:text-stone-400 py-2.5 px-2 focus:outline-none"
+            >
+            <button type="button" onclick="addBatchItemFromInput()" class="m-1 px-3 py-1.5 bg-fern hover:bg-fern-dark text-white rounded font-mono font-bold text-xs flex items-center gap-1 shadow-sm tap-active">
+              <span>⏎</span>
+              <span>Add</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Live Session Batch Stream -->
+        <section class="space-y-2">
+          <div class="flex items-center justify-between py-1 border-b border-stone-100">
+            <div class="flex items-center gap-1.5">
+              <span class="font-serif font-bold text-xs text-ink">Objects on Shelf</span>
+              <span class="font-mono text-[11px] text-fern font-bold" id="batchQueueCount">(0 items)</span>
+            </div>
+            <button type="button" onclick="clearBatchQueue()" class="text-[11px] font-mono text-brick hover:underline">
+              Clear All
+            </button>
+          </div>
+
+          <div class="space-y-2" id="batchStreamList">
+            <!-- Dynamically populated batch items -->
+            <div class="p-6 text-center text-stone-400 font-mono text-xs" id="batchEmptyPlaceholder">
+              No items queued for this shelf yet.<br>Type an Object ID above to begin.
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- 3. Sticky Bottom Commit Bar -->
+      <footer class="fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur-md border-t border-bordercol px-4 py-3 shadow-dock max-w-[440px] mx-auto">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex flex-col">
+            <span class="font-mono text-[10px] text-muted uppercase">Ready to Sync</span>
+            <span class="font-mono text-xs font-bold text-ink" id="batchCommitSummary">0 Accessions Queued</span>
+          </div>
+          <button type="button" onclick="commitBatchLocationUpdate()" class="flex-1 py-3 bg-fern hover:bg-fern-dark text-white font-sans font-bold text-xs rounded-lg flex items-center justify-center gap-2 shadow-sm tap-active transition-all">
+            <svg class="w-4 h-4 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg>
+            <span>Commit Batch</span>
+          </button>
+        </div>
       </footer>
     </div>
 
-    <!-- ========================================== -->
-    <!-- 5. INTERACTIVE MORE... BOTTOM SHEET MODAL   -->
-    <!-- ========================================== -->
-    <div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end animate-fade-in hidden" id="storedAsBottomSheet" onclick="if(event.target===this)closeStoredAsBottomSheet()">
-      <div class="bg-surface border-t border-bordercol rounded-t-xl p-4 space-y-3 max-h-[80vh] overflow-y-auto shadow-2xl transition-transform duration-200">
+
+    <!-- ============================================================= -->
+    <!-- MODALS                                                        -->
+    <!-- ============================================================= -->
+
+    <!-- MODAL: Settings -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div class="bg-surface border border-bordercol rounded w-full max-w-sm shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
+          <h2 class="font-serif font-bold text-sm text-ink">Application Settings</h2>
+          <button type="button" onclick="closeSettingsModal()" class="text-ink-muted hover:text-ink font-bold text-sm">✕</button>
+        </header>
+        <div class="p-4 space-y-4">
+          <!-- Toggle Filter Pills on List View -->
+          <div class="flex items-center justify-between p-2.5 bg-stone-50 border border-bordercol rounded">
+            <div>
+              <span class="block font-sans text-xs font-bold text-ink">Quick Filter Pills</span>
+              <span class="block font-sans text-[10px] text-muted">Show horizontal filter pills on Vault List</span>
+            </div>
+            <input type="checkbox" id="settingShowFilterPills" onchange="toggleFilterPillsSetting(this.checked)" class="w-4 h-4 text-fern rounded border-bordercol focus:ring-fern">
+          </div>
+
+          <div>
+            <label class="block font-sans text-xs font-medium text-ink mb-1">Image URL Pattern Override</label>
+            <input type="text" id="settingImageUrlPattern" placeholder="e.g. https://example.com/{id}.jpg" class="w-full bg-surface border border-bordercol rounded px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern">
+            <p class="text-[10px] text-ink-muted mt-1">Available tokens: {id}, {num}, {num:04d}, {suffix}.</p>
+          </div>
+
+          <div class="pt-2 border-t border-tonal2 flex justify-end gap-2">
+            <button type="button" onclick="closeSettingsModal()" class="px-3 py-1.5 border border-bordercol text-ink-muted hover:bg-surface rounded text-xs font-medium">Cancel</button>
+            <button type="button" onclick="saveSettings()" class="px-3 py-1.5 bg-fern hover:bg-fern-dark text-white rounded text-xs font-bold">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Stored As Bottom Sheet -->
+    <div id="storedAsBottomSheet" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end" onclick="if(event.target===this)closeStoredAsBottomSheet()">
+      <div class="bg-surface border-t border-bordercol rounded-t-xl p-4 space-y-3 max-h-[80vh] overflow-y-auto shadow-2xl">
         <div class="flex items-center justify-between pb-2 border-b border-stone-200">
           <div>
             <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Additional Storage Vessels</h3>
             <p class="text-[10px] font-mono text-subdued">Select botanical archival method</p>
           </div>
-          <button class="p-1 text-muted hover:text-ink min-h-[36px] min-w-[36px] flex items-center justify-center font-mono text-sm" onclick="closeStoredAsBottomSheet()" type="button">✕</button>
+          <button class="p-1 text-muted hover:text-ink font-mono text-sm" onclick="closeStoredAsBottomSheet()" type="button">✕</button>
         </div>
-        <div class="space-y-1.5 font-mono text-xs">
-          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Herbarium Sheet')" type="button">
-            <div class="truncate">
-              <span class="font-bold block text-ink">Herbarium Sheet</span>
-              <span class="text-[10px] text-muted block">Cardstock 420x297mm archival standard</span>
-            </div>
-            <span class="text-xs text-muted">Select</span>
-          </button>
-          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Standard Box / Bin')" type="button">
-            <div class="truncate">
-              <span class="font-bold block text-ink">Standard Box / Bin</span>
-              <span class="text-[10px] text-muted block">Acid-free corrugated storage box</span>
-            </div>
-            <span class="text-xs text-muted">Select</span>
-          </button>
-          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Liquid / Glass Jar')" type="button">
-            <div class="truncate">
-              <span class="font-bold block text-ink">Liquid / Glass Jar</span>
-              <span class="text-[10px] text-muted block">70% EtOH spirit fluid preservative</span>
-            </div>
-            <span class="text-xs text-muted">Select</span>
-          </button>
-          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Capsule / Seed Envelope')" type="button">
-            <div class="truncate">
-              <span class="font-bold block text-ink">Capsule / Seed Envelope</span>
-              <span class="text-[10px] text-muted block">Glassine carpo-taxonomic pouch</span>
-            </div>
-            <span class="text-xs text-muted">Select</span>
-          </button>
-          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Microscope Slide')" type="button">
-            <div class="truncate">
-              <span class="font-bold block text-ink">Microscope Slide</span>
-              <span class="text-[10px] text-muted block">Canada balsam histological mount</span>
-            </div>
-            <span class="text-xs text-muted">Select</span>
-          </button>
-          <button class="w-full p-3 rounded-[3px] border border-stone-200 hover:border-ink hover:bg-stone-50 active:bg-stone-100 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]" onclick="selectModalStorageOption('Oversized Folder')" type="button">
-            <div class="truncate">
-              <span class="font-bold block text-ink">Oversized Folder</span>
-              <span class="text-[10px] text-muted block">Double-width herbarium portfolio</span>
-            </div>
-            <span class="text-xs text-muted">Select</span>
-          </button>
+        <div class="space-y-1.5 font-mono text-xs" id="storedAsModalOptions">
+          <!-- Populated dynamically -->
         </div>
       </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- 6. MODAL: FULLSCREEN PHOTO VIEWER          -->
-    <!-- ========================================== -->
-    <div id="photoViewerModal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col select-none">
-      <!-- Modal Header -->
-      <header class="p-3.5 bg-stone-950/80 text-white flex items-center justify-between border-b border-stone-800 shrink-0">
-        <div>
-          <div class="text-xs font-mono font-bold text-stone-200" id="photoViewerTitle">Specimen Plate</div>
-          <div class="text-[11px] font-serif italic text-stone-400" id="photoViewerCounter">(1/1)</div>
-        </div>
-        <button
-          type="button"
-          onclick="closePhotoViewer()"
-          class="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-400 hover:text-white rounded-[3px] bg-stone-800/80 active:bg-stone-700 touch-target-min"
-        >
-          <svg class="w-5 h-5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
-        </button>
-      </header>
-
-      <!-- Viewport -->
-      <div
-        id="photoViewport"
-        class="flex-1 relative overflow-hidden flex items-center justify-center p-4 cursor-grab active:cursor-grabbing select-none"
-        onmousedown="startPhotoDrag(event)"
-        ontouchstart="startPhotoTouch(event)"
-      >
-        <img
-          id="photoViewerImg"
-          src=""
-          alt="High Resolution Scan"
-          class="max-w-full max-h-full object-contain transition-transform duration-75 origin-center"
-          style="transform: scale(1) rotate(0deg) translate(0px, 0px);"
-        />
-      </div>
-
-      <!-- Controls Footer -->
-      <footer class="flex-none p-3.5 bg-stone-950/90 border-t border-stone-800 flex items-center justify-between text-xs font-mono text-white">
-        <div class="flex items-center gap-1.5 bg-stone-900 p-1 rounded-[3px] border border-stone-800">
-          <button type="button" onclick="zoomPhoto(-0.5)" class="px-3 py-2 min-h-[44px] min-w-[44px] text-white hover:bg-stone-800 rounded active:bg-stone-700 flex items-center justify-center font-bold text-base">− Zoom</button>
-          <span id="zoomLevelDisplay" class="px-2 text-stone-300 text-xs min-w-[40px] text-center">1.0x</span>
-          <button type="button" onclick="zoomPhoto(0.5)" class="px-3 py-2 min-h-[44px] min-w-[44px] text-white hover:bg-stone-800 rounded active:bg-stone-700 flex items-center justify-center font-bold text-base">+ Zoom</button>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button type="button" onclick="rotatePhoto()" class="px-3 py-2 min-h-[44px] flex items-center gap-1.5 bg-stone-900 border border-stone-800 text-stone-200 rounded-[3px] active:bg-stone-800" title="Rotate 90°">↻ Rotate</button>
-          <button type="button" onclick="resetPhotoTransform()" class="px-3 py-2 min-h-[44px] bg-stone-800 text-stone-300 rounded-[3px] active:bg-stone-700">Reset</button>
-        </div>
-      </footer>
-    </div>
-
-
-    <!-- ========================================== -->
-    <!-- MODAL: APP SETTINGS                        -->
-    <!-- ========================================== -->
-    <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
-          <div class="flex items-center gap-2 text-ink">
-            <span class="text-sm">⚙️</span>
-            <h2 class="font-serif font-bold text-sm text-ink">
-              Application Settings
-            </h2>
-          </div>
-          <button
-            type="button"
-            onclick="closeSettingsModal()"
-            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold touch-press"
-          >
-            ✕
-          </button>
-        </header>
-
-        <div class="p-4 space-y-4">
+    <!-- MODAL: Presets Configuration -->
+    <div id="presetsConfigModal" class="hidden fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4" onclick="if(event.target===this)closePresetsModal()">
+      <div class="bg-surface border border-stone-300 rounded-lg max-w-sm w-full p-4 space-y-3.5 shadow-2xl flex flex-col max-h-[88vh]">
+        <div class="flex items-center justify-between pb-2 border-b border-stone-200">
           <div>
-            <label class="block font-sans text-xs font-medium text-ink mb-1">Image URL Pattern Override</label>
-            <input type="text" id="settingImageUrlPattern" placeholder="e.g. https://example.com/{id}.jpg" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern" />
-            <p class="text-[10px] text-ink-muted mt-1">Available tokens: {id}, {num}, {num:04d}, {suffix}. Leave blank to use desktop defaults.</p>
+            <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Customize Quick-Select</h3>
+            <p class="text-[10px] font-mono text-subdued">Select 3 presets for the primary 2x2 grid</p>
           </div>
-
-          <div class="pt-2 border-t border-tonal2 flex justify-end gap-2">
-            <button type="button" onclick="closeSettingsModal()" class="px-3 py-1.5 border border-bordercol text-ink-muted hover:bg-surface rounded-[2px] text-xs font-medium touch-press">Cancel</button>
-            <button type="button" onclick="saveSettings()" class="px-3 py-1.5 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold transition-colors touch-press">Save</button>
-          </div>
+          <button class="p-1 text-muted hover:text-ink font-mono text-sm" onclick="closePresetsModal()" type="button">✕</button>
+        </div>
+        <div class="flex items-center justify-between text-[11px] font-mono bg-stone-100 px-2.5 py-1.5 rounded border border-stone-200">
+          <span class="text-subdued uppercase text-[9px] font-bold">Selection count:</span>
+          <span class="font-bold text-fern" id="presetSelectionCounter">3 of 3 selected</span>
+        </div>
+        <div class="space-y-1.5 overflow-y-auto no-scrollbar max-h-[50vh] pr-0.5" id="presetsSelectionList">
+          <!-- Checkbox list of storage vessels -->
+        </div>
+        <div class="pt-2 border-t border-stone-200 flex items-center gap-2">
+          <button class="flex-1 py-2 px-3 bg-stone-100 hover:bg-stone-200 text-ink text-xs font-mono font-medium rounded min-h-[38px]" onclick="closePresetsModal()" type="button">Cancel</button>
+          <button class="flex-1 py-2 px-3 bg-fern hover:bg-fern-dark text-white text-xs font-mono font-semibold rounded min-h-[38px]" id="btnSavePresets" onclick="savePresetsFromModal()" type="button">Save Presets</button>
         </div>
       </div>
     </div>
 
-
-    <!-- ========================================== -->
-    <!-- MODAL: LOCATION PRESETS SETTINGS           -->
-    <!-- ========================================== -->
-    <div id="presetSettingsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
-          <div class="flex items-center gap-2 text-ink">
-            <span class="text-sm">⚙️</span>
-            <h2 class="font-serif font-bold text-sm text-ink">
-              Location Presets Settings
-            </h2>
-          </div>
-          <button
-            type="button"
-            onclick="closePresetSettings()"
-            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold touch-press"
-          >
-            ✕
-          </button>
-        </header>
-
-        <div class="p-4 space-y-4">
-          <div>
-            <h3 class="font-bold text-xs text-ink uppercase tracking-wider mb-2">Saved Presets</h3>
-            <div id="presetSettingsList" class="max-h-48 overflow-y-auto space-y-1">
-               <!-- Preset items injected dynamically -->
-            </div>
-          </div>
-
-          <div class="pt-2 border-t border-tonal2">
-            <button type="button" onclick="toggleNewPresetForm()" class="w-full py-2 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold transition-colors mb-2 cursor-pointer touch-press">
-              + Save Current Location as New Preset
-            </button>
-            <div id="newPresetForm" class="hidden space-y-2 mt-2 p-3 bg-tonal1 border border-bordercol rounded-[2px]">
-              <label class="block font-sans text-xs font-medium text-ink">New Preset Name</label>
-              <input type="text" id="newPresetNameInput" placeholder="e.g., Cabinet A, Shelf 2" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern" />
-              <div class="flex justify-end gap-2 mt-2">
-                <button type="button" onclick="toggleNewPresetForm()" class="px-3 py-1.5 border border-bordercol text-ink-muted hover:bg-surface rounded-[2px] text-xs font-medium touch-press">Cancel</button>
-                <button type="button" onclick="saveNewLocPreset()" class="px-3 py-1.5 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold transition-colors touch-press">Save</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- ========================================== -->
-    <!-- MODAL: RECENT EDITS DRAWER                 -->
-    <!-- ========================================== -->
-    <div id="recentEditsModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end">
-      <div class="bg-surface w-full max-w-sm h-full shadow-xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-200 border-l border-bordercol">
-        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between shrink-0">
-          <div class="flex items-center gap-2">
-            <span class="text-sm">↩</span>
-            <h2 class="font-serif font-bold text-sm text-ink">
-              Recent Changes
-            </h2>
-          </div>
-          <button
-            type="button"
-            onclick="closeRecentEditsModal()"
-            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold"
-          >
-            ✕
-          </button>
-        </header>
-
-        <div class="p-4 overflow-y-auto space-y-3 flex-1 bg-canvas" id="recentEditsList">
-          <!-- Dynamically populated -->
-        </div>
-      </div>
-    </div>
-
-
-    <!-- ========================================== -->
-    <!-- MODAL: ADVANCED FILTER                     -->
-    <!-- ========================================== -->
+    <!-- MODAL: Curatorial Advanced Filter -->
     <div id="filterModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+      <div class="bg-surface border border-bordercol rounded w-full max-w-md shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
         <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between shrink-0">
-          <div class="flex items-center gap-2">
-            <span class="text-sm">⚙</span>
-            <h2 class="font-serif font-bold text-sm text-ink">
-              Advanced Filter
-            </h2>
-          </div>
-          <button
-            type="button"
-            onclick="closeFilterModal()"
-            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold"
-          >
-            ✕
-          </button>
+          <h2 class="font-serif font-bold text-sm text-ink">Curatorial Advanced Filter</h2>
+          <button type="button" onclick="closeFilterModal()" class="text-ink-muted hover:text-ink font-bold text-sm">✕</button>
         </header>
-
-        <div class="p-4 overflow-y-auto space-y-6 flex-1">
-          <!-- Locations -->
+        <div class="p-4 overflow-y-auto space-y-4 flex-1">
           <div>
-            <h3 class="font-sans text-xs font-bold text-ink mb-3 uppercase tracking-wider">Location Filters</h3>
-            <div id="filterModalLocations" class="space-y-3">
-              <!-- Dynamically populated -->
-            </div>
+            <h3 class="font-sans text-xs font-bold text-ink mb-2 uppercase tracking-wider">Spatial Location</h3>
+            <div id="filterModalLocations" class="space-y-2"></div>
           </div>
-
-          <hr class="border-t border-tonal2" />
-
-          <!-- Specific Problems -->
+          <hr class="border-t border-tonal2">
           <div>
-            <h3 class="font-sans text-xs font-bold text-ink mb-3 uppercase tracking-wider">Specific Problems</h3>
-            <div id="filterModalProblems" class="space-y-2">
-              <!-- Dynamically populated -->
-            </div>
+            <h3 class="font-sans text-xs font-bold text-ink mb-2 uppercase tracking-wider">Specific Problems & Verification</h3>
+            <div id="filterModalProblems" class="space-y-1.5"></div>
           </div>
         </div>
-
-        <footer class="p-3.5 bg-tonal1 border-t border-tonal2 flex gap-3 justify-end shrink-0">
-          <button
-            type="button"
-            onclick="clearAdvancedFilters()"
-            class="px-4 py-2 font-sans font-medium text-xs text-ink-muted hover:text-ink transition-colors rounded-[2px]"
-          >
-            Clear All
-          </button>
-          <button
-            type="button"
-            onclick="applyAdvancedFilters()"
-            class="px-5 py-2 bg-fern hover:bg-fern-dark text-white font-sans font-bold text-xs transition-colors rounded-[2px]"
-          >
-            Apply Filters
-          </button>
+        <footer class="p-3.5 bg-tonal1 border-t border-tonal2 flex gap-2 justify-end shrink-0">
+          <button type="button" onclick="clearAdvancedFilters()" class="px-3 py-1.5 border border-bordercol text-ink-muted hover:text-ink rounded text-xs">Clear</button>
+          <button type="button" onclick="applyAdvancedFilters()" class="px-4 py-1.5 bg-fern hover:bg-fern-dark text-white rounded text-xs font-bold">Apply</button>
         </footer>
       </div>
     </div>
 
-
-    <!-- ========================================== -->
-    <!-- MODAL: ADD DISCREPANCY                     -->
-    <!-- ========================================== -->
+    <!-- MODAL: Add Discrepancy Flag -->
     <div id="addDiscrepancyModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div class="bg-surface border border-bordercol rounded w-full max-w-sm shadow-xl overflow-hidden">
         <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
-          <div class="flex items-center gap-2 text-ember">
-            <span class="text-sm">⚑</span>
-            <h2 class="font-serif font-bold text-sm text-ink">
-              Flag Specimen Discrepancy
-            </h2>
-          </div>
-          <button
-            type="button"
-            onclick="closeModal('addDiscrepancyModal')"
-            class="p-1 text-ink-faint hover:text-ink rounded-[2px] text-sm font-bold"
-          >
-            ✕
-          </button>
+          <h2 class="font-serif font-bold text-sm text-ink">⚑ Flag Specimen Discrepancy</h2>
+          <button type="button" onclick="closeModal('addDiscrepancyModal')" class="text-ink-muted hover:text-ink font-bold text-sm">✕</button>
         </header>
-
-        <form onsubmit="submitDiscrepancy(event)" class="p-4 space-y-3.5">
+        <form onsubmit="submitDiscrepancy(event)" class="p-4 space-y-3">
           <div>
-            <label class="block font-sans text-xs font-medium text-ink mb-1">
-              Target Field
-            </label>
-            <select
-              id="discrepancyFieldSelect"
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
-            >
-              <!-- Populated dynamically from schema -->
-            </select>
+            <label class="block font-sans text-xs font-medium text-ink mb-1">Target Field / Problem</label>
+            <select id="discrepancyFieldSelect" class="w-full bg-surface border border-bordercol rounded px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern"></select>
           </div>
-
           <div>
-            <label class="block font-sans text-xs font-medium text-ink mb-1">
-              Severity Level
-            </label>
-            <div class="grid grid-cols-3 gap-2">
-              <label class="border border-bordercol rounded-[2px] p-2 flex items-center gap-1.5 text-xs cursor-pointer hover:bg-tonal1">
-                <input type="radio" name="severity" value="warning" checked class="text-ember">
-                <span class="text-ember-dark font-medium">Warning</span>
-              </label>
-              <label class="border border-bordercol rounded-[2px] p-2 flex items-center gap-1.5 text-xs cursor-pointer hover:bg-tonal1">
-                <input type="radio" name="severity" value="critical" class="text-red-600">
-                <span class="text-red-700 font-medium">Critical</span>
-              </label>
-              <label class="border border-bordercol rounded-[2px] p-2 flex items-center gap-1.5 text-xs cursor-pointer hover:bg-tonal1">
-                <input type="radio" name="severity" value="inquiry" class="text-blue-600">
-                <span class="text-blue-700 font-medium">Inquiry</span>
-              </label>
-            </div>
+            <label class="block font-sans text-xs font-medium text-ink mb-1">Discrepancy Note</label>
+            <textarea id="discrepancyReasonInput" rows="3" required placeholder="Note observed curatorial discrepancy..." class="w-full bg-surface border border-bordercol rounded px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern"></textarea>
           </div>
-
-          <div>
-            <label class="block font-sans text-xs font-medium text-ink mb-1">
-              Discrepancy Reason / Note *
-            </label>
-            <textarea
-              id="discrepancyReasonInput"
-              rows="3"
-              required
-              placeholder="e.g. Inscription handwriting does not match genus determination..."
-              class="w-full bg-surface border border-bordercol rounded-[2px] px-3 py-2 text-xs text-ink outline-none focus:border-fern"
-            ></textarea>
-          </div>
-
-          <div class="flex items-center justify-end gap-2 pt-2 border-t border-tonal2">
-            <button
-              type="button"
-              onclick="closeModal('addDiscrepancyModal')"
-              class="px-3 py-2 border border-bordercol text-ink-muted hover:bg-tonal1 rounded-[2px] text-xs font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              class="px-4 py-2 bg-ember hover:bg-ember-dark text-white rounded-[2px] text-xs font-bold transition"
-            >
-              Flag Issue
-            </button>
+          <div class="flex justify-end gap-2 pt-2 border-t border-tonal2">
+            <button type="button" onclick="closeModal('addDiscrepancyModal')" class="px-3 py-1.5 border border-bordercol text-ink-muted rounded text-xs">Cancel</button>
+            <button type="submit" class="px-4 py-1.5 bg-ember hover:bg-ember-dark text-white rounded text-xs font-bold">Flag Issue</button>
           </div>
         </form>
       </div>
     </div>
 
-
-    <!-- ========================================== -->
-    <!-- MODAL: LEAVE DATABASE CONFIRMATION         -->
-    <!-- ========================================== -->
-    <div id="leaveConfirmModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-sm p-4 shadow-xl space-y-3">
-        <div class="flex items-center justify-between border-b border-tonal2 pb-2">
-          <h3 class="font-serif font-bold text-sm text-ink">⚠️ Leave Database?</h3>
-          <button type="button" onclick="cancelLeaveModal()" class="text-ink-muted font-bold text-sm">✕</button>
+    <!-- MODAL: Photo Fullscreen Viewer -->
+    <div id="photoViewerModal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4">
+      <div class="flex items-center justify-between text-white">
+        <span class="font-mono text-xs" id="photoViewerTitle">Specimen Photo</span>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="rotatePhoto()" class="px-2 py-1 bg-white/20 hover:bg-white/30 rounded text-xs font-mono">↻ Rotate</button>
+          <button type="button" onclick="closePhotoViewerModal()" class="px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded text-xs font-bold">✕</button>
         </div>
-
-        <p class="font-sans text-xs text-ink-muted leading-relaxed">
-          do you want to leave the database? (you might need to resync)
-        </p>
-
-        <div class="flex items-center gap-2 pt-2">
-          <button
-            type="button"
-            onclick="cancelLeaveModal()"
-            class="flex-1 py-2 border border-bordercol bg-tonal1 hover:bg-tonal2 text-ink rounded-[2px] text-xs font-bold transition"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onclick="confirmLeaveModal()"
-            class="flex-1 py-2 bg-ember hover:bg-ember-dark text-white rounded-[2px] text-xs font-bold transition"
-          >
-            Leave
-          </button>
-        </div>
+      </div>
+      <div class="flex-1 flex items-center justify-center overflow-hidden my-2">
+        <img id="photoViewerImg" src="" alt="Specimen Inspection" class="max-w-full max-h-full object-contain transition-transform">
+      </div>
+      <div class="flex items-center justify-center gap-3 text-white text-xs font-mono">
+        <button type="button" onclick="zoomPhoto(-0.3)" class="px-3 py-1.5 bg-white/20 rounded font-bold">− Zoom</button>
+        <span id="zoomLevelDisplay">1.0x</span>
+        <button type="button" onclick="zoomPhoto(0.3)" class="px-3 py-1.5 bg-white/20 rounded font-bold">+ Zoom</button>
+        <button type="button" onclick="resetPhotoTransform()" class="px-3 py-1.5 bg-white/20 rounded">Reset</button>
       </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- MODAL: CONNECTION STATUS                   -->
-    <!-- ========================================== -->
+    <!-- MODAL: Connection Telemetry Status -->
     <div id="connectionModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div class="bg-surface border border-bordercol rounded-[2px] w-full max-w-sm p-4 shadow-xl space-y-3">
+      <div class="bg-surface border border-bordercol rounded w-full max-w-sm p-4 shadow-xl space-y-3">
         <div class="flex items-center justify-between border-b border-tonal2 pb-2">
-          <h3 class="font-serif font-bold text-sm text-ink">⚡ Desktop Host Linked</h3>
+          <h3 class="font-serif font-bold text-sm text-ink">⚡ Desktop Host Link</h3>
           <button type="button" onclick="closeModal('connectionModal')" class="text-ink-muted font-bold text-sm">✕</button>
         </div>
-
         <div class="space-y-1.5 text-xs font-mono">
           <div class="flex justify-between py-1 border-b border-tonal2">
-            <span class="text-ink-muted">Host Status:</span>
-            <span class="text-fern-dark font-bold">Online (Active)</span>
+            <span class="text-muted">Connection Status:</span>
+            <span class="text-fern font-bold">Online (Active)</span>
           </div>
           <div class="flex justify-between py-1 border-b border-tonal2">
-            <span class="text-ink-muted">Database:</span>
-            <span class="text-ink font-bold" id="connModalDbName">---</span>
+            <span class="text-muted">Active Database:</span>
+            <span class="text-ink font-bold truncate max-w-[170px]" id="connModalDbName">---</span>
           </div>
           <div class="flex justify-between py-1 border-b border-tonal2">
-            <span class="text-ink-muted">Reviewed Total:</span>
+            <span class="text-muted">Reviewed Total:</span>
             <span class="text-ink" id="connModalReviewed">---</span>
           </div>
           <div class="flex justify-between py-1">
-            <span class="text-ink-muted">Latency / Ping:</span>
-            <span class="text-fern-dark font-bold" id="connModalPing">12ms</span>
+            <span class="text-muted">Ping / Latency:</span>
+            <span class="text-fern font-bold" id="connModalPing">42ms</span>
           </div>
         </div>
-
-        <button
-          type="button"
-          onclick="closeModal('connectionModal')"
-          class="w-full py-2 bg-fern hover:bg-fern-dark text-white rounded-[2px] text-xs font-bold"
-        >
-          Done
-        </button>
+        <button type="button" onclick="closeModal('connectionModal')" class="w-full py-2 bg-fern hover:bg-fern-dark text-white rounded text-xs font-bold">Done</button>
       </div>
     </div>
 
-    <!-- Floating Toast Notification -->
-    <div id="toast" class="hidden fixed bottom-24 left-4 right-4 max-w-sm mx-auto bg-fern-dark text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity">
+    <!-- Toast Notification -->
+    <div id="toast" class="hidden fixed bottom-20 left-4 right-4 max-w-sm mx-auto bg-fern-dark text-white text-xs font-bold py-2.5 px-4 rounded shadow-lg text-center z-50 transition-opacity">
       Edits saved & synchronized
     </div>
 
   </div>
 
-  <!-- ========================================== -->
-  <!-- CLIENT APPLICATION SCRIPT                  -->
-  <!-- ========================================== -->
+  <!-- ============================================================= -->
+  <!-- CLIENT LOGIC & REACTIVE CONTROLLER SCRIPT                     -->
+  <!-- ============================================================= -->
   <script>
     const _urlParams = new URLSearchParams(window.location.search);
     const TOKEN = _urlParams.get('token') || "{{ token }}";
-    let activeSchema = null;
-    let objectList = [];
-    let currentOid = null;
-    let currentRecord = null;
-    let isReviewed = false;
-    let activeStatusFilter = 'all';
-    let noImageFilterActive = false;
-    let activeAdvancedFilters = { locations: {}, problems: {} };
-    let activeSortBy = 'location';
-    let searchQuery = '';
+
+    // Master Client State
+    const state = {
+      activeSchema: null,
+      objectList: [],
+      totalMatching: 0,
+      currentOid: null,
+      currentRecord: null,
+      activeStatusFilter: 'all',
+      noImageFilterActive: false,
+      activeAdvancedFilters: { locations: {}, problems: {} },
+      activeSortBy: 'location',
+      searchQuery: '',
+      isReviewed: false,
+      showFilterPills: false,
+      lastSavedLocation: {
+        building: 'Økern',
+        floor: -1,
+        cabinet: 4,
+        shelf: 2,
+        storedAs: 'Herbarium Sheet'
+      },
+      batchAnchor: {
+        building: 'Økern',
+        floor: -1,
+        cabinet: 4,
+        shelf: 2,
+        storedAs: 'Herbarium Sheet'
+      },
+      batchQueue: [], // array of { oid, sciName, prevLoc }
+      customPresets: ['Herbarium Sheet', 'Standard Box', 'Free Standing'],
+      allStorageOptions: [
+        'Herbarium Sheet', 'Standard Box', 'Free Standing', 'Petri dish', 
+        'Liquid / Glass Jar', 'Capsule / Envelope', 'Microscope Slide', 'Mounted platform', 'Oversized Folder'
+      ]
+    };
+
     let searchDebounceTimer = null;
     let autoSaveTimer = null;
     let isSaving = false;
-    let hasPendingSave = false;
     let dirtyFields = new Set();
-    let currentUnvalidatedMap = {};
+    let currentTabIdx = 0;
     let wakeLockSentinel = null;
-    let isWalkModeWanted = false;
-    try { isWalkModeWanted = localStorage.getItem('arbor_walk_mode') === 'true'; } catch(e) {}
+    let eventSource = null;
 
-    let locationPresets = {};
-    let lastSelectedPreset = "Default";
-    let activeCabinet = { building: "Lid's hus", floor: "2", cabinet: "" };
+    // Load persisted settings
     try {
-      const savedCab = localStorage.getItem('arbor_active_cabinet');
-      if (savedCab) activeCabinet = JSON.parse(savedCab);
+      state.showFilterPills = localStorage.getItem('arbor_show_filter_pills') === 'true';
+      const savedPresets = localStorage.getItem('arbor_storage_presets');
+      if (savedPresets) state.customPresets = JSON.parse(savedPresets);
+      const savedLastLoc = localStorage.getItem('arbor_last_location');
+      if (savedLastLoc) state.lastSavedLocation = JSON.parse(savedLastLoc);
     } catch(e) {}
 
-    function applyActiveCabinet() {
-      if (!currentRecord) return;
-      currentRecord.observation = currentRecord.observation || {};
-      let changed = false;
-      if (activeCabinet.building) {
-        currentRecord.observation.Building = activeCabinet.building;
-        markDirty('Building');
-        changed = true;
-      }
-      if (activeCabinet.floor) {
-        currentRecord.observation.Floor = activeCabinet.floor;
-        markDirty('Floor');
-        changed = true;
-      }
-      if (activeCabinet.cabinet) {
-        currentRecord.observation.Cabinet = activeCabinet.cabinet;
-        markDirty('Cabinet');
-        changed = true;
-      }
-      if (changed) {
-        triggerAutoSave();
-        showToast(`✓ Applied Active Cabinet: ${activeCabinet.building || ''} Fl ${activeCabinet.floor || ''} Cab ${activeCabinet.cabinet || ''}`);
-        renderDynamicForm(activeSchema, currentRecord);
-      }
-    }
-
-    function setAsActiveCabinet() {
-      if (!currentRecord || !currentRecord.observation) return;
-      activeCabinet = {
-        building: currentRecord.observation.Building || '',
-        floor: currentRecord.observation.Floor || '',
-        cabinet: currentRecord.observation.Cabinet || ''
-      };
-      try { localStorage.setItem('arbor_active_cabinet', JSON.stringify(activeCabinet)); } catch(e) {}
-      showToast(`🔒 Set Active Cabinet: ${activeCabinet.building || ''} Fl ${activeCabinet.floor || ''} Cab ${activeCabinet.cabinet || ''}`);
-      renderDynamicForm(activeSchema, currentRecord);
-    }
-
-    function onLocationCoordChange(field, value) {
-      if (!currentRecord) return;
-      currentRecord.observation = currentRecord.observation || {};
-      currentRecord.observation[field] = value;
-      markDirty(field);
-      triggerAutoSave();
-
-      // Update sticky top summary header
-      let locStr = [];
-      if (currentRecord.observation) {
-        if (currentRecord.observation.Building) locStr.push(currentRecord.observation.Building);
-        if (currentRecord.observation.Floor) locStr.push(`Floor ${currentRecord.observation.Floor}`);
-        if (currentRecord.observation.Cabinet) locStr.push(`Cab ${currentRecord.observation.Cabinet}`);
-        if (currentRecord.observation["Stored as"]) locStr.push(currentRecord.observation["Stored as"]);
-      }
-      const topLoc = document.getElementById('detailTopLocation');
-      if (topLoc) topLoc.textContent = locStr.length > 0 ? `Location: ${locStr.join(' • ')}` : 'Location: Unrecorded';
-
-      // Update current coordinate readout in workstation card
-      const curReadout = document.getElementById('activeCabCurrentReadout');
-      if (curReadout) {
-        curReadout.textContent = `${currentRecord.observation.Building || '—'} • Fl ${currentRecord.observation.Floor || '—'} • Cab ${currentRecord.observation.Cabinet || '—'}`;
-      }
-
-      // Update active cabinet match badge
-      const btnContainer = document.getElementById('activeCabBtnContainer');
-      if (btnContainer) {
-        const matchesActiveCab = Boolean(
-          (currentRecord.observation.Building && currentRecord.observation.Building === activeCabinet.building) &&
-          (currentRecord.observation.Floor && currentRecord.observation.Floor === activeCabinet.floor) &&
-          (currentRecord.observation.Cabinet && currentRecord.observation.Cabinet === activeCabinet.cabinet)
-        );
-        if (matchesActiveCab) {
-          btnContainer.innerHTML = `
-            <span class="px-2.5 py-1 text-[10px] font-bold bg-fern text-white rounded-[2px] shadow-xs shrink-0 flex items-center gap-1">
-              <span>✓</span><span>In Active Cab</span>
-            </span>
-          `;
-        } else {
-          btnContainer.innerHTML = `
-            <button type="button" onclick="applyActiveCabinet()" class="min-h-[36px] px-3 py-1.5 text-xs font-bold bg-fern hover:bg-fern-dark text-white rounded-[2px] shadow-xs shrink-0 touch-press touch-target-min">
-              Apply to Specimen
-            </button>
-          `;
-        }
-      }
-    }
-
-    function toggleLocationProblem(checked) {
-      if (!currentRecord) return;
-      currentRecord.observation = currentRecord.observation || {};
-      currentRecord.observation.Loc_Problem = checked;
-      markDirty('Loc_Problem');
-      triggerAutoSave();
-      renderDynamicForm(activeSchema, currentRecord);
-      renderDiscrepancies(currentRecord);
-    }
-
-    function toggleLoanStatus(checked) {
-      if (!currentRecord) return;
-      currentRecord.observation = currentRecord.observation || {};
-      currentRecord.observation['Loaned out'] = checked;
-      markDirty('Loaned out');
-      if (checked) {
-        const today = new Date().toISOString().split('T')[0];
-        currentRecord.observation['Loaned out date'] = today;
-        markDirty('Loaned out date');
-      } else {
-        currentRecord.observation['Loaned out date'] = '';
-        markDirty('Loaned out date');
-      }
-      triggerAutoSave();
-      renderDynamicForm(activeSchema, currentRecord);
-    }
-
-    let historicalData = {};
-    let revertState = {}; // field: originalValue
-    let presenceHeartbeatTimer = null;
-
-    async function sendPresence(oid) {
-      try {
-        const res = await apiFetch('/api/presence', {
-          method: 'POST',
-          body: JSON.stringify({ oid: oid ? String(oid) : null })
-        });
-        if (res && currentOid && String(oid) === String(currentOid)) {
-          updatePresenceBanner(res.other_viewers_count || 0);
-        }
-      } catch (err) {
-        console.warn('sendPresence error:', err);
-      }
-    }
-
-    function updatePresenceBanner(otherCount) {
-      const banner = document.getElementById('detailPresenceBanner');
-      const text = document.getElementById('detailPresenceText');
-      if (!banner) return;
-      if (otherCount > 0) {
-        if (text) {
-          text.textContent = otherCount === 1
-            ? 'Warning: Another worker is currently viewing this record.'
-            : `Warning: ${otherCount} other workers are currently viewing this record.`;
-        }
-        banner.classList.remove('hidden');
-      } else {
-        banner.classList.add('hidden');
-      }
-    }
-
-    async function fetchHistoricalData(oid) {
-      try {
-        const cachedData = await getCachedHistoricalData(oid);
-        if (cachedData) {
-          historicalData = cachedData;
-          injectHistoricalData();
-        }
-
-        const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}/history`);
-        if (data) {
-          historicalData = data.historical_data || {};
-          cacheHistoricalData(oid, historicalData);
-          injectHistoricalData();
-        }
-      } catch (err) {
-        console.error("Failed to fetch historical data:", err);
-      }
-    }
-
-    function injectHistoricalData() {
-        if (!historicalData || Object.keys(historicalData).length === 0) {
-            return;
-        }
-
-        for (const [field, valuesMap] of Object.entries(historicalData)) {
-            if (Object.keys(valuesMap).length === 0) continue;
-
-            const fNameClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
-            const toggleBtn = document.getElementById(`history_toggle_${fNameClean}`);
-            const container = document.getElementById(`history_container_${fNameClean}`);
-
-            if (!toggleBtn || !container) continue;
-
-            let currentVal = '';
-            if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
-               currentVal = currentRecord.registration[field];
-            } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
-               currentVal = currentRecord.observation[field];
-            }
-            let currentValDisp = currentVal ? String(currentVal) : "[BLANK]";
-
-            let suggestionsHtml = '';
-            for (const [val, sources] of Object.entries(valuesMap)) {
-                const encodedVal = val.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                const sourceStr = sources.join(', ');
-                suggestionsHtml += `
-                    <div id="hist_sug_${fNameClean}_${encodedVal}" class="p-2.5 mt-1.5 bg-surface border border-bordercol rounded-[2px] cursor-pointer touch-target-min touch-press transition group" onclick="stageHistoricalValue('${field}', '${encodedVal}')">
-                        <div class="flex items-center justify-between gap-2">
-                            <div class="font-mono text-xs text-ink group-[.staged]:font-bold group-[.staged]:text-ember truncate">${encodedVal}</div>
-                            <button type="button" class="hidden group-[.staged]:inline-flex min-h-[36px] bg-ember text-white px-3 py-1.5 text-xs rounded-[2px] font-bold shadow-xs items-center justify-center shrink-0" onclick="event.stopPropagation(); applyHistoricalValue('${field}', '${encodedVal}')">Apply</button>
-                        </div>
-                        <div class="font-sans text-[10px] text-ink-muted mt-1">Sources: <span class="font-mono">${sourceStr}</span></div>
-                    </div>
-                `;
-            }
-
-            let undoBtn = '';
-            if (revertState.hasOwnProperty(field)) {
-                 const orig = revertState[field].replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                 undoBtn = `<button type="button" onclick="undoHistoricalValue('${field}', '${orig}')" class="text-[11px] text-ember hover:underline font-bold bg-ember-light px-2 py-1 border border-ember-border rounded-[2px] touch-press">Undo Change</button>`;
-            }
-
-            container.innerHTML = `
-                <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-[10px] font-sans font-bold text-ink-muted uppercase tracking-wider">History Suggestions</span>
-                    ${undoBtn}
-                </div>
-                <div class="text-xs font-mono text-ink-muted mb-2">Current: <span class="text-ink font-semibold">${currentValDisp}</span></div>
-                ${suggestionsHtml}
-            `;
-
-            // Unhide the toggle button since there is history available
-            toggleBtn.classList.remove('hidden');
-        }
-        if (typeof renderProblemsTab === 'function' && currentRecord) renderProblemsTab(currentRecord);
-        if (typeof renderHistoricalConflicts === 'function' && currentRecord) renderHistoricalConflicts(currentRecord);
-    }
-
-    function toggleHistoryContainer(field) {
-        const fNameClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
-        const container = document.getElementById(`history_container_${fNameClean}`);
-        if (container) {
-            container.classList.toggle('hidden');
-        }
-    }
-
-    function stageHistoricalValue(field, value) {
-        const fNameClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
-        const container = document.getElementById(`history_container_${fNameClean}`);
-        if (!container) return;
-
-        // Reset all suggestion cards in this container
-        const suggestions = container.querySelectorAll('[id^="hist_sug_"]');
-        suggestions.forEach(sug => {
-            sug.classList.remove('staged', 'bg-ember-light', 'border-ember', 'ring-1', 'ring-ember');
-            sug.classList.add('bg-surface', 'border-bordercol');
-        });
-
-        // Apply distinct staged styling to selected card
-        const suggestionId = `hist_sug_${fNameClean}_${value}`;
-        const selectedSug = document.getElementById(suggestionId);
-        if (selectedSug) {
-            selectedSug.classList.remove('bg-surface', 'border-bordercol');
-            selectedSug.classList.add('staged', 'bg-ember-light', 'border-ember', 'ring-1', 'ring-ember');
-        }
-    }
-
-    async function applyHistoricalValue(field, value) {
-        // Find input element for this field
-        const inputs = document.querySelectorAll(`[data-field="${field}"]`);
-        if (inputs.length === 0) {
-            showToast(`Field ${field} not found in form`, true);
-            return;
-        }
-
-        const input = inputs[0];
-
-        // Save revert state if not already saved
-        if (!revertState.hasOwnProperty(field)) {
-             revertState[field] = input.type === 'checkbox' ? (input.checked ? 'true' : 'false') : input.value;
-        }
-
-        // Apply
-        if (input.type === 'checkbox') {
-             input.checked = (value.toLowerCase() === 'true' || value === '1' || value === 'yes');
-        } else {
-             input.value = value;
-        }
-        markDirty(field);
-
-        // Micro-interaction: Flash the updated input with fern border to confirm receipt
-        input.classList.add('ring-2', 'ring-fern', 'border-fern');
-        setTimeout(() => {
-            input.classList.remove('ring-2', 'ring-fern', 'border-fern');
-        }, 1200);
-
-        // Clear related problems locally
-        if (currentRecord.observation) {
-            const probKeys = Object.keys(currentRecord.observation).filter(k => k === field + '_Problem' || (activeSchema.ui_sections.problems && activeSchema.ui_sections.problems.some(p => p.name === k && p.target === field))); // Assuming target might exist, or just clear exact match
-
-            // For Arbor, problem fields usually match `${field}_Problem` or similar, let's clear it
-            const exactProb = `${field}_Problem`;
-            if (currentRecord.observation.hasOwnProperty(exactProb)) {
-                 currentRecord.observation[exactProb] = false;
-                 const probToggle = document.getElementById(`prob_${exactProb}`);
-                 if (probToggle) probToggle.checked = false;
-                 markDirty(exactProb);
-            }
-        }
-
-        // Trigger save and update UI
-        triggerAutoSave();
-        showToast(`Applied historical value for ${field}`);
-
-        // Update local currentRecord so rendering reflects changes
-        if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
-             currentRecord.registration[field] = value;
-        } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
-             currentRecord.observation[field] = value;
-        }
-
-        // Re-inject history UI for this field to show new current value
-        injectHistoricalData();
-
-        // Hide the container after application
-        const fNameClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
-        const container = document.getElementById(`history_container_${fNameClean}`);
-        if (container) {
-            container.classList.add('hidden');
-        }
-    }
-
-    async function undoHistoricalValue(field, originalValue) {
-        if (!revertState.hasOwnProperty(field)) return;
-
-        const inputs = document.querySelectorAll(`[data-field="${field}"]`);
-        if (inputs.length > 0) {
-            const input = inputs[0];
-            if (input.type === 'checkbox') {
-                 input.checked = (originalValue.toLowerCase() === 'true' || originalValue === '1' || originalValue === 'yes');
-            } else {
-                 input.value = originalValue;
-            }
-        }
-        markDirty(field);
-
-        if (currentRecord.registration && currentRecord.registration[field] !== undefined) {
-             currentRecord.registration[field] = originalValue;
-        } else if (currentRecord.observation && currentRecord.observation[field] !== undefined) {
-             currentRecord.observation[field] = originalValue;
-        }
-
-        const exactProb = `${field}_Problem`;
-        if (currentRecord.observation && currentRecord.observation.hasOwnProperty(exactProb)) {
-             currentRecord.observation[exactProb] = true;
-             const probToggle = document.getElementById(`prob_${exactProb}`);
-             if (probToggle) probToggle.checked = true;
-             markDirty(exactProb);
-        }
-
-        delete revertState[field];
-
-        triggerAutoSave();
-        showToast(`Reverted ${field} to original value`);
-        injectHistoricalData();
-    }
-
-
-
-    // Photo viewer state
-    let photoUrls = [];
-    let currentPhotoIdx = 0;
-    let photoZoom = 1;
-    let photoRotation = 0;
-    let photoPan = { x: 0, y: 0 };
-    let isDraggingPhoto = false;
-    let photoDragStart = { x: 0, y: 0 };
-
+    // API Helper
     async function apiFetch(url, options = {}) {
       options.headers = options.headers || {};
-      options.headers['X-Session-Token'] = TOKEN;
-      if (options.body && typeof options.body === 'string' && !options.headers['Content-Type']) {
+      if (TOKEN) options.headers['X-Session-Token'] = TOKEN;
+      if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
         options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(options.body);
       }
-      const sep = url.includes('?') ? '&' : '?';
-      const fullUrl = `${url}${sep}token=${encodeURIComponent(TOKEN)}`;
-      const isCacheable = options.method !== 'POST' && (url.startsWith('/api/schema') || url.startsWith('/api/objects'));
-
-      try {
-        const res = await fetch(fullUrl, options);
-        if (!res.ok) {
-          console.warn(`API response status ${res.status} for ${url}`);
-        }
-        let data = {};
-        try {
-          data = await res.json();
-        } catch (jsonErr) {
-          data = {};
-        }
-        if (data && typeof data === 'object') {
-          data._status = res.status;
-          data.status = res.status;
-          data._ok = res.ok;
-        }
-        if (isCacheable) {
-          cacheApiResponse(url, data);
-        }
-        return data;
-      } catch (err) {
-        console.error(`Fetch error on ${url}:`, err);
-        if (isCacheable) {
-          const cached = await getCachedApiResponse(url);
-          if (cached) return cached;
-        }
-        return {};
+      const res = await fetch(url, options);
+      if (res.status === 401) {
+        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
+        return null;
       }
+      return res.json();
     }
 
-    function showToast(msg, isError = false) {
+    function showToast(msg) {
       const toast = document.getElementById('toast');
+      if (!toast) return;
       toast.textContent = msg;
-      toast.className = `fixed bottom-24 left-4 right-4 max-w-sm mx-auto ${isError ? 'bg-ember-dark' : 'bg-fern-dark'} text-white text-xs font-bold py-2.5 px-4 rounded-[2px] shadow-lg text-center z-50 transition-opacity`;
       toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2200);
+      toast.style.opacity = '1';
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.classList.add('hidden'), 200);
+      }, 2000);
     }
 
-    function openModal(id) {
-      document.getElementById(id).classList.remove('hidden');
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.add('hidden');
-    }
-
-    let isLeavingApp = false;
-    let hasUnsavedChanges = false;
-
-    function openLeaveModal() {
-      openModal('leaveConfirmModal');
-    }
-
-    function cancelLeaveModal() {
-      closeModal('leaveConfirmModal');
-      // Re-push list state so history is restored at [root] -> [list]
-      window.history.pushState({ view: 'list' }, '');
-    }
-
-    function confirmLeaveModal() {
-      isLeavingApp = true;
-      closeModal('leaveConfirmModal');
-      if (window.history.length > 1) {
-        window.history.back();
-      } else {
-        window.location.href = '/login';
-      }
-    }
-
-    window.addEventListener('beforeunload', (e) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = 'You have unsaved offline changes. Are you sure you want to leave?';
-        return e.returnValue;
-      }
-    });
-
-    window.addEventListener('popstate', async (event) => {
-      if (isLeavingApp) return;
-
-      const state = event.state;
-
-      // If we popped to list view:
-      if (state && state.view === 'list') {
-        closeModal('leaveConfirmModal');
-        closeModal('photoViewerModal');
-        closeModal('presetSettingsModal');
-        closeModal('filterModal');
-        closeModal('addDiscrepancyModal');
-        closeModal('connectionModal');
-        await showListView(false);
-      } else if (state && state.view === 'detail') {
-        closeModal('leaveConfirmModal');
-        if (state.id && state.id !== currentOid) {
-          await loadSpecimen(state.id, true);
-        } else {
-          showDetailView();
-        }
-      } else {
-        // Popped past list view (e.g. state is 'root' or null) -> user clicked back on List View
-        openLeaveModal();
-      }
-    });
-
-
+    // -------------------------------------------------------------
+    // INITIALIZATION & SSE CONNECTION
+    // -------------------------------------------------------------
     async function init() {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/service-worker.js').catch(err => console.error('ServiceWorker registration failed: ', err));
-      }
-
-      try {
-        await initIndexedDB();
-      } catch (e) {
-        console.warn('Offline DB init failed', e);
-      }
-
-      // 0. Initialize SPA History State for Back Button handling
-      if (!window.history.state || window.history.state.view !== 'list') {
-        window.history.replaceState({ view: 'root' }, '');
-        window.history.pushState({ view: 'list' }, '');
-      }
-
-      // 1. Immediately initiate live SSE connection in background so desktop detects phone right away
+      applyFilterPillVisibility();
+      await fetchSchema();
+      await fetchObjects();
       setupEventSource();
-      if (isWalkModeWanted) {
-        acquireWakeLock(true);
-      }
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          _reconnectDelay = 2000;
-          if (_reconnectTimer) clearTimeout(_reconnectTimer);
-          setupEventSource();  // closes stale connection and opens a fresh one
-          if (isWalkModeWanted && !wakeLockSentinel) {
-            acquireWakeLock(true);
-          }
-        }
+        if (document.visibilityState === 'visible') setupEventSource();
       });
-      window.addEventListener('online', () => {
-        _reconnectDelay = 2000;
-        if (_reconnectTimer) clearTimeout(_reconnectTimer);
-        setupEventSource();
-      });
-      window.addEventListener('offline', () => {
-        stopPing();
-        if (_reconnectTimer) clearTimeout(_reconnectTimer);
-        if (_evtSource) { _evtSource.close(); _evtSource = null; }
-        updateConnectionState('disconnected');
-      });
-
-      try {
-        // 2. Fetch Schema from Master config.py
-        activeSchema = await apiFetch('/api/schema');
-        const dbName = (activeSchema && activeSchema.database_name) ? activeSchema.database_name : 'Active Database';
-        document.getElementById('headerDbName').textContent = dbName;
-        document.getElementById('connModalDbName').textContent = dbName;
-
-        // 3. Fetch Initial List
-        await fetchList();
-
-        // 4. Fetch Location Presets
-        const presetsRes = await apiFetch('/api/presets');
-        if (presetsRes && presetsRes.success) {
-          locationPresets = presetsRes.presets || {};
-        }
-
-        // 5. Populate Discrepancy Field Select Options
-        populateDiscrepancyFields();
-
-        // 6. Update Advanced Filter Indicator
-        updateFilterIndicator();
-      } catch (err) {
-        console.error("Initialization error:", err);
-        document.getElementById('headerDbName').textContent = 'Active Database';
-        fetchList();
-      }
-    }
-
-    let _evtSource = null;
-    let _reconnectDelay = 2000;
-    const _maxReconnectDelay = 16000;
-    let _pingInterval = null;
-    let _missedPings = 0;
-    let _reconnectTimer = null;
-
-    function startPing() {
-      stopPing();
-      _missedPings = 0;
-      _pingInterval = setInterval(async () => {
-        if (!navigator.onLine) {
-           _missedPings = 3; // Force immediate disconnect if browser knows it's offline
-        } else {
-           try {
-             const res = await fetch('/api/ping?token=' + encodeURIComponent(TOKEN));
-             if (res.ok) {
-               _missedPings = 0;
-             } else {
-               _missedPings++;
-             }
-           } catch (e) {
-             _missedPings++;
-           }
-        }
-
-        if (_missedPings >= 3) {
-          stopPing();
-          if (_evtSource) {
-            _evtSource.close();
-            _evtSource = null;
-          }
-          updateConnectionState('disconnected');
-          scheduleReconnect();
-        }
-      }, 10000);
-    }
-
-    function stopPing() {
-      if (_pingInterval) {
-        clearInterval(_pingInterval);
-        _pingInterval = null;
-      }
-    }
-
-    function scheduleReconnect() {
-      if (_reconnectTimer) clearTimeout(_reconnectTimer);
-      _reconnectTimer = setTimeout(() => {
-        setupEventSource();
-        _reconnectDelay = Math.min(_reconnectDelay * 2, _maxReconnectDelay);
-      }, _reconnectDelay);
-    }
-
-    let db;
-    function initIndexedDB() {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open('arbor_offline_db', 3);
-        request.onupgradeneeded = (e) => {
-          const dbInstance = e.target.result;
-          if (!dbInstance.objectStoreNames.contains('queued_mutations')) {
-            dbInstance.createObjectStore('queued_mutations', { keyPath: 'timestamp' });
-          }
-          if (!dbInstance.objectStoreNames.contains('api_cache')) {
-            dbInstance.createObjectStore('api_cache', { keyPath: 'url' });
-          }
-          if (!dbInstance.objectStoreNames.contains('historical_cache')) {
-            dbInstance.createObjectStore('historical_cache', { keyPath: 'oid' });
-          }
-        };
-        request.onsuccess = (e) => {
-          db = e.target.result;
-          resolve();
-        };
-        request.onerror = (e) => {
-          console.error('IndexedDB init error:', e);
-          reject(e);
-        };
-      });
-    }
-
-    function cacheApiResponse(url, data) {
-      if (!db) return;
-      try {
-        const tx = db.transaction('api_cache', 'readwrite');
-        tx.objectStore('api_cache').put({ url, data });
-      } catch (e) { console.error('Cache API error', e); }
-    }
-
-    function getCachedApiResponse(url) {
-      return new Promise((resolve) => {
-        if (!db) return resolve(null);
-        try {
-          const tx = db.transaction('api_cache', 'readonly');
-          const req = tx.objectStore('api_cache').get(url);
-          req.onsuccess = () => resolve(req.result ? req.result.data : null);
-          req.onerror = () => resolve(null);
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    }
-
-    function cacheHistoricalData(oid, data) {
-      if (!db) return;
-      try {
-        const tx = db.transaction('historical_cache', 'readwrite');
-        tx.objectStore('historical_cache').put({ oid, data });
-      } catch (e) { console.error('Cache history error', e); }
-    }
-
-    function getCachedHistoricalData(oid) {
-      return new Promise((resolve) => {
-        if (!db) return resolve(null);
-        try {
-          const tx = db.transaction('historical_cache', 'readonly');
-          const req = tx.objectStore('historical_cache').get(oid);
-          req.onsuccess = () => resolve(req.result ? req.result.data : null);
-          req.onerror = () => resolve(null);
-        } catch (e) {
-          resolve(null);
-        }
-      });
-    }
-
-    function queueMutation(payload) {
-      if (!db) return;
-      const tx = db.transaction('queued_mutations', 'readwrite');
-      const store = tx.objectStore('queued_mutations');
-      store.put(payload);
-      tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
-      hasUnsavedChanges = true;
-    }
-
-    function getQueuedMutations() {
-      return new Promise((resolve) => {
-        if (!db) return resolve([]);
-        const tx = db.transaction('queued_mutations', 'readonly');
-        const store = tx.objectStore('queued_mutations');
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-      });
-    }
-
-    function clearQueuedMutations(timestamps) {
-      if (!db) return;
-      const tx = db.transaction('queued_mutations', 'readwrite');
-      const store = tx.objectStore('queued_mutations');
-      if (timestamps && timestamps.length > 0) {
-        timestamps.forEach(ts => store.delete(ts));
-      } else {
-        store.clear();
-      }
-      tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
-    }
-
-    function updateOfflineBannerQueueCount() {
-      if (!db) return;
-      const tx = db.transaction('queued_mutations', 'readonly');
-      const req = tx.objectStore('queued_mutations').count();
-      req.onsuccess = () => {
-        const count = req.result;
-        hasUnsavedChanges = count > 0;
-        const banner = document.getElementById('footerSyncStatus');
-        if (count > 0 && (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline'))) {
-          banner.innerHTML = `<span class="font-mono text-ember-dark font-medium">Offline (${count} edits queued)</span>`;
-        }
-      };
-    }
-
-    async function flushQueuedMutations() {
-      const mutations = await getQueuedMutations();
-      if (mutations.length === 0) return;
-      // Sort by timestamp just in case
-      mutations.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-      const offlineBanner = document.getElementById('offlineBanner');
-      const bannerContent = document.getElementById('offlineBannerContent');
-      const retryBtn = document.getElementById('btnOfflineRetry');
-      const footerStatus = document.getElementById('footerSyncStatus');
-
-      // Prominent syncing visual feedback
-      if (offlineBanner && bannerContent) {
-        offlineBanner.className = 'bg-fern-light border-b border-fern-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-fern-dark shrink-0 transition-all shadow-xs';
-        offlineBanner.classList.remove('hidden');
-        bannerContent.innerHTML = `
-          <svg class="animate-spin h-3.5 w-3.5 text-fern shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span class="font-bold">Syncing ${mutations.length} queued edit${mutations.length > 1 ? 's' : ''} to host...</span>
-        `;
-        if (retryBtn) retryBtn.classList.add('hidden');
-      }
-      if (footerStatus) {
-        footerStatus.innerHTML = `<span class="flex items-center gap-1.5 font-mono text-fern-dark font-medium animate-pulse"><span>Syncing queued edits (${mutations.length})...</span></span>`;
-      }
-
-      try {
-        const res = await apiFetch('/api/batch_update', {
-          method: 'POST',
-          body: JSON.stringify({ updates: mutations })
-        });
-        if (res && (res.success || res.updated_count !== undefined)) {
-          clearQueuedMutations(mutations.map(m => m.timestamp));
-          showToast(`✓ Reconnected: ${mutations.length} queued edits synced to host`);
-          if (footerStatus) {
-            footerStatus.innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ All synced</span>';
-          }
-        }
-      } catch (err) {
-        console.error('Failed to flush queued mutations', err);
-        showToast('Sync failed; will retry when connected', true);
-      } finally {
-        if (offlineBanner && navigator.onLine) {
-          offlineBanner.classList.add('hidden');
-        }
-      }
-    }
-
-    function updateConnectionState(state) {
-      const badge = document.getElementById('pingBadge');
-      const footerHost = document.getElementById('footerTickerHost');
-      const dotsHeader = document.querySelectorAll('.conn-ping-dot');
-      const dotsHeaderAnim = document.querySelectorAll('.conn-ping-dot-animate');
-      const dotFooter = document.getElementById('footerConnDot');
-      const dotFooterAnim = document.getElementById('footerConnDotAnimate');
-      const offlineBanner = document.getElementById('offlineBanner');
-      const bannerContent = document.getElementById('offlineBannerContent');
-      const retryBtn = document.getElementById('btnOfflineRetry');
-      const syncStatusText = document.getElementById('footerSyncStatusText');
-
-      if (state === 'connected') {
-        if (badge) badge.textContent = 'Live';
-        if (footerHost) footerHost.textContent = 'Host Connected';
-        if (offlineBanner) offlineBanner.classList.add('hidden');
-        dotsHeader.forEach(d => { d.className = 'conn-ping-dot relative inline-flex rounded-full h-2 w-2 bg-fern'; });
-        dotsHeaderAnim.forEach(d => { d.className = 'conn-ping-dot-animate animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern'; });
-        if (dotFooter) dotFooter.className = 'relative inline-flex rounded-full h-2 w-2 bg-fern';
-        if (dotFooterAnim) dotFooterAnim.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-fern';
-      } else if (state === 'connecting') {
-        if (badge) badge.textContent = 'Connecting...';
-        if (footerHost) footerHost.textContent = 'Connecting to host...';
-        dotsHeader.forEach(d => { d.className = 'conn-ping-dot relative inline-flex rounded-full h-2 w-2 bg-ember'; });
-        dotsHeaderAnim.forEach(d => { d.className = 'conn-ping-dot-animate animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember'; });
-        if (dotFooter) dotFooter.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember';
-        if (dotFooterAnim) dotFooterAnim.className = 'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-ember';
-      } else {
-        if (badge) badge.textContent = 'Offline';
-        if (footerHost) footerHost.textContent = 'Host Disconnected';
-        if (offlineBanner) {
-          offlineBanner.className = 'bg-ember-light border-b border-ember-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-ember-dark shrink-0 transition-all shadow-xs';
-          offlineBanner.classList.remove('hidden');
-        }
-        if (bannerContent) {
-          bannerContent.innerHTML = `<span class="text-sm">⚠</span><span>Connection to host lost. Reconnecting...</span>`;
-        }
-        if (retryBtn) retryBtn.classList.remove('hidden');
-        dotsHeader.forEach(d => { d.className = 'conn-ping-dot relative inline-flex rounded-full h-2 w-2 bg-ember-dark'; });
-        dotsHeaderAnim.forEach(d => { d.className = 'conn-ping-dot-animate hidden'; });
-        if (dotFooter) dotFooter.className = 'relative inline-flex rounded-full h-2 w-2 bg-ember-dark';
-        if (dotFooterAnim) dotFooterAnim.className = 'hidden';
-        if (syncStatusText) syncStatusText.classList.add('hidden');
-      }
-    }
-
-    async function fetchStatus() {
-      try {
-        const res = await apiFetch('/api/status');
-        if (res && res.database_name) {
-          const dbEl = document.getElementById('headerDbName');
-          if (dbEl) dbEl.textContent = res.database_name;
-          const modalDb = document.getElementById('connModalDbName');
-          if (modalDb) modalDb.textContent = res.database_name;
-        }
-      } catch (e) {
-        console.warn('fetchStatus error', e);
-      }
+      renderStorageQuickGrid();
     }
 
     function setupEventSource() {
-      try {
-        if (_reconnectTimer) clearTimeout(_reconnectTimer);
-        if (_evtSource) { _evtSource.close(); _evtSource = null; }
-        updateConnectionState('connecting');
-        _evtSource = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
-
-        _evtSource.onopen = function() {
-          updateConnectionState('connected');
-          _reconnectDelay = 2000;
-          startPing();
-          flushQueuedMutations();
-          fetchStatus();
-          if (currentOid && dirtyFields.size === 0) {
-            loadSpecimen(currentOid, true);
-          } else if (!currentOid && activeSchema && objectList.length === 0) {
-            fetchList();
-          }
-        };
-
-        _evtSource.onerror = function() {
-          stopPing();
-          if (_evtSource) { _evtSource.close(); _evtSource = null; }
-          updateConnectionState('disconnected');
-          scheduleReconnect();
-        };
-
-        _evtSource.onmessage = function(e) {
-          try {
-            const data = JSON.parse(e.data);
-            const eventsToProcess = data.type === 'batch' ? data.events : [data];
-
-            let needsListRender = false;
-            let needsListFetch = false;
-
-            for (const evt of eventsToProcess) {
-              if (evt.type === 'record_updated' || evt.type === 'object_updated') {
-                const updatedId = String(evt.data ? (evt.data.id || evt.data.oid) : '');
-                if (evt.data && (evt.data.has_flags !== undefined || evt.data.review_status !== undefined)) {
-                  const listItem = objectList.find(o => String(o.id) === updatedId);
-                  if (listItem) {
-                    Object.assign(listItem, evt.data);
-                    if (!document.getElementById('listView').classList.contains('hidden')) {
-                      needsListRender = true;
-                    }
-                  }
-                  if (currentRecord && String(currentRecord.id) === updatedId) {
-                    Object.assign(currentRecord, evt.data);
-                    if (evt.data.review_status) isReviewed = (evt.data.review_status === 'reviewed');
-                    updateReviewButtonUI();
-                  }
-                } else {
-                  if (!document.getElementById('listView').classList.contains('hidden')) {
-                    needsListFetch = true;
-                  } else if (currentRecord && String(currentRecord.id) === updatedId) {
-                    apiFetch(`/api/object/${encodeURIComponent(updatedId)}`).then(freshData => {
-                      if (currentOid === updatedId) {
-                        currentRecord = freshData;
-                        isReviewed = (freshData.review_status === 'reviewed');
-                        updateReviewButtonUI();
-                      }
-                    }).catch(() => {});
-                  }
-                }
-              } else if (evt.type === 'presence_updated' && evt.data) {
-                const updatedOid = String(evt.data.oid || '');
-                if (currentOid && String(currentOid) === updatedOid) {
-                  const totalViewers = evt.data.viewers_count || 0;
-                  const otherCount = Math.max(0, totalViewers - 1);
-                  updatePresenceBanner(otherCount);
-                }
-              } else if (evt.type === 'session_ended') {
-                showSessionEndedOverlay();
-              } else if (evt.type === 'push_navigation') {
-                showPushNavigationOverlay(evt.data.id);
-              } else if (evt.type === 'filter_synced') {
-                const payload = evt.data;
-                searchQuery = payload.q || "";
-                const searchBox = document.getElementById('searchBox');
-                if (searchBox) searchBox.value = searchQuery;
-
-                const searchClearBtn = document.getElementById('searchClearBtn');
-                if (searchClearBtn) {
-                  if (searchQuery) searchClearBtn.classList.remove('hidden');
-                  else searchClearBtn.classList.add('hidden');
-                }
-
-                activeAdvancedFilters.locations = payload.locations || {};
-                activeAdvancedFilters.problems = payload.specific_problems || [];
-
-                noImageFilterActive = payload.no_image || false;
-                const noImagePill = document.getElementById('pill-no-image');
-                if (noImagePill) {
-                  if (noImageFilterActive) {
-                    noImagePill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ink text-white border-ink';
-                  } else {
-                    noImagePill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
-                  }
-                }
-
-                setStatusFilter(payload.status || 'all').then(() => {
-                  showToast("📱 Synced batch with Desktop (" + objectList.length + " matching records)");
-                });
-
-                if (!document.getElementById('detailView').classList.contains('hidden')) {
-                  showListView(false);
-                }
-              }
-            }
-
-            if (needsListFetch) {
-              fetchList();
-            } else if (needsListRender) {
-              renderList();
-            }
-
-          } catch(err) {}
-        };
-      } catch(err) {
-        updateConnectionState('disconnected');
+      if (eventSource) {
+        try { eventSource.close(); } catch(e) {}
+        eventSource = null;
       }
-    }
-
-    function showPushNavigationOverlay(oid) {
-      const existing = document.getElementById('pushNavOverlay');
-      if (existing) existing.remove();
-
-      const overlay = document.createElement('div');
-      overlay.id = 'pushNavOverlay';
-      overlay.className = 'fixed bottom-4 left-4 right-4 z-[100] flex flex-col bg-surface border border-bordercol rounded-xl shadow-2xl p-4 transform transition-all';
-      overlay.innerHTML = `
-        <div class="flex items-start gap-3">
-          <div class="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-lake-light text-lake-dark rounded-full">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <div class="flex-1">
-            <h2 class="text-base font-serif font-bold text-ink mb-1">Object Pushed: ${oid}</h2>
-            <p class="font-sans text-sm text-ink-muted mb-3">
-              The desktop app sent this object. View it now?
-            </p>
-            <div class="flex gap-2">
-              <button id="btnDeclinePush" class="flex-1 py-2 px-3 bg-canvas text-ink-muted font-sans font-bold text-xs rounded-[2px] border border-bordercol touch-press touch-target-min">
-                Decline
-              </button>
-              <button id="btnAcceptPush" class="flex-1 py-2 px-3 bg-fern text-white font-sans font-bold text-xs rounded-[2px] touch-press touch-target-min">
-                View Object
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(overlay);
-
-      document.getElementById('btnDeclinePush').addEventListener('click', () => {
-        overlay.remove();
-      });
-
-      document.getElementById('btnAcceptPush').addEventListener('click', () => {
-        overlay.remove();
-        loadSpecimen(oid);
-      });
-    }
-
-    function showSessionEndedOverlay() {
-      // Close active SSE connection
-      if (_evtSource) {
-        _evtSource.close();
-        _evtSource = null;
-      }
-
-      const overlay = document.createElement('div');
-      overlay.className = 'fixed inset-0 z-[100] flex flex-col items-center justify-center bg-surface px-6 text-center';
-      overlay.innerHTML = `
-        <div class="mb-6 rounded-full bg-ember-light p-4">
-          <svg class="h-10 w-10 text-ember-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <h2 class="font-serif text-2xl font-bold text-ink mb-2">Session Ended</h2>
-        <p class="font-sans text-ink-muted mb-8 max-w-sm">
-          The desktop application has closed this session.
-          To continue editing, start a new session on your desktop.
-        </p>
-        <button onclick="window.location.reload()" class="w-full max-w-[200px] py-3.5 px-4 rounded-[2px] font-sans font-bold text-sm bg-fern text-white border-2 border-fern-dark shadow-md touch-target-min touch-press">
-          Refresh & Try Again
-        </button>
-      `;
-      document.body.appendChild(overlay);
-    }
-
-    function updateWakeLockUI(active) {
-      const btns = document.querySelectorAll('.btn-wake-lock');
-      const icons = document.querySelectorAll('.wake-lock-icon');
-      btns.forEach(btn => {
-        if (active) {
-          btn.className = 'btn-wake-lock p-2 rounded-[2px] border transition-all touch-target-min bg-amber-400 text-black border-amber-600 ring-2 ring-amber-300 shadow-xs font-bold flex items-center justify-center';
-        } else {
-          btn.className = 'btn-wake-lock p-2 rounded-[2px] border transition-colors touch-target-min bg-ink text-surface border-ink hover:bg-ink-muted flex items-center justify-center';
-        }
-      });
-      icons.forEach(icon => {
-        if (active) {
-          icon.innerText = '☀️';
-          icon.classList.add('animate-spin-slow');
-        } else {
-          icon.innerText = '🌙';
-          icon.classList.remove('animate-spin-slow');
-        }
-      });
-    }
-
-    async function acquireWakeLock(silent = false) {
-      if (!('wakeLock' in navigator)) {
-        if (!silent) showToast('Wake Lock API not supported on this browser', true);
-        return false;
-      }
-      try {
-        if (wakeLockSentinel) {
-          try { await wakeLockSentinel.release(); } catch(e) {}
-          wakeLockSentinel = null;
-        }
-        wakeLockSentinel = await navigator.wakeLock.request('screen');
-        updateWakeLockUI(true);
-        wakeLockSentinel.addEventListener('release', () => {
-          wakeLockSentinel = null;
-          if (!isWalkModeWanted) {
-            updateWakeLockUI(false);
-          }
-        });
-        if (!silent) showToast('Walk Mode Active (Screen Sleep Prevented)');
-        return true;
-      } catch (err) {
-        if (!silent) showToast('Wake Lock unavailable on this device', true);
-        return false;
-      }
-    }
-
-    async function releaseWakeLock(silent = false) {
-      isWalkModeWanted = false;
-      try { localStorage.setItem('arbor_walk_mode', 'false'); } catch (e) {}
-      if (wakeLockSentinel) {
+      const sseUrl = '/api/events' + (TOKEN ? '?token=' + encodeURIComponent(TOKEN) : '');
+      eventSource = new EventSource(sseUrl);
+      eventSource.onopen = () => {
+        document.getElementById('offlineBanner')?.classList.add('hidden');
+      };
+      eventSource.onerror = () => {
+        document.getElementById('offlineBanner')?.classList.remove('hidden');
+      };
+      eventSource.onmessage = (e) => {
         try {
-          await wakeLockSentinel.release();
-        } catch (e) {}
-        wakeLockSentinel = null;
-      }
-      updateWakeLockUI(false);
-      if (!silent) showToast('Walk Mode Deactivated (Sleep Allowed)');
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'record_updated') {
+            if (state.currentOid && String(msg.id) === String(state.currentOid)) {
+              fetchObjectDetail(state.currentOid, false);
+            }
+            fetchObjects(false);
+          }
+        } catch(err) {}
+      };
     }
 
-    async function toggleWakeLock() {
-      if (isWalkModeWanted || wakeLockSentinel) {
-        await releaseWakeLock();
-      } else {
-        isWalkModeWanted = true;
-        try { localStorage.setItem('arbor_walk_mode', 'true'); } catch (e) {}
-        await acquireWakeLock();
+    async function fetchSchema() {
+      try {
+        const data = await apiFetch('/api/schema');
+        if (data) {
+          state.activeSchema = data;
+          document.getElementById('headerDbName').textContent = data.database_name || 'Active Database';
+          document.getElementById('connModalDbName').textContent = data.database_name || 'Active Database';
+        }
+      } catch(err) {
+        console.error('Failed to fetch schema:', err);
       }
     }
 
-    // ==========================================
-    // SPECIMEN LIST RENDERING & SEARCH
-    // ==========================================
+    // -------------------------------------------------------------
+    // SCREEN 1: VAULT LIST VIEW LOGIC
+    // -------------------------------------------------------------
+    async function fetchObjects(showLoading = true) {
+      const container = document.getElementById('specimenListContainer');
+      if (showLoading && container) {
+        container.innerHTML = `
+          <div class="p-8 text-center text-ink-muted font-mono text-xs animate-pulse">
+            Loading specimens from database...
+          </div>
+        `;
+      }
+
+      const params = new URLSearchParams();
+      if (state.searchQuery) params.set('q', state.searchQuery);
+      if (state.activeStatusFilter) params.set('status', state.activeStatusFilter);
+      if (state.activeSortBy) {
+        if (state.activeSortBy === 'location') params.set('sort_by', 'cabinet');
+        else if (state.activeSortBy === 'name_asc') { params.set('sort_by', 'genus'); params.set('sort_dir', 'asc'); }
+        else if (state.activeSortBy === 'name_desc') { params.set('sort_by', 'genus'); params.set('sort_dir', 'desc'); }
+        else if (state.activeSortBy === 'id_asc') { params.set('sort_by', 'id'); params.set('sort_dir', 'asc'); }
+        else if (state.activeSortBy === 'flagged_first') { params.set('has_problems', 'true'); }
+      }
+      params.set('limit', '200');
+
+      try {
+        const res = await apiFetch('/api/objects?' + params.toString());
+        if (res) {
+          state.objectList = res.objects || [];
+          state.totalMatching = res.total_matching || 0;
+          renderObjectList();
+          updateListMetrics(res.facets);
+        }
+      } catch(err) {
+        if (container) {
+          container.innerHTML = `<div class="p-8 text-center text-brick font-mono text-xs">Failed to load objects.</div>`;
+        }
+      }
+    }
+
+    function renderObjectList() {
+      const container = document.getElementById('specimenListContainer');
+      if (!container) return;
+
+      if (state.objectList.length === 0) {
+        container.innerHTML = `
+          <div class="p-12 text-center text-ink-muted flex flex-col items-center justify-center">
+            <span class="text-3xl mb-2">🔍</span>
+            <p class="font-sans font-semibold text-sm text-ink">No specimens found</p>
+            <p class="text-xs text-muted mt-1 max-w-[240px]">Try adjusting your search query or filter criteria.</p>
+            <button onclick="clearSearch()" class="mt-4 px-3 py-1.5 bg-white border border-bordercol rounded text-xs font-mono font-medium shadow-2xs tap-active">
+              [ Clear Filter & Show All ]
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = state.objectList.map((obj, idx) => {
+        const isRev = obj.review_status === 'reviewed';
+        const hasFlags = obj.has_flags;
+        const loc = obj.location || {};
+        
+        let locBreadcrumb = [];
+        if (loc.building) locBreadcrumb.push(loc.building);
+        if (loc.floor !== undefined && loc.floor !== null && String(loc.floor).trim() !== '') locBreadcrumb.push(`Fl ${loc.floor}`);
+        if (loc.cabinet) locBreadcrumb.push(`Cab ${loc.cabinet}`);
+        if (loc.shelf) locBreadcrumb.push(`Sh ${loc.shelf}`);
+        const locStr = locBreadcrumb.length > 0 ? locBreadcrumb.join(' › ') : 'Unrecorded location';
+
+        return `
+          <article onclick="openDetailView('${obj.id}')" class="bg-surface border border-bordercol rounded p-3 shadow-2xs hover:border-fern/50 active:bg-stone-50 transition-all cursor-pointer flex flex-col gap-1.5 relative tap-active">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="font-mono text-[11px] font-bold text-ink px-1.5 py-0.5 bg-stone-100 border border-bordercol/80 rounded">
+                  #${obj.accession_number || obj.id}
+                </span>
+                <span class="text-[10px] font-mono text-muted uppercase truncate">${obj.family || 'Taxon'}</span>
+              </div>
+              
+              <div class="flex items-center gap-1.5 shrink-0">
+                ${hasFlags ? '<span class="text-xs text-brick font-bold" title="Flagged Issue">⚠</span>' : ''}
+                ${isRev ? 
+                  '<span class="w-5 h-5 rounded-full bg-emerald-50 text-fern border border-fern/30 flex items-center justify-center text-[10px] font-bold">✓</span>' : 
+                  '<span class="w-5 h-5 rounded-full bg-stone-100 text-stone-400 border border-stone-200 flex items-center justify-center text-[10px]">🕒</span>'
+                }
+              </div>
+            </div>
+
+            <div class="font-serif font-semibold italic text-[15px] text-ink leading-tight truncate">
+              ${obj.scientific_name || 'Unidentified Specimen'}
+            </div>
+
+            <div class="flex items-center justify-between text-[11px] font-mono pt-1 border-t border-stone-100 text-muted">
+              <span class="truncate text-ink-muted">${locStr}</span>
+              ${loc.stored_as ? `<span class="text-[10px] px-1.5 py-0.2 bg-stone-100 rounded border border-bordercol/60 shrink-0">${loc.stored_as}</span>` : ''}
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function updateListMetrics(facets = {}) {
+      document.getElementById('matchingCount').textContent = state.totalMatching;
+      
+      const rev = facets.reviewed_count || 0;
+      const total = state.totalMatching || 1;
+      const pct = Math.round((rev / total) * 100) || 0;
+
+      document.getElementById('listProgressText').textContent = `${rev} / ${total} Reviewed`;
+      document.getElementById('listProgressPct').textContent = `(${pct}%)`;
+      document.getElementById('listProgressBar').style.width = `${pct}%`;
+
+      document.getElementById('pillCountAll').textContent = `(${total})`;
+      document.getElementById('pillCountPending').textContent = `(${facets.pending_count || 0})`;
+      document.getElementById('pillCountFlagged').textContent = `(${facets.flagged_count || 0})`;
+      document.getElementById('pillCountReviewed').textContent = `(${rev})`;
+      document.getElementById('pillCountConflict').textContent = `(${facets.history_count || 0})`;
+      document.getElementById('pillCountUnknown').textContent = `(${facets.unknown_count || 0})`;
+    }
+
     function debounceSearch() {
       clearTimeout(searchDebounceTimer);
-      searchQuery = document.getElementById('searchBox').value.trim();
-      const clearBtn = document.getElementById('searchClearBtn');
-      if (searchQuery) clearBtn.classList.remove('hidden');
-      else clearBtn.classList.add('hidden');
-      const detailView = document.getElementById('detailView');
-      if (detailView && !detailView.classList.contains('hidden')) {
-        showListView(false);
-      }
-      searchDebounceTimer = setTimeout(fetchList, 350);
+      searchDebounceTimer = setTimeout(() => {
+        state.searchQuery = document.getElementById('searchBox').value.trim();
+        const clearBtn = document.getElementById('searchClearBtn');
+        if (state.searchQuery) clearBtn?.classList.remove('hidden');
+        else clearBtn?.classList.add('hidden');
+        fetchObjects();
+      }, 300);
     }
 
     function clearSearch() {
       document.getElementById('searchBox').value = '';
-      document.getElementById('searchClearBtn').classList.add('hidden');
-      searchQuery = '';
-      const detailView = document.getElementById('detailView');
-      if (detailView && !detailView.classList.contains('hidden')) {
-        showListView(false);
-      }
-      fetchList();
-    }
-
-    function renderStatusBadge(item) {
-      if (!item) return '';
-      const isRev = (item.review_status === 'reviewed') || (item.reviewed === true) || (item.is_reviewed === true);
-      const hasFlags = Boolean(item.has_flags);
-      const problemsHaveHistory = Boolean(item.problems_have_history !== undefined ? item.problems_have_history : item.has_history);
-      const hasUnknown = Boolean(item.has_unknown);
-
-      let label, bg, fg, border, icon;
-      if (isRev && hasFlags) {
-        label = 'REV+ERR';
-        bg = '#F57C00';
-        fg = '#ffffff';
-        border = '#F57C00';
-        icon = '⚠';
-      } else if (isRev) {
-        label = 'OK';
-        bg = '#2E7D32';
-        fg = '#ffffff';
-        border = '#2E7D32';
-        icon = '✓';
-      } else if (hasFlags && problemsHaveHistory) {
-        label = 'ERR+HIS';
-        bg = '#7B1FA2';
-        fg = '#ffffff';
-        border = '#7B1FA2';
-        icon = '⚠';
-      } else if (hasFlags) {
-        label = 'ERR';
-        bg = '#C62828';
-        fg = '#ffffff';
-        border = '#C62828';
-        icon = '⚠';
-      } else if (problemsHaveHistory) {
-        label = 'CFCT';
-        bg = '#0284C7';
-        fg = '#ffffff';
-        border = '#0284C7';
-        icon = '🔀';
-      } else if (hasUnknown) {
-        label = 'UKN';
-        bg = '#FBC02D';
-        fg = '#2c302e';
-        border = '#FBC02D';
-        icon = '?';
-      } else {
-        label = 'UNREV';
-        bg = '#45475a';
-        fg = '#ffffff';
-        border = '#45475a';
-        icon = '🕒';
-      }
-
-      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-[10px] font-sans font-semibold" style="background-color: ${bg}; color: ${fg}; border: 1px solid ${border};">${icon} ${label}</span>`;
+      state.searchQuery = '';
+      document.getElementById('searchClearBtn')?.classList.add('hidden');
+      fetchObjects();
     }
 
     function setStatusFilter(status) {
-      activeStatusFilter = status;
-      const filterStyles = {
-        all: {
-          active: 'bg-ink text-white border-ink font-semibold',
-          inactive: 'bg-surface text-ink-muted border-bordercol hover:bg-tonal1'
-        },
-        pending: {
-          active: 'bg-[#45475a] text-white border-[#45475a] shadow-xs font-semibold',
-          inactive: 'bg-surface text-ink-muted border-bordercol hover:bg-tonal1'
-        },
-        flagged: {
-          active: 'bg-[#C62828] text-white border-[#C62828] shadow-xs font-semibold',
-          inactive: 'bg-ember-light text-ember-dark border-ember-border hover:bg-ember-light/80'
-        },
-        reviewed: {
-          active: 'bg-[#2E7D32] text-white border-[#2E7D32] shadow-xs font-semibold',
-          inactive: 'bg-fern-light text-fern-dark border-fern-border hover:bg-fern-light/80'
-        },
-        conflict: {
-          active: 'bg-[#0284C7] text-white border-[#0284C7] shadow-xs font-semibold',
-          inactive: 'bg-[#e0f2fe] text-[#0369a1] border-[#bae6fd] hover:bg-[#bae6fd]'
-        },
-        unknown: {
-          active: 'bg-[#FBC02D] text-[#2c302e] border-[#FBC02D] shadow-xs font-semibold',
-          inactive: 'bg-[#fef9c3] text-[#854d0e] border-[#fde047] hover:bg-[#fef08a]'
-        }
-      };
-
-      ['all', 'pending', 'flagged', 'reviewed', 'conflict', 'unknown'].forEach(s => {
-        const pill = document.getElementById(`pill-${s}`);
-        if (!pill) return;
-        const isSelected = (s === status);
-        const styleRule = filterStyles[s] || filterStyles.all;
-        pill.className = `min-h-[44px] px-3.5 py-2 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border transition-colors touch-press flex items-center justify-center gap-1.5 ${isSelected ? styleRule.active : styleRule.inactive}`;
+      state.activeStatusFilter = status;
+      document.querySelectorAll('.filter-pill').forEach(el => {
+        el.className = 'filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-stone-200/80 text-ink-muted hover:bg-stone-300 tap-active transition-all';
       });
-      return fetchList();
-    }
-
-    function handleSortChange() {
-      activeSortBy = document.getElementById('sortBySelect').value;
-      renderList();
+      const activeEl = document.getElementById('pill-' + status);
+      if (activeEl) {
+        activeEl.className = 'filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-ink text-white shadow-sm tap-active transition-all';
+      }
+      fetchObjects();
     }
 
     function toggleNoImageFilter() {
-      noImageFilterActive = !noImageFilterActive;
+      state.noImageFilterActive = !state.noImageFilterActive;
       const pill = document.getElementById('pill-no-image');
-      if (noImageFilterActive) {
-        pill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-ink text-white border-ink';
+      if (state.noImageFilterActive) {
+        pill.className = 'filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-amber-50 text-amber-900 border border-amber-300 tap-active transition-all';
       } else {
-        pill.className = 'px-3 py-1 rounded-[2px] font-sans text-xs font-medium whitespace-nowrap border flex items-center gap-1.5 transition-colors bg-surface text-ink-muted border-bordercol hover:bg-tonal1';
+        pill.className = 'filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-stone-100 text-stone-600 border border-stone-200 hover:bg-stone-200 tap-active transition-all';
       }
-      fetchList();
+      fetchObjects();
     }
 
-    function cycleTriState(btn) {
-      const row = btn.closest('[data-prob-name]');
-      if (!row) return;
-      const pName = row.getAttribute('data-prob-name');
-      const currState = row.getAttribute('data-state') || 'ignore';
-      let nextState = 'ignore';
-      if (currState === 'ignore') nextState = 'has';
-      else if (currState === 'has') nextState = 'not';
-      else nextState = 'ignore';
-
-      row.setAttribute('data-state', nextState);
-      updateTriStateVisual(row, nextState);
+    function handleSortChange() {
+      state.activeSortBy = document.getElementById('sortBySelect').value;
+      fetchObjects();
     }
 
-    function updateTriStateVisual(row, state) {
-      const badge = row.querySelector('.tristate-badge');
-      const icon = row.querySelector('.tristate-icon');
-      if (!badge || !icon) return;
+    function toggleFilterPillsSetting(enabled) {
+      state.showFilterPills = enabled;
+      try { localStorage.setItem('arbor_show_filter_pills', enabled ? 'true' : 'false'); } catch(e) {}
+      applyFilterPillVisibility();
+    }
 
-      if (state === 'has') {
-        row.className = 'flex items-center justify-between p-2.5 rounded-[2px] border border-fern bg-fern-light/30 transition-colors cursor-pointer touch-press';
-        badge.className = 'tristate-badge px-2.5 py-1 text-[11px] font-bold rounded-[2px] bg-fern text-white shadow-xs';
-        badge.textContent = 'HAS (✓)';
-        icon.textContent = '✓';
-        icon.className = 'tristate-icon text-sm font-bold text-fern';
-      } else if (state === 'not') {
-        row.className = 'flex items-center justify-between p-2.5 rounded-[2px] border border-ember bg-ember-light/30 transition-colors cursor-pointer touch-press';
-        badge.className = 'tristate-badge px-2.5 py-1 text-[11px] font-bold rounded-[2px] bg-ember text-white shadow-xs';
-        badge.textContent = 'NOT (−)';
-        icon.textContent = '−';
-        icon.className = 'tristate-icon text-sm font-bold text-ember';
-      } else {
-        row.className = 'flex items-center justify-between p-2.5 rounded-[2px] border border-bordercol bg-surface hover:bg-tonal1 transition-colors cursor-pointer touch-press';
-        badge.className = 'tristate-badge px-2.5 py-1 text-[11px] font-bold rounded-[2px] bg-tonal2 text-ink-muted';
-        badge.textContent = 'IGNORE';
-        icon.textContent = '□';
-        icon.className = 'tristate-icon text-sm font-normal text-ink-faint';
+    function applyFilterPillVisibility() {
+      const container = document.getElementById('filterPillsContainer');
+      const settingInput = document.getElementById('settingShowFilterPills');
+      if (settingInput) settingInput.checked = state.showFilterPills;
+      if (container) {
+        if (state.showFilterPills) container.classList.remove('hidden');
+        else container.classList.add('hidden');
       }
     }
 
-    function openFilterModal() {
-      // Populate Location Filters
-      const locContainer = document.getElementById('filterModalLocations');
-      locContainer.innerHTML = '';
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
-        activeSchema.ui_sections.location.forEach(field => {
-          if (field.type === 'checkbox') return; // Skip bool locations for simplicity
-
-          let inputHtml = '';
-          if (field.type === 'choice' && field.choices) {
-            inputHtml = `
-              <select id="filter_loc_${field.name}" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs font-sans text-ink outline-none focus:border-fern cursor-pointer">
-                <option value="">Any ${field.name}</option>
-                ${field.choices.map(c => `<option value="${c}" ${activeAdvancedFilters.locations[field.name] === c ? 'selected' : ''}>${c}</option>`).join('')}
-              </select>
-            `;
-          } else {
-            inputHtml = `
-              <input type="text" id="filter_loc_${field.name}" placeholder="Any ${field.name}..." value="${activeAdvancedFilters.locations[field.name] || ''}" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs font-sans text-ink placeholder:text-ink-faint outline-none focus:border-fern" />
-            `;
-          }
-
-          locContainer.innerHTML += `
-            <div>
-              <label class="block text-[11px] font-bold text-ink-muted mb-1">${field.name}</label>
-              ${inputHtml}
-            </div>
-          `;
-        });
-      }
-
-      // Populate Specific Problems & History with Tri-State Controls
-      const probContainer = document.getElementById('filterModalProblems');
-      probContainer.innerHTML = '';
-
-      // Static items
-      let staticProblems = [
-        { name: "Any_Problem", label: "Any problem (all flags)" },
-        { name: "Historical_Data", label: "Historical Data (Has / No History)" },
-        { name: "Images_Missing", label: "Missing Images" }
-      ];
-
-      let dynamicProblems = [];
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-        dynamicProblems = activeSchema.ui_sections.problems.map(p => {
-          return { name: p.name, label: p.name.replace('_Problem', '').replace(/_/g, ' ') };
-        });
-      }
-
-      const allProblems = staticProblems.concat(dynamicProblems);
-
-      allProblems.forEach(p => {
-        const currState = (activeAdvancedFilters.problems && activeAdvancedFilters.problems[p.name]) || 'ignore';
-        probContainer.innerHTML += `
-          <div
-            data-prob-name="${p.name}"
-            data-state="${currState}"
-            onclick="cycleTriState(this)"
-            class="flex items-center justify-between p-2.5 rounded-[2px] border border-bordercol bg-surface hover:bg-tonal1 transition-colors cursor-pointer touch-press"
-          >
-            <div class="flex items-center gap-2.5">
-              <span class="tristate-icon text-sm text-ink-faint font-mono">□</span>
-              <span class="text-xs font-sans font-medium text-ink">${p.label}</span>
-            </div>
-            <span class="tristate-badge px-2.5 py-1 text-[11px] font-bold rounded-[2px] bg-tonal2 text-ink-muted">IGNORE</span>
-          </div>
-        `;
-      });
-
-      // Apply initial visual state styling
-      probContainer.querySelectorAll('[data-prob-name]').forEach(row => {
-        const st = row.getAttribute('data-state') || 'ignore';
-        updateTriStateVisual(row, st);
-      });
-
-      openModal('filterModal');
+    // -------------------------------------------------------------
+    // SCREEN 2: SPECIMEN DETAIL VIEW LOGIC
+    // -------------------------------------------------------------
+    async function openDetailView(oid) {
+      state.currentOid = String(oid);
+      showDetailView();
+      await fetchObjectDetail(oid);
     }
 
-    function closeFilterModal() {
-      closeModal('filterModal');
-    }
-
-    function updateFilterIndicator() {
-      const badge = document.getElementById('filterActiveBadge');
-      const btn = document.getElementById('btnFilterModalTrigger');
-      if (!badge) return;
-      const hasLocs = activeAdvancedFilters.locations && Object.values(activeAdvancedFilters.locations).some(v => Boolean(v && String(v).trim()));
-      const hasProbs = activeAdvancedFilters.problems && Object.keys(activeAdvancedFilters.problems).length > 0;
-      const isActive = hasLocs || hasProbs;
-      if (isActive) {
-        badge.classList.remove('hidden');
-        if (btn) {
-          btn.classList.add('border-fern', 'bg-fern-light/40', 'text-fern-dark');
-        }
-      } else {
-        badge.classList.add('hidden');
-        if (btn) {
-          btn.classList.remove('border-fern', 'bg-fern-light/40', 'text-fern-dark');
-        }
-      }
-    }
-
-    function applyAdvancedFilters() {
-      // Gather Locations
-      activeAdvancedFilters.locations = {};
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
-        activeSchema.ui_sections.location.forEach(field => {
-          if (field.type === 'checkbox') return;
-          const el = document.getElementById(`filter_loc_${field.name}`);
-          if (el && el.value.trim()) {
-            activeAdvancedFilters.locations[field.name] = el.value.trim();
-          }
-        });
-      }
-
-      // Gather Problems with tri-state
-      activeAdvancedFilters.problems = {};
-      const probRows = document.querySelectorAll('#filterModalProblems [data-prob-name]');
-      probRows.forEach(row => {
-        const pName = row.getAttribute('data-prob-name');
-        const pState = row.getAttribute('data-state');
-        if (pName && (pState === 'has' || pState === 'not')) {
-          activeAdvancedFilters.problems[pName] = pState;
-        }
-      });
-
-      updateFilterIndicator();
-      closeFilterModal();
-      fetchList();
-    }
-
-    function clearAdvancedFilters() {
-      activeAdvancedFilters = { locations: {}, problems: {} };
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) {
-        activeSchema.ui_sections.location.forEach(field => {
-          const el = document.getElementById(`filter_loc_${field.name}`);
-          if (el) el.value = '';
-        });
-      }
-      const probRows = document.querySelectorAll('#filterModalProblems [data-prob-name]');
-      probRows.forEach(row => {
-        row.setAttribute('data-state', 'ignore');
-        updateTriStateVisual(row, 'ignore');
-      });
-
-      updateFilterIndicator();
-      closeFilterModal();
-      fetchList();
-    }
-
-    async function fetchList() {
-      try {
-        let url = `/api/objects?limit=150&q=${encodeURIComponent(searchQuery)}`;
-        if (activeStatusFilter !== 'all') {
-          url += `&status=${encodeURIComponent(activeStatusFilter)}`;
-        }
-
-        // Append Location Filters
-        for (const [key, val] of Object.entries(activeAdvancedFilters.locations || {})) {
-          url += `&loc_${encodeURIComponent(key)}=${encodeURIComponent(val)}`;
-        }
-
-        // Append Specific Problems (key:state serialized)
-        const probEntries = [];
-        for (const [pName, pState] of Object.entries(activeAdvancedFilters.problems || {})) {
-          if (pState === 'has' || pState === 'not') {
-            probEntries.push(`${pName}:${pState}`);
-          }
-        }
-
-        if (noImageFilterActive && !probEntries.some(p => p.startsWith('Images_Missing:'))) {
-          probEntries.push('Images_Missing:has');
-        }
-
-        if (probEntries.length > 0) {
-          url += `&specific_problems=${encodeURIComponent(probEntries.join(','))}`;
-        }
-
-        const res = await apiFetch(url);
-        objectList = res.objects || [];
-
-        // Update counts safely
-        const facets = res.facets || {};
-        const revCount = facets.reviewed_count || 0;
-        const pendCount = facets.pending_count || 0;
-        const flaggedCount = facets.flagged_count !== undefined 
-          ? facets.flagged_count 
-          : objectList.filter(o => o.has_flags).length;
-        const historyCount = facets.history_count !== undefined
-          ? facets.history_count
-          : objectList.filter(o => o.has_history).length;
-        const unknownCount = facets.unknown_count !== undefined
-          ? facets.unknown_count
-          : objectList.filter(o => o.has_unknown).length;
-        const total = res.total_matching !== undefined ? res.total_matching : objectList.length;
-
-        document.getElementById('matchingCount').textContent = total;
-        document.getElementById('pill-all').textContent = `All (${total})`;
-        document.getElementById('pill-pending').innerHTML = `<span>🕒</span> <span>Unreviewed (${pendCount})</span>`;
-        document.getElementById('pill-flagged').innerHTML = `<span>⚠</span> <span>Flagged (${flaggedCount})</span>`;
-        document.getElementById('pill-reviewed').innerHTML = `<span>✓</span> <span>Reviewed (${revCount})</span>`;
-        const pillConf = document.getElementById('pill-conflict');
-        if (pillConf) pillConf.innerHTML = `<span>🔀</span> <span>Conflict (${historyCount})</span>`;
-        const pillUkn = document.getElementById('pill-unknown');
-        if (pillUkn) pillUkn.innerHTML = `<span>?</span> <span>Unknown (${unknownCount})</span>`;
-        document.getElementById('connModalReviewed').textContent = `${revCount} / ${total} items`;
-
-        renderList();
-      } catch (err) {
-        console.error("Failed to fetch specimen list:", err);
-      }
-    }
-
-    // Substring-based highlight without regex escaping hazards
-    function highlightMatch(text, query) {
-      if (!query || !text) return text || '';
-      const str = String(text);
-      const q = query.trim().toLowerCase();
-      if (!q) return str;
-      const idx = str.toLowerCase().indexOf(q);
-      if (idx === -1) return str;
-      const match = str.substring(idx, idx + q.length);
-      return str.substring(0, idx) + '<mark class="bg-ember-light text-ember font-semibold px-0.5 rounded-[1px]">' + match + '</mark>' + str.substring(idx + q.length);
-    }
-
-    async function quickToggleReviewed(oid, event) {
-      if (event) event.stopPropagation();
-      const item = objectList.find(o => String(o.id) === String(oid));
-      if (!item) return;
-      const wasReviewed = (item.review_status === 'reviewed') || (item.reviewed === true) || (item.is_reviewed === true);
-      const newStatus = wasReviewed ? 'pending' : 'reviewed';
-      item.review_status = newStatus;
-      item.reviewed = (newStatus === 'reviewed');
-      item.is_reviewed = (newStatus === 'reviewed');
-      renderList();
-
-      try {
-        await apiFetch(`/api/object/${encodeURIComponent(oid)}`, {
-          method: 'POST',
-          body: JSON.stringify({ review_status: newStatus })
-        });
-        if (currentRecord && String(currentRecord.id) === String(oid)) {
-          currentRecord.review_status = newStatus;
-          isReviewed = (newStatus === 'reviewed');
-          updateReviewButtonUI();
-        }
-        showToast(newStatus === 'reviewed' ? `✓ #${item.accession_number || oid} marked Reviewed` : `Unmarked #${item.accession_number || oid}`);
-        fetchList();
-      } catch (e) {
-        showToast('Failed to update status', true);
-      }
-    }
-
-    function renderList() {
-      const container = document.getElementById('specimenListContainer');
-      if (objectList.length === 0) {
-        container.innerHTML = `
-          <div class="bg-surface border border-bordercol rounded-[3px] p-8 text-center mt-4 shadow-xs">
-            <span class="text-3xl text-ink-faint">🌿</span>
-            <p class="font-serif font-bold text-base text-ink mt-2">No specimens match filter</p>
-            <p class="font-sans text-xs text-ink-muted mt-1">If no database is currently loaded, please open an Excel database in Arbor Desktop.</p>
-          </div>
-        `;
-        return;
-      }
-
-      // Sort in-place if requested
-      const sorted = [...objectList].sort((a, b) => {
-        if (activeSortBy === 'name-asc') return (a.scientific_name || '').localeCompare(b.scientific_name || '');
-        if (activeSortBy === 'name-desc') return (b.scientific_name || '').localeCompare(a.scientific_name || '');
-        if (activeSortBy === 'id-asc') return (a.id || '').localeCompare(b.id || '', undefined, { numeric: true });
-        return 0; // default server order
-      });
-
-      container.innerHTML = sorted.map(s => {
-        const statusBadge = renderStatusBadge(s);
-        const isRev = (s.review_status === 'reviewed') || (s.reviewed === true) || (s.is_reviewed === true);
-
-        let locStr = [];
-        if (s.location) {
-          if (s.location.building) locStr.push(s.location.building);
-          if (s.location.floor) locStr.push(`Fl ${s.location.floor}`);
-          if (s.location.cabinet) locStr.push(`Cab ${s.location.cabinet}`);
-          if (s.location.stored_as) locStr.push(s.location.stored_as);
-        }
-        const locDisplay = locStr.join(' · ') || 'Location unrecorded';
-
-        // Active cabinet highlight
-        const isMatchingActiveCab = Boolean(
-          activeCabinet.building && s.location &&
-          s.location.building === activeCabinet.building &&
-          String(s.location.floor || '') === String(activeCabinet.floor || '') &&
-          String(s.location.cabinet || '') === String(activeCabinet.cabinet || '')
-        );
-
-        const cardBorder = isMatchingActiveCab ? 'border-fern/60 ring-1 ring-fern/30 bg-surface' : 'border-bordercol hover:border-borderdark bg-surface';
-
-        return `
-          <div
-            onclick="loadSpecimen('${s.id}')"
-            class="${cardBorder} border rounded-[3px] p-3 transition-all cursor-pointer touch-press shadow-2xs space-y-2"
-          >
-            <!-- Top row: Accession, Family, Status, 1-Tap Quick Review -->
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-1.5 truncate">
-                <span class="font-mono text-xs font-bold text-ink bg-stone-100 px-1.5 py-0.5 rounded-[2px] border border-stone-200 shrink-0">
-                  #${highlightMatch(s.accession_number || s.id, searchQuery)}
-                </span>
-                ${s.family ? `<span class="font-sans text-[10px] text-muted bg-stone-50 border border-stone-200 px-1.5 py-0.5 rounded-[2px] truncate">${highlightMatch(s.family, searchQuery)}</span>` : ''}
-              </div>
-
-              <div class="flex items-center gap-1.5 shrink-0">
-                ${statusBadge}
-                ${s.has_unvalidated ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded-[2px] text-[10px] font-bold bg-amber-500/20 text-amber-600 border border-amber-500/40">UNVAL</span>` : ''}
-                
-                <!-- Quick Review Toggle Button -->
-                <button
-                  type="button"
-                  onclick="quickToggleReviewed('${s.id}', event)"
-                  class="w-7 h-7 flex items-center justify-center rounded-[2px] border transition-colors tap-highlight-transparent ${isRev ? 'bg-fern text-white border-fern hover:bg-fern-dark' : 'bg-stone-100 text-stone-400 border-stone-200 hover:text-ink hover:bg-stone-200'}"
-                  title="${isRev ? 'Mark Unreviewed' : 'Mark Reviewed'}"
-                >
-                  <svg class="w-4 h-4 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Middle row: Scientific Name, Author, Collector -->
-            <div>
-              <h2 class="font-serif italic font-bold text-base text-ink leading-snug">
-                ${highlightMatch(s.scientific_name || 'Unidentified Specimen', searchQuery)}
-              </h2>
-              <div class="flex items-center gap-2 text-xs font-sans text-muted mt-0.5 truncate">
-                ${s.author ? `<span class="text-ink font-mono text-[11px]">${highlightMatch(s.author, searchQuery)}</span>` : ''}
-                ${s.collector ? `<span>•</span><span class="truncate max-w-[150px]">👤 ${highlightMatch(s.collector, searchQuery)}</span>` : ''}
-              </div>
-            </div>
-
-            <!-- Bottom row: Physical Location & Inspect link -->
-            <div class="flex items-center justify-between pt-1.5 border-t border-stone-100 text-xs">
-              <div class="flex items-center gap-1 text-ink truncate max-w-[260px]">
-                <span class="text-xs ${isMatchingActiveCab ? 'text-fern font-bold' : 'text-stone-400'}">📍</span>
-                <span class="font-mono text-[11px] ${isMatchingActiveCab ? 'text-fern font-semibold' : 'text-muted'} truncate">${locDisplay}</span>
-              </div>
-              <div class="flex items-center gap-0.5 text-[11px] font-mono font-medium text-slate hover:text-ink shrink-0">
-                <span>Inspect</span>
-                <span class="text-xs">→</span>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      prefetchVisibleHistory(sorted);
-    }
-
-    async function prefetchVisibleHistory(list) {
-      // Pre-fetch the first 10 items in background
-      const limit = Math.min(10, list.length);
-      for (let i = 0; i < limit; i++) {
-        const item = list[i];
-        if (!item || !item.id) continue;
-
-        try {
-          const cachedData = await getCachedHistoricalData(item.id);
-          if (!cachedData) {
-            // Not in cache, fetch and store
-            const res = await apiFetch(`/api/object/${encodeURIComponent(item.id)}/history`);
-            if (res && res.historical_data) {
-              cacheHistoricalData(item.id, res.historical_data);
-            }
-          }
-        } catch (err) {
-          console.error(`Failed to prefetch history for ${item.id}`, err);
-        }
-      }
-    }
-
-    async function showListView(manageHistory = true) {
-      if (presenceHeartbeatTimer) {
-        clearInterval(presenceHeartbeatTimer);
-        presenceHeartbeatTimer = null;
-      }
-      sendPresence(null);
-      updatePresenceBanner(0);
-
-      if (autoSaveTimer !== null) {
-        clearTimeout(autoSaveTimer);
-        autoSaveTimer = null;
-        if (currentOid) {
-          await saveCurrentEdits();
-        }
-      }
-
-      // If triggered from top-left UI back button while in detail view, pop history
-      if (manageHistory && window.history.state && window.history.state.view === 'detail') {
-        window.history.back();
-        return;
-      }
-
-      document.getElementById('detailView').classList.add('hidden');
+    function showListView() {
       document.getElementById('listView').classList.remove('hidden');
-      fetchList();
+      document.getElementById('detailView').classList.add('hidden');
+      document.getElementById('batchLocationView').classList.add('hidden');
     }
 
     function showDetailView() {
       document.getElementById('listView').classList.add('hidden');
       document.getElementById('detailView').classList.remove('hidden');
+      document.getElementById('batchLocationView').classList.add('hidden');
     }
 
-    // ==========================================
-    // SPECIMEN DETAIL VIEW & DYNAMIC FORM ENGINE
-    // ==========================================
-    // ==========================================
-    // SPECIMEN DETAIL VIEW & TAB CONTROLLER
-    // ==========================================
-    let currentTabIndex = 0;
+    function showBatchLocationView() {
+      document.getElementById('listView').classList.add('hidden');
+      document.getElementById('detailView').classList.add('hidden');
+      document.getElementById('batchLocationView').classList.remove('hidden');
+      updateBatchAnchorUI();
+      document.getElementById('batchIdInput')?.focus();
+    }
 
-    function switchTab(index) {
-      currentTabIndex = index;
-      const tabTrack = document.getElementById('tabTrack');
-      const tabIndicator = document.getElementById('tabIndicator');
-      const buttons = document.querySelectorAll('.tab-btn');
-
-      if (tabTrack) {
-        tabTrack.style.transform = `translateX(-${index * 33.333333}%)`;
+    async function fetchObjectDetail(oid, renderFull = true) {
+      try {
+        const data = await apiFetch('/api/object/' + encodeURIComponent(oid));
+        if (data) {
+          state.currentRecord = data;
+          state.isReviewed = data.review_status === 'reviewed';
+          renderDetailView(renderFull);
+        }
+      } catch(err) {
+        console.error('Failed to load specimen detail:', err);
       }
-      if (tabIndicator) {
-        tabIndicator.style.transform = `translateX(${index * 100}%)`;
+    }
+
+    function renderDetailView(renderFull = true) {
+      if (!state.currentRecord) return;
+      const rec = state.currentRecord;
+      const reg = rec.registration || {};
+      const obs = rec.observation || {};
+
+      // Accession Header
+      document.getElementById('detailAccession').textContent = '#' + (rec.accession_number || rec.id);
+      document.getElementById('detailScientificName').textContent = rec.scientific_name || 'Unidentified Specimen';
+      document.getElementById('detailFamily').textContent = reg.Family || '—';
+
+      // Status Pill
+      const statusBtn = document.getElementById('badgeStatus');
+      const statusText = document.getElementById('badgeStatusText');
+      const statusDot = document.getElementById('badgeStatusDot');
+      if (state.isReviewed) {
+        statusBtn.className = 'flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded border transition-colors tap-highlight-transparent bg-emerald-50 text-fern-dark border-fern/30';
+        statusText.textContent = 'REVIEWED';
+        statusDot.className = 'w-1.5 h-1.5 rounded-full bg-fern';
+      } else {
+        statusBtn.className = 'flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300';
+        statusText.textContent = 'UNREVIEWED';
+        statusDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse';
       }
 
-      buttons.forEach((btn, idx) => {
-        if (idx === index) {
+      // Specimen index in list
+      const curIdx = state.objectList.findIndex(o => String(o.id) === String(rec.id));
+      document.getElementById('detailCurrentIdx').textContent = curIdx >= 0 ? curIdx + 1 : 1;
+      document.getElementById('detailTotalCount').textContent = state.objectList.length || state.totalMatching || 1;
+
+      // Coordinate Steppers
+      renderCoordinateSteppers(obs);
+
+      // Building Chips
+      renderBuildingChips(obs.Building || 'Økern');
+
+      // Stored As Selection
+      renderStoredAsGrid(obs['Stored as'] || obs.Stored_As || 'Herbarium Sheet');
+
+      // Loan Status
+      renderLoanStatus(obs['Loaned out']);
+
+      // Dynamic Form Fields in Details Tab
+      renderDynamicForm(state.activeSchema, rec);
+
+      // Photos in Details Tab
+      renderPhotos(rec.images);
+
+      // Problems & Discrepancies in Problems Tab
+      renderProblems(rec.flagged_issues);
+      renderProblemResolvers(rec);
+      renderHistoricalConflicts(rec);
+
+      // Breadcrumb
+      updateDetailLocBreadcrumbs(obs);
+    }
+
+    function renderCoordinateSteppers(obs) {
+      // Floor (supports negative)
+      const fl = (obs.Floor !== undefined && obs.Floor !== null && String(obs.Floor).trim() !== '') ? String(obs.Floor) : '-1';
+      document.getElementById('displayFloorVal').textContent = fl;
+      const inpFl = document.getElementById('input_observation_Floor');
+      if (inpFl) inpFl.value = fl;
+
+      // Cabinet
+      const cab = (obs.Cabinet !== undefined && obs.Cabinet !== null && String(obs.Cabinet).trim() !== '') ? String(obs.Cabinet).padStart(2, '0') : '04';
+      document.getElementById('displayCabVal').textContent = cab;
+      const inpCab = document.getElementById('input_observation_Cabinet');
+      if (inpCab) inpCab.value = cab;
+
+      // Shelf
+      const sh = (obs.Shelf !== undefined && obs.Shelf !== null && String(obs.Shelf).trim() !== '') ? String(obs.Shelf).padStart(2, '0') : '02';
+      document.getElementById('displayShelfVal').textContent = sh;
+      const inpSh = document.getElementById('input_observation_Shelf');
+      if (inpSh) inpSh.value = sh;
+    }
+
+    function onLocationCoordChange(field, val) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.observation[field] = val;
+      markDirty(field);
+      renderCoordinateSteppers(state.currentRecord.observation);
+      updateDetailLocBreadcrumbs(state.currentRecord.observation);
+      triggerAutoSave();
+    }
+
+    function adjustCoordinate(coord, delta) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      const obs = state.currentRecord.observation;
+
+      if (coord === 'floor') {
+        const current = parseInt(obs.Floor !== undefined && obs.Floor !== null ? obs.Floor : '-1', 10);
+        const next = isNaN(current) ? -1 : current + delta;
+        obs.Floor = String(next);
+        markDirty('Floor');
+      } else if (coord === 'cab') {
+        const current = parseInt(obs.Cabinet || '4', 10);
+        const next = Math.max(1, (isNaN(current) ? 1 : current) + delta);
+        obs.Cabinet = String(next);
+        markDirty('Cabinet');
+      } else if (coord === 'shelf') {
+        const current = parseInt(obs.Shelf || '2', 10);
+        const next = Math.max(1, (isNaN(current) ? 1 : current) + delta);
+        obs.Shelf = String(next);
+        markDirty('Shelf');
+      }
+
+      renderCoordinateSteppers(obs);
+      updateDetailLocBreadcrumbs(obs);
+      triggerAutoSave();
+    }
+
+    function activateDirectInput(field) {
+      document.getElementById('display' + field + 'Val').classList.add('hidden');
+      const input = document.getElementById('input_observation_' + field) || document.getElementById('input' + field + 'Val');
+      if (input) {
+        input.classList.remove('hidden');
+        input.focus();
+        input.select();
+      }
+    }
+
+    function finishDirectInput(field) {
+      const input = document.getElementById('input_observation_' + field) || document.getElementById('input' + field + 'Val');
+      const display = document.getElementById('display' + field + 'Val');
+      if (input) input.classList.add('hidden');
+      if (display) display.classList.remove('hidden');
+
+      if (!state.currentRecord || !input) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      const obs = state.currentRecord.observation;
+
+      const val = input.value.trim();
+      if (field === 'Floor') {
+        obs.Floor = val;
+        markDirty('Floor');
+      } else if (field === 'Cab') {
+        obs.Cabinet = val;
+        markDirty('Cabinet');
+      } else if (field === 'Shelf') {
+        obs.Shelf = val;
+        markDirty('Shelf');
+      }
+
+      renderCoordinateSteppers(obs);
+      updateDetailLocBreadcrumbs(obs);
+      triggerAutoSave();
+    }
+
+    function setBuildingSelection(bldg, btnEl) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.observation.Building = bldg;
+      markDirty('Building');
+
+      renderBuildingChips(bldg);
+      updateDetailLocBreadcrumbs(state.currentRecord.observation);
+      triggerAutoSave();
+    }
+
+    function renderBuildingChips(activeBldg) {
+      document.querySelectorAll('.bldg-chip').forEach(el => {
+        const b = el.getAttribute('data-building');
+        if (b === activeBldg) {
+          el.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs bg-[#1c3829] text-white border-transparent';
+        } else {
+          el.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs';
+        }
+      });
+      const bldgInp = document.getElementById('input_observation_Building');
+      if (bldgInp) bldgInp.value = activeBldg;
+    }
+
+    function toggleCustomBuildingInput() {
+      document.getElementById('customBuildingWrap')?.classList.toggle('hidden');
+    }
+
+    function applyCustomBuilding() {
+      const val = document.getElementById('input_observation_Building').value.trim();
+      if (!val) return;
+      setBuildingSelection(val);
+      document.getElementById('customBuildingWrap')?.classList.add('hidden');
+    }
+
+    // Stored As Matrix
+    function renderStorageQuickGrid() {
+      const grid = document.getElementById('storageQuickGrid');
+      if (!grid) return;
+      const currentStored = state.currentRecord?.observation?.['Stored as'] || 'Herbarium Sheet';
+
+      const presets = state.customPresets.slice(0, 3);
+      let html = presets.map((opt, i) => {
+        const isSel = (opt === currentStored);
+        return `
+          <button type="button" onclick="selectStoredAsOption('${opt}')" class="storage-quick-btn min-h-[44px] p-2.5 rounded border text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs ${isSel ? 'border-2 border-ink bg-stone-100 text-ink font-semibold' : 'border-stone-300 hover:border-ink bg-white text-muted'}">
+            <span class="truncate">${opt}</span>
+            <span class="w-2 h-2 rounded-full ${isSel ? 'bg-fern' : 'bg-transparent border border-stone-300'} flex-none ml-1"></span>
+          </button>
+        `;
+      }).join('');
+
+      html += `
+        <button type="button" onclick="openStoredAsBottomSheet()" class="min-h-[44px] p-2.5 rounded border border-dashed border-stone-400 hover:border-ink bg-stone-50 text-ink text-left flex items-center justify-between tap-highlight-transparent shadow-2xs">
+          <span class="font-semibold text-muted">More...</span>
+          <span class="text-muted text-xs">▼</span>
+        </button>
+      `;
+
+      grid.innerHTML = html;
+      document.getElementById('activeStoredAsLabel').textContent = currentStored;
+      document.getElementById('manualStorageInput').value = currentStored;
+    }
+
+    function renderStoredAsGrid(activeStored) {
+      renderStorageQuickGrid();
+    }
+
+    function selectStoredAsOption(opt) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.observation['Stored as'] = opt;
+      markDirty('Stored as');
+
+      renderStorageQuickGrid();
+      updateDetailLocBreadcrumbs(state.currentRecord.observation);
+      triggerAutoSave();
+    }
+
+    function onManualStorageChange(val) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.observation['Stored as'] = val;
+      markDirty('Stored as');
+      document.getElementById('activeStoredAsLabel').textContent = val;
+      triggerAutoSave();
+    }
+
+    function clearManualStorage() {
+      document.getElementById('manualStorageInput').value = '';
+      onManualStorageChange('');
+    }
+
+    function openStoredAsBottomSheet() {
+      const container = document.getElementById('storedAsModalOptions');
+      if (container) {
+        container.innerHTML = state.allStorageOptions.map(opt => `
+          <button type="button" onclick="selectStoredAsOption('${opt}'); closeStoredAsBottomSheet();" class="w-full p-3 rounded border border-stone-200 hover:border-ink hover:bg-stone-50 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]">
+            <span class="font-bold text-ink">${opt}</span>
+            <span class="text-xs text-muted">Select</span>
+          </button>
+        `).join('');
+      }
+      document.getElementById('storedAsBottomSheet')?.classList.remove('hidden');
+    }
+
+    function closeStoredAsBottomSheet() {
+      document.getElementById('storedAsBottomSheet')?.classList.add('hidden');
+    }
+
+    function openPresetsModal() {
+      const container = document.getElementById('presetsSelectionList');
+      if (container) {
+        container.innerHTML = state.allStorageOptions.map(opt => {
+          const checked = state.customPresets.includes(opt);
+          return `
+            <label class="p-2 bg-stone-50 border border-stone-200 rounded flex items-center justify-between text-xs font-mono cursor-pointer hover:bg-stone-100">
+              <span class="text-ink font-medium">${opt}</span>
+              <input type="checkbox" value="${opt}" ${checked ? 'checked' : ''} onchange="onPresetCheckboxChange()" class="preset-cb w-4 h-4 text-fern rounded focus:ring-fern">
+            </label>
+          `;
+        }).join('');
+      }
+      onPresetCheckboxChange();
+      document.getElementById('presetsConfigModal')?.classList.remove('hidden');
+    }
+
+    function closePresetsModal() {
+      document.getElementById('presetsConfigModal')?.classList.add('hidden');
+    }
+
+    function onPresetCheckboxChange() {
+      const checked = Array.from(document.querySelectorAll('.preset-cb:checked')).map(cb => cb.value);
+      const counter = document.getElementById('presetSelectionCounter');
+      if (counter) counter.textContent = `${checked.length} of 3 selected`;
+      const saveBtn = document.getElementById('btnSavePresets');
+      if (saveBtn) saveBtn.disabled = (checked.length !== 3);
+    }
+
+    function savePresetsFromModal() {
+      const checked = Array.from(document.querySelectorAll('.preset-cb:checked')).map(cb => cb.value);
+      if (checked.length === 3) {
+        state.customPresets = checked;
+        try { localStorage.setItem('arbor_storage_presets', JSON.stringify(checked)); } catch(e) {}
+        renderStorageQuickGrid();
+        closePresetsModal();
+        showToast('✓ Storage presets updated');
+      }
+    }
+
+    // Availability / Loan Status
+    function setLoanStatus(isLoaned) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.observation['Loaned out'] = isLoaned;
+      markDirty('Loaned out');
+
+      renderLoanStatus(isLoaned);
+      triggerAutoSave();
+    }
+
+    function renderLoanStatus(isLoaned) {
+      const btnAvail = document.getElementById('btnStatusAvailable');
+      const btnLoan = document.getElementById('btnStatusLoan');
+      const tag = document.getElementById('loanStateTag');
+      const dot = document.getElementById('loanStatusDot');
+
+      if (isLoaned) {
+        btnLoan.className = 'py-1.5 px-2 rounded text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-ink border border-stone-300 min-h-[36px]';
+        btnAvail.className = 'py-1.5 px-2 rounded text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]';
+        tag.textContent = 'Loaned Out';
+        tag.className = 'text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-500';
+      } else {
+        btnAvail.className = 'py-1.5 px-2 rounded text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-ink border border-stone-300 min-h-[36px]';
+        btnLoan.className = 'py-1.5 px-2 rounded text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]';
+        tag.textContent = 'In Repository';
+        tag.className = 'text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-fern-light text-fern border border-fern/30';
+        dot.className = 'w-2 h-2 rounded-full bg-fern';
+      }
+    }
+
+    // Copy from Previous Logic
+    function handleCopyPreviousSpecimen() {
+      if (!state.currentRecord) return;
+      const last = state.lastSavedLocation;
+      if (!last) {
+        showToast('No previous location coordinates cached');
+        return;
+      }
+
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      const obs = state.currentRecord.observation;
+
+      if (last.building) { obs.Building = last.building; markDirty('Building'); }
+      if (last.floor !== undefined) { obs.Floor = String(last.floor); markDirty('Floor'); }
+      if (last.cabinet) { obs.Cabinet = String(last.cabinet); markDirty('Cabinet'); }
+      if (last.shelf) { obs.Shelf = String(last.shelf); markDirty('Shelf'); }
+      if (last.storedAs) { obs['Stored as'] = last.storedAs; markDirty('Stored as'); }
+
+      renderCoordinateSteppers(obs);
+      renderBuildingChips(obs.Building);
+      renderStoredAsGrid(obs['Stored as']);
+      updateDetailLocBreadcrumbs(obs);
+      triggerAutoSave();
+      showToast('📋 Copied coordinates from previous specimen');
+    }
+
+    function updateDetailLocBreadcrumbs(obs = {}) {
+      let locBreadcrumb = [];
+      if (obs.Building) locBreadcrumb.push(obs.Building);
+      if (obs.Floor !== undefined && obs.Floor !== null && String(obs.Floor).trim() !== '') locBreadcrumb.push(`Floor ${obs.Floor}`);
+      if (obs.Cabinet) locBreadcrumb.push(`Cab ${obs.Cabinet}`);
+      if (obs.Shelf) locBreadcrumb.push(`Sh ${obs.Shelf}`);
+      const locStr = locBreadcrumb.length > 0 ? locBreadcrumb.join(' › ') : 'Unrecorded location';
+
+      document.getElementById('liveLocBreadcrumb').textContent = locStr;
+      document.getElementById('headerLocSummary').textContent = locBreadcrumb.length > 0 ? locBreadcrumb.join(' · ') : 'Unrecorded';
+
+      // Cache for Copy from Previous
+      state.lastSavedLocation = {
+        building: obs.Building || state.lastSavedLocation.building,
+        floor: obs.Floor !== undefined ? obs.Floor : state.lastSavedLocation.floor,
+        cabinet: obs.Cabinet || state.lastSavedLocation.cabinet,
+        shelf: obs.Shelf || state.lastSavedLocation.shelf,
+        storedAs: obs['Stored as'] || state.lastSavedLocation.storedAs
+      };
+      try { localStorage.setItem('arbor_last_location', JSON.stringify(state.lastSavedLocation)); } catch(e) {}
+    }
+
+    function toggleReviewed() {
+      state.isReviewed = !state.isReviewed;
+      if (state.currentRecord) {
+        state.currentRecord.observation = state.currentRecord.observation || {};
+        state.currentRecord.observation.Reviewed = state.isReviewed;
+        markDirty('Reviewed');
+        triggerAutoSave();
+      }
+      renderDetailView(false);
+    }
+
+    function navSpecimen(delta) {
+      if (state.objectList.length === 0) return;
+      const curIdx = state.objectList.findIndex(o => String(o.id) === String(state.currentOid));
+      if (curIdx < 0) return;
+      const nextIdx = Math.max(0, Math.min(state.objectList.length - 1, curIdx + delta));
+      if (nextIdx !== curIdx) {
+        openDetailView(state.objectList[nextIdx].id);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // TAB CONTROLLER & GESTURES
+    // -------------------------------------------------------------
+    function switchDetailTab(tab) {
+      let idx = 0;
+      if (typeof tab === 'number') idx = tab;
+      else if (tab === 'details') idx = 1;
+      else if (tab === 'problems') idx = 2;
+      switchTab(idx);
+    }
+
+    function switchTab(idx) {
+      currentTabIdx = idx;
+      const indicator = document.getElementById('tabIndicator');
+      const track = document.getElementById('tabTrack');
+      if (indicator) indicator.style.transform = `translateX(${idx * 100}%)`;
+      if (track) track.style.transform = `translateX(-${(idx * 100) / 3}%)`;
+
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        if (i === idx) {
           btn.classList.add('font-semibold', 'text-ink');
           btn.classList.remove('text-muted');
         } else {
@@ -10074,1869 +8669,406 @@ INDEX_TEMPLATE_V2 = """
           btn.classList.add('text-muted');
         }
       });
-
-      // Scroll active panel to top
-      const panels = [
-        document.getElementById('tabContentLocation'),
-        document.getElementById('tabContentDetails'),
-        document.getElementById('tabContentProblems')
-      ];
-      if (panels[index]) panels[index].scrollTop = 0;
     }
 
-    // Swipe Gesture Engine for Mobile Panels
-    function initSwipeGestures() {
-      const swipeArea = document.getElementById('swipeArea');
-      if (!swipeArea) return;
-
-      let touchStartX = 0;
-      let touchStartY = 0;
-      let touchEndX = 0;
-      let touchEndY = 0;
-
-      swipeArea.addEventListener('touchstart', (e) => {
-        if (!e.touches || e.touches.length === 0) return;
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-      }, { passive: true });
-
-      swipeArea.addEventListener('touchend', (e) => {
-        if (!e.changedTouches || e.changedTouches.length === 0) return;
-        touchEndX = e.changedTouches[0].clientX;
-        touchEndY = e.changedTouches[0].clientY;
-        handleSwipeGesture();
-      }, { passive: true });
-
-      function handleSwipeGesture() {
-        const deltaX = touchEndX - touchStartX;
-        const deltaY = touchEndY - touchStartY;
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 45) {
-          if (deltaX < 0 && currentTabIndex < 2) {
-            switchTab(currentTabIndex + 1);
-          } else if (deltaX > 0 && currentTabIndex > 0) {
-            switchTab(currentTabIndex - 1);
-          }
-        }
-      }
-    }
-
-    async function loadSpecimen(oid, fromHistory = false) {
-      // Flush any pending debounced save for the outgoing specimen BEFORE currentOid changes.
-      if (autoSaveTimer !== null) {
-        clearTimeout(autoSaveTimer);
-        autoSaveTimer = null;
-        if (currentOid && currentOid !== oid) {
-          await saveCurrentEdits();
-        }
-      }
-      currentOid = oid;
-      dirtyFields.clear();
-
-      if (presenceHeartbeatTimer) clearInterval(presenceHeartbeatTimer);
-      sendPresence(oid);
-      presenceHeartbeatTimer = setInterval(() => {
-        if (currentOid && !document.getElementById('detailView').classList.contains('hidden')) {
-          sendPresence(currentOid);
-        }
-      }, 8000);
-
-      if (!fromHistory) {
-        if (window.history.state && window.history.state.view === 'detail') {
-          window.history.replaceState({ view: 'detail', id: oid }, '');
-        } else {
-          window.history.pushState({ view: 'detail', id: oid }, '');
-        }
-      }
-
-      showDetailView();
-
-      // Reset active tab to Location (0)
-      switchTab(0);
-
-      // Update Nav Index
-      const idx = objectList.findIndex(o => String(o.id) === String(oid));
-      if (idx !== -1) {
-        const curRecNum = document.getElementById('currentRecordNum');
-        const totRecNum = document.getElementById('totalRecordsNum');
-        if (curRecNum) curRecNum.textContent = idx + 1;
-        if (totRecNum) totRecNum.textContent = objectList.length;
-
-        const btnPrev = document.getElementById('btnPrevSpecimen');
-        const btnNext = document.getElementById('btnNextSpecimen');
-        if (btnPrev) btnPrev.disabled = (idx === 0);
-        if (btnNext) btnNext.disabled = (idx === objectList.length - 1);
-      }
-
-      // Instant Loading State
-      const accEl = document.getElementById('detailAccession');
-      if (accEl) accEl.textContent = `#${oid}`;
-      const sciEl = document.getElementById('detailScientificName');
-      if (sciEl) sciEl.innerHTML = '<span class="text-stone-400 animate-pulse font-serif italic">Loading specimen record...</span>';
-      const authEl = document.getElementById('detailAuthor');
-      if (authEl) authEl.textContent = '—';
-      const famEl = document.getElementById('detailFamily');
-      if (famEl) famEl.textContent = '—';
-      const headerLoc = document.getElementById('headerLocSummary');
-      if (headerLoc) headerLoc.textContent = 'Retrieving...';
-
-      // Hide Undo button on explicit specimen navigation
-      const undoBtn = document.getElementById('btnMobileUndo');
-      if (undoBtn) {
-        undoBtn.classList.add('hidden');
-        undoBtn.classList.remove('flex');
-      }
-
-      // Reset Photo State
-      const photoPlace = document.getElementById('photoPlaceholder');
-      const photoImg = document.getElementById('specimenImg');
-      if (photoPlace) photoPlace.classList.remove('hidden');
-      if (photoImg) {
-        photoImg.classList.add('hidden');
-        photoImg.src = '';
-      }
-
-      try {
-        const data = await apiFetch(`/api/object/${encodeURIComponent(oid)}`);
-        currentRecord = data;
-        isReviewed = (data.review_status === 'reviewed');
-
-        if (data.other_viewers_count !== undefined) {
-          updatePresenceBanner(data.other_viewers_count);
-        }
-
-        // Top Summary Info
-        if (accEl) accEl.textContent = `#${data.accession_number || data.id}`;
-        if (sciEl) sciEl.textContent = data.scientific_name || 'Specimen';
-        if (authEl) authEl.textContent = (data.registration && data.registration.Author) ? data.registration.Author : '—';
-        if (famEl) famEl.textContent = (data.registration && data.registration.Family) ? data.registration.Family : '—';
-
-        // Direct Taxonomy Inputs (Tab 2 Header)
-        const inGen = document.getElementById('input_Genus');
-        const inSp = document.getElementById('input_Species');
-        const inFam = document.getElementById('input_Family');
-        const inAuth = document.getElementById('input_Author');
-        if (inGen) inGen.value = (data.registration && data.registration.Genus) || '';
-        if (inSp) inSp.value = (data.registration && data.registration.Species) || '';
-        if (inFam) inFam.value = (data.registration && data.registration.Family) || '';
-        if (inAuth) inAuth.value = (data.registration && data.registration.Author) || '';
-
-        // Refresh Location UI (Tab 1)
-        refreshLocUI();
-
-        // Update Review Button Status
-        updateReviewButtonUI();
-
-        // Load Photos
-        photoUrls = (data.images && data.images.online_urls) ? data.images.online_urls : [];
-        const photoBadge = document.getElementById('photoCountBadge');
-        if (photoBadge) photoBadge.textContent = `${photoUrls.length} available`;
-
-        if (photoUrls.length > 0) {
-          currentPhotoIdx = 0;
-          if (photoPlace) {
-            photoPlace.innerHTML = `
-              <span class="text-2xl">📷</span>
-              <p class="font-semibold text-fern-light" id="photoPlaceholderText">Tap to Load ${photoUrls.length} Archival Scan${photoUrls.length > 1 ? 's' : ''}</p>
-            `;
-            photoPlace.classList.remove('hidden');
-          }
-          if (photoImg) {
-            photoImg.src = photoUrls[0];
-            photoImg.classList.remove('hidden');
-            if (photoPlace) photoPlace.classList.add('hidden');
-          }
-        } else {
-          if (photoPlace) {
-            photoPlace.innerHTML = `
-              <span class="text-2xl text-stone-500">📷</span>
-              <p class="font-sans text-[11px] font-semibold text-stone-400">No Archival Scans Attached</p>
-            `;
-            photoPlace.classList.remove('hidden');
-          }
-          if (photoImg) photoImg.classList.add('hidden');
-        }
-
-        // Render Dynamic Form Accordions for Registration Groups
-        currentUnvalidatedMap = {};
-        if (data.unvalidated_sources && Array.isArray(data.unvalidated_sources)) {
-          data.unvalidated_sources.forEach(u => {
-            if (u.field) currentUnvalidatedMap[u.field] = u.comment || '';
-          });
-        }
-        renderDynamicForm(activeSchema, data);
-        updateTaxonProblemAlerts(data);
-
-        // Render Problems (Tab 3)
-        renderProblemFlagGrid(data);
-        const curNote = document.getElementById('curatorNote');
-        if (curNote) curNote.value = (data.observation && data.observation.Comment) ? data.observation.Comment : '';
-        updateProblemSummaryBar(data);
-        renderHistoricalConflicts(data);
-
-        // Fetch Historical Data
-        revertState = {};
-        fetchHistoricalData(oid);
-
-      } catch (err) {
-        console.error("Failed to load specimen details:", err);
-        if (sciEl) sciEl.textContent = 'Error Loading Specimen';
-        showToast('Failed to load specimen data from host', true);
-      }
-    }
-
-    function navSpecimen(offset) {
-      const idx = objectList.findIndex(o => String(o.id) === String(currentOid));
-      if (idx !== -1 && objectList[idx + offset]) {
-        loadSpecimen(objectList[idx + offset].id);
-      }
-    }
-
-    // ==========================================
-    // LOCATION TAB 1 LOGIC & BINDINGS
-    // ==========================================
-    function refreshLocUI() {
-      if (!currentRecord) return;
-      const obs = currentRecord.observation || {};
-
-      // Building
-      const bldg = obs.Building || '';
-      const chips = document.querySelectorAll('.bldg-chip');
-      let matchedStandard = false;
-      chips.forEach(chip => {
-        const bName = chip.getAttribute('data-building');
-        if (bName === bldg) {
-          matchedStandard = true;
-          chip.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-stone-800 text-white border-stone-800';
-        } else {
-          chip.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded-[3px] border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs';
-        }
-      });
-
-      const customWrap = document.getElementById('customBuildingWrap');
-      const customInput = document.getElementById('customBuildingInput');
-      if (!matchedStandard && bldg) {
-        if (customWrap) customWrap.classList.remove('hidden');
-        if (customInput) customInput.value = bldg;
-      }
-
-      // Steppers: Floor, Cabinet, Shelf/Extra
-      const flVal = (obs.Floor !== undefined && obs.Floor !== null && String(obs.Floor).trim() !== '') ? String(obs.Floor) : '—';
-      const cabVal = (obs.Cabinet !== undefined && obs.Cabinet !== null && String(obs.Cabinet).trim() !== '') ? String(obs.Cabinet) : '—';
-      const shelfVal = (obs.Extra !== undefined && obs.Extra !== null && String(obs.Extra).trim() !== '') ? String(obs.Extra) : (obs.Shelf !== undefined ? String(obs.Shelf) : '—');
-
-      const dispFl = document.getElementById('displayFloorVal');
-      const dispCab = document.getElementById('displayCabVal');
-      const dispShelf = document.getElementById('displayShelfVal');
-      if (dispFl) dispFl.textContent = flVal;
-      if (dispCab) dispCab.textContent = cabVal;
-      if (dispShelf) dispShelf.textContent = shelfVal;
-
-      // Breadcrumbs & Header Location
-      let locParts = [];
-      if (bldg) locParts.push(bldg);
-      if (flVal !== '—') locParts.push(`Fl ${flVal}`);
-      if (cabVal !== '—') locParts.push(`Cab ${cabVal}`);
-      if (shelfVal !== '—') locParts.push(`Shelf ${shelfVal}`);
-
-      const locSummaryStr = locParts.length > 0 ? locParts.join(' · ') : 'Unrecorded';
-      const headerLoc = document.getElementById('headerLocSummary');
-      if (headerLoc) headerLoc.textContent = locSummaryStr;
-      const liveBreadcrumb = document.getElementById('liveLocBreadcrumb');
-      if (liveBreadcrumb) liveBreadcrumb.textContent = locSummaryStr;
-
-      const locValidBadge = document.getElementById('locValidBadge');
-      if (locValidBadge) {
-        if (obs.Loc_Problem) {
-          locValidBadge.textContent = '⚠ Discrepancy';
-          locValidBadge.className = 'text-[10px] font-mono text-brick font-bold whitespace-nowrap ml-1';
-        } else if (locParts.length > 0) {
-          locValidBadge.textContent = '✓ Validated';
-          locValidBadge.className = 'text-[10px] font-mono text-fern font-bold whitespace-nowrap ml-1';
-        } else {
-          locValidBadge.textContent = '○ Unset';
-          locValidBadge.className = 'text-[10px] font-mono text-muted whitespace-nowrap ml-1';
-        }
-      }
-
-      // Stored As
-      const storedVal = obs['Stored as'] || '';
-      const activeStoredLabel = document.getElementById('activeStoredAsLabel');
-      if (activeStoredLabel) activeStoredLabel.textContent = storedVal || 'Unspecified';
-
-      const manualStorage = document.getElementById('manualStorageInput');
-      const clearManualStorageBtn = document.getElementById('btnClearManualStorage');
-      if (manualStorage && manualStorage !== document.activeElement) {
-        manualStorage.value = storedVal;
-      }
-      if (clearManualStorageBtn) {
-        if (storedVal) clearManualStorageBtn.classList.remove('hidden');
-        else clearManualStorageBtn.classList.add('hidden');
-      }
-
-      // Quick storage grid buttons
-      const storageBtns = document.querySelectorAll('.storage-quick-btn');
-      let matchedQuickStorage = false;
-      storageBtns.forEach(sBtn => {
-        const sName = sBtn.getAttribute('data-storage-name');
-        const dot = sBtn.querySelector('span:last-child');
-        if (sName === storedVal) {
-          matchedQuickStorage = true;
-          sBtn.className = 'storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border-2 border-ink bg-stone-100 text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-xs';
-          if (dot) dot.className = 'w-2 h-2 rounded-full bg-ink border border-ink flex-none ml-1.5';
-        } else {
-          sBtn.className = 'storage-quick-btn min-h-[44px] p-2.5 rounded-[2px] border border-stone-300 hover:border-ink bg-white text-muted hover:text-ink text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs';
-          if (dot) dot.className = 'w-2 h-2 rounded-full bg-transparent border border-stone-300 flex-none ml-1.5';
-        }
-      });
-
-      const moreStorageLabel = document.getElementById('moreStorageBtnLabel');
-      if (moreStorageLabel) {
-        if (!matchedQuickStorage && storedVal) {
-          moreStorageLabel.textContent = storedVal;
-          moreStorageLabel.className = 'font-bold truncate text-ink';
-        } else {
-          moreStorageLabel.textContent = 'More...';
-          moreStorageLabel.className = 'font-semibold truncate text-muted';
-        }
-      }
-
-      // Copy Previous Specimen Button Readout
-      const currIdx = objectList.findIndex(o => String(o.id) === String(currentOid));
-      const copyBtn = document.getElementById('btnCopyPrevSpecimen');
-      const copyTitle = document.getElementById('copyTitleSpan');
-      const copySubtitle = document.getElementById('copySubtitleSpan');
-      if (copyBtn && copyTitle && copySubtitle) {
-        if (currIdx > 0) {
-          const prevObj = objectList[currIdx - 1];
-          const prevLoc = prevObj.location || {};
-          const prevLocStr = [prevLoc.building, prevLoc.floor ? `Fl ${prevLoc.floor}` : '', prevLoc.cabinet ? `Cab ${prevLoc.cabinet}` : '', prevLoc.stored_as].filter(Boolean).join(' · ');
-          copyTitle.textContent = `Copy from #${prevObj.accession_number || prevObj.id}`;
-          copySubtitle.textContent = prevLocStr || 'Duplicate previous specimen coordinates';
-          copyBtn.disabled = false;
-          copyBtn.classList.remove('opacity-40');
-        } else {
-          copyTitle.textContent = 'Copy from Previous Specimen';
-          copySubtitle.textContent = 'No preceding specimen in active batch';
-          copyBtn.disabled = true;
-          copyBtn.classList.add('opacity-40');
-        }
-      }
-
-      // Availability / Loan Status
-      const isLoaned = Boolean(obs['Loaned out'] === true || String(obs['Loaned out']).toLowerCase() === 'true' || obs['Loaned out'] === '1');
-      const btnAvail = document.getElementById('btnStatusAvailable');
-      const btnLoan = document.getElementById('btnStatusLoan');
-      const availBox = document.getElementById('availableStatusBox');
-      const loanBox = document.getElementById('loanedStatusBox');
-      const loanPillDot = document.getElementById('loanStatusPillDot');
-      const loanIndicatorTag = document.getElementById('loanStateIndicatorTag');
-      const loanDateDisp = document.getElementById('loanDateDisplay');
-
-      if (isLoaned) {
-        if (btnAvail) btnAvail.className = 'py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]';
-        if (btnLoan) btnLoan.className = 'py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-white text-ink border border-stone-300 min-h-[36px]';
-        if (availBox) availBox.classList.add('hidden');
-        if (loanBox) loanBox.classList.remove('hidden');
-        if (loanPillDot) loanPillDot.className = 'w-2 h-2 rounded-full bg-amber-500';
-        if (loanIndicatorTag) {
-          loanIndicatorTag.textContent = 'Loaned Out';
-          loanIndicatorTag.className = 'text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] bg-amber-50 text-amber-800 border border-amber-300';
-        }
-        if (loanDateDisp) loanDateDisp.textContent = obs['Loaned out date'] || 'Active';
-      } else {
-        if (btnAvail) btnAvail.className = 'py-1.5 px-2 rounded-[2px] text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs bg-white text-ink border border-stone-300 min-h-[36px]';
-        if (btnLoan) btnLoan.className = 'py-1.5 px-2 rounded-[2px] text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]';
-        if (availBox) availBox.classList.remove('hidden');
-        if (loanBox) loanBox.classList.add('hidden');
-        if (loanPillDot) loanPillDot.className = 'w-2 h-2 rounded-full bg-fern';
-        if (loanIndicatorTag) {
-          loanIndicatorTag.textContent = 'In Repository';
-          loanIndicatorTag.className = 'text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[2px] bg-fern-light text-fern border border-fern/30';
-        }
-      }
-    }
-
-    async function handleCopyPreviousSpecimen() {
-      const currIdx = objectList.findIndex(o => String(o.id) === String(currentOid));
-      if (currIdx <= 0) return;
-      const prevObj = objectList[currIdx - 1];
-
-      try {
-        const fullPrev = await apiFetch(`/api/object/${encodeURIComponent(prevObj.id)}`);
-        const prevObs = (fullPrev && fullPrev.observation) ? fullPrev.observation : {};
-
-        if (!currentRecord.observation) currentRecord.observation = {};
-        if (prevObs.Building) { currentRecord.observation.Building = prevObs.Building; markDirty('Building'); }
-        if (prevObs.Floor !== undefined) { currentRecord.observation.Floor = prevObs.Floor; markDirty('Floor'); }
-        if (prevObs.Cabinet !== undefined) { currentRecord.observation.Cabinet = prevObs.Cabinet; markDirty('Cabinet'); }
-        if (prevObs['Stored as'] !== undefined) { currentRecord.observation['Stored as'] = prevObs['Stored as']; markDirty('Stored as'); }
-        if (prevObs.Extra !== undefined) { currentRecord.observation.Extra = prevObs.Extra; markDirty('Extra'); }
-
-        refreshLocUI();
-        triggerAutoSave();
-        showToast(`✓ Copied location from #${prevObj.accession_number || prevObj.id}`);
-      } catch (err) {
-        showToast('Failed to copy previous location', true);
-      }
-    }
-
-    function setBuildingSelection(bldgName, btn) {
-      if (!currentRecord) return;
-      if (!currentRecord.observation) currentRecord.observation = {};
-      currentRecord.observation.Building = bldgName;
-      markDirty('Building');
-
-      const customWrap = document.getElementById('customBuildingWrap');
-      if (customWrap) customWrap.classList.add('hidden');
-
-      refreshLocUI();
-      triggerAutoSave();
-    }
-
-    function toggleCustomBuildingInput() {
-      const wrap = document.getElementById('customBuildingWrap');
-      const input = document.getElementById('customBuildingInput');
-      if (!wrap) return;
-      wrap.classList.toggle('hidden');
-      if (!wrap.classList.contains('hidden') && input) {
-        input.focus();
-      }
-    }
-
-    function onCustomBuildingInput(val) {
-      if (!currentRecord) return;
-      if (!currentRecord.observation) currentRecord.observation = {};
-      currentRecord.observation.Building = val.trim();
-      markDirty('Building');
-    }
-
-    function applyCustomBuilding() {
-      const input = document.getElementById('customBuildingInput');
-      if (input && input.value.trim()) {
-        setBuildingSelection(input.value.trim());
-        showToast(`Facility set: ${input.value.trim()}`);
-      }
-    }
-
-    function adjustCoordinate(field, delta) {
-      if (!currentRecord) return;
-      if (!currentRecord.observation) currentRecord.observation = {};
-      const obs = currentRecord.observation;
-
-      if (field === 'floor') {
-        let current = parseInt(obs.Floor, 10);
-        if (isNaN(current)) current = 1;
-        let next = current + delta;
-        if (next === 0) next = delta > 0 ? 1 : -1;
-        obs.Floor = String(next);
-        markDirty('Floor');
-      } else if (field === 'cab') {
-        let current = parseInt(obs.Cabinet, 10);
-        if (isNaN(current)) current = 1;
-        let next = Math.max(1, current + delta);
-        obs.Cabinet = String(next);
-        markDirty('Cabinet');
-      } else if (field === 'shelf') {
-        let current = parseInt(obs.Extra, 10);
-        if (isNaN(current)) current = 1;
-        let next = Math.max(1, current + delta);
-        obs.Extra = String(next);
-        markDirty('Extra');
-      }
-
-      refreshLocUI();
-      triggerAutoSave();
-    }
-
-    function activateDirectInput(field) {
-      const disp = document.getElementById(`display${field}Val`);
-      const inp = document.getElementById(`input${field}Val`);
-      if (!disp || !inp || !currentRecord) return;
-
-      const obs = currentRecord.observation || {};
-      let val = '';
-      if (field === 'Floor') val = obs.Floor || '';
-      else if (field === 'Cab') val = obs.Cabinet || '';
-      else if (field === 'Shelf') val = obs.Extra || obs.Shelf || '';
-
-      disp.classList.add('hidden');
-      inp.classList.remove('hidden');
-      inp.value = val;
-      inp.focus();
-      inp.select();
-    }
-
-    function finishDirectInput(field) {
-      const disp = document.getElementById(`display${field}Val`);
-      const inp = document.getElementById(`input${field}Val`);
-      if (!disp || !inp || !currentRecord) return;
-
-      const val = inp.value.trim();
-      if (!currentRecord.observation) currentRecord.observation = {};
-
-      if (field === 'Floor') {
-        currentRecord.observation.Floor = val;
-        markDirty('Floor');
-      } else if (field === 'Cab') {
-        currentRecord.observation.Cabinet = val;
-        markDirty('Cabinet');
-      } else if (field === 'Shelf') {
-        currentRecord.observation.Extra = val;
-        markDirty('Extra');
-      }
-
-      inp.classList.add('hidden');
-      disp.classList.remove('hidden');
-
-      refreshLocUI();
-      triggerAutoSave();
-    }
-
-    function handleStorageOptionSelect(storageName, btn) {
-      if (!currentRecord) return;
-      if (!currentRecord.observation) currentRecord.observation = {};
-      currentRecord.observation['Stored as'] = storageName;
-      markDirty('Stored as');
-
-      refreshLocUI();
-      triggerAutoSave();
-    }
-
-    function openStoredAsBottomSheet() {
-      const sheet = document.getElementById('storedAsBottomSheet');
-      if (sheet) sheet.classList.remove('hidden');
-    }
-
-    function closeStoredAsBottomSheet() {
-      const sheet = document.getElementById('storedAsBottomSheet');
-      if (sheet) sheet.classList.add('hidden');
-    }
-
-    function selectModalStorageOption(storageName) {
-      closeStoredAsBottomSheet();
-      handleStorageOptionSelect(storageName);
-    }
-
-    function onManualStorageChange(val) {
-      if (!currentRecord) return;
-      if (!currentRecord.observation) currentRecord.observation = {};
-      currentRecord.observation['Stored as'] = val;
-      markDirty('Stored as');
-
-      const clearBtn = document.getElementById('btnClearManualStorage');
-      if (clearBtn) {
-        if (val) clearBtn.classList.remove('hidden');
-        else clearBtn.classList.add('hidden');
-      }
-
-      const activeStoredLabel = document.getElementById('activeStoredAsLabel');
-      if (activeStoredLabel) activeStoredLabel.textContent = val || 'Unspecified';
-
-      triggerAutoSave();
-    }
-
-    function clearManualStorage() {
-      const inp = document.getElementById('manualStorageInput');
-      if (inp) inp.value = '';
-      onManualStorageChange('');
-    }
-
-    function setLoanStatus(isLoaned) {
-      if (!currentRecord) return;
-      if (!currentRecord.observation) currentRecord.observation = {};
-      currentRecord.observation['Loaned out'] = isLoaned;
-      markDirty('Loaned out');
-
-      if (isLoaned) {
-        const today = new Date().toISOString().split('T')[0];
-        currentRecord.observation['Loaned out date'] = today;
-        markDirty('Loaned out date');
-      } else {
-        currentRecord.observation['Loaned out date'] = '';
-        markDirty('Loaned out date');
-      }
-
-      refreshLocUI();
-      triggerAutoSave();
-    }
-
-    // ==========================================
-    // DETAILS TAB 2 & DYNAMIC REGISTRATION FORMS
-    // ==========================================
-    function onFieldInputDirect(fieldName, section, value) {
-      if (!currentRecord) return;
-      if (!currentRecord[section]) currentRecord[section] = {};
-      currentRecord[section][fieldName] = value;
-      markDirty(fieldName);
-
-      if (fieldName === 'Genus' || fieldName === 'Species') {
-        const gen = (currentRecord.registration && currentRecord.registration.Genus) || '';
-        const sp = (currentRecord.registration && currentRecord.registration.Species) || '';
-        const nameStr = [gen, sp].filter(Boolean).join(' ') || 'Specimen';
-        const nameEl = document.getElementById('detailScientificName');
-        if (nameEl) nameEl.textContent = nameStr;
-      } else if (fieldName === 'Author') {
-        const authEl = document.getElementById('detailAuthor');
-        if (authEl) authEl.textContent = value || '—';
-      } else if (fieldName === 'Family') {
-        const famEl = document.getElementById('detailFamily');
-        if (famEl) famEl.textContent = value || '—';
-      }
-
-      triggerAutoSave();
-    }
-
-    function updateTaxonProblemAlerts(record) {
-      const fields = ['Genus', 'Species', 'Family', 'Author'];
-      let flaggedCount = 0;
-
-      fields.forEach(f => {
-        const isProb = isFieldProblemActive(f, 'registration', record);
-        const alertEl = document.getElementById(`fieldAlert_${f}`);
-        const inputEl = document.getElementById(`input_${f}`);
-
-        if (isProb) {
-          flaggedCount++;
-          if (alertEl) alertEl.classList.remove('hidden');
-          if (inputEl) {
-            inputEl.classList.add('border-brick', 'bg-red-50/50');
-            inputEl.classList.remove('border-bordercol', 'bg-alabaster');
-          }
-        } else {
-          if (alertEl) alertEl.classList.add('hidden');
-          if (inputEl) {
-            inputEl.classList.remove('border-brick', 'bg-red-50/50');
-            inputEl.classList.add('border-bordercol', 'bg-alabaster');
-          }
-        }
-      });
-
-      const authAlertIcon = document.getElementById('btnAuthorAlertIcon');
-      const authSubtext = document.getElementById('subtext_Author');
-      const isAuthProb = isFieldProblemActive('Author', 'registration', record);
-      if (authAlertIcon) {
-        if (isAuthProb) authAlertIcon.classList.remove('hidden');
-        else authAlertIcon.classList.add('hidden');
-      }
-      if (authSubtext) {
-        if (isAuthProb) authSubtext.classList.remove('hidden');
-        else authSubtext.classList.add('hidden');
-      }
-
-      const summaryBadge = document.getElementById('taxonAlertSummaryBadge');
-      const summaryText = document.getElementById('taxonAlertSummaryText');
-      if (summaryBadge && summaryText) {
-        if (flaggedCount > 0) {
-          summaryBadge.classList.remove('hidden');
-          summaryText.textContent = `${flaggedCount} Flagged`;
-        } else {
-          summaryBadge.classList.add('hidden');
-        }
-      }
-    }
-
+    // -------------------------------------------------------------
+    // DETAILS & PROBLEMS FORM RENDERING
+    // -------------------------------------------------------------
     function renderDynamicForm(schema, record) {
-      if (!record) return;
-      const regData = record.registration || {};
-
-      // Fixed Pinned Fields across the Botanical Cards
-      const pinnedFields = [
-        { field: 'Genus', id: 'input_Genus', wrapper: 'fieldWrapper_Genus', ctrl: 'fieldControls_Genus', alert: 'fieldAlert_Genus' },
-        { field: 'Species', id: 'input_Species', wrapper: 'fieldWrapper_Species', ctrl: 'fieldControls_Species', alert: 'fieldAlert_Species' },
-        { field: 'Family', id: 'input_Family', wrapper: 'fieldWrapper_Family', ctrl: 'fieldControls_Family', alert: 'fieldAlert_Family' },
-        { field: 'Author', id: 'input_Author', wrapper: 'fieldWrapper_Author', ctrl: 'fieldControls_Author', alert: 'fieldAlert_Author' },
-        { field: 'Higher Classification', id: 'input_Higher_Classification', wrapper: 'fieldWrapper_Higher_Classification', ctrl: 'fieldControls_Higher_Classification', alert: 'fieldAlert_Higher_Classification' },
-        { field: 'Collector', id: 'input_Collector', wrapper: 'fieldWrapper_Collector', ctrl: 'fieldControls_Collector', alert: 'fieldAlert_Collector' },
-        { field: 'Collection Date', id: 'input_Collection_Date', wrapper: 'fieldWrapper_Collection_Date', ctrl: 'fieldControls_Collection_Date', alert: 'fieldAlert_Collection_Date' },
-        { field: 'Collection Place', id: 'input_Collection_Place', wrapper: 'fieldWrapper_Collection_Place', ctrl: 'fieldControls_Collection_Place', alert: 'fieldAlert_Collection_Place' },
-        { field: 'Plant Part', id: 'input_Plant_Part', wrapper: 'fieldWrapper_Plant_Part', ctrl: 'fieldControls_Plant_Part', alert: 'fieldAlert_Plant_Part' },
-        { field: 'Variant', id: 'input_Variant', wrapper: 'fieldWrapper_Variant', ctrl: 'fieldControls_Variant', alert: 'fieldAlert_Variant' },
-        { field: 'Box Label', id: 'input_Box_Label', wrapper: 'fieldWrapper_Box_Label', ctrl: 'fieldControls_Box_Label', alert: 'fieldAlert_Box_Label' },
-        { field: 'Comment', id: 'input_Comment', wrapper: 'fieldWrapper_Comment', ctrl: 'fieldControls_Comment', alert: 'fieldAlert_Comment' }
-      ];
-
-      const pinnedNames = new Set(pinnedFields.map(p => p.field));
-
-      // Populate fixed inputs
-      pinnedFields.forEach(p => {
-        const inp = document.getElementById(p.id);
-        const fVal = regData[p.field] !== undefined ? regData[p.field] : '';
-        if (inp && inp !== document.activeElement) {
-          inp.value = fVal;
-        }
-
-        const hasProb = isFieldProblemActive(p.field, 'registration', record);
-        const hasUkn = isValueUnknown(fVal);
-        const alertEl = document.getElementById(p.alert);
-        if (alertEl) {
-          if (hasProb) {
-            alertEl.classList.remove('hidden');
-            alertEl.textContent = '⚠';
-          } else if (hasUkn) {
-            alertEl.classList.remove('hidden');
-            alertEl.textContent = '?';
-          } else {
-            alertEl.classList.add('hidden');
-          }
-        }
-
-        if (inp) {
-          if (hasProb) {
-            inp.classList.add('border-brick', 'bg-red-50/50');
-            inp.classList.remove('border-bordercol', 'bg-alabaster', 'border-amber-400', 'bg-amber-50');
-          } else if (hasUkn) {
-            inp.classList.add('border-amber-400', 'bg-amber-50');
-            inp.classList.remove('border-bordercol', 'bg-alabaster', 'border-brick', 'bg-red-50/50');
-          } else {
-            inp.classList.remove('border-brick', 'bg-red-50/50', 'border-amber-400', 'bg-amber-50');
-            inp.classList.add('border-bordercol', 'bg-alabaster');
-          }
-        }
-
-        // Unvalidated & History control injection
-        const ctrlEl = document.getElementById(p.ctrl);
-        if (ctrlEl) {
-          const isUnval = (currentUnvalidatedMap && currentUnvalidatedMap[p.field] !== undefined);
-          const fClean = p.field.replace(/[^a-zA-Z0-9_]/g, '_');
-          const hasHist = historicalData && historicalData[p.field] && Object.keys(historicalData[p.field]).length > 0;
-
-          ctrlEl.innerHTML = `
-            ${alertEl ? alertEl.outerHTML : ''}
-            ${hasHist ? `
-              <button
-                type="button"
-                id="history_toggle_${fClean}"
-                onclick="toggleHistoryContainer('${p.field}')"
-                class="min-h-[26px] px-1.5 py-0.5 text-[10px] font-mono font-medium text-amber-800 bg-amber-50 border border-amber-300 rounded-[2px] tap-highlight-transparent flex items-center gap-0.5"
-                title="View historical value suggestions"
-              >
-                <span>📖</span><span>Hist</span>
-              </button>
-            ` : ''}
-            <button
-              type="button"
-              id="unval_btn_registration_${fClean}"
-              onclick="toggleUnvalidatedField('registration', '${p.field}')"
-              class="min-h-[26px] px-1.5 py-0.5 text-[10px] font-bold rounded-[2px] tap-highlight-transparent flex items-center justify-center transition-all ${isUnval ? 'bg-amber-500/20 text-amber-600 border border-amber-500/40' : 'text-stone-400 hover:bg-stone-100 border border-bordercol'}"
-              title="Toggle Unvalidated Source for ${p.field}"
-            >
-              <span>${isUnval ? '❓' : '?'}</span>
-            </button>
-          `;
-        }
-
-        // Unvalidated input values
-        const fClean = p.field.replace(/[^a-zA-Z0-9_]/g, '_');
-        const unvalCont = document.getElementById(`unval_container_registration_${fClean}`);
-        const unvalInp = document.getElementById(`unval_input_registration_${fClean}`);
-        if (currentUnvalidatedMap && currentUnvalidatedMap[p.field] !== undefined) {
-          if (unvalCont) unvalCont.classList.remove('hidden');
-          if (unvalInp && unvalInp !== document.activeElement) unvalInp.value = currentUnvalidatedMap[p.field] || '';
-        } else {
-          if (unvalCont) unvalCont.classList.add('hidden');
-        }
-      });
-
-      // Dynamic additional registration fields (excluding Field No / Innsammling Nr. and pinned fields)
-      const regContainer = document.getElementById('detailRegAccordionsContainer');
-      if (!regContainer) return;
-
-      const uiSec = schema ? schema.ui_sections : null;
-      const regFields = (uiSec && uiSec.registration) ? uiSec.registration : [];
-      const excludedFields = new Set(['Innsammling Nr.', 'Innsammling Nr', 'Field No', 'Field No.', 'Online photo 1', 'Online photo 2', 'Online photo 3', 'UID']);
-
-      const extraFields = regFields.filter(f => !pinnedNames.has(f.name) && !excludedFields.has(f.name));
-
-      if (extraFields.length === 0) {
-        regContainer.innerHTML = '';
-        return;
-      }
-
-      let extraHtml = `
-        <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-sm space-y-3">
-          <div class="flex items-center justify-between border-b border-stone-100 pb-2">
-            <div class="flex items-center gap-1.5">
-              <span class="text-sm">📋</span>
-              <div>
-                <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Additional Catalog Fields</h2>
-                <p class="text-[10px] font-mono text-subdued">Extended museum schema attributes</p>
-              </div>
-            </div>
-          </div>
-          <div class="space-y-3">
-      `;
-
-      extraFields.forEach(fDef => {
-        const val = regData[fDef.name] !== undefined ? regData[fDef.name] : '';
-        extraHtml += renderFieldInput(fDef, val, 'registration', record);
-      });
-
-      extraHtml += `
-          </div>
-        </div>
-      `;
-
-      regContainer.innerHTML = extraHtml;
-    }
-
-    function renderFieldInput(field, value, section, record) {
-      const fName = field.name;
-      const fType = field.type || 'text';
-      const isReadOnly = !!field.readonly;
-      const inputId = `input_${section}_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-
-      const toggleBtnId = `history_toggle_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-      const containerId = `history_container_${fName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-
-      const hasProb = isFieldProblemActive(fName, section, record);
-      const hasUkn = isValueUnknown(value);
-
-      const problemBadge = hasProb
-        ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-brick text-white shadow-2xs ml-1" title="Problem Flagged">⚠</span>`
-        : (hasUkn
-          ? `<span class="inline-flex items-center justify-center px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold bg-amber-400 text-stone-900 shadow-2xs ml-1" title="Unknown Value">?</span>`
-          : '');
-
-      const inputStyle = hasProb
-        ? 'border-l-4 border-l-brick bg-red-50/50 border-brick text-brick-dark font-medium focus:border-brick'
-        : (hasUkn
-          ? 'border-l-4 border-l-amber-400 bg-amber-50 border-amber-300 text-amber-900 font-medium focus:border-amber-400'
-          : 'border-bordercol bg-alabaster hover:bg-white focus:bg-white text-ink focus:border-ink');
-
-      const isUnval = (currentUnvalidatedMap && currentUnvalidatedMap[fName] !== undefined);
-      const unvalComment = (currentUnvalidatedMap && currentUnvalidatedMap[fName]) || '';
-      const fKey = fName.replace(/[ ]+/g, '_');
-      const unvalBtnId = `unval_btn_${section}_${fKey}`;
-      const unvalContainerId = `unval_container_${section}_${fKey}`;
-      const unvalInputId = `unval_input_${section}_${fKey}`;
-
-      const unvalBtn = `
-        <button
-          type="button"
-          id="${unvalBtnId}"
-          onclick="toggleUnvalidatedField('${section}', '${fName}')"
-          class="min-h-[38px] px-2 py-1 text-xs font-bold rounded-[2px] tap-highlight-transparent ml-1 flex items-center justify-center transition-all ${isUnval ? 'bg-amber-500/20 text-amber-600 border border-amber-500/40' : 'text-stone-400 hover:bg-stone-100 border border-bordercol'}"
-          title="Toggle Unvalidated Source for ${fName}"
-        >
-          <span>${isUnval ? '❓' : '?'}</span>
-        </button>
-      `;
-
-      const unvalContainerHtml = `
-        <div id="${unvalContainerId}" class="${isUnval ? '' : 'hidden'} mt-1.5 p-2 bg-amber-50 border border-amber-300 rounded-[2px]">
-          <label for="${unvalInputId}" class="block text-[10px] font-bold text-amber-800 mb-1">Unvalidated Note:</label>
-          <input
-            type="text"
-            id="${unvalInputId}"
-            value="${unvalComment}"
-            placeholder="Explain why source is unvalidated..."
-            oninput="markDirty('${fName}'); onUnvalCommentChange('${fName}', this.value); triggerAutoSave()"
-            onblur="saveCurrentEdits()"
-            class="w-full bg-white border border-amber-300 rounded-[2px] px-2.5 py-1.5 text-xs outline-none text-ink"
-          />
-        </div>
-      `;
-
-      const historyControls = `
-        <button
-          type="button"
-          id="${toggleBtnId}"
-          onclick="toggleHistoryContainer('${fName}')"
-          class="hidden min-h-[38px] px-2.5 py-1 text-xs font-mono font-medium text-amber-800 bg-amber-50 border border-amber-300 rounded-[2px] tap-highlight-transparent ml-1 flex items-center gap-1"
-          title="View historical value suggestions"
-        >
-          <span>📖</span>
-          <span>History</span>
-        </button>
-        ${!isReadOnly ? unvalBtn : ''}
-      `;
-
-      const historyContainerHtml = `
-        <div id="${containerId}" class="hidden mt-2 p-2.5 bg-stone-50 border border-bordercol rounded-[2px] shadow-2xs">
-           <!-- History suggestions injected here -->
-        </div>
-      `;
-
-      // Choice / Select
-      if (fType === 'choice' && Array.isArray(field.choices)) {
-        const optionsHtml = ['<option value="">Select option...</option>']
-          .concat(field.choices.map(c => `<option value="${c}" ${String(value) === String(c) ? 'selected' : ''}>${c}</option>`))
-          .join('');
-
-        return `
-          <div class="space-y-1">
-            <div class="flex items-center justify-between min-h-[28px]">
-              <label for="${inputId}" class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1">
-                <span>${fName}</span>
-                ${problemBadge}
-              </label>
-              <div class="flex items-center">${historyControls}</div>
-            </div>
-            <select
-              id="${inputId}"
-              data-section="${section}"
-              data-field="${fName}"
-              onchange="markDirty('${fName}'); triggerAutoSave()" onblur="saveCurrentEdits()"
-              class="w-full min-h-[42px] border rounded-[2px] px-2.5 py-1.5 text-xs outline-none cursor-pointer ${inputStyle}"
-            >
-              ${optionsHtml}
-            </select>
-            ${historyContainerHtml}
-            ${unvalContainerHtml}
-          </div>
-        `;
-      }
-
-      // Checkbox
-      if (fType === 'checkbox' || fType === 'bool') {
-        const isChecked = (String(value).toLowerCase() === 'true' || value === true || value === '1' || value === 'yes');
-        return `
-          <div class="space-y-1">
-            <div class="flex items-center justify-between min-h-[42px] py-1 ${hasProb ? 'bg-red-50 p-2 rounded-[2px] border border-brick' : ''}">
-              <label for="${inputId}" class="flex-1 text-xs font-bold text-ink cursor-pointer flex items-center gap-1">
-                <span>${fName}</span>
-                ${problemBadge}
-              </label>
-              <div class="flex items-center gap-1.5">
-                ${historyControls}
-                <label class="min-w-[42px] min-h-[42px] flex items-center justify-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    id="${inputId}"
-                    data-section="${section}"
-                    data-field="${fName}"
-                    ${isChecked ? 'checked' : ''}
-                    onchange="markDirty('${fName}'); triggerAutoSave()"
-                    class="w-5 h-5 text-fern rounded-[2px] border-bordercol focus:ring-fern cursor-pointer"
-                  />
-                </label>
-              </div>
-            </div>
-            ${historyContainerHtml}
-            ${unvalContainerHtml}
-          </div>
-        `;
-      }
-
-      // Multiline
-      if (fType === 'multiline') {
-        return `
-          <div class="space-y-1">
-            <div class="flex items-center justify-between min-h-[28px]">
-              <label for="${inputId}" class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1">
-                <span>${fName}</span>
-                ${problemBadge}
-              </label>
-              <div class="flex items-center">${historyControls}</div>
-            </div>
-            <textarea
-              id="${inputId}"
-              data-section="${section}"
-              data-field="${fName}"
-              rows="2"
-              oninput="markDirty('${fName}'); triggerAutoSave()" onblur="saveCurrentEdits()"
-              class="w-full border rounded-[2px] px-2.5 py-1.5 text-xs outline-none ${inputStyle}"
-            >${value || ''}</textarea>
-            ${historyContainerHtml}
-            ${unvalContainerHtml}
-          </div>
-        `;
-      }
-
-      // Standard Text
-      return `
-        <div class="space-y-1">
-          <div class="flex items-center justify-between min-h-[28px]">
-            <label for="${inputId}" class="text-[10px] font-mono uppercase tracking-wider font-semibold text-subdued flex items-center gap-1">
-              <span>${fName}</span>
-              ${problemBadge}
-              ${isReadOnly ? '<span class="text-[9px] text-stone-400 font-normal font-mono">(Locked)</span>' : ''}
-            </label>
-            <div class="flex items-center">${historyControls}</div>
-          </div>
-          <input
-            type="text"
-            id="${inputId}"
-            data-section="${section}"
-            data-field="${fName}"
-            value="${value || ''}"
-            ${isReadOnly ? 'readonly class="w-full min-h-[42px] bg-stone-100 border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs text-muted font-mono outline-none"' : `class="w-full min-h-[42px] border rounded-[2px] px-2.5 py-1.5 text-xs outline-none ${inputStyle}" oninput="markDirty('${fName}'); handleVocabInput(this, '${fName}')" onchange="markDirty('${fName}'); handleVocabChange(this)" onblur="saveCurrentEdits()"`}
-            ${activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName] && !isReadOnly ? `list="datalist_${section}_${fName}"` : ''}
-          />
-          ${activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName] && !isReadOnly ? `
-          <datalist id="datalist_${section}_${fName}">
-            ${activeSchema.vocabulary[fName].map(v => `<option value="${v}"></option>`).join('')}
-          </datalist>
-          ` : ''}
-          ${historyContainerHtml}
-          ${unvalContainerHtml}
-        </div>
-      `;
-    }
-
-    function toggleUnvalidatedField(section, fName) {
-      if (!currentUnvalidatedMap) currentUnvalidatedMap = {};
-      const fKey = fName.replace(/[ ]+/g, '_');
-      const container = document.getElementById(`unval_container_${section}_${fKey}`);
-      const btn = document.getElementById(`unval_btn_${section}_${fKey}`);
-      const input = document.getElementById(`unval_input_${section}_${fKey}`);
-
-      if (currentUnvalidatedMap[fName] !== undefined) {
-        delete currentUnvalidatedMap[fName];
-        if (container) container.classList.add('hidden');
-        if (btn) {
-          btn.innerHTML = '<span>?</span>';
-          btn.className = 'min-h-[38px] px-2 py-1 text-xs font-bold rounded-[2px] tap-highlight-transparent ml-1 flex items-center justify-center transition-all text-stone-400 hover:bg-stone-100 border border-bordercol';
-        }
-      } else {
-        currentUnvalidatedMap[fName] = (input ? input.value : '') || '';
-        if (container) container.classList.remove('hidden');
-        if (btn) {
-          btn.innerHTML = '<span>❓</span>';
-          btn.className = 'min-h-[38px] px-2 py-1 text-xs font-bold rounded-[2px] tap-highlight-transparent ml-1 flex items-center justify-center transition-all bg-amber-500/20 text-amber-600 border border-amber-500/40';
-        }
-        if (input) input.focus();
-      }
-      markDirty(fName);
-      triggerAutoSave();
-    }
-
-    function onUnvalCommentChange(fName, val) {
-      if (!currentUnvalidatedMap) currentUnvalidatedMap = {};
-      currentUnvalidatedMap[fName] = val;
-      markDirty(fName);
-    }
-
-    function toggleAccordion(btn) {
-      const acc = btn.closest('.accordion');
-      acc.classList.toggle('acc-open');
-      const content = acc.querySelector('.acc-content');
-      const icon = acc.querySelector('.acc-icon');
-      if (acc.classList.contains('acc-open')) {
-        content.classList.remove('hidden');
-        if (icon) icon.textContent = '▲';
-      } else {
-        content.classList.add('hidden');
-        if (icon) icon.textContent = '▼';
-      }
-    }
-
-    function isFieldProblemActive(fieldName, section, record) {
-      if (!record) return false;
-      const issues = record.flagged_issues || [];
-      if (issues.some(iss => (iss.field === fieldName || iss.id === fieldName) && !iss.resolved)) {
-        return true;
-      }
-      const obs = record.observation || {};
+      const container = document.getElementById('dynamicFormContainer');
+      if (!container || !schema) return;
       const reg = record.registration || {};
+      const obs = record.observation || {};
 
-      // Direct Problem Column Check (e.g. Genus_Problem)
-      const directProb = `${fieldName}_Problem`;
-      if (obs[directProb] === true || String(obs[directProb]).toLowerCase() === 'true' || obs[directProb] === '1' ||
-          reg[directProb] === true || String(reg[directProb]).toLowerCase() === 'true' || reg[directProb] === '1') {
-        return true;
-      }
+      let html = '<h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans mb-2">Botanical Registration</h3>';
+      const fields = ['Genus', 'Species', 'Family', 'Author', 'Collector', 'Collection Date', 'Locality', 'County', 'Country'];
+      
+      html += '<div class="space-y-2 font-mono text-xs">';
+      fields.forEach(f => {
+        const val = obs[f] !== undefined && obs[f] !== '' ? obs[f] : (reg[f] || '');
+        html += `
+          <div class="flex items-center justify-between py-1 border-b border-stone-100">
+            <span class="text-muted text-[11px]">${f}:</span>
+            <span class="font-semibold text-ink text-right truncate max-w-[200px]">${val || '—'}</span>
+          </div>
+        `;
+      });
+      html += '</div>';
+      container.innerHTML = html;
+    }
 
-      if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
-        for (const p of activeSchema.ui_sections.problems) {
-          const target = p.maps_to || p.target;
-          if (target === fieldName || (!target && p.name.replace(/_Problem$/, '').replace(/_problem$/, '') === fieldName)) {
-            const pVal = (obs[p.name] !== undefined) ? obs[p.name] : reg[p.name];
-            if (pVal === true || String(pVal).toLowerCase() === 'true' || pVal === '1' || pVal === 'x') {
-              return true;
-            }
-          }
+    function renderPhotos(images = {}) {
+      const img = document.getElementById('specimenImg');
+      const placeholder = document.getElementById('photoPlaceholder');
+      const countDisp = document.getElementById('photoCountDisplay');
+      const thumbsRow = document.getElementById('photoThumbnailsRow');
+
+      const urls = images.local_endpoints && images.local_endpoints.length > 0 ? images.local_endpoints : (images.online_urls || []);
+      if (countDisp) countDisp.textContent = `${urls.length} Photo${urls.length === 1 ? '' : 's'}`;
+
+      if (urls.length > 0) {
+        img.src = urls[0];
+        document.getElementById('photoViewerImg').src = urls[0];
+        img.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+
+        if (thumbsRow) {
+          thumbsRow.innerHTML = urls.map((u, i) => `
+            <img src="${u}" onclick="selectPhoto(${i}, '${u}')" class="w-12 h-12 rounded border border-bordercol object-cover cursor-pointer hover:border-fern">
+          `).join('');
         }
+      } else {
+        img.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        if (thumbsRow) thumbsRow.innerHTML = '';
       }
-
-      if (section === 'observation' && (obs.Loc_Problem === true || String(obs.Loc_Problem).toLowerCase() === 'true' || obs.Loc_Problem === '1')) {
-        return true;
-      }
-
-      return false;
     }
 
-    function isValueUnknown(val) {
-      if (val === null || val === undefined) return false;
-      const s = String(val).trim().toLowerCase();
-      return ['ukjent', 'unknown', '?', '-', 'nan',
-              'unknown:missing', 'unknown:indecipherable',
-              'unknown:undigitized', 'withheld'].includes(s);
+    function selectPhoto(idx, url) {
+      document.getElementById('specimenImg').src = url;
+      document.getElementById('photoViewerImg').src = url;
     }
 
-    // ==========================================
-    // PROBLEMS TAB 3 & HISTORICAL CONFLICTS
-    // ==========================================
-    const SCHEMA_11_PROBLEMS = [
-      { name: 'Genus_Problem', label: 'Genus' },
-      { name: 'Species_Problem', label: 'Species' },
-      { name: 'Family_Problem', label: 'Family' },
-      { name: 'Author_Problem', label: 'Author' },
-      { name: 'PlantPart_Problem', label: 'Plant Part' },
-      { name: 'Collector_Problem', label: 'Collector' },
-      { name: 'Collection_Date_Problem', label: 'Collection Date' },
-      { name: 'Collection_Place_Problem', label: 'Collection Place' },
-      { name: 'Box_Label_Problem', label: 'Box Label' },
-      { name: 'Images_Problem', label: 'Images' },
-      { name: 'Other_problem', label: 'Other' }
-    ];
+    function onPhotoLoaded() {}
+    function onPhotoError() {}
 
-    function renderProblemFlagGrid(record) {
-      const container = document.getElementById('flagGrid');
+    function openPhotoViewerModal() {
+      document.getElementById('photoViewerModal')?.classList.remove('hidden');
+    }
+
+    function closePhotoViewerModal() {
+      document.getElementById('photoViewerModal')?.classList.add('hidden');
+    }
+
+    let photoZoom = 1;
+    let photoRotation = 0;
+    function zoomPhoto(delta) {
+      photoZoom = Math.min(Math.max(photoZoom + delta, 0.5), 4);
+      updatePhotoTransform();
+    }
+    function rotatePhoto() {
+      photoRotation = (photoRotation + 90) % 360;
+      updatePhotoTransform();
+    }
+    function resetPhotoTransform() {
+      photoZoom = 1;
+      photoRotation = 0;
+      updatePhotoTransform();
+    }
+    function updatePhotoTransform() {
+      const img = document.getElementById('photoViewerImg');
+      document.getElementById('zoomLevelDisplay').textContent = `${photoZoom.toFixed(1)}x`;
+      if (img) img.style.transform = `scale(${photoZoom}) rotate(${photoRotation}deg)`;
+    }
+
+    function renderProblems(issues = []) {
+      const container = document.getElementById('problemsListContainer');
+      const badge = document.getElementById('tabProblemBadge');
       if (!container) return;
 
-      const obs = (record && record.observation) ? record.observation : {};
-
-      container.innerHTML = SCHEMA_11_PROBLEMS.map(p => {
-        const isFlagged = Boolean(obs[p.name] === true || String(obs[p.name]).toLowerCase() === 'true' || obs[p.name] === '1');
-        return `
-          <button
-            type="button"
-            onclick="toggle11ProblemFlag('${p.name}')"
-            class="min-h-[44px] p-2.5 rounded-[3px] border text-xs font-mono font-medium flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs ${isFlagged ? 'bg-red-50 text-brick border-brick font-bold' : 'bg-stone-50 text-ink border-stone-200 hover:bg-stone-100'}"
-            title="Toggle ${p.label} problem flag"
-          >
-            <span class="truncate">${p.label}</span>
-            <span class="text-xs ${isFlagged ? 'text-brick font-bold' : 'text-stone-400'}">${isFlagged ? '⚠' : '○'}</span>
-          </button>
+      if (issues.length > 0) {
+        badge?.classList.remove('hidden');
+        badge.textContent = issues.length;
+        container.innerHTML = issues.map(iss => `
+          <div class="p-2.5 bg-brick-light border border-brick/30 rounded flex items-center justify-between text-xs font-mono">
+            <div>
+              <span class="font-bold text-brick block">${iss.field || iss.id}</span>
+              <span class="text-[10px] text-muted block">${iss.reason || 'Flagged curatorial discrepancy'}</span>
+            </div>
+            <span class="text-xs text-brick">⚠</span>
+          </div>
+        `).join('');
+      } else {
+        badge?.classList.add('hidden');
+        container.innerHTML = `
+          <div class="p-4 text-center text-stone-400 font-mono text-xs">
+            ✓ No curatorial problems flagged.
+          </div>
         `;
-      }).join('');
+      }
     }
 
-    async function toggle11ProblemFlag(flagName) {
-      if (!currentRecord) return;
-      if (!currentRecord.observation) currentRecord.observation = {};
-      const curVal = Boolean(currentRecord.observation[flagName] === true || String(currentRecord.observation[flagName]).toLowerCase() === 'true' || currentRecord.observation[flagName] === '1');
-      const newVal = !curVal;
-      currentRecord.observation[flagName] = newVal;
-      markDirty(flagName);
-
-      const baseName = flagName.replace(/_Problem$/, '').replace(/_problem$/, '');
-      if (!newVal && currentRecord.flagged_issues) {
-        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.field !== baseName && i.field !== flagName);
+    function renderProblemResolvers(record) {
+      const container = document.getElementById('problemResolverContainer');
+      if (!container) return;
+      const issues = record.flagged_issues || [];
+      if (issues.length === 0) {
+        container.innerHTML = '';
+        return;
       }
+      container.innerHTML = issues.map(iss => `
+        <div class="p-2.5 bg-stone-50 border border-bordercol rounded flex items-center justify-between text-xs font-mono">
+          <span class="font-medium text-ink">${iss.field || iss.id}: ${iss.reason || ''}</span>
+          <button type="button" onclick="fixProblemInline('${iss.id}', 'resolve')" class="px-2 py-1 bg-fern hover:bg-fern-dark text-white rounded text-[10px] font-bold">
+            Resolve
+          </button>
+        </div>
+      `).join('');
+    }
 
-      renderProblemFlagGrid(currentRecord);
-      updateTaxonProblemAlerts(currentRecord);
-      renderHistoricalConflicts(currentRecord);
-      updateProblemSummaryBar(currentRecord);
-      updateReviewButtonUI();
-
+    function fixProblemInline(field, action) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.observation[field] = false;
+      markDirty(field);
       triggerAutoSave();
-      showToast(newVal ? `⚠ Flagged ${baseName} problem` : `✓ Cleared ${baseName} problem`);
-    }
-
-    function onCuratorNoteChange(val) {
-      if (!currentRecord) return;
-      if (!currentRecord.observation) currentRecord.observation = {};
-      currentRecord.observation.Comment = val;
-      markDirty('Comment');
-      triggerAutoSave();
-    }
-
-    function updateProblemSummaryBar(record) {
-      const summaryBar = document.getElementById('problemSummaryBar');
-      const summaryDot = document.getElementById('problemSummaryDot');
-      const countText = document.getElementById('problemSummaryCountText');
-      const actionText = document.getElementById('problemSummaryActionText');
-      const tabBadge = document.getElementById('tabProblemBadge');
-
-      if (!record) return;
-      const obs = record.observation || {};
-
-      let activeCount = 0;
-      SCHEMA_11_PROBLEMS.forEach(p => {
-        if (obs[p.name] === true || String(obs[p.name]).toLowerCase() === 'true' || obs[p.name] === '1') {
-          activeCount++;
-        }
-      });
-
-      const issues = (record.flagged_issues || []).filter(i => !i.resolved);
-      const total = activeCount + issues.length;
-
-      if (tabBadge) {
-        if (total > 0) {
-          tabBadge.textContent = total;
-          tabBadge.classList.remove('hidden');
-        } else {
-          tabBadge.classList.add('hidden');
-        }
-      }
-
-      if (countText && actionText && summaryDot && summaryBar) {
-        if (total > 0) {
-          countText.textContent = `${total} Active Discrepanc${total === 1 ? 'y' : 'ies'}`;
-          actionText.textContent = 'Action Needed';
-          summaryDot.className = 'w-2.5 h-2.5 rounded-full bg-brick animate-pulse';
-          summaryBar.className = 'flex items-center justify-between p-3 bg-red-50 border border-brick/30 rounded-[3px] transition-colors duration-200';
-        } else {
-          countText.textContent = '0 Active Discrepancies';
-          actionText.textContent = 'Verified Clear';
-          summaryDot.className = 'w-2.5 h-2.5 rounded-full bg-fern';
-          summaryBar.className = 'flex items-center justify-between p-3 bg-stone-100 border border-stone-200 rounded-[3px] transition-colors duration-200';
-        }
-      }
+      fetchObjectDetail(state.currentRecord.id, false);
+      showToast(`✓ Resolved problem ${field}`);
     }
 
     function renderHistoricalConflicts(record) {
       const container = document.getElementById('historicalConflictsContainer');
       if (!container) return;
+      container.innerHTML = '';
+    }
 
-      if (!historicalData || Object.keys(historicalData).length === 0) {
-        container.innerHTML = `
-          <div class="p-3 bg-surface border border-bordercol rounded-[3px] flex items-center gap-2 text-xs font-mono text-muted">
-            <span class="text-stone-400">ℹ</span>
-            <span>No historical archive comparisons available for this specimen.</span>
-          </div>
-        `;
+    function applyHistoricalAndFix(field, val) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.observation[field] = val;
+      markDirty(field);
+      triggerAutoSave();
+      fetchObjectDetail(state.currentRecord.id, false);
+      showToast(`✓ Applied historical determination to ${field}`);
+    }
+
+    // -------------------------------------------------------------
+    // SCREEN 3: BATCH LOCATION REGISTRATOR LOGIC
+    // -------------------------------------------------------------
+    function updateBatchAnchorUI() {
+      document.getElementById('batchBuildingSelect').value = state.batchAnchor.building || 'Økern';
+      document.getElementById('batchFloorVal').textContent = state.batchAnchor.floor !== undefined ? state.batchAnchor.floor : '-1';
+      document.getElementById('batchCabVal').textContent = String(state.batchAnchor.cabinet || '4').padStart(2, '0');
+      document.getElementById('batchShelfVal').textContent = String(state.batchAnchor.shelf || '2').padStart(2, '0');
+      document.getElementById('batchStoredAsLabel').textContent = state.batchAnchor.storedAs || 'Herbarium Sheet';
+      
+      const nextShelf = (parseInt(state.batchAnchor.shelf, 10) || 1) + 1;
+      document.getElementById('btnAdvanceNextShelfText').textContent = `Advance to Shelf ${String(nextShelf).padStart(2, '0')}`;
+
+      renderBatchQueue();
+    }
+
+    function adjustBatchCoord(coord, delta) {
+      if (coord === 'floor') {
+        const cur = parseInt(state.batchAnchor.floor, 10) || -1;
+        state.batchAnchor.floor = cur + delta;
+      } else if (coord === 'cab') {
+        const cur = parseInt(state.batchAnchor.cabinet, 10) || 4;
+        state.batchAnchor.cabinet = Math.max(1, cur + delta);
+      } else if (coord === 'shelf') {
+        const cur = parseInt(state.batchAnchor.shelf, 10) || 2;
+        state.batchAnchor.shelf = Math.max(1, cur + delta);
+      }
+      updateBatchAnchorUI();
+    }
+
+    function selectBatchStoragePill(btn, opt) {
+      document.querySelectorAll('.batch-storage-pill').forEach(el => {
+        el.className = 'batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted';
+      });
+      btn.className = 'batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border-2 border-fern bg-emerald-50 text-fern-dark font-semibold';
+      state.batchAnchor.storedAs = opt;
+      document.getElementById('batchStoredAsLabel').textContent = opt;
+    }
+
+    function advanceToNextShelf() {
+      const cur = parseInt(state.batchAnchor.shelf, 10) || 1;
+      state.batchAnchor.shelf = cur + 1;
+      state.batchQueue = []; // Clear queue for the new shelf
+      updateBatchAnchorUI();
+      showToast(`⚡ Advanced to Shelf ${String(state.batchAnchor.shelf).padStart(2, '0')}`);
+      document.getElementById('batchIdInput')?.focus();
+    }
+
+    async function addBatchItemFromInput() {
+      const input = document.getElementById('batchIdInput');
+      if (!input || !input.value.trim()) return;
+      const rawOid = input.value.trim();
+      input.value = '';
+
+      // Check if already in queue
+      if (state.batchQueue.some(i => String(i.oid) === String(rawOid))) {
+        showToast(`Item #${rawOid} already in queue`);
         return;
       }
 
-      let conflictCount = 0;
-      let conflictCardsHtml = '';
-
-      for (const [field, valuesMap] of Object.entries(historicalData)) {
-        if (!valuesMap || Object.keys(valuesMap).length === 0) continue;
-
-        let currentVal = '';
-        if (record && record.registration && record.registration[field] !== undefined) {
-          currentVal = record.registration[field];
-        } else if (record && record.observation && record.observation[field] !== undefined) {
-          currentVal = record.observation[field];
-        }
-        const currentValClean = (currentVal !== null && currentVal !== undefined) ? String(currentVal).trim() : '';
-        const currentValStr = currentValClean !== '' ? currentValClean : '[BLANK]';
-
-        for (const [histVal, sources] of Object.entries(valuesMap)) {
-          const histValClean = String(histVal).trim();
-          const isMatching = currentValClean.toLowerCase() === histValClean.toLowerCase();
-
-          if (!isMatching) {
-            conflictCount++;
-            const encodedVal = histVal.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            const sourceStr = sources.join(', ');
-            const fClean = field.replace(/[^a-zA-Z0-9_]/g, '_');
-
-            conflictCardsHtml += `
-              <div class="bg-surface border border-bordercol border-l-4 border-l-slate rounded-[3px] p-3.5 space-y-2.5 shadow-2xs">
-                <div class="flex items-center justify-between border-b border-stone-100 pb-1.5">
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-sans font-bold text-xs text-ink uppercase tracking-wider">${field}</span>
-                    <span class="px-1.5 py-0.2 rounded-[2px] text-[10px] font-mono font-bold bg-slate text-white">
-                      Archive Conflict
-                    </span>
-                  </div>
-                  <span class="text-[11px] font-mono text-muted">Current: <strong class="text-ink font-mono">${currentValStr}</strong></span>
-                </div>
-
-                <div class="p-2.5 bg-stone-50 border border-stone-200 rounded-[2px] flex items-center justify-between gap-2 text-xs">
-                  <div class="min-w-0 flex-1">
-                    <div class="font-mono font-bold text-slate">${encodedVal}</div>
-                    <p class="text-[10px] font-mono text-muted mt-0.5">Archive Sources: <span class="text-ink font-medium">${sourceStr}</span></p>
-                  </div>
-                  <button
-                    type="button"
-                    onclick="applyHistoricalAndFix('${field}', '${encodedVal}', '')"
-                    class="min-h-[38px] px-3 py-1.5 bg-slate hover:bg-stone-700 text-white font-mono font-bold text-xs rounded-[2px] transition-colors shrink-0 tap-highlight-transparent"
-                    title="Accept historical archive value"
-                  >
-                    Accept Value
-                  </button>
-                </div>
-
-                <!-- Direct manual override -->
-                <div class="flex items-center gap-1.5 pt-1">
-                  <input
-                    type="text"
-                    id="fix_input_${fClean}"
-                    value="${currentValClean.replace(/"/g, '&quot;')}"
-                    placeholder="Enter manual corrected value..."
-                    class="flex-1 bg-alabaster border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs font-mono text-ink outline-none focus:bg-white focus:border-ink"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();fixProblemInline('${field}', 'registration', '');}"
-                  />
-                  <button
-                    type="button"
-                    onclick="fixProblemInline('${field}', 'registration', '')"
-                    class="min-h-[36px] px-3 py-1.5 bg-stone-800 text-white font-mono font-bold text-xs rounded-[2px] shrink-0 tap-highlight-transparent"
-                  >
-                    Override
-                  </button>
-                </div>
-              </div>
-            `;
-          }
-        }
+      // Fetch quick details from server or local list
+      let sciName = 'Vascular Specimen';
+      let prevLoc = 'Unrecorded';
+      const existing = state.objectList.find(o => String(o.id) === String(rawOid));
+      if (existing) {
+        sciName = existing.scientific_name;
+        const l = existing.location || {};
+        prevLoc = `${l.building || ''} Fl ${l.floor || ''} Cab ${l.cabinet || ''} Sh ${l.shelf || ''}`.trim() || 'Unrecorded';
       }
 
-      if (conflictCount === 0) {
-        container.innerHTML = `
-          <div class="p-3 bg-surface border border-fern/30 border-l-4 border-l-fern rounded-[3px] flex items-center gap-2 text-xs font-sans text-ink">
-            <span class="text-sm font-bold text-fern">✓</span>
-            <span class="font-medium text-muted">All active specimen values match historical archival databases.</span>
-          </div>
-        `;
-      } else {
-        container.innerHTML = conflictCardsHtml;
-      }
-    }
-
-    async function fixProblemInline(fieldName, section, issueId) {
-      if (!currentRecord) return;
-      const fClean = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
-      const inputEl = document.getElementById(`fix_input_${fClean}`);
-      if (!inputEl) return;
-      const newVal = inputEl.value.trim();
-
-      onFieldInputDirect(fieldName, section, newVal);
-
-      // Clear problem flag on field
-      const probCol = `${fieldName}_Problem`;
-      if (currentRecord.observation && currentRecord.observation[probCol] !== undefined) {
-        currentRecord.observation[probCol] = false;
-        markDirty(probCol);
-      }
-      if (currentRecord.flagged_issues) {
-        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issueId && i.field !== fieldName);
-      }
-
-      triggerAutoSave();
-      showToast(`Fixed ${fieldName}: ${newVal || '[BLANK]'}`);
-
-      renderDynamicForm(activeSchema, currentRecord);
-      updateTaxonProblemAlerts(currentRecord);
-      renderProblemFlagGrid(currentRecord);
-      updateProblemSummaryBar(currentRecord);
-      renderHistoricalConflicts(currentRecord);
-      updateReviewButtonUI();
-    }
-
-    async function applyHistoricalAndFix(fieldName, value, issueId) {
-      await applyHistoricalValue(fieldName, value);
-      const probCol = `${fieldName}_Problem`;
-      if (currentRecord && currentRecord.observation && currentRecord.observation[probCol] !== undefined) {
-        currentRecord.observation[probCol] = false;
-        markDirty(probCol);
-      }
-      if (currentRecord && currentRecord.flagged_issues) {
-        currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issueId && i.field !== fieldName);
-      }
-      triggerAutoSave();
-      renderDynamicForm(activeSchema, currentRecord);
-      updateTaxonProblemAlerts(currentRecord);
-      renderProblemFlagGrid(currentRecord);
-      updateProblemSummaryBar(currentRecord);
-      renderHistoricalConflicts(currentRecord);
-      updateReviewButtonUI();
-    }
-
-    function renderDiscrepancies(record) {
-      renderProblemFlagGrid(record);
-      renderHistoricalConflicts(record);
-      updateProblemSummaryBar(record);
-    }
-
-    function populateDiscrepancyFields() {
-      const select = document.getElementById('discrepancyFieldSelect');
-      if (!select || !activeSchema || !activeSchema.ui_sections) return;
-      const reg = (activeSchema.ui_sections.registration || []).map(f => f.name);
-      const loc = (activeSchema.ui_sections.location || []).map(f => f.name);
-      const all = ['General Specimen Issue'].concat(reg).concat(loc);
-      select.innerHTML = all.map(f => `<option value="${f}">${f}</option>`).join('');
-    }
-
-    function openAddDiscrepancyModal(fieldName) {
-      if (fieldName) {
-        const select = document.getElementById('discrepancyFieldSelect');
-        if (select) select.value = fieldName;
-      }
-      openModal('addDiscrepancyModal');
-    }
-
-    async function submitDiscrepancy(e) {
-      e.preventDefault();
-      const field = document.getElementById('discrepancyFieldSelect').value;
-      const reason = document.getElementById('discrepancyReasonInput').value.trim();
-      const severity = document.querySelector('input[name="severity"]:checked').value;
-
-      if (!reason) return;
-
-      currentRecord.flagged_issues = currentRecord.flagged_issues || [];
-      currentRecord.flagged_issues.push({
-        id: `flag_${Date.now()}`,
-        field: field,
-        severity: severity,
-        reason: reason,
-        resolved: false
+      state.batchQueue.unshift({
+        oid: rawOid,
+        sciName: sciName,
+        prevLoc: prevLoc
       });
 
-      const matchProb = `${field}_Problem`;
-      if (currentRecord.observation) {
-        currentRecord.observation[matchProb] = true;
-        markDirty(matchProb);
-      }
-
-      closeModal('addDiscrepancyModal');
-      document.getElementById('discrepancyReasonInput').value = '';
-      renderDynamicForm(activeSchema, currentRecord);
-      updateTaxonProblemAlerts(currentRecord);
-      renderProblemFlagGrid(currentRecord);
-      updateProblemSummaryBar(currentRecord);
-      renderHistoricalConflicts(currentRecord);
-      await saveCurrentEdits();
-      showToast('Discrepancy flagged on host');
+      renderBatchQueue();
     }
 
-    async function resolveDiscrepancy(issId) {
-      if (!currentRecord || !currentRecord.flagged_issues) return;
-      currentRecord.flagged_issues = currentRecord.flagged_issues.filter(i => i.id !== issId);
-      renderDynamicForm(activeSchema, currentRecord);
-      updateTaxonProblemAlerts(currentRecord);
-      renderProblemFlagGrid(currentRecord);
-      updateProblemSummaryBar(currentRecord);
-      renderHistoricalConflicts(currentRecord);
-      await saveCurrentEdits();
-      showToast('Discrepancy resolved');
+    function removeBatchItem(idx) {
+      state.batchQueue.splice(idx, 1);
+      renderBatchQueue();
     }
 
-    // ==========================================
-    // LIVE SEARCH BAR & KEYBOARD SHORTCUTS
-    // ==========================================
-    function handleLiveSearch(query) {
-      const clearBtn = document.getElementById('btnClearSearch');
-      const dropdown = document.getElementById('searchDropdown');
-      const countEl = document.getElementById('searchResultsCount');
-      const listEl = document.getElementById('searchResultsList');
+    function clearBatchQueue() {
+      state.batchQueue = [];
+      renderBatchQueue();
+    }
 
-      const q = (query || '').trim().toLowerCase();
-      if (clearBtn) {
-        if (q) clearBtn.classList.remove('hidden');
-        else clearBtn.classList.add('hidden');
-      }
+    function renderBatchQueue() {
+      const container = document.getElementById('batchStreamList');
+      const countEl = document.getElementById('batchQueueCount');
+      const summaryEl = document.getElementById('batchCommitSummary');
 
-      if (!q) {
-        if (dropdown) dropdown.classList.add('hidden');
+      const count = state.batchQueue.length;
+      if (countEl) countEl.textContent = `(${count} items)`;
+      if (summaryEl) summaryEl.textContent = `${count} Accessions Queued`;
+
+      if (count === 0) {
+        if (container) container.innerHTML = `
+          <div class="p-6 text-center text-stone-400 font-mono text-xs" id="batchEmptyPlaceholder">
+            No items queued for this shelf yet.<br>Type an Object ID above to begin.
+          </div>
+        `;
         return;
       }
 
-      const matches = objectList.filter(o => {
-        const acc = String(o.accession_number || o.id || '').toLowerCase();
-        const name = String(o.scientific_name || '').toLowerCase();
-        const fam = String(o.family || '').toLowerCase();
-        const auth = String(o.author || '').toLowerCase();
-        return acc.includes(q) || name.includes(q) || fam.includes(q) || auth.includes(q);
-      }).slice(0, 8);
+      const targetLocStr = `${state.batchAnchor.building} · Cab ${String(state.batchAnchor.cabinet).padStart(2, '0')} · Sh ${String(state.batchAnchor.shelf).padStart(2, '0')}`;
 
-      if (dropdown && countEl && listEl) {
-        countEl.textContent = `${matches.length} Match${matches.length === 1 ? '' : 'es'}`;
-        if (matches.length > 0) {
-          listEl.innerHTML = matches.map(m => `
-            <button
-              type="button"
-              onclick="selectSearchResult('${m.id}')"
-              class="w-full p-2 rounded-[2px] hover:bg-stone-100 flex items-center justify-between text-left text-xs font-mono transition-colors tap-highlight-transparent min-h-[38px]"
-            >
-              <div class="truncate">
-                <span class="font-bold text-ink">${highlightMatch(m.accession_number || m.id, q)}</span>
-                <span class="italic text-muted ml-1">${highlightMatch(m.scientific_name, q)}</span>
+      container.innerHTML = state.batchQueue.map((item, idx) => `
+        <article class="relative bg-white rounded border border-bordercol p-3 shadow-2xs flex flex-col gap-1">
+          <div class="flex items-start justify-between">
+            <div class="flex flex-col min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="font-mono text-xs font-bold text-fern-dark">#${item.oid}</span>
+                <span class="text-[9px] font-mono px-1 py-0.2 bg-emerald-50 text-fern rounded border border-fern/30">QUEUED</span>
               </div>
-              <span class="text-[10px] text-muted shrink-0">${m.review_status === 'reviewed' ? '✓ OK' : '○'}</span>
-            </button>
-          `).join('');
+              <div class="font-serif italic text-xs text-ink truncate">${item.sciName}</div>
+            </div>
+            <button type="button" onclick="removeBatchItem(${idx})" class="text-stone-400 hover:text-brick p-1 text-sm font-bold">✕</button>
+          </div>
+          <div class="flex items-center gap-1.5 text-[10px] font-mono text-muted pt-1 border-t border-stone-100">
+            <span class="truncate">${item.prevLoc}</span>
+            <span class="text-fern font-bold">→</span>
+            <span class="font-semibold text-fern-dark truncate">${targetLocStr}</span>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    async function commitBatchLocationUpdate() {
+      if (state.batchQueue.length === 0) {
+        showToast('No items in batch to commit');
+        return;
+      }
+
+      const payload = {
+        location: {
+          Building: state.batchAnchor.building,
+          Floor: String(state.batchAnchor.floor),
+          Cabinet: String(state.batchAnchor.cabinet),
+          Shelf: String(state.batchAnchor.shelf),
+          'Stored as': state.batchAnchor.storedAs
+        },
+        items: state.batchQueue.map(i => i.oid),
+        timestamp: new Date().toISOString()
+      };
+
+      try {
+        const res = await apiFetch('/api/batch_location_update', {
+          method: 'POST',
+          body: payload
+        });
+
+        if (res && res.success) {
+          showToast(`✓ Batch committed! Relocated ${res.updated_count} specimens`);
+          state.batchQueue = [];
+          renderBatchQueue();
+          fetchObjects(false);
         } else {
-          listEl.innerHTML = '<div class="p-3 text-center text-xs text-muted font-sans">No matching specimens</div>';
+          showToast('Batch commit error');
         }
-        dropdown.classList.remove('hidden');
+      } catch(err) {
+        showToast('Failed to commit batch location');
       }
     }
 
-    function clearLiveSearch() {
-      const input = document.getElementById('vaultLiveSearch');
-      const clearBtn = document.getElementById('btnClearSearch');
-      const dropdown = document.getElementById('searchDropdown');
-      if (input) input.value = '';
-      if (clearBtn) clearBtn.classList.add('hidden');
-      if (dropdown) dropdown.classList.add('hidden');
-    }
-
-    function selectSearchResult(oid) {
-      clearLiveSearch();
-      loadSpecimen(oid);
-    }
-
-    // Global ⌘K / Ctrl+K listener
-    document.addEventListener('keydown', (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        const detailSearch = document.getElementById('vaultLiveSearch');
-        const listSearch = document.getElementById('searchBox');
-        if (detailSearch && !document.getElementById('detailView').classList.contains('hidden')) {
-          detailSearch.focus();
-          detailSearch.select();
-        } else if (listSearch) {
-          listSearch.focus();
-          listSearch.select();
-        }
-      }
-    });
-
-    // ==========================================
-    // REVIEW STATUS & PRIMARY ACTION
-    // ==========================================
-    function updateReviewButtonUI() {
-      const btn = document.getElementById('btnPrimaryReview');
-      const text = document.getElementById('primaryReviewText');
-      const icon = document.getElementById('primaryReviewIcon');
-      const badge = document.getElementById('badgeStatus');
-      const badgeText = document.getElementById('badgeStatusText');
-
-      if (isReviewed) {
-        if (btn) {
-          btn.className = 'w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-fern text-white border-2 border-fern-dark';
-        }
-        if (text) text.textContent = '✓ REVIEWED (TAP TO UNDO)';
-        if (icon) {
-          icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />';
-        }
-        if (badge) {
-          badge.className = 'flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-fern-light text-fern border-fern/40';
-        }
-        if (badgeText) badgeText.textContent = 'REVIEWED';
-      } else {
-        if (btn) {
-          btn.className = 'w-full py-3.5 px-4 min-h-[50px] rounded-[3px] font-sans font-bold text-sm tracking-wide flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-[0.985] shadow-sm tap-highlight-transparent bg-white text-ink border-2 border-ink hover:bg-stone-50';
-        }
-        if (text) text.textContent = 'MARK AS REVIEWED';
-        if (icon) {
-          icon.innerHTML = '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"></circle><path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"></path>';
-        }
-        if (badge) {
-          badge.className = 'flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded-[2px] border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300';
-        }
-        if (badgeText) badgeText.textContent = 'UNREVIEWED';
-      }
-
-      if (currentRecord) {
-        currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-      }
-    }
-
-    async function toggleReviewed() {
-      isReviewed = !isReviewed;
-      updateReviewButtonUI();
-      await saveCurrentEdits();
-      showToast(isReviewed ? '✓ Specimen marked as Reviewed' : 'Specimen marked Unreviewed');
-    }
-
-    // ==========================================
-    // AUTO-SAVE & STATE ENGINE
-    // ==========================================
-    function handleVocabInput(input, fName) {
-      markDirty(fName);
-      triggerAutoSave();
-    }
-
-    function handleVocabChange(input) {
-      if (input.value && input.value.trim() !== '') {
-        const val = input.value.trim();
-        const fName = input.getAttribute('data-field');
-        if (val !== '?') {
-          if (activeSchema && activeSchema.vocabulary && activeSchema.vocabulary[fName]) {
-            const match = activeSchema.vocabulary[fName].find(v => v.toLowerCase() === val.toLowerCase());
-            if (match) {
-              input.value = match;
-            } else {
-              input.value = val;
-            }
-          } else {
-            input.value = val;
-          }
-        }
-      }
-      const fName = input.getAttribute('data-field');
-      markDirty(fName);
-      triggerAutoSave();
-    }
-
-    function markDirty(fieldName) {
-      if (fieldName) dirtyFields.add(fieldName);
+    // -------------------------------------------------------------
+    // AUTOSAVE & UNDO
+    // -------------------------------------------------------------
+    function markDirty(field) {
+      dirtyFields.add(field);
     }
 
     function triggerAutoSave() {
-      const syncStatus = document.getElementById('footerSyncStatus');
-      if (syncStatus) {
-        syncStatus.innerHTML = `<span class='flex items-center gap-1.5 font-mono text-ember font-medium animate-pulse'><svg class="animate-spin h-3 w-3 text-ember" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Saving changes...</span></span>`;
-      }
-      const btnRev = document.getElementById('btnPrimaryReview');
-      if (btnRev) btnRev.disabled = true;
       clearTimeout(autoSaveTimer);
-      autoSaveTimer = setTimeout(saveCurrentEdits, 800);
+      autoSaveTimer = setTimeout(saveRecord, 800);
     }
 
-    async function saveCurrentEdits() {
-      if (autoSaveTimer) {
-        clearTimeout(autoSaveTimer);
-        autoSaveTimer = null;
-      }
-      if (!currentOid) return;
-
-      if (isSaving) {
-        hasPendingSave = true;
-        return;
-      }
+    async function saveRecord() {
+      if (!state.currentRecord || dirtyFields.size === 0 || isSaving) return;
       isSaving = true;
 
+      const payload = {
+        id: state.currentRecord.id,
+        observation: state.currentRecord.observation || {},
+        registration: state.currentRecord.registration || {},
+        reviewed: state.isReviewed,
+        timestamp: new Date().toISOString()
+      };
+
       try {
-        while (true) {
-          hasPendingSave = false;
-          const btnRev = document.getElementById('btnPrimaryReview');
-
-          const regPayload = {};
-          const obsPayload = {};
-
-          // Collect registration fields
-          document.querySelectorAll('[data-section="registration"]').forEach(input => {
-            const f = input.getAttribute('data-field');
-            if (dirtyFields.has(f)) {
-              regPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
-            }
-          });
-
-          // Collect observation fields
-          document.querySelectorAll('[data-section="observation"]').forEach(input => {
-            const f = input.getAttribute('data-field');
-            if (dirtyFields.has(f)) {
-              obsPayload[f] = (input.type === 'checkbox') ? input.checked : input.value;
-            }
-          });
-
-          // Merge problem flags & observation state
-          if (currentRecord && currentRecord.observation) {
-            Object.keys(currentRecord.observation).forEach(k => {
-              if (k.endsWith('_Problem') || k.endsWith('_problem') || k.startsWith('Unknown_') || ['Building', 'Floor', 'Cabinet', 'Stored as', 'Extra', 'Comment', 'Loaned out', 'Loaned out date', 'Loc_Problem'].includes(k)) {
-                if (dirtyFields.has(k)) {
-                  obsPayload[k] = currentRecord.observation[k];
-                }
-              }
-            });
-          }
-
+        const res = await apiFetch('/api/update', {
+          method: 'POST',
+          body: payload
+        });
+        if (res && res.success) {
           dirtyFields.clear();
-
-          const unvalSourcesList = Object.entries(currentUnvalidatedMap || {}).map(([field, comment]) => ({ field, comment }));
-
-          const payload = {
-            id: currentOid,
-            reviewed: isReviewed,
-            registration: regPayload,
-            observation: obsPayload,
-            unvalidated_sources: unvalSourcesList,
-            timestamp: new Date().toISOString()
-          };
-
-          if (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline')) {
-            queueMutation(payload);
-            if (btnRev) btnRev.disabled = false;
-
-            if (currentRecord) {
-              currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-              currentRecord.unvalidated_sources = unvalSourcesList;
-              updateReviewButtonUI();
-            }
-
-            const listItem = objectList.find(o => String(o.id) === String(currentOid));
-            if (listItem) {
-              listItem.review_status = isReviewed ? 'reviewed' : 'pending';
-              listItem.has_unvalidated = (unvalSourcesList.length > 0);
-            }
-
-            if (!hasPendingSave) break;
-            continue;
-          }
-
-          if (btnRev) btnRev.disabled = false;
-
-          try {
-            const res = await apiFetch('/api/update', {
-              method: 'POST',
-              body: JSON.stringify(payload)
-            });
-
-            if (res && (res._status === 409 || res.status === 409 || (typeof res.error === 'string' && res.error.includes('Conflict')))) {
-              showToast(`⚠️ ${res.error || 'Conflict: Host modified this record'}`, true);
-              const syncStatus = document.getElementById('footerSyncStatus');
-              if (syncStatus) {
-                syncStatus.innerHTML = '<span class="font-mono text-ember font-medium" id="footerSyncStatusText">⚠️ Host conflict</span>';
-              }
-              if (btnRev) btnRev.disabled = false;
-              if (!hasPendingSave) break;
-              continue;
-            }
-
-            if (res && res.error && res.error !== 'Failed to fetch') {
-              showToast(`⚠️ ${res.error}`, true);
-              if (btnRev) btnRev.disabled = false;
-              if (!hasPendingSave) break;
-              continue;
-            }
-
-            if (!res || res.error === 'Failed to fetch' || (Object.keys(res).length === 0)) {
-              throw new Error('Network failure');
-            }
-
-            const syncStatus = document.getElementById('footerSyncStatus');
-            if (syncStatus) {
-              syncStatus.innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Edit saved</span>';
-            }
-            if (btnRev) btnRev.disabled = false;
-            const undoBtn = document.getElementById('btnMobileUndo');
-            if (undoBtn) undoBtn.classList.remove('hidden');
-            if (undoBtn) undoBtn.classList.add('flex');
-
-            if (res && res.success && currentRecord && (String(currentRecord.id) === String(currentOid) || String(currentRecord.accession_number) === String(currentOid))) {
-              if (res.has_flags !== undefined) currentRecord.has_flags = res.has_flags;
-              if (res.has_history !== undefined) currentRecord.has_history = res.has_history;
-              if (res.has_unknown !== undefined) currentRecord.has_unknown = res.has_unknown;
-              if (res.review_status !== undefined) currentRecord.review_status = res.review_status;
-              updateReviewButtonUI();
-
-              const listItem = objectList.find(o => String(o.id) === String(currentOid));
-              if (listItem) {
-                if (res.has_flags !== undefined) listItem.has_flags = res.has_flags;
-                if (res.has_history !== undefined) listItem.has_history = res.has_history;
-                if (res.has_unknown !== undefined) listItem.has_unknown = res.has_unknown;
-                if (res.review_status !== undefined) listItem.review_status = res.review_status;
-              }
-            }
-
-            if (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline') {
-              const textEl = document.getElementById('footerSyncStatusText');
-              if (textEl) textEl.classList.add('hidden');
-            }
-          } catch (err) {
-            queueMutation(payload);
-            if (btnRev) btnRev.disabled = false;
-
-            if (currentRecord) {
-              currentRecord.review_status = isReviewed ? 'reviewed' : 'pending';
-              updateReviewButtonUI();
-            }
-
-            const listItem = objectList.find(o => String(o.id) === String(currentOid));
-            if (listItem) {
-              listItem.review_status = isReviewed ? 'reviewed' : 'pending';
-            }
-          }
-
-          if (!hasPendingSave) {
-            break;
-          }
+          showToast('✓ Saved & synchronized');
         }
+      } catch(err) {
+        console.error('Save error:', err);
       } finally {
         isSaving = false;
       }
     }
 
-    // ==========================================
-    // UNDO & RECENT EDITS
-    // ==========================================
-    async function undoLastEdit(oid = null) {
+    async function undoLastEdit() {
       try {
-        const payload = oid ? { oid: oid } : {};
         const res = await apiFetch('/api/undo', {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: { oid: state.currentOid }
         });
-
-        if (res.success) {
-          showToast(`✓ Undo successful`);
-          const undoBtn = document.getElementById('btnMobileUndo');
-          if (undoBtn) {
-            undoBtn.classList.remove('flex');
-            undoBtn.classList.add('hidden');
-          }
-
-          if (document.getElementById('recentEditsModal') && !document.getElementById('recentEditsModal').classList.contains('hidden')) {
-            await openRecentEditsModal();
-          }
-
-          if (currentRecord && String(res.restored.id) === String(currentOid)) {
-            Object.assign(currentRecord, res.restored);
-            isReviewed = currentRecord.review_status === 'reviewed';
-            refreshLocUI();
-            renderDynamicForm(activeSchema, currentRecord);
-            updateTaxonProblemAlerts(currentRecord);
-            renderDiscrepancies(currentRecord);
-            updateReviewButtonUI();
-          }
-
-          const listItem = objectList.find(o => String(o.id) === String(res.restored.id));
-          if (listItem) {
-            Object.assign(listItem, res.restored);
-            if (!document.getElementById('listView').classList.contains('hidden')) {
-              renderList();
-            }
-          }
-        } else {
-          showToast(res.error || 'Undo failed', true);
-        }
-      } catch (err) {
-        showToast('Undo failed', true);
-        console.error(err);
-      }
-    }
-
-    async function openRecentEditsModal() {
-      const modal = document.getElementById('recentEditsModal');
-      const listContainer = document.getElementById('recentEditsList');
-
-      try {
-        const res = await apiFetch('/api/recent_edits');
-        if (res.edits && res.edits.length > 0) {
-          listContainer.innerHTML = res.edits.map(edit => `
-            <div class="bg-surface border border-bordercol rounded-[2px] p-3 text-sm flex flex-col gap-2 shadow-xs">
-              <div class="flex items-center justify-between">
-                <span class="font-mono text-xs font-medium text-ink bg-stone-100 px-1.5 py-0.5 rounded-[2px]">${edit.oid}</span>
-                <span class="text-[10px] text-muted">${edit.time}</span>
-              </div>
-              <div class="text-xs text-ink break-words font-mono">${edit.summary}</div>
-              <div class="flex justify-end border-t border-stone-100 mt-1 pt-2">
-                <button type="button" onclick="undoLastEdit('${edit.oid}')" class="text-[11px] font-bold text-ember hover:bg-orange-100 px-2 py-1 border border-orange-200 bg-orange-50 rounded-[2px] tap-highlight-transparent">Revert</button>
-              </div>
-            </div>
-          `).join('');
-        } else {
-          listContainer.innerHTML = `
-            <div class="text-center p-6 text-stone-400 text-xs">
-              <div class="text-2xl mb-2">∅</div>
-              No recent edits in this session.
-            </div>
-          `;
-        }
-      } catch (err) {
-        listContainer.innerHTML = `<div class="text-center p-4 text-brick text-xs">Error loading history.</div>`;
-      }
-
-      modal.classList.remove('hidden');
-    }
-
-    function closeRecentEditsModal() {
-      document.getElementById('recentEditsModal').classList.add('hidden');
-    }
-
-    // ==========================================
-    // SETTINGS & LOCATION PRESETS
-    // ==========================================
-    async function openSettingsModal() {
-      openModal('settingsModal');
-      const input = document.getElementById('settingImageUrlPattern');
-      try {
-        const res = await apiFetch('/api/settings');
         if (res && res.success) {
-          input.value = res.image_url_pattern_override || '';
+          showToast('↩ Undid last edit');
+          if (state.currentOid) fetchObjectDetail(state.currentOid);
+          fetchObjects(false);
         }
-      } catch (err) {
-        console.error("Failed to load settings:", err);
+      } catch(err) {
+        showToast('Nothing to undo');
       }
+    }
+
+    // -------------------------------------------------------------
+    // SETTINGS, WALK MODE, MODAL HELPERS
+    // -------------------------------------------------------------
+    function openModal(id) {
+      document.getElementById(id)?.classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id)?.classList.add('hidden');
+    }
+
+    function openSettingsModal() {
+      document.getElementById('settingShowFilterPills').checked = state.showFilterPills;
+      openModal('settingsModal');
     }
 
     function closeSettingsModal() {
@@ -11945,269 +9077,74 @@ INDEX_TEMPLATE_V2 = """
 
     async function saveSettings() {
       const pattern = document.getElementById('settingImageUrlPattern').value.trim();
-      try {
-        const res = await apiFetch('/api/settings', {
+      if (pattern) {
+        await apiFetch('/api/settings', {
           method: 'POST',
-          body: JSON.stringify({ image_url_pattern_override: pattern })
+          body: { image_url_pattern_override: pattern }
         });
-        if (res && res.success) {
-          showToast("Settings saved.");
-          closeSettingsModal();
-        } else {
-          showToast("Failed to save settings.", true);
-        }
-      } catch (err) {
-        console.error("Failed to save settings:", err);
-        showToast("Error saving settings.", true);
       }
+      closeSettingsModal();
+      showToast('✓ Settings saved');
     }
 
-    function openPresetSettings() {
-      renderPresetSettingsList();
-      openModal('presetSettingsModal');
-    }
-
-    function closePresetSettings() {
-      closeModal('presetSettingsModal');
-    }
-
-    function renderPresetSettingsList() {
-      const container = document.getElementById('presetSettingsList');
-      if (!container) return;
-
-      const keys = Object.keys(locationPresets).filter(k => k !== 'Default');
-      if (keys.length === 0) {
-        container.innerHTML = '<p class="text-xs text-stone-400 italic py-2 font-mono">No custom presets saved yet.</p>';
-        return;
-      }
-
-      container.innerHTML = keys.map(k => `
-        <div class="flex items-center justify-between p-2.5 border-b border-bordercol bg-surface hover:bg-stone-50 rounded-[2px] transition-colors mb-1 shadow-2xs">
-          <span class="text-sm font-mono text-ink">${k}</span>
-          <button type="button" onclick="deleteLocPreset('${k}')" class="px-2 py-1 text-xs font-mono font-bold text-brick border border-brick/40 bg-brick-light hover:bg-brick rounded-[2px] hover:text-white transition-colors cursor-pointer tap-highlight-transparent">Delete</button>
-        </div>
-      `).join('');
-    }
-
-    async function deleteLocPreset(name) {
-      if (!confirm(`Delete location preset "${name}"?`)) return;
-
-      try {
-        const res = await apiFetch('/api/presets', {
-          method: 'POST',
-          body: JSON.stringify({ action: "delete", name: name })
-        });
-
-        if (res && res.success) {
-          locationPresets = res.presets || {};
-          if (lastSelectedPreset === name) lastSelectedPreset = "Default";
-          renderPresetSettingsList();
-          showToast(`Preset deleted.`);
-          refreshLocUI();
-        } else {
-          showToast(`Failed to delete preset.`, true);
-        }
-      } catch (err) {
-        console.error("Error deleting preset:", err);
-        showToast("Error deleting preset", true);
-      }
-    }
-
-    function toggleNewPresetForm() {
-      const form = document.getElementById('newPresetForm');
-      if (form.classList.contains('hidden')) {
-        form.classList.remove('hidden');
-        document.getElementById('newPresetNameInput').focus();
+    async function toggleWakeLock() {
+      if (!wakeLockSentinel) {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLockSentinel = await navigator.wakeLock.request('screen');
+            document.getElementById('listWakeLockIcon').textContent = '☀️';
+            showToast('☀️ Walk Mode active (screen awake)');
+          }
+        } catch(err) {}
       } else {
-        form.classList.add('hidden');
+        try {
+          await wakeLockSentinel.release();
+          wakeLockSentinel = null;
+          document.getElementById('listWakeLockIcon').textContent = '🌙';
+          showToast('🌙 Walk Mode disabled');
+        } catch(err) {}
       }
     }
 
-    async function saveNewLocPreset() {
-      const nameInput = document.getElementById('newPresetNameInput');
-      const name = nameInput.value.trim();
-
-      if (!name) {
-        alert("Please enter a name for the preset.");
-        return;
-      }
-      if (name.toLowerCase() === "default") {
-        alert("Cannot overwrite Default preset.");
-        return;
-      }
-
-      const obs = (currentRecord && currentRecord.observation) ? currentRecord.observation : {};
-      const vals = {
-        Building: obs.Building || '',
-        Floor: obs.Floor || '',
-        Cabinet: obs.Cabinet || '',
-        'Stored as': obs['Stored as'] || '',
-        Extra: obs.Extra || ''
-      };
-
-      try {
-        const res = await apiFetch('/api/presets', {
-          method: 'POST',
-          body: JSON.stringify({ action: "save", name: name, values: vals })
-        });
-
-        if (res && res.success) {
-          locationPresets = res.presets || {};
-          lastSelectedPreset = name;
-          nameInput.value = "";
-          toggleNewPresetForm();
-          renderPresetSettingsList();
-          showToast(`Preset "${name}" saved.`);
-        } else {
-          showToast(`Failed to save preset.`, true);
-        }
-      } catch (err) {
-        console.error("Error saving preset:", err);
-        showToast("Error saving preset", true);
-      }
+    function openFilterModal() {
+      openModal('filterModal');
     }
 
-    // ==========================================
-    // FULLSCREEN PHOTO VIEWER MODAL
-    // ==========================================
-    function openPhotoViewer() {
-      if (!photoUrls || photoUrls.length === 0) {
-        showToast('No photo scans attached to this specimen');
-        return;
-      }
-      photoZoom = 1;
-      photoRotation = 0;
-      photoPan = { x: 0, y: 0 };
-      updatePhotoTransform();
-      const modalImg = document.getElementById('photoViewerImg');
-      if (modalImg) modalImg.src = photoUrls[currentPhotoIdx] || photoUrls[0];
-      const title = document.getElementById('photoViewerTitle');
-      if (title) title.textContent = `Specimen Plate #${currentRecord ? (currentRecord.accession_number || currentRecord.id) : ''}`;
-      const counter = document.getElementById('photoViewerCounter');
-      if (counter) counter.textContent = `(${currentPhotoIdx + 1}/${photoUrls.length})`;
-      openModal('photoViewerModal');
+    function closeFilterModal() {
+      closeModal('filterModal');
     }
 
-    function closePhotoViewer() {
-      closeModal('photoViewerModal');
+    function clearAdvancedFilters() {
+      state.activeAdvancedFilters = { locations: {}, problems: {} };
+      closeFilterModal();
+      fetchObjects();
     }
 
-    function loadInitialPhoto() {
-      if (!photoUrls || photoUrls.length === 0) return;
-      const placeholder = document.getElementById('photoPlaceholder');
-      const img = document.getElementById('specimenImg');
-
-      if (placeholder) {
-        placeholder.innerHTML = `
-          <span class="text-2xl text-stone-400 animate-spin-slow">⏳</span>
-          <p class="font-semibold text-fern-light">Loading plate scan...</p>
-        `;
-      }
-      if (img) {
-        img.src = photoUrls[0];
-      }
+    function applyAdvancedFilters() {
+      closeFilterModal();
+      fetchObjects();
     }
 
-    function selectSpecimenPhoto(idx) {
-      if (!photoUrls || !photoUrls[idx]) return;
-      currentPhotoIdx = idx;
-      const mainImg = document.getElementById('specimenImg');
-      if (mainImg) mainImg.src = photoUrls[idx];
+    async function submitDiscrepancy(e) {
+      e.preventDefault();
+      const field = document.getElementById('discrepancyFieldSelect').value;
+      const note = document.getElementById('discrepancyReasonInput').value.trim();
+      if (!field || !note || !state.currentRecord) return;
+
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.observation[field + '_Problem'] = true;
+      state.currentRecord.observation[field + '_Note'] = note;
+      markDirty(field + '_Problem');
+      markDirty(field + '_Note');
+
+      closeModal('addDiscrepancyModal');
+      triggerAutoSave();
+      renderDetailView(false);
+      showToast('⚑ Issue flagged');
     }
 
-    function onPhotoLoaded() {
-      const placeholder = document.getElementById('photoPlaceholder');
-      const img = document.getElementById('specimenImg');
-      if (placeholder) placeholder.classList.add('hidden');
-      if (img) img.classList.remove('hidden');
-    }
-
-    function onPhotoError() {
-      const placeholder = document.getElementById('photoPlaceholder');
-      if (placeholder) {
-        placeholder.innerHTML = `
-          <span class="text-2xl text-stone-500">📷</span>
-          <p class="font-semibold text-stone-400">Photo scan unavailable</p>
-        `;
-      }
-    }
-
-    function zoomPhoto(delta) {
-      photoZoom = Math.min(Math.max(photoZoom + delta, 1), 4);
-      if (photoZoom === 1) photoPan = { x: 0, y: 0 };
-      updatePhotoTransform();
-    }
-
-    function rotatePhoto() {
-      photoRotation = (photoRotation + 90) % 360;
-      updatePhotoTransform();
-    }
-
-    function resetPhotoTransform() {
-      photoZoom = 1;
-      photoRotation = 0;
-      photoPan = { x: 0, y: 0 };
-      updatePhotoTransform();
-    }
-
-    function updatePhotoTransform() {
-      const img = document.getElementById('photoViewerImg');
-      const zoomDisp = document.getElementById('zoomLevelDisplay');
-      if (zoomDisp) zoomDisp.textContent = `${photoZoom.toFixed(1)}x`;
-      if (img) {
-        img.style.transform = `scale(${photoZoom}) rotate(${photoRotation}deg) translate(${photoPan.x}px, ${photoPan.y}px)`;
-      }
-    }
-
-    function startPhotoDrag(e) {
-      if (photoZoom > 1) {
-        isDraggingPhoto = true;
-        photoDragStart = { x: e.clientX - photoPan.x, y: e.clientY - photoPan.y };
-        window.addEventListener('mousemove', onPhotoDrag);
-        window.addEventListener('mouseup', stopPhotoDrag);
-      }
-    }
-
-    function onPhotoDrag(e) {
-      if (isDraggingPhoto && photoZoom > 1) {
-        photoPan = { x: e.clientX - photoDragStart.x, y: e.clientY - photoDragStart.y };
-        updatePhotoTransform();
-      }
-    }
-
-    function stopPhotoDrag() {
-      isDraggingPhoto = false;
-      window.removeEventListener('mousemove', onPhotoDrag);
-      window.removeEventListener('mouseup', stopPhotoDrag);
-    }
-
-    function startPhotoTouch(e) {
-      if (e.touches && e.touches.length === 1 && photoZoom > 1) {
-        isDraggingPhoto = true;
-        photoDragStart = { x: e.touches[0].clientX - photoPan.x, y: e.touches[0].clientY - photoPan.y };
-        window.addEventListener('touchmove', onPhotoTouchMove);
-        window.addEventListener('touchend', stopPhotoTouch);
-      }
-    }
-
-    function onPhotoTouchMove(e) {
-      if (isDraggingPhoto && e.touches && e.touches.length === 1 && photoZoom > 1) {
-        photoPan = { x: e.touches[0].clientX - photoDragStart.x, y: e.touches[0].clientY - photoDragStart.y };
-        updatePhotoTransform();
-      }
-    }
-
-    function stopPhotoTouch() {
-      isDraggingPhoto = false;
-      window.removeEventListener('touchmove', onPhotoTouchMove);
-      window.removeEventListener('touchend', stopPhotoTouch);
-    }
-
-    // Initialize swipe gestures and application
-    initSwipeGestures();
-
-    // Initialize application
-    init();
+    // Start App
+    window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html>

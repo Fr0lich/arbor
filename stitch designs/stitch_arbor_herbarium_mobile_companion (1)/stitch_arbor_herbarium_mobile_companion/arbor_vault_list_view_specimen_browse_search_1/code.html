@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Arbor Companion — Vault List View</title>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Lora (Botanical Latin), JetBrains Mono (IDs/Coordinates), Inter (Clean UI) -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Lora:ital,wght@0,500;0,600;1,500;1,600&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            alabaster: '#f3f3f3',
+            surface: '#ffffff',
+            'surface-subtle': '#fbfbfb',
+            ink: '#1e241e',
+            'ink-muted': '#5c645e',
+            'ink-faint': '#8b948d',
+            fern: '#3a7d44',
+            'fern-dark': '#205438',
+            'fern-light': '#e8f3ea',
+            brick: '#c93a40',
+            'brick-light': '#fdf2f2',
+            amber: '#d97706',
+            'amber-light': '#fef3c7',
+            bordercol: '#e2e5e2',
+            'bordercol-subtle': '#ecefec'
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Lora', 'Georgia', 'serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          },
+          boxShadow: {
+            card: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+            pop: '0 4px 12px rgba(0,0,0,0.08)',
+            dock: '0 -2px 10px rgba(0,0,0,0.05)'
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Hide scrollbar for horizontal filter strip */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Tactile tap feedback */
+    .tap-active:active {
+      transform: scale(0.985);
+      transition: transform 0.05s ease-out;
+    }
+
+    /* Screen frame centering for desktop preview while preserving true mobile 412px feel */
+    body {
+      background-color: #121413;
+      font-family: 'Inter', sans-serif;
+      color: #1e241e;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    
+    .mobile-shell {
+      max-width: 440px;
+      min-height: 100vh;
+      margin: 0 auto;
+      background-color: #f3f3f3;
+      position: relative;
+      box-shadow: 0 0 50px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+</head>
+<body class="min-h-screen py-0 md:py-6 flex justify-center items-center">
+<div class="mobile-shell w-full overflow-hidden border-x border-stone-800">
+<!-- 1. PERSISTENT STICKY TOP HEADER -->
+<header class="sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-bordercol">
+<!-- Top Row: Logo, Title, Database, Utility Controls -->
+<div class="px-3.5 pt-3 pb-2 flex items-center justify-between">
+<div class="flex items-center space-x-2.5">
+<!-- Arbor "A" Brand Badge -->
+<div class="w-7 h-7 rounded bg-fern-dark flex items-center justify-center text-white font-serif font-bold text-sm shadow-sm ring-1 ring-black/10">
+            A
+          </div>
+<div>
+<div class="flex items-center space-x-1.5 leading-none">
+<span class="font-bold text-[13px] tracking-tight text-ink font-sans">Arbor Companion</span>
+<span class="text-[10px] px-1 py-0.5 rounded bg-emerald-50 text-fern-dark font-mono font-medium border border-fern/30">v2.4</span>
+</div>
+<div class="text-[10.5px] font-mono text-ink-muted tracking-tight truncate max-w-[170px] mt-0.5">
+              vascular_plants.csv
+            </div>
+</div>
+</div>
+<!-- Controls: Undo, Wake Lock, Settings, Connection Pill -->
+<div class="flex items-center space-x-1.5">
+<button class="w-8 h-8 rounded-md bg-stone-100 border border-stone-200 text-stone-600 hover:text-ink flex items-center justify-center tap-active transition-colors" id="undo-btn" title="Undo recent update">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M3 10h10a5 5 0 015 5v2m0 0l-4-4m4 4l4-4M3 10l4-4m-4 4l4 4" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+<button class="w-8 h-8 rounded-md bg-stone-100 border border-stone-200 text-stone-600 hover:text-ink flex items-center justify-center tap-active transition-colors" id="wakelock-btn" onclick="toggleWakeLock()" title="Keep screen awake during audit walk">
+<span class="text-xs" id="wakelock-icon">☀️</span>
+</button>
+<!-- Desktop Connection Pill -->
+<div class="flex items-center space-x-1 px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[10.5px] font-mono font-medium text-emerald-800">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<span>42ms</span>
+</div>
+</div>
+</div>
+<!-- Search Row: Full-width live input + quick clear + advanced filter trigger -->
+<div class="px-3.5 pb-2.5 pt-0.5">
+<div class="relative flex items-center">
+<div class="absolute left-3 text-ink-faint pointer-events-none">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<input autocomplete="off" class="w-full pl-9 pr-16 py-2 bg-stone-100/90 hover:bg-stone-100 focus:bg-white text-xs font-mono text-ink placeholder:text-ink-faint placeholder:font-sans rounded-lg border border-stone-200 focus:border-fern focus:ring-1 focus:ring-fern focus:outline-none transition-all shadow-inner" id="search-input" oninput="handleSearch(this.value)" placeholder="Search taxonomy, accession, cabinet..." spellcheck="false" type="text"/>
+<div class="absolute right-2 flex items-center space-x-1">
+<button class="hidden text-ink-faint hover:text-ink p-1 rounded-md text-xs font-mono leading-none" id="clear-search-btn" onclick="clearSearch()" title="Clear search">
+              ✕
+            </button>
+<button class="relative p-1.5 rounded-md hover:bg-stone-200/70 text-ink-muted hover:text-ink transition-colors" id="filter-toggle-btn" onclick="toggleAdvancedFilters()" title="Toggle Advanced Curatorial Filters">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewbox="0 0 24 24">
+<path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<!-- Active filter green dot -->
+<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-fern ring-2 ring-white" id="filter-active-dot"></span>
+</button>
+</div>
+</div>
+<!-- Optional Expandable Advanced Filter Drawer -->
+<div class="hidden mt-2 pt-2 pb-1 border-t border-dashed border-bordercol text-[11px] grid grid-cols-2 gap-2 font-mono" id="advanced-filter-drawer">
+<div>
+<label class="block text-ink-faint text-[9.5px] uppercase font-sans font-semibold mb-1">Building Vault</label>
+<select class="w-full bg-stone-50 border border-stone-200 rounded p-1 text-xs text-ink focus:border-fern focus:outline-none" id="adv-building-filter" onchange="applyFilters()">
+<option value="all">Any Vault (All)</option>
+<option value="Økern">Økern Main Facility</option>
+<option value="Lid's hus">Lid's hus Annex</option>
+</select>
+</div>
+<div>
+<label class="block text-ink-faint text-[9.5px] uppercase font-sans font-semibold mb-1">Taxonomic Family</label>
+<select class="w-full bg-stone-50 border border-stone-200 rounded p-1 text-xs text-ink focus:border-fern focus:outline-none" id="adv-family-filter" onchange="applyFilters()">
+<option value="all">All Families</option>
+<option value="Betulaceae">Betulaceae</option>
+<option value="Pinaceae">Pinaceae</option>
+<option value="Asteraceae">Asteraceae</option>
+<option value="Salicaceae">Salicaceae</option>
+</select>
+</div>
+</div>
+</div>
+<!-- 2. FILTER PILLS BAR (Horizontal Scrollable) -->
+<div class="px-3.5 pb-2 overflow-x-auto no-scrollbar flex items-center space-x-1.5 border-t border-stone-100 pt-2">
+<button class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-ink text-white shadow-sm tap-active transition-all" id="pill-all" onclick="setFilter('all')">
+          All <span class="font-mono text-[10px] ml-0.5 opacity-90">(128)</span>
+</button>
+<button class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-stone-200/80 text-ink-muted hover:bg-stone-300 tap-active transition-all" id="pill-unreviewed" onclick="setFilter('unreviewed')">
+          🕒 Unreviewed <span class="font-mono text-[10px] ml-0.5">(84)</span>
+</button>
+<button class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-brick-light text-brick border border-brick/30 hover:bg-red-100 tap-active transition-all" id="pill-flagged" onclick="setFilter('flagged')">
+          ⚠ Flagged <span class="font-mono text-[10px] ml-0.5 font-bold">(14)</span>
+</button>
+<button class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-emerald-50 text-fern-dark border border-fern/30 hover:bg-emerald-100 tap-active transition-all" id="pill-reviewed" onclick="setFilter('reviewed')">
+          ✓ Reviewed <span class="font-mono text-[10px] ml-0.5">(44)</span>
+</button>
+<button class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100 tap-active transition-all" id="pill-conflicts" onclick="setFilter('conflicts')">
+          🔀 Conflicts <span class="font-mono text-[10px] ml-0.5">(6)</span>
+</button>
+<button class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100 tap-active transition-all" id="pill-unknown" onclick="setFilter('unknown')">
+          ? Unknown <span class="font-mono text-[10px] ml-0.5">(12)</span>
+</button>
+<button class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-stone-100 text-stone-600 border border-stone-200 hover:bg-stone-200 tap-active transition-all" id="pill-noimage" onclick="setFilter('noimage')">
+          📷 No Image <span class="font-mono text-[10px] ml-0.5">(8)</span>
+</button>
+</div>
+<!-- Metrics & Sort Row -->
+<div class="px-3.5 py-2 bg-alabaster/70 border-t border-bordercol flex items-center justify-between text-[11px]">
+<div class="font-mono text-ink-muted">
+          Showing <span class="font-bold text-ink" id="record-count-display">128</span> matching records
+        </div>
+<div class="flex items-center space-x-1.5">
+<label class="text-ink-faint sr-only" for="sort-select">Sort by</label>
+<div class="relative inline-flex items-center">
+<select class="appearance-none bg-white border border-bordercol rounded-md px-2 py-1 pr-6 text-[10.5px] font-mono text-ink focus:outline-none focus:border-fern shadow-xs cursor-pointer" id="sort-select" onchange="handleSort(this.value)">
+<option value="location">⇅ Sort: Physical Location</option>
+<option value="name_asc">Scientific Name (A–Z)</option>
+<option value="name_desc">Scientific Name (Z–A)</option>
+<option value="accession">Accession ID (0894...)</option>
+<option value="problems">Severity / Problems First</option>
+</select>
+<div class="absolute right-1.5 pointer-events-none text-ink-faint">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- 3. SCROLLABLE SPECIMEN STREAM -->
+<main class="flex-1 p-3.5 space-y-2.5 overflow-y-auto pb-24" id="specimen-stream">
+<!-- Specimen Cards will be rendered dynamically by JavaScript for filtering/sorting -->
+</main>
+<!-- 4. EMPTY SEARCH / FILTER STATE (Initially hidden) -->
+<div class="hidden flex-1 flex flex-col items-center justify-center p-8 text-center my-auto" id="empty-state">
+<div class="w-12 h-12 rounded-full bg-stone-200 text-stone-500 flex items-center justify-center mb-3 text-lg">
+        🔍
+      </div>
+<h3 class="text-sm font-semibold text-ink">No specimens matching query</h3>
+<p class="text-xs text-ink-muted mt-1 max-w-[220px]">Try adjusting your search terms, family filters, or status selection.</p>
+<button class="mt-4 px-3.5 py-1.5 bg-white border border-stone-300 rounded-md text-xs font-mono font-medium text-ink hover:bg-stone-50 shadow-xs tap-active" onclick="clearSearch()">
+        [ Clear Filter &amp; Show All ]
+      </button>
+</div>
+<!-- Active Vault Section Floating Beacon -->
+<div class="fixed md:absolute bottom-16 right-4 z-30" id="vault-beacon">
+<div class="bg-ink/90 backdrop-blur-md text-white px-2.5 py-1 rounded-full text-[11px] font-mono flex items-center space-x-1.5 shadow-pop border border-white/10">
+<span class="w-1.5 h-1.5 rounded-full bg-fern animate-pulse"></span>
+<span id="current-vault-aisle">📍 Cab 04 · Shelf 02</span>
+</div>
+</div>
+<!-- 5. STICKY BOTTOM VAULT PROGRESS BAR -->
+<footer class="sticky bottom-0 z-40 bg-surface/95 backdrop-blur-md border-t border-bordercol px-4 py-2.5 shadow-dock">
+<div class="flex items-center justify-between text-xs mb-1.5">
+<div class="flex items-center space-x-1.5 font-mono text-[11px]">
+<span class="w-2 h-2 rounded-full bg-fern inline-block"></span>
+<span class="text-ink font-semibold">44 / 128 Reviewed</span>
+<span class="text-ink-muted">(34%)</span>
+</div>
+<div class="text-[10px] font-mono text-ink-muted flex items-center space-x-1">
+<svg class="w-3 h-3 text-fern" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span>Auto-sync ready</span>
+</div>
+</div>
+<!-- Mini Progress bar -->
+<div class="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden">
+<div class="bg-fern h-full rounded-full transition-all duration-500 ease-out" style="width: 34.3%;"></div>
+</div>
+</footer>
+<!-- INTERACTIVE TOAST POPUP (Simulates opening detail screen / quick actions) -->
+<div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 hidden" id="toast-modal">
+<div class="bg-white rounded-xl max-w-xs w-full p-4 shadow-pop border border-bordercol transform transition-all text-center">
+<div class="w-10 h-10 rounded-full bg-fern-light text-fern-dark flex items-center justify-center mx-auto mb-2 text-base">
+          🌿
+        </div>
+<div class="font-mono text-xs text-ink-muted" id="toast-accession">#2024-BOT-0894</div>
+<div class="font-serif italic font-semibold text-sm text-ink mt-0.5" id="toast-name">Betula pendula</div>
+<p class="text-xs text-ink-muted mt-2">Connecting to Specimen Detail View (Location Tab, Physical Coordinates &amp; Integrity Flags)...</p>
+<div class="mt-4 flex space-x-2">
+<button class="flex-1 py-1.5 bg-stone-100 hover:bg-stone-200 text-ink rounded-lg text-xs font-mono font-medium tap-active" onclick="closeToast()">
+            Close
+          </button>
+<button class="flex-1 py-1.5 bg-fern hover:bg-fern-dark text-white rounded-lg text-xs font-mono font-medium tap-active" onclick="closeToast()">
+            Open Detail ➔
+          </button>
+</div>
+</div>
+</div>
+</div>
+<!-- SCRIPT: DATASET & DYNAMIC INTERACTION LOGIC -->
+<script>
+    // Rich Mock Dataset of Herbarium Specimens
+    const specimens = [
+      {
+        id: "#2024-BOT-0894",
+        genus: "Betula",
+        species: "pendula",
+        infra: "Roth subsp. pendula",
+        family: "Betulaceae",
+        reviewed: false,
+        flag: "⚠ Pest Flag",
+        flagType: "brick",
+        building: "Økern",
+        floor: -1,
+        cabinet: "Cab 04",
+        shelf: "Sh 02",
+        storedAs: "Free Standing",
+        hasImage: true,
+        imageCount: 1,
+        conflict: false,
+        unknown: false
+      },
+      {
+        id: "#2024-BOT-0893",
+        genus: "Betula",
+        species: "pubescens",
+        infra: "Ehrh.",
+        family: "Betulaceae",
+        reviewed: true,
+        flag: null,
+        building: "Økern",
+        floor: -1,
+        cabinet: "Cab 04",
+        shelf: "Sh 02",
+        storedAs: "Petri dish",
+        hasImage: true,
+        imageCount: 2,
+        conflict: false,
+        unknown: false
+      },
+      {
+        id: "#2024-BOT-0895",
+        genus: "Alnus",
+        species: "glutinosa",
+        infra: "(L.) Gaertn.",
+        family: "Betulaceae",
+        reviewed: false,
+        flag: "🔀 Archive Conflict",
+        flagType: "sky",
+        building: "Økern",
+        floor: -1,
+        cabinet: "Cab 04",
+        shelf: "Sh 03",
+        storedAs: "Herbarium Sheet",
+        hasImage: true,
+        imageCount: 1,
+        conflict: true,
+        unknown: false
+      },
+      {
+        id: "#2024-BOT-0896",
+        genus: "Pinus",
+        species: "sylvestris",
+        infra: "L. var. sylvestris",
+        family: "Pinaceae",
+        reviewed: true,
+        flag: null,
+        building: "Økern",
+        floor: -1,
+        cabinet: "Cab 05",
+        shelf: "Sh 01",
+        storedAs: "Box / Bin",
+        hasImage: true,
+        imageCount: 3,
+        conflict: false,
+        unknown: false
+      },
+      {
+        id: "#2024-BOT-0897",
+        genus: "Picea",
+        species: "abies",
+        infra: "(L.) H.Karst.",
+        family: "Pinaceae",
+        reviewed: false,
+        flag: "? Taxon Unverified",
+        flagType: "amber",
+        building: "Økern",
+        floor: -1,
+        cabinet: "Cab 05",
+        shelf: "Sh 02",
+        storedAs: "Free Standing",
+        hasImage: false,
+        imageCount: 0,
+        conflict: false,
+        unknown: true
+      },
+      {
+        id: "#2024-BOT-0898",
+        genus: "Taraxacum",
+        species: "officinale",
+        infra: "F.H.Wigg. coll.",
+        family: "Asteraceae",
+        reviewed: false,
+        flag: "⚠ Missing Collector Date",
+        flagType: "brick",
+        building: "Lid's hus",
+        floor: 1,
+        cabinet: "Cab 01",
+        shelf: "Sh 04",
+        storedAs: "Herbarium Sheet",
+        hasImage: true,
+        imageCount: 1,
+        conflict: false,
+        unknown: false
+      },
+      {
+        id: "#2024-BOT-0899",
+        genus: "Salix",
+        species: "caprea",
+        infra: "L.",
+        family: "Salicaceae",
+        reviewed: true,
+        flag: null,
+        building: "Lid's hus",
+        floor: 1,
+        cabinet: "Cab 02",
+        shelf: "Sh 01",
+        storedAs: "Capsule Envelope",
+        hasImage: true,
+        imageCount: 1,
+        conflict: false,
+        unknown: false
+      },
+      {
+        id: "#2024-BOT-0900",
+        genus: "Betula",
+        species: "nana",
+        infra: "L.",
+        family: "Betulaceae",
+        reviewed: false,
+        flag: "🔀 Coordinate Mismatch",
+        flagType: "sky",
+        building: "Lid's hus",
+        floor: 1,
+        cabinet: "Cab 02",
+        shelf: "Sh 03",
+        storedAs: "Mounted to platform",
+        hasImage: false,
+        imageCount: 0,
+        conflict: true,
+        unknown: false
+      }
+    ];
+
+    let currentFilter = 'all';
+    let searchQuery = '';
+    let currentSort = 'location';
+    let wakeLockActive = false;
+
+    // Render cards into stream
+    function renderSpecimens() {
+      const stream = document.getElementById('specimen-stream');
+      const emptyState = document.getElementById('empty-state');
+      const recordCountDisplay = document.getElementById('record-count-display');
+      
+      const advBuilding = document.getElementById('adv-building-filter').value;
+      const advFamily = document.getElementById('adv-family-filter').value;
+
+      // Filter
+      let filtered = specimens.filter(item => {
+        // Status filter
+        if (currentFilter === 'unreviewed' && item.reviewed) return false;
+        if (currentFilter === 'reviewed' && !item.reviewed) return false;
+        if (currentFilter === 'flagged' && !item.flag) return false;
+        if (currentFilter === 'conflicts' && !item.conflict) return false;
+        if (currentFilter === 'unknown' && !item.unknown) return false;
+        if (currentFilter === 'noimage' && item.hasImage) return false;
+
+        // Advanced filters
+        if (advBuilding !== 'all' && item.building !== advBuilding) return false;
+        if (advFamily !== 'all' && item.family !== advFamily) return false;
+
+        // Search text matching
+        if (searchQuery.trim() !== '') {
+          const q = searchQuery.toLowerCase();
+          const matchId = item.id.toLowerCase().includes(q);
+          const matchGenus = item.genus.toLowerCase().includes(q);
+          const matchSpecies = item.species.toLowerCase().includes(q);
+          const matchFamily = item.family.toLowerCase().includes(q);
+          const matchCab = item.cabinet.toLowerCase().includes(q);
+          const matchShelf = item.shelf.toLowerCase().includes(q);
+          const matchBuilding = item.building.toLowerCase().includes(q);
+          if (!matchId && !matchGenus && !matchSpecies && !matchFamily && !matchCab && !matchShelf && !matchBuilding) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      // Sort
+      filtered.sort((a, b) => {
+        if (currentSort === 'name_asc') {
+          return `${a.genus} ${a.species}`.localeCompare(`${b.genus} ${b.species}`);
+        } else if (currentSort === 'name_desc') {
+          return `${b.genus} ${b.species}`.localeCompare(`${a.genus} ${a.species}`);
+        } else if (currentSort === 'accession') {
+          return b.id.localeCompare(a.id);
+        } else if (currentSort === 'problems') {
+          return (b.flag ? 1 : 0) - (a.flag ? 1 : 0);
+        } else {
+          // location hierarchy
+          return a.cabinet.localeCompare(b.cabinet) || a.shelf.localeCompare(b.shelf);
+        }
+      });
+
+      recordCountDisplay.innerText = filtered.length;
+
+      if (filtered.length === 0) {
+        stream.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      stream.innerHTML = filtered.map(item => {
+        // Tag styles
+        let statusTag = item.reviewed
+          ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-50 text-fern-dark border border-emerald-200">✓ REVIEWED</span>`
+          : `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-50 text-amber-900 border border-amber-200">🕒 UNREVIEWED</span>`;
+
+        let problemBadge = '';
+        if (item.flag) {
+          let badgeCol = item.flagType === 'brick' 
+            ? 'bg-brick-light text-brick border-brick/30' 
+            : item.flagType === 'sky' 
+              ? 'bg-sky-50 text-sky-800 border-sky-200' 
+              : 'bg-amber-50 text-amber-900 border-amber-200';
+          problemBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium ${badgeCol} border truncate max-w-[150px]">${item.flag}</span>`;
+        }
+
+        let imageBadge = item.hasImage 
+          ? `<span class="flex items-center space-x-1 px-1.5 py-0.5 bg-stone-100 text-stone-600 rounded text-[10px] font-mono border border-stone-200">
+               <svg class="w-3 h-3 text-stone-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+               <span>${item.imageCount} scan</span>
+             </span>`
+          : `<span class="px-1.5 py-0.5 bg-stone-50 text-stone-400 rounded text-[10px] font-mono border border-stone-200">no scan</span>`;
+
+        return `
+          <div onclick="openSpecimenDetail('${item.id}', '${item.genus} ${item.species}')" 
+               class="bg-white rounded-xl p-3 border border-bordercol shadow-card hover:border-fern/60 hover:shadow-pop transition-all cursor-pointer tap-active relative overflow-hidden group">
+            
+            <!-- Left subtle review accent bar -->
+            <div class="absolute left-0 top-0 bottom-0 w-1 ${item.reviewed ? 'bg-fern' : 'bg-amber-400'}"></div>
+
+            <!-- Top Row: Accession ID, Status, Problem Badges -->
+            <div class="flex items-center justify-between gap-1.5 pl-1.5 mb-1.5">
+              <span class="font-mono text-xs font-bold text-ink tracking-tight flex items-center space-x-1">
+                <span>${item.id}</span>
+              </span>
+              <div class="flex items-center space-x-1.5 flex-shrink-0">
+                ${problemBadge}
+                ${statusTag}
+              </div>
+            </div>
+
+            <!-- Middle Row: Botanical Scientific Name (Lora) & Family Tag -->
+            <div class="pl-1.5 mb-2 flex items-baseline justify-between">
+              <div>
+                <span class="font-serif italic font-semibold text-[15px] text-ink group-hover:text-fern-dark transition-colors">
+                  ${item.genus} ${item.species}
+                </span>
+                <span class="font-serif text-xs text-ink-muted ml-1">${item.infra}</span>
+              </div>
+              <span class="text-[11px] font-mono text-ink-muted">
+                ${item.family}
+              </span>
+            </div>
+
+            <!-- Bottom Row: Spatial Breadcrumb & Image Scan Tag -->
+            <div class="pl-1.5 pt-1.5 border-t border-stone-100 flex items-center justify-between text-[11px] font-mono">
+              <div class="text-ink-muted flex items-center space-x-1 truncate max-w-[240px]">
+                <span class="text-stone-400">📍</span>
+                <span class="font-medium text-ink">${item.building}</span>
+                <span class="text-stone-300">›</span>
+                <span>Fl ${item.floor}</span>
+                <span class="text-stone-300">›</span>
+                <span class="text-fern-dark font-medium">${item.cabinet}</span>
+                <span class="text-stone-300">›</span>
+                <span>${item.shelf}</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="text-[10.5px] text-stone-400 font-sans italic hidden xs:inline">${item.storedAs}</span>
+                ${imageBadge}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Filter Pill Switcher
+    function setFilter(type) {
+      currentFilter = type;
+      
+      const pills = document.querySelectorAll('.filter-pill');
+      pills.forEach(p => {
+        p.classList.remove('bg-ink', 'text-white', 'shadow-sm');
+        p.classList.add('bg-stone-200/80', 'text-ink-muted');
+      });
+
+      const activePill = document.getElementById(`pill-${type}`);
+      if (activePill) {
+        activePill.classList.remove('bg-stone-200/80', 'text-ink-muted', 'bg-emerald-50', 'bg-brick-light', 'bg-sky-50', 'bg-amber-50');
+        activePill.classList.add('bg-ink', 'text-white', 'shadow-sm');
+      }
+
+      renderSpecimens();
+    }
+
+    // Live Search Handling
+    function handleSearch(val) {
+      searchQuery = val;
+      const clearBtn = document.getElementById('clear-search-btn');
+      if (val.length > 0) {
+        clearBtn.classList.remove('hidden');
+      } else {
+        clearBtn.classList.add('hidden');
+      }
+      renderSpecimens();
+    }
+
+    function clearSearch() {
+      const searchInput = document.getElementById('search-input');
+      searchInput.value = '';
+      searchQuery = '';
+      document.getElementById('clear-search-btn').classList.add('hidden');
+      setFilter('all');
+      document.getElementById('adv-building-filter').value = 'all';
+      document.getElementById('adv-family-filter').value = 'all';
+      renderSpecimens();
+    }
+
+    // Sort Dropdown
+    function handleSort(val) {
+      currentSort = val;
+      renderSpecimens();
+    }
+
+    // Advanced Drawer Toggle
+    function toggleAdvancedFilters() {
+      const drawer = document.getElementById('advanced-filter-drawer');
+      const dot = document.getElementById('filter-active-dot');
+      drawer.classList.toggle('hidden');
+      dot.classList.toggle('bg-amber-500');
+    }
+
+    function applyFilters() {
+      renderSpecimens();
+    }
+
+    // Wake Lock Simulation
+    function toggleWakeLock() {
+      wakeLockActive = !wakeLockActive;
+      const btn = document.getElementById('wakelock-btn');
+      const icon = document.getElementById('wakelock-icon');
+      if (wakeLockActive) {
+        btn.classList.add('bg-amber-100', 'border-amber-300', 'text-amber-900');
+        icon.innerText = '🌙';
+        btn.title = "Screen Wake Lock ACTIVE (display won't sleep during audit)";
+      } else {
+        btn.classList.remove('bg-amber-100', 'border-amber-300', 'text-amber-900');
+        icon.innerText = '☀️';
+        btn.title = "Wake Lock inactive";
+      }
+    }
+
+    // Detail Modal Preview Simulation
+    function openSpecimenDetail(accession, name) {
+      document.getElementById('toast-accession').innerText = accession;
+      document.getElementById('toast-name').innerText = name;
+      document.getElementById('toast-modal').classList.remove('hidden');
+    }
+
+    function closeToast() {
+      document.getElementById('toast-modal').classList.add('hidden');
+    }
+
+    // Initial render
+    renderSpecimens();
+  </script>
+</body></html>

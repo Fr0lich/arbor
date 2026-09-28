@@ -1,0 +1,494 @@
+<!DOCTYPE html><html lang="en" style=""><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600;700&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#f6fbf3;}body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "tertiary": "#6f0011", "error": "#ba1a1a", "secondary-fixed-dim": "#95d4b3", "primary": "#023d23", "on-secondary-fixed-variant": "#0e5138", "on-surface-variant": "#414942", "on-background": "#181d19", "surface-variant": "#dfe4dd", "tertiary-fixed": "#ffdad8", "surface-container-highest": "#dfe4dd", "surface-dim": "#d7dbd4", "on-secondary-container": "#316e52", "on-error-container": "#93000a", "on-primary": "#ffffff", "outline": "#717972", "on-tertiary": "#ffffff", "primary-fixed-dim": "#9cd3af", "on-tertiary-fixed": "#410006", "on-error": "#ffffff", "secondary": "#2c694e", "surface-bright": "#f6fbf3", "background": "#f6fbf3", "inverse-primary": "#9cd3af", "on-secondary": "#ffffff", "surface": "#f6fbf3", "on-primary-fixed": "#002110", "surface-tint": "#35684b", "on-tertiary-container": "#ffa19e", "tertiary-container": "#951120", "secondary-fixed": "#b1f0ce", "outline-variant": "#c0c9c0", "surface-container-high": "#e5eae2", "surface-container": "#ebefe8", "on-primary-fixed-variant": "#1c5034", "primary-container": "#205438", "surface-container-low": "#f0f5ee", "surface-container-lowest": "#ffffff", "primary-fixed": "#b7efca", "on-primary-container": "#90c7a3", "inverse-surface": "#2c322d", "tertiary-fixed-dim": "#ffb3b0", "inverse-on-surface": "#edf2eb", "on-surface": "#181d19", "on-secondary-fixed": "#002114", "secondary-container": "#aeeecb", "on-tertiary-fixed-variant": "#900b1d", "error-container": "#ffdad6" }, borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, spacing: { "space-lg": "1rem", "space-sm": "0.5rem", "gutter": "0.75rem", "space-xl": "1.5rem", "space-xs": "0.25rem", "space-md": "0.75rem", "margin": "1rem" }, fontFamily: { "mono-accession": ["JetBrains Mono"], "body-md": ["Inter"], "label-caps": ["JetBrains Mono"], "body-sm": ["Inter"], "headline-md": ["Newsreader"], "mono-coordinate": ["JetBrains Mono"], "headline-sm": ["Newsreader"], "headline-lg": ["Newsreader"], "taxon-italic": ["Newsreader"], "body-lg": ["Inter"] }, fontSize: { "mono-accession": ["15px", { lineHeight: "20px", fontWeight: "600" }], "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }], "label-caps": ["11px", { lineHeight: "14px", fontWeight: "600" }], "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }], "headline-md": ["22px", { lineHeight: "28px", fontWeight: "600" }], "mono-coordinate": ["13px", { lineHeight: "18px", fontWeight: "500" }], "headline-sm": ["18px", { lineHeight: "24px", fontWeight: "500" }], "headline-lg": ["30px", { lineHeight: "36px", fontWeight: "600" }], "taxon-italic": ["17px", { lineHeight: "24px", fontWeight: "400" }], "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }] } } } };</script></head><body class="bg-surface text-on-surface font-body-md min-h-screen flex flex-col antialiased selection:bg-secondary-container"><header class="fixed top-0 inset-x-0 z-50 bg-surface/90 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="max-w-md mx-auto h-16 px-space-md flex items-center justify-between gap-space-xs"><div class="flex items-center gap-space-xs min-w-0"><button aria-label="Back to batch" class="min-h-[44px] min-w-[44px] -ml-space-xs flex items-center justify-center text-on-surface hover:text-primary active:scale-95" onclick="history.back()"><span class="material-symbols-outlined text-[20px]">arrow_back</span></button><div class="w-7 h-7 rounded bg-primary-container flex items-center justify-center shrink-0"><span class="font-mono-accession text-on-primary text-xs leading-none">A</span></div><div class="flex flex-col min-w-0"><span class="font-headline-sm text-headline-sm text-on-surface leading-tight truncate">Vault 04 Batch Audit</span><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[12px] text-secondary">tag</span><span class="font-label-caps text-[10px] text-on-surface-variant truncate">Manual ID registration · vascular_plants.csv</span></div></div></div><div class="flex items-center gap-space-xs shrink-0"><button aria-label="Undo specimen action" class="min-h-[44px] min-w-[44px] flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-full"><span class="material-symbols-outlined text-[20px]">undo</span></button><button aria-label="Toggle shelf wake-lock" class="min-h-[44px] min-w-[44px] flex items-center justify-center text-primary-container bg-secondary-container/40 rounded-full"><span class="material-symbols-outlined text-[20px]">light_mode</span></button><div class="flex items-center gap-1 bg-surface-container-high px-space-xs py-0.5 rounded-full shrink-0"><span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span><span class="font-label-caps text-[10px] text-on-secondary-container">42ms</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 max-w-md mx-auto w-full pt-16 bg-surface flex flex-col pb-36"><div class="flex flex-col w-full pb-8 select-none">
+<!-- MODULE 1: Target Shelf Anchor & Location Lock -->
+<section class="px-space-md py-space-sm flex flex-col gap-space-xs bg-surface-container-low border-b border-surface-container-high">
+  <!-- Compact Coordinates Hierarchy: Row 1 Building | Floor, Row 2 Cabinet | Shelf -->
+  <div class="grid grid-cols-2 gap-space-xs"><!-- Row 1 Col 1: Building -->
+    <div class="bg-surface-container-lowest rounded px-space-sm py-1 flex items-center justify-between shadow-sm min-h-[36px]">
+      <div class="flex items-center gap-1 min-w-0">
+        <span class="material-symbols-outlined text-[14px] text-secondary shrink-0">domain</span>
+        <span class="font-label-caps text-[9px] uppercase tracking-wider text-on-surface-variant shrink-0">Building</span>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <span class="font-mono-coordinate text-[12px] font-bold text-primary">Økern</span>
+        <button aria-label="Change building" class="text-outline hover:text-on-surface flex items-center">
+          <span class="material-symbols-outlined text-[14px]">unfold_more</span>
+        </button>
+      </div>
+    </div>
+    <!-- Row 1 Col 2: Floor -->
+    <div class="bg-surface-container-lowest rounded px-space-sm py-1 flex items-center justify-between shadow-sm min-h-[36px]">
+      <div class="flex items-center gap-1 min-w-0">
+        <span class="material-symbols-outlined text-[14px] text-secondary shrink-0">layers</span>
+        <span class="font-label-caps text-[9px] uppercase tracking-wider text-on-surface-variant shrink-0">Floor</span>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button class="w-5 h-5 rounded bg-surface-container flex items-center justify-center text-on-surface active:bg-secondary-container" id="btn-fl-dec">
+          <span class="material-symbols-outlined text-[12px]">remove</span>
+        </button>
+        <span class="font-mono-coordinate text-[12px] font-bold text-on-surface px-1 min-w-[16px] text-center" id="val-floor">-1</span>
+        <button class="w-5 h-5 rounded bg-surface-container flex items-center justify-center text-on-surface active:bg-secondary-container" id="btn-fl-inc">
+          <span class="material-symbols-outlined text-[12px]">add</span>
+        </button>
+      </div>
+    </div>
+    <!-- Row 2 Col 1: Cabinet (Prominent) -->
+    <div class="bg-surface-container-lowest rounded-lg px-space-sm py-2 flex items-center justify-between shadow-sm min-h-[44px] border border-outline-variant/60">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="material-symbols-outlined text-[18px] text-secondary shrink-0">inventory_2</span>
+        <span class="font-label-caps text-[10px] uppercase tracking-wider text-on-surface font-semibold shrink-0">Cabinet</span>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button class="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface active:bg-secondary-container" id="btn-cab-dec">
+          <span class="material-symbols-outlined text-[14px]">remove</span>
+        </button>
+        <span class="font-mono-accession text-[16px] font-bold text-on-surface px-1 min-w-[24px] text-center leading-none" id="val-cab">04</span>
+        <button class="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface active:bg-secondary-container" id="btn-cab-inc">
+          <span class="material-symbols-outlined text-[14px]">add</span>
+        </button>
+      </div>
+    </div>
+    <!-- Row 2 Col 2: Shelf (Prominent) -->
+    <div class="bg-surface-container-lowest rounded-lg px-space-sm py-2 flex items-center justify-between shadow-sm min-h-[44px] border-2 border-secondary">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="material-symbols-outlined text-[18px] text-primary shrink-0">shelves</span>
+        <span class="font-label-caps text-[10px] uppercase tracking-wider text-primary font-bold shrink-0">Shelf</span>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button class="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface active:bg-secondary-container" id="btn-sh-dec">
+          <span class="material-symbols-outlined text-[14px]">remove</span>
+        </button>
+        <span class="font-mono-accession text-[16px] font-bold text-primary px-1 min-w-[24px] text-center leading-none" id="val-shelf">02</span>
+        <button class="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface active:bg-secondary-container" id="btn-sh-inc">
+          <span class="material-symbols-outlined text-[14px]">add</span>
+        </button>
+      </div>
+    </div></div>
+</section><!-- NEW MODULE: Stored As Selector -->
+<section class="px-space-md pt-space-sm pb-1 flex flex-col gap-1.5">
+  <div class="flex items-center justify-between">
+    <span class="font-label-caps text-[10px] uppercase text-on-surface-variant flex items-center gap-1">
+      <span class="material-symbols-outlined text-[13px] text-secondary">category</span> Stored As
+    </span>
+    <span class="font-mono-coordinate text-[10px] text-outline" id="storage-selected-label">Herbarium Sheet</span>
+  </div>
+  <div class="flex items-center gap-1.5 overflow-x-auto select-none py-0.5" style="scrollbar-width: none; -ms-overflow-style: none; scroll-snap-type: x mandatory;" id="storage-pill-carousel">
+    <!-- Blank / Unset option -->
+    <button type="button" onclick="selectStoragePill(this, 'Unset')" class="storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container flex items-center gap-1 transition-all">
+      <span class="">[ — None / Blank ]</span>
+    </button>
+    <button type="button" onclick="selectStoragePill(this, 'Herbarium Sheet')" class="storage-pill active shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border-2 border-secondary bg-secondary-container/40 text-primary font-semibold flex items-center gap-1 transition-all">
+      <span class="material-symbols-outlined text-[13px] text-secondary">check</span>
+      <span class="">Herbarium Sheet</span>
+    </button>
+    <button type="button" onclick="selectStoragePill(this, 'Standard Box')" class="storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container flex items-center gap-1 transition-all">
+      <span class="">Standard Box</span>
+    </button>
+    <button type="button" onclick="selectStoragePill(this, 'Capsule / Envelope')" class="storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container flex items-center gap-1 transition-all">
+      <span class="">Capsule / Envelope</span>
+    </button>
+    <button type="button" onclick="selectStoragePill(this, 'Glass Jar')" class="storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container flex items-center gap-1 transition-all">
+      <span class="">Glass Jar</span>
+    </button>
+    <button type="button" onclick="selectStoragePill(this, 'Petri dish')" class="storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container flex items-center gap-1 transition-all">
+      <span class="">Petri dish</span>
+    </button>
+    <button type="button" onclick="selectStoragePill(this, 'Free Standing')" class="storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container flex items-center gap-1 transition-all">
+      <span class="">Free Standing</span>
+    </button>
+    <button type="button" onclick="selectStoragePill(this, 'Mounted platform')" class="storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container flex items-center gap-1 transition-all">
+      <span class="">Mounted platform</span>
+    </button>
+    <!-- Custom storage add trigger -->
+    <button type="button" onclick="promptCustomStorage()" id="btn-custom-storage" class="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-dashed border-secondary text-secondary bg-surface-container-low hover:bg-secondary-container/30 flex items-center gap-1 transition-all">
+      <span class="material-symbols-outlined text-[13px]">add</span>
+      <span class="">+ Custom</span>
+    </button>
+  </div>
+</section>
+<!-- MODULE 2: Rapid Entry Bar & Camera Scanner Trigger -->
+<section class="px-space-md pt-space-sm pb-space-xs flex flex-col gap-1">
+  <label class="font-label-caps text-[10px] uppercase text-on-surface-variant flex items-center justify-between" for="barcode-input"><span class="">Type Object ID</span><span class="font-mono-coordinate text-[10px] text-secondary lowercase">autofocus active</span></label>
+  <div class="relative flex items-center bg-surface-container-lowest rounded-lg shadow-sm border border-outline-variant/60 focus-within:border-secondary">
+    <div class="min-h-[44px] min-w-[44px] flex items-center justify-center text-primary shrink-0 pl-1">
+      <span class="material-symbols-outlined text-[20px]">tag</span>
+    </div>
+    <input class="w-full bg-transparent font-mono-accession text-on-surface placeholder:text-outline text-body-md py-2.5 focus:outline-none" id="barcode-input" placeholder="Type Object ID (e.g. 0894 or 2024-BOT-0894)..." type="text" autofocus="">
+    <button aria-label="Add to current shelf" class="min-h-[38px] min-w-[44px] m-1 rounded bg-secondary text-on-secondary font-body-md font-bold flex items-center justify-center active:scale-95 transition-transform shadow-sm" id="btn-add-item">
+      <span class="material-symbols-outlined text-[18px]">keyboard_return</span>
+    </button>
+  </div>
+</section>
+<!-- MODULE 3: Live Session Batch Stream -->
+<section class="px-space-md pt-space-xs flex flex-col gap-space-xs">
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-1.5"><span class="font-headline-sm text-headline-sm text-on-surface">Objects on Shelf</span>
+<span class="font-mono-accession text-mono-coordinate text-secondary font-bold">(7 items)</span></div>
+<div class="flex items-center gap-space-xs">
+<button class="min-h-[44px] px-space-xs flex items-center gap-1 text-on-surface-variant hover:text-error text-body-sm">
+<span class="material-symbols-outlined text-[16px]">clear_all</span>
+<span class="font-label-caps text-[11px] uppercase">Clear</span>
+</button>
+</div>
+</div>
+<!-- Live Specimen Cards Stack -->
+<div class="flex flex-col gap-space-xs" id="batch-stream">
+<!-- Card 1: Latest Decoded (flashing/accented) -->
+<article class="relative bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1 transition-all">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-start justify-between pl-1">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="font-mono-accession text-mono-accession text-primary">#2024-BOT-0899</span>
+<span class="font-label-caps text-[9px] px-1.5 py-0.5 rounded bg-secondary-container text-on-secondary-fixed-variant uppercase">ID Verified</span>
+</div>
+<div class="font-taxon-italic text-taxon-italic italic text-on-surface truncate">Salix caprea <span class="font-body-sm not-italic text-on-surface-variant text-[12px]">L.</span></div>
+</div>
+<button aria-label="Remove item" class="min-h-[44px] min-w-[44px] -mr-2 -mt-2 flex items-center justify-center text-outline hover:text-error">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="pl-1 pt-1 flex flex-col gap-1">
+<div class="flex items-center gap-1 text-[11px] font-mono-coordinate text-on-surface-variant">
+<span class="truncate">Lid's hus · FL 1 · Cab 02 · Sh 01</span>
+<span class="material-symbols-outlined text-[14px] text-secondary shrink-0">arrow_forward</span>
+<span class="text-primary font-semibold truncate">Økern · Cab 04 · Sh 02</span>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-body-sm text-[11px] text-on-surface-variant">Fam: Salicaceae</span>
+<span class="text-secondary font-label-caps text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Matched in CSV
+            </span>
+</div>
+</div>
+</article>
+<!-- Card 2 -->
+<article class="relative bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-start justify-between pl-1">
+<div class="flex flex-col min-w-0">
+<span class="font-mono-accession text-mono-accession text-on-surface">#2024-BOT-0898</span>
+<div class="font-taxon-italic text-taxon-italic italic text-on-surface truncate">Taraxacum officinale <span class="font-body-sm not-italic text-on-surface-variant text-[12px]">F.H.Wigg. coll.</span></div>
+</div>
+<button aria-label="Remove item" class="min-h-[44px] min-w-[44px] -mr-2 -mt-2 flex items-center justify-center text-outline hover:text-error">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="pl-1 pt-0.5 flex flex-col gap-1">
+<div class="flex items-center gap-1 text-[11px] font-mono-coordinate text-on-surface-variant">
+<span class="truncate">Lid's hus · FL 1 · Cab 01 · Sh 04</span>
+<span class="material-symbols-outlined text-[14px] text-secondary shrink-0">arrow_forward</span>
+<span class="text-secondary font-medium">Relocating</span>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-body-sm text-[11px] text-on-surface-variant">Fam: Asteraceae</span>
+<span class="text-secondary font-label-caps text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Matched in CSV
+            </span>
+</div>
+</div>
+</article>
+<!-- Card 3 -->
+<article class="relative bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-start justify-between pl-1">
+<div class="flex flex-col min-w-0">
+<span class="font-mono-accession text-mono-accession text-on-surface">#2024-BOT-0900</span>
+<div class="font-taxon-italic text-taxon-italic italic text-on-surface truncate">Betula nana <span class="font-body-sm not-italic text-on-surface-variant text-[12px]">L.</span></div>
+</div>
+<button aria-label="Remove item" class="min-h-[44px] min-w-[44px] -mr-2 -mt-2 flex items-center justify-center text-outline hover:text-error">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="pl-1 pt-0.5 flex flex-col gap-1">
+<div class="flex items-center gap-1 text-[11px] font-mono-coordinate text-on-surface-variant">
+<span class="truncate">Lid's hus · FL 1 · Cab 02 · Sh 03</span>
+<span class="material-symbols-outlined text-[14px] text-secondary shrink-0">arrow_forward</span>
+<span class="text-secondary font-medium">Relocating</span>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-body-sm text-[11px] text-on-surface-variant">Fam: Betulaceae</span>
+<span class="text-secondary font-label-caps text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Matched in CSV
+            </span>
+</div>
+</div>
+</article>
+<!-- Card 4 (Adjacent Shelf Adjustment) -->
+<article class="relative bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-start justify-between pl-1">
+<div class="flex flex-col min-w-0">
+<span class="font-mono-accession text-mono-accession text-on-surface">#2024-BOT-0895</span>
+<div class="font-taxon-italic text-taxon-italic italic text-on-surface truncate">Alnus glutinosa <span class="font-body-sm not-italic text-on-surface-variant text-[12px]">(L.) Gaertn.</span></div>
+</div>
+<button aria-label="Remove item" class="min-h-[44px] min-w-[44px] -mr-2 -mt-2 flex items-center justify-center text-outline hover:text-error">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="pl-1 pt-0.5 flex flex-col gap-1">
+<div class="flex items-center gap-1 text-[11px] font-mono-coordinate text-on-surface-variant">
+<span class="truncate">Økern · FL -1 · Cab 04 · Sh 03</span>
+<span class="material-symbols-outlined text-[14px] text-secondary shrink-0">arrow_forward</span>
+<span class="text-on-surface font-medium">Adjacent Shelf Corr.</span>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-body-sm text-[11px] text-on-surface-variant">Fam: Betulaceae</span>
+<span class="text-secondary font-label-caps text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Confirmed
+            </span>
+</div>
+</div>
+</article>
+<!-- Card 5 (Specimen with warning / flag) -->
+<article class="relative bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-tertiary-container rounded-l-lg"></div>
+<div class="flex items-start justify-between pl-1">
+<div class="flex flex-col min-w-0">
+<span class="font-mono-accession text-mono-accession text-on-surface">#2024-BOT-0897</span>
+<div class="font-taxon-italic text-taxon-italic italic text-on-surface truncate">Picea abies <span class="font-body-sm not-italic text-on-surface-variant text-[12px]">(L.) H.Karst.</span></div>
+</div>
+<button aria-label="Remove item" class="min-h-[44px] min-w-[44px] -mr-2 -mt-2 flex items-center justify-center text-outline hover:text-error">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="pl-1 pt-0.5 flex flex-col gap-1">
+<div class="flex items-center gap-1 text-[11px] font-mono-coordinate text-on-surface-variant">
+<span class="truncate">Økern · FL -1 · Cab 05 · Sh 02</span>
+<span class="material-symbols-outlined text-[14px] text-secondary shrink-0">arrow_forward</span>
+<span class="text-secondary font-medium">Relocating</span>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-body-sm text-[11px] text-on-surface-variant">Fam: Pinaceae</span>
+<span class="text-tertiary font-label-caps text-[10px] flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[12px]">warning</span> Taxon Unverified
+            </span>
+</div>
+</div>
+</article>
+<!-- Card 6 -->
+<article class="relative bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-start justify-between pl-1">
+<div class="flex flex-col min-w-0">
+<span class="font-mono-accession text-mono-accession text-on-surface">#2024-BOT-0896</span>
+<div class="font-taxon-italic text-taxon-italic italic text-on-surface truncate">Pinus sylvestris <span class="font-body-sm not-italic text-on-surface-variant text-[12px]">L. var. sylvestris</span></div>
+</div>
+<button aria-label="Remove item" class="min-h-[44px] min-w-[44px] -mr-2 -mt-2 flex items-center justify-center text-outline hover:text-error">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="pl-1 pt-0.5 flex flex-col gap-1">
+<div class="flex items-center gap-1 text-[11px] font-mono-coordinate text-on-surface-variant">
+<span class="truncate">Lid's hus · FL 2 · Cab 01 · Sh 01</span>
+<span class="material-symbols-outlined text-[14px] text-secondary shrink-0">arrow_forward</span>
+<span class="text-secondary font-medium">Relocating</span>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-body-sm text-[11px] text-on-surface-variant">Fam: Pinaceae</span>
+<span class="text-secondary font-label-caps text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Matched in CSV
+            </span>
+</div>
+</div>
+</article>
+<!-- Card 7 -->
+<article class="relative bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-start justify-between pl-1">
+<div class="flex flex-col min-w-0">
+<span class="font-mono-accession text-mono-accession text-on-surface">#2024-BOT-0894</span>
+<div class="font-taxon-italic text-taxon-italic italic text-on-surface truncate">Betula pendula <span class="font-body-sm not-italic text-on-surface-variant text-[12px]">Roth subsp. pendula</span></div>
+</div>
+<button aria-label="Remove item" class="min-h-[44px] min-w-[44px] -mr-2 -mt-2 flex items-center justify-center text-outline hover:text-error">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="pl-1 pt-0.5 flex flex-col gap-1">
+<div class="flex items-center gap-1 text-[11px] font-mono-coordinate text-on-surface-variant">
+<span class="">Already on Shelf 02</span>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-body-sm text-[11px] text-on-surface-variant">Fam: Betulaceae</span>
+<span class="text-secondary font-label-caps text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check_circle</span> Verified On Shelf
+            </span>
+</div>
+</div>
+</article>
+</div>
+</section>
+<!-- MODULE 4: Live Batch Telemetry Summary -->
+<section class="px-space-md py-space-sm">
+<div class="bg-surface-container p-space-sm rounded-lg flex flex-col gap-1 shadow-inner">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-[10px] uppercase text-on-surface-variant">Batch Register Telemetry</span>
+<span class="font-mono-coordinate text-[11px] font-bold text-primary">7 Queued</span>
+</div>
+<div class="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class=""><strong>5</strong> Relocated from other cabinets</span>
+<span class="text-outline">·</span>
+<span class=""><strong>2</strong> Verified in-place</span>
+</div>
+</div>
+</section>
+<!-- MODULE 5: Shelf Bump & In-View Trigger Auxiliary -->
+
+</div>
+<script>
+  (function() {
+    // Stepper logic with physical click response
+    const shelfVal = document.getElementById('val-shelf');
+    const cabVal = document.getElementById('val-cab');
+    const flVal = document.getElementById('val-floor');
+    const input = document.getElementById('barcode-input');
+    const nextShelfBtn = document.getElementById('btn-next-shelf');
+
+    function pad(n) {
+      return n.toString().padStart(2, '0');
+    }
+
+    document.getElementById('btn-sh-inc')?.addEventListener('click', () => {
+      let v = parseInt(shelfVal.textContent, 10) || 1;
+      shelfVal.textContent = pad(v + 1);
+    });
+    document.getElementById('btn-sh-dec')?.addEventListener('click', () => {
+      let v = parseInt(shelfVal.textContent, 10) || 1;
+      if (v > 1) shelfVal.textContent = pad(v - 1);
+    });
+
+    document.getElementById('btn-cab-inc')?.addEventListener('click', () => {
+      let v = parseInt(cabVal.textContent, 10) || 1;
+      cabVal.textContent = pad(v + 1);
+    });
+    document.getElementById('btn-cab-dec')?.addEventListener('click', () => {
+      let v = parseInt(cabVal.textContent, 10) || 1;
+      if (v > 1) cabVal.textContent = pad(v - 1);
+    });
+
+    document.getElementById('btn-fl-inc')?.addEventListener('click', () => {
+      let v = parseInt(flVal.textContent, 10) || 0;
+      flVal.textContent = (v + 1);
+    });
+    document.getElementById('btn-fl-dec')?.addEventListener('click', () => {
+      let v = parseInt(flVal.textContent, 10) || 0;
+      flVal.textContent = (v - 1);
+    });
+
+    nextShelfBtn?.addEventListener('click', () => {
+      let v = parseInt(shelfVal.textContent, 10) || 1;
+      let nextV = v + 1;
+      shelfVal.textContent = pad(nextV);
+      nextShelfBtn.querySelector('span:last-child').textContent = 'Advance to Shelf ' + pad(nextV + 1);
+    });
+
+    // Mock rapid input append
+    const addBtn = document.getElementById('btn-add-item');
+    addBtn?.addEventListener('click', () => {
+      if (!input.value.trim()) return;
+      const stream = document.getElementById('batch-stream');
+      const val = input.value.trim().toUpperCase();
+      const code = val.startsWith('#') ? val : '#2024-BOT-' + val;
+      
+      const newCard = document.createElement('article');
+      newCard.className = 'relative bg-surface-container-lowest rounded-lg p-space-sm shadow-sm flex flex-col gap-1 animate-pulse';
+      newCard.innerHTML = `
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+        <div class="flex items-start justify-between pl-1">
+          <div class="flex flex-col min-w-0">
+            <span class="font-mono-accession text-mono-accession text-primary">${code}</span>
+            <div class="font-taxon-italic text-taxon-italic italic text-on-surface truncate">Vascular Specimen pending lookup...</div>
+          </div>
+          <button class="min-h-[44px] min-w-[44px] -mr-2 -mt-2 flex items-center justify-center text-outline hover:text-error">
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+        <div class="pl-1 pt-0.5 flex items-center justify-between text-[11px]">
+          <span class="font-mono-coordinate text-on-surface-variant">Assigned to: Økern · Cab 04 · Sh 02</span>
+          <span class="text-secondary font-label-caps text-[10px] flex items-center gap-1">
+            <span class="material-symbols-outlined text-[12px]">schedule</span> Pending Commit
+          </span>
+        </div>
+      `;
+      stream.insertBefore(newCard, stream.firstChild);
+      input.value = '';
+      setTimeout(() => newCard.classList.remove('animate-pulse'), 800);
+    });
+
+    // Lock toggle interaction
+    const lockToggle = document.getElementById('lock-toggle');
+    let locked = true;
+    lockToggle?.addEventListener('click', () => {
+      locked = !locked;
+      const icon = lockToggle.querySelector('.material-symbols-outlined');
+      const label = lockToggle.querySelector('span:last-child');
+      if (locked) {
+        icon.textContent = 'lock_open';
+        label.textContent = 'Unlock';
+      } else {
+        icon.textContent = 'lock';
+        label.textContent = 'Lock in';
+      }
+    });
+  })();
+</script></main><footer class="fixed bottom-0 inset-x-0 z-50 pb-safe bg-surface/95 backdrop-blur-xl shadow-[0_-4px_12px_rgba(20,25,21,0.08)]"><div class="max-w-md mx-auto px-space-md pt-2 pb-safe flex flex-col gap-2 bg-surface/95 backdrop-blur-xl">
+  <!-- Quick Advance Row -->
+  <div class="flex items-center gap-space-xs">
+    <button class="flex-1 min-h-[40px] bg-surface-container-high hover:bg-secondary-container text-on-surface rounded font-body-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-transform border border-outline-variant/60" id="btn-next-shelf">
+      <span class="material-symbols-outlined text-[16px]">move_up</span>
+      <span class="font-label-caps text-label-caps uppercase">Advance to Shelf 03</span>
+    </button>
+    <button aria-label="Print shelf barcode sheet" class="min-h-[40px] px-space-md bg-surface-container hover:bg-surface-container-high text-on-surface-variant rounded flex items-center justify-center shadow-sm border border-outline-variant/60">
+      <span class="material-symbols-outlined text-[18px]">print</span>
+    </button>
+  </div>
+  <!-- Primary Commit Row -->
+  <div class="h-12 flex items-center justify-between gap-space-md pb-1">
+    <div class="flex flex-col">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+        <span class="font-label-caps text-[10px] text-on-surface-variant uppercase">HOST LINKED</span>
+      </div>
+      <span class="font-mono-coordinate text-[12px] font-bold text-on-surface">14 Accessions</span>
+    </div>
+    <button class="flex-1 h-11 bg-primary text-on-primary font-body-md font-semibold rounded-lg px-space-md flex items-center justify-center gap-space-xs shadow active:translate-y-0.5 transition-all">
+      <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
+      <span class="font-label-caps text-label-caps uppercase tracking-wider">Commit Batch</span>
+    </button>
+  </div>
+</div>
+<script class="">
+  function selectStoragePill(btn, name) {
+    document.querySelectorAll('.storage-pill').forEach(el => {
+      el.className = 'storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container flex items-center gap-1 transition-all';
+      const icon = el.querySelector('.material-symbols-outlined');
+      if (icon) icon.remove();
+    });
+    btn.className = 'storage-pill active shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border-2 border-secondary bg-secondary-container/40 text-primary font-semibold flex items-center gap-1 transition-all';
+    if (name !== 'Unset') {
+      const check = document.createElement('span');
+      check.className = 'material-symbols-outlined text-[13px] text-secondary';
+      check.textContent = 'check';
+      btn.insertBefore(check, btn.firstChild);
+    }
+    const label = document.getElementById('storage-selected-label');
+    if (label) label.textContent = name === 'Unset' ? 'None (blank)' : name;
+  }
+
+  function promptCustomStorage() {
+    const name = window.prompt('Enter new storage type (e.g. Glass slide box, Seed packet):');
+    if (!name || !name.trim()) return;
+    const customVal = name.trim();
+    const btnCustom = document.getElementById('btn-custom-storage');
+    const newBtn = document.createElement('button');
+    newBtn.type = 'button';
+    newBtn.className = 'storage-pill shrink-0 px-2.5 py-1 rounded-full text-[11px] font-mono-coordinate border border-outline-variant/60 bg-surface-container-lowest text-on-surface hover:bg-surface-container flex items-center gap-1 transition-all';
+    newBtn.innerHTML = `<span>${customVal}</span>`;
+    newBtn.onclick = function() { selectStoragePill(this, customVal); };
+    btnCustom.parentNode.insertBefore(newBtn, btnCustom);
+    selectStoragePill(newBtn, customVal);
+  }
+</script></footer>
+
+</body></html>
