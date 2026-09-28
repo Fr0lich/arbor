@@ -82,10 +82,21 @@ def get_history_set(app_state):
     presence_set, _ = get_historical_cache(app_state)
     return presence_set
 
+_hist_cache_lock = threading.Lock()
+
 def get_historical_cache(app_state):
+    hist_dbs = getattr(app_state, "historical_dbs", None) or []
+
+    # Generate cache key based on id() of loaded reg_by_id objects
+    current_keys = tuple(id(db.get("reg_by_id")) for db in hist_dbs if db.get("reg_by_id") is not None)
+
+    with _hist_cache_lock:
+        cached_keys = getattr(app_state, "_hist_cache_keys", None)
+        if cached_keys == current_keys and hasattr(app_state, "_hist_cache_data"):
+            return app_state._hist_cache_data
+
     hist_presence_set = set()
     hist_fields_by_oid = {}
-    hist_dbs = getattr(app_state, "historical_dbs", None) or []
     for db in hist_dbs:
         reg_by_id = db.get("reg_by_id")
         if reg_by_id is not None:
@@ -127,6 +138,11 @@ def get_historical_cache(app_state):
                                 val_str = str(val).strip()
                                 if val_str and val_str.lower() not in ("nan", "none", "") and val_str.lower() not in _AUT:
                                     hist_fields_by_oid[s_id].add(col)
+
+    with _hist_cache_lock:
+        app_state._hist_cache_keys = current_keys
+        app_state._hist_cache_data = (hist_presence_set, hist_fields_by_oid)
+
     return hist_presence_set, hist_fields_by_oid
 
 def compute_status_flags(reg_dict, obs_dict, history_set, oid, prob_cols=None, problem_to_field=None, hist_fields_by_oid=None):
@@ -801,7 +817,11 @@ class MobileServer:
         self.port = port
         self.on_edit_callback = on_edit_callback
         self.session_id = uuid.uuid4().hex[:12]
-        self._pin_required = config.load_prefs().get("require_mobile_pin", True)
+        prefs = config.load_prefs()
+        self._pin_required = prefs.get("require_mobile_pin", True)
+        self._image_url_pattern_override = prefs.get("image_url_pattern_override", "")
+        if not self._image_url_pattern_override:
+            self._image_url_pattern_override = prefs.get("advanced", {}).get("image_url_pattern_override", "")
         if self.app_state:
             self.app_state._mobile_session_id = self.session_id
         self.flask_app = Flask(__name__)
@@ -1371,19 +1391,18 @@ self.addEventListener('fetch', (event) => {
                 return jsonify({"error": "Unauthorized"}), 401
 
             if request.method == 'GET':
-                prefs = config.load_prefs()
-                pattern = prefs.get("image_url_pattern_override", "")
-                return jsonify({"success": True, "image_url_pattern_override": pattern})
+                return jsonify({"success": True, "image_url_pattern_override": self._image_url_pattern_override})
 
             elif request.method == 'POST':
                 data = request.get_json(silent=True) or {}
                 prefs = config.load_prefs()
                 if "image_url_pattern_override" in data:
-                    prefs["image_url_pattern_override"] = data["image_url_pattern_override"]
+                    self._image_url_pattern_override = data["image_url_pattern_override"]
+                    prefs["image_url_pattern_override"] = self._image_url_pattern_override
 
                     # Also update advanced subkey for backwards compatibility (same as unified_settings.py)
                     adv = prefs.setdefault("advanced", {})
-                    adv["image_url_pattern_override"] = data["image_url_pattern_override"]
+                    adv["image_url_pattern_override"] = self._image_url_pattern_override
 
                     config.save_prefs(prefs)
                 return jsonify({"success": True})
@@ -2162,13 +2181,9 @@ self.addEventListener('fetch', (event) => {
                 rev_val = str(obs_dict["Reviewed"]).strip().lower() in ["true", "1", "yes"]
 
             online_urls = []
-            prefs = config.load_prefs()
 
             # Check user preferences override first
-            pattern = prefs.get("image_url_pattern_override", "").strip()
-            if not pattern:
-                # Fall back to advanced setting or config pattern
-                pattern = prefs.get("advanced", {}).get("image_url_pattern_override", "").strip()
+            pattern = self._image_url_pattern_override.strip()
 
             if not pattern and self.app_state.config:
                 pattern = self.app_state.config.get("image_url_pattern", "").strip()
