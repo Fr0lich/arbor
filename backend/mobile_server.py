@@ -397,8 +397,15 @@ def _apply_unvalidated_updates(app_state, oid, unvalidated_sources, changed_fiel
     old_rows = {}
     if not df_u.empty and "ObjectID" in df_u.columns:
         matching = df_u[df_u["ObjectID"].astype(str).str.strip() == oid_str]
-        for _, r in matching.iterrows():
-            old_rows[str(r.get("Field_Name", "")).strip()] = str(r.get("Unvalidated_Comment", "")).strip()
+
+        field_name_idx = matching.columns.get_loc("Field_Name") + 1 if "Field_Name" in matching.columns else None
+        comment_idx = matching.columns.get_loc("Unvalidated_Comment") + 1 if "Unvalidated_Comment" in matching.columns else None
+
+        for row in matching.itertuples(index=True, name=None):
+            f_name = row[field_name_idx] if field_name_idx is not None else ""
+            comm = row[comment_idx] if comment_idx is not None else ""
+            old_rows[str(f_name).strip()] = str(comm).strip()
+
         app_state.df_unvalidated = df_u[df_u["ObjectID"].astype(str).str.strip() != oid_str].copy()
 
     if isinstance(unvalidated_sources, list):
@@ -2125,8 +2132,10 @@ self.addEventListener('fetch', (event) => {
                     p_oid = _resolve_oid_in_df(df_p, oid)
                     if p_oid is not None and p_oid in df_p.index:
                         p_rows = df_p.loc[[p_oid]]
-                        for _, pr in p_rows.iterrows():
-                            fn = str(pr.get("FileName", "")).strip()
+                        fn_idx = p_rows.columns.get_loc("FileName") + 1 if "FileName" in p_rows.columns else None
+                        for row in p_rows.itertuples(index=True, name=None):
+                            fn_val = row[fn_idx] if fn_idx is not None else ""
+                            fn = str(fn_val).strip()
                             if fn and f"/api/photo/{fn}" not in local_endpoints:
                                 local_endpoints.append(f"/api/photo/{fn}")
 
@@ -2135,9 +2144,14 @@ self.addEventListener('fetch', (event) => {
                     df_u = self.app_state.df_unvalidated
                     if "ObjectID" in df_u.columns:
                         u_matches = df_u[df_u["ObjectID"].astype(str).str.strip() == str(oid).strip()]
-                        for _, u_row in u_matches.iterrows():
-                            f_name = str(u_row.get("Field_Name", "")).strip()
-                            comm = str(u_row.get("Unvalidated_Comment", "")).strip()
+                        u_field_idx = u_matches.columns.get_loc("Field_Name") + 1 if "Field_Name" in u_matches.columns else None
+                        u_comm_idx = u_matches.columns.get_loc("Unvalidated_Comment") + 1 if "Unvalidated_Comment" in u_matches.columns else None
+                        for row in u_matches.itertuples(index=True, name=None):
+                            f_name_val = row[u_field_idx] if u_field_idx is not None else ""
+                            comm_val = row[u_comm_idx] if u_comm_idx is not None else ""
+
+                            f_name = str(f_name_val).strip()
+                            comm = str(comm_val).strip()
                             if f_name:
                                 unvalidated_sources.append({"field": f_name, "comment": comm})
 
