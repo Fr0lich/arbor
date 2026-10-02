@@ -3189,7 +3189,8 @@ class ObjectProgramUI(
             if str(self.left_frame) not in self.panes.panes():
                 self.panes.insert(0, self.left_frame, weight=1)
         else:
-            self.panes.forget(self.left_frame)
+            if str(self.left_frame) in self.panes.panes():
+                self.panes.forget(self.left_frame)
             
     def toggle_search_panel(self):
         if hasattr(self, "search_bar_frame"):
@@ -3206,22 +3207,22 @@ class ObjectProgramUI(
         if not hasattr(self, 'middle_panes'):
             return
             
-        # Temporarily forget panes to manage ordering and visibility safely
-        if hasattr(self, 'right_frame') and str(self.right_frame) in self.middle_panes.panes():
+        # Manage ordering and visibility safely without thrashing
+        if not self.show_images_var.get() and hasattr(self, 'right_frame') and str(self.right_frame) in self.middle_panes.panes():
             self.middle_panes.forget(self.right_frame)
-        if hasattr(self, 'loc_frame_horizontal') and str(self.loc_frame_horizontal) in self.middle_panes.panes():
-            self.middle_panes.forget(self.loc_frame_horizontal)
-
-        # Re-add visible panes in order: images at top, location at bottom
-        if self.show_images_var.get():
+        elif self.show_images_var.get() and hasattr(self, 'right_frame') and str(self.right_frame) not in self.middle_panes.panes():
             # U2-A: 200px minimum keeps image panel usable when sash is dragged left
-            self.middle_panes.add(self.right_frame, weight=3)
+            self.middle_panes.insert(0, self.right_frame, weight=3)
+            self.refresh_image_view()
+        elif self.show_images_var.get() and hasattr(self, 'right_frame'):
             self.refresh_image_view()
 
         focus_active = hasattr(self, "focus_mode_var") and self.focus_mode_var.get()
         show_loc = not (focus_active and not self.focus_visibility_vars.get("Location", tk.BooleanVar(value=True)).get())
 
-        if hasattr(self, 'location_in_center_var') and self.location_in_center_var.get() and show_loc:
+        if not (hasattr(self, 'location_in_center_var') and self.location_in_center_var.get() and show_loc) and hasattr(self, 'loc_frame_horizontal') and str(self.loc_frame_horizontal) in self.middle_panes.panes():
+            self.middle_panes.forget(self.loc_frame_horizontal)
+        elif hasattr(self, 'location_in_center_var') and self.location_in_center_var.get() and show_loc and hasattr(self, 'loc_frame_horizontal') and str(self.loc_frame_horizontal) not in self.middle_panes.panes():
             # U2-A: 130px minimum keeps location rows readable
             self.middle_panes.add(self.loc_frame_horizontal, weight=1)
 
@@ -6107,7 +6108,8 @@ class ObjectProgramUI(
             self.ensure_no_image_label()
 
             if self.no_image_label.winfo_exists():
-                self.no_image_label.pack(pady=20)
+                if self.no_image_label.winfo_manager() != 'pack':
+                    self.no_image_label.pack(pady=20)
 
         except Exception as e:
             debug_error("Suppressed Error", str(e))
@@ -6132,7 +6134,8 @@ class ObjectProgramUI(
             self.ensure_no_image_label()
 
             if self.no_image_label.winfo_exists():
-                self.no_image_label.pack(pady=20)
+                if self.no_image_label.winfo_manager() != 'pack':
+                    self.no_image_label.pack(pady=20)
 
         except Exception as e:
             debug_error("Suppressed Error", str(e))
