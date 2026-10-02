@@ -820,7 +820,7 @@ class ObjectProblemResolver:
                 if hasattr(self.main_app, "object_list") and hasattr(self.main_app.object_list, "refresh_object_card"):
                     self.main_app.object_list.refresh_object_card(self.oid)
 
-                app_bus.publish(DATABASE_UPDATED)
+                self.win.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
                 self.update_stats()
                 
                 c.configure(highlightbackground=COLORS["success"])
@@ -976,7 +976,7 @@ class ObjectProblemResolver:
         if hasattr(self.main_app, "object_list") and hasattr(self.main_app.object_list, "refresh_object_card"):
             self.main_app.object_list.refresh_object_card(self.oid)
 
-        app_bus.publish(DATABASE_UPDATED)
+        self.win.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
         self.update_stats()
 
         if self._is_queue_mode:

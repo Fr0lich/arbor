@@ -475,7 +475,7 @@ class HistoricalConflictResolverWindow:
                 if hasattr(self.main_app, "object_list") and hasattr(self.main_app.object_list, "refresh_object_card"):
                     self.main_app.object_list.refresh_object_card(self.oid)
 
-                app_bus.publish(DATABASE_UPDATED)
+                self.win.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
                 self.update_stats()
                 
                 # Visual feedback on card
@@ -602,7 +602,7 @@ class HistoricalConflictResolverWindow:
         if hasattr(self.main_app, "object_list") and hasattr(self.main_app.object_list, "refresh_object_card"):
             self.main_app.object_list.refresh_object_card(self.oid)
 
-        app_bus.publish(DATABASE_UPDATED)
+        self.win.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
         self.update_stats()
         self.win.destroy()
 

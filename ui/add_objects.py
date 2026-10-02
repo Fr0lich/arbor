@@ -614,7 +614,7 @@ class AddObjectsWizard:
                 pass
 
         self.app.dirty = True
-        app_bus.publish(DATABASE_UPDATED)
+        self.win.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
 
         messagebox.showinfo("Success", f"Successfully created {len(oids)} object(s).", parent=self.main_window.root)
         self.win.destroy()

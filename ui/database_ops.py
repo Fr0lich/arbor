@@ -304,7 +304,7 @@ class DatabaseOpsMixin:
 
         self.initializing = False
         self.app.dirty = False
-        app_bus.publish(DATABASE_UPDATED)
+        self.system_status.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
 
         self.system_status.config(text="Excel loaded - loading images...")
         self.image_scan_progress.configure(value=85)
@@ -612,7 +612,7 @@ class DatabaseOpsMixin:
         def _on_save_complete(success, err=None):
             if success:
                 self.app.dirty = False
-                app_bus.publish(DATABASE_UPDATED)  # sets badge to "✓ Saved HH:MM"
+                self.system_status.after(0, lambda: app_bus.publish(DATABASE_UPDATED))  # sets badge to "✓ Saved HH:MM"
                 self.system_status.config(text=f"Saved: {basename}")
                 self.show_banner(f"Database saved: {basename}", "success")
                 # Clean up autosave file now that a real save succeeded
@@ -735,7 +735,7 @@ class DatabaseOpsMixin:
                     self.app.excel_path = path
                     self.app.output_path = path
                     self.app.dirty = False
-                    app_bus.publish(DATABASE_UPDATED)
+                    self.system_status.after(0, lambda: app_bus.publish(DATABASE_UPDATED))
                     self.system_status.config(text=f"Saved: {os.path.basename(path)}")
                     self._hide_progress("Export complete")
                     self.show_banner(f"Exported to: {path}", "success")
