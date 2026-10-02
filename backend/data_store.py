@@ -34,19 +34,9 @@ class ObjectDataStore:
                             reg_by_id = raw_df
 
                 if reg_by_id is not None and oid in reg_by_id.index:
-                    rows = reg_by_id.loc[oid]
-                    if isinstance(rows, pd.DataFrame):
-                        for row in rows.itertuples(index=False, name=None):
-                            for col, val in zip(rows.columns, row):
-                                if pd.notna(val):
-                                    val_str = str(val).strip()
-                                    if val_str and val_str != "nan":
-                                        if col not in oid_cache:
-                                            oid_cache[col] = []
-                                        if val_str not in oid_cache[col]:
-                                            oid_cache[col].append(val_str)
-                    elif isinstance(rows, pd.Series):
-                        for col, val in rows.items():
+                    rows = reg_by_id.loc[[oid]]
+                    for row in rows.itertuples(index=False, name=None):
+                        for col, val in zip(rows.columns, row):
                             if pd.notna(val):
                                 val_str = str(val).strip()
                                 if val_str and val_str != "nan":
