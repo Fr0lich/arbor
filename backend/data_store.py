@@ -123,7 +123,7 @@ class ObjectDataStore:
                 reg = reg_dict.get(oid)
             elif hasattr(self.app, "df_reg") and self.app.df_reg is not None:
                 if oid in self.app.df_reg.index:
-                    reg = self.app.df_reg.loc[oid].to_dict()
+                    reg = self.app.df_reg.loc[[oid]].iloc[0].to_dict()
 
             obs = None
             if hasattr(self.app, "_get_obs_dict"):
@@ -131,27 +131,19 @@ class ObjectDataStore:
                 obs = obs_dict.get(oid)
             elif hasattr(self.app, "df_obs") and self.app.df_obs is not None:
                 if oid in self.app.df_obs.index:
-                    obs = self.app.df_obs.loc[oid].to_dict()
+                    obs = self.app.df_obs.loc[[oid]].iloc[0].to_dict()
 
             if reg is None:
                 try:
                     if hasattr(self.app, "df_reg") and self.app.df_reg is not None:
-                        reg = self.app.df_reg.loc[oid]
-                        if isinstance(reg, pd.DataFrame):
-                            reg = reg.iloc[0].to_dict()
-                        else:
-                            reg = reg.to_dict()
+                        reg = self.app.df_reg.loc[[oid]].iloc[0].to_dict()
                 except Exception:
                     reg = {}
 
             if obs is None:
                 try:
                     if hasattr(self.app, "df_obs") and self.app.df_obs is not None:
-                        obs = self.app.df_obs.loc[oid]
-                        if isinstance(obs, pd.DataFrame):
-                            obs = obs.iloc[0].to_dict()
-                        else:
-                            obs = obs.to_dict()
+                        obs = self.app.df_obs.loc[[oid]].iloc[0].to_dict()
                 except Exception:
                     obs = {}
 
