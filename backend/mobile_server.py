@@ -1293,7 +1293,7 @@ class MobileServer:
 
             effective_token = tok or self.session_token
             effective_sid = sid or self.session_id
-            rendered = render_template_string(INDEX_TEMPLATE, token=effective_token, session_id=effective_sid)
+            rendered = INDEX_TEMPLATE.replace('{{ token }}', effective_token).replace('{{ session_id }}', effective_sid)
             resp = make_response(rendered)
             resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
             resp.headers['Pragma'] = 'no-cache'
@@ -1324,7 +1324,7 @@ class MobileServer:
 
             effective_token = tok or self.session_token
             effective_sid = sid or self.session_id
-            rendered = render_template_string(INDEX_TEMPLATE_V2, token=effective_token, session_id=effective_sid)
+            rendered = INDEX_TEMPLATE_V2.replace('{{ token }}', effective_token).replace('{{ session_id }}', effective_sid)
             resp = make_response(rendered)
             resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
             resp.headers['Pragma'] = 'no-cache'
@@ -2020,47 +2020,50 @@ self.addEventListener('fetch', (event) => {
                     if "ObjectID" in df_u.columns:
                         unval_set = set(df_u["ObjectID"].astype(str).str.strip().unique())
 
-                for oid in paged_indices_list:
-                    reg_row = paged_reg_dict.get(oid, {})
-                    obs_row = paged_obs_dict.get(oid, {})
 
-                    genus = _clean_val(reg_row.get("Genus"))
-                    species = _clean_val(reg_row.get("Species"))
-                    family = _clean_val(reg_row.get("Family"))
-                    author = _clean_val(reg_row.get("Author"))
-                    collector = _clean_val(reg_row.get("Collector"))
-                    collection_date = _clean_val(reg_row.get("Collection Date"))
-                    sci_name = f"{genus} {species} {author}".strip() if (genus or species) else f"Specimen #{oid}"
+            # End of df_lock critical section
 
-                    loc = {}
-                    for lcol, key_name in loc_keys.items():
-                        if obs_row and lcol in obs_cols and _clean_val(obs_row.get(lcol)):
-                            loc[key_name] = _clean_val(obs_row.get(lcol))
-                        elif lcol in reg_cols and _clean_val(reg_row.get(lcol)):
-                            loc[key_name] = _clean_val(reg_row.get(lcol))
-                        else:
-                            loc[key_name] = ""
+            for oid in paged_indices_list:
+                reg_row = paged_reg_dict.get(oid, {})
+                obs_row = paged_obs_dict.get(oid, {})
 
-                    flags = compute_status_flags(reg_row, obs_row, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
+                genus = _clean_val(reg_row.get("Genus"))
+                species = _clean_val(reg_row.get("Species"))
+                family = _clean_val(reg_row.get("Family"))
+                author = _clean_val(reg_row.get("Author"))
+                collector = _clean_val(reg_row.get("Collector"))
+                collection_date = _clean_val(reg_row.get("Collection Date"))
+                sci_name = f"{genus} {species} {author}".strip() if (genus or species) else f"Specimen #{oid}"
 
-                    objects.append({
-                        "id": str(oid),
-                        "accession_number": str(oid),
-                        "scientific_name": sci_name,
-                        "genus": genus,
-                        "species": species,
-                        "family": family,
-                        "author": author,
-                        "collector": collector,
-                        "collection_date": collection_date,
-                        "location": loc,
-                        "review_status": flags["review_status"],
-                        "has_flags": flags["has_flags"],
-                        "has_history": flags["has_history"],
-                        "problems_have_history": flags["problems_have_history"],
-                        "has_unknown": flags["has_unknown"],
-                        "has_unvalidated": (str(oid) in unval_set)
-                    })
+                loc = {}
+                for lcol, key_name in loc_keys.items():
+                    if obs_row and lcol in obs_cols and _clean_val(obs_row.get(lcol)):
+                        loc[key_name] = _clean_val(obs_row.get(lcol))
+                    elif lcol in reg_cols and _clean_val(reg_row.get(lcol)):
+                        loc[key_name] = _clean_val(reg_row.get(lcol))
+                    else:
+                        loc[key_name] = ""
+
+                flags = compute_status_flags(reg_row, obs_row, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
+
+                objects.append({
+                    "id": str(oid),
+                    "accession_number": str(oid),
+                    "scientific_name": sci_name,
+                    "genus": genus,
+                    "species": species,
+                    "family": family,
+                    "author": author,
+                    "collector": collector,
+                    "collection_date": collection_date,
+                    "location": loc,
+                    "review_status": flags["review_status"],
+                    "has_flags": flags["has_flags"],
+                    "has_history": flags["has_history"],
+                    "problems_have_history": flags["problems_have_history"],
+                    "has_unknown": flags["has_unknown"],
+                    "has_unvalidated": (str(oid) in unval_set)
+                })
 
             return jsonify({
                 "total_matching": total_matching,
