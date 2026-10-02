@@ -49,18 +49,9 @@ def _get_row_dict_safe(df, oid):
         return {}
     try:
         if oid in df.index:
-            row_data = df.loc[[oid]]
-            if not row_data.empty:
-                return row_data.iloc[0].to_dict()
+            return df.loc[[oid]].iloc[0].to_dict()
     except Exception:
-        try:
-            row_data = df.loc[oid]
-            if isinstance(row_data, pd.DataFrame):
-                return row_data.iloc[0].to_dict()
-            elif isinstance(row_data, pd.Series):
-                return row_data.to_dict()
-        except Exception:
-            pass
+        pass
     return {}
 
 def get_problem_to_field_map(config):
@@ -1618,7 +1609,10 @@ self.addEventListener('fetch', (event) => {
                     })
 
                 df_reg = self.app_state.df_reg
+                df_reg.index = df_reg.index.astype(str)
                 df_obs = self.app_state.df_obs
+                if df_obs is not None:
+                    df_obs.index = df_obs.index.astype(str)
                 history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
                 prob_cols = []
                 if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
@@ -1670,20 +1664,11 @@ self.addEventListener('fetch', (event) => {
                         return df_reg[col_name].reindex(indices)
 
                     if has_obs and not has_reg:
-                        obs_s = df_obs[col_name]
-                        if obs_s.index.dtype != indices.dtype:
-                            obs_map = {str(k): v for k, v in obs_s.items()}
-                            return pd.Series([obs_map.get(str(idx), "") for idx in indices], index=indices, dtype=object)
-                        return obs_s.reindex(indices)
+                        return df_obs[col_name].reindex(indices)
 
                     # Both exist: overlay non-null/non-empty observation values onto registration values
                     reg_col = df_reg[col_name].reindex(indices).astype(object)
-                    obs_s = df_obs[col_name]
-                    if obs_s.index.dtype != indices.dtype:
-                        obs_map = {str(k): v for k, v in obs_s.items()}
-                        obs_col = pd.Series([obs_map.get(str(idx), "") for idx in indices], index=indices, dtype=object)
-                    else:
-                        obs_col = obs_s.reindex(indices).astype(object)
+                    obs_col = df_obs[col_name].reindex(indices).astype(object)
                     obs_clean = _clean_series(obs_col)
                     valid_mask = obs_clean != ""
                     reg_col[valid_mask] = obs_col[valid_mask]
@@ -1732,11 +1717,7 @@ self.addEventListener('fetch', (event) => {
                     if status_filter in ('reviewed', 'pending', 'unreviewed'):
                         if rev_col and df_obs is not None:
                             obs_rev = df_obs[rev_col]
-                            if obs_rev.index.dtype != matched_indices.dtype:
-                                obs_rev_map = {str(k): v for k, v in obs_rev.items()}
-                                rev_series = pd.Series([str(obs_rev_map.get(str(idx), "")).strip().lower() for idx in matched_indices], index=matched_indices)
-                            else:
-                                rev_series = obs_rev.reindex(matched_indices).astype(str).str.strip().str.lower()
+                            rev_series = obs_rev.reindex(matched_indices).astype(str).str.strip().str.lower()
                             is_rev = rev_series.isin(["true", "1", "yes", "t"])
                             if status_filter == 'reviewed':
                                 matched_indices = matched_indices[is_rev]
@@ -1926,11 +1907,7 @@ self.addEventListener('fetch', (event) => {
                 if total_matching > 0:
                     if rev_col and df_obs is not None:
                         obs_rev = df_obs[rev_col]
-                        if obs_rev.index.dtype != matched_indices.dtype:
-                            obs_rev_map = {str(k): v for k, v in obs_rev.items()}
-                            rev_series_facet = pd.Series([str(obs_rev_map.get(str(idx), "")).strip().lower() for idx in matched_indices], index=matched_indices)
-                        else:
-                            rev_series_facet = obs_rev.reindex(matched_indices).astype(str).str.strip().str.lower()
+                        rev_series_facet = obs_rev.reindex(matched_indices).astype(str).str.strip().str.lower()
                         is_rev_series = rev_series_facet.isin(["true", "1", "yes", "t"])
                         reviewed_count = int(is_rev_series.sum())
                         pending_count = max(0, total_matching - reviewed_count)
@@ -2000,17 +1977,9 @@ self.addEventListener('fetch', (event) => {
 
                 paged_obs_dict = {}
                 if df_obs is not None:
-                    if df_obs.index.dtype == df_reg.index.dtype:
-                        intersect = df_obs.index.intersection(paged_indices_list)
-                        if len(intersect) > 0:
-                            paged_obs_dict = df_obs.loc[intersect].to_dict('index')
-                    else:
-                        obs_dict_full = df_obs.to_dict('index')
-                        obs_map = {str(k): v for k, v in obs_dict_full.items()}
-                        for oid_item in paged_indices_list:
-                            s_item = str(oid_item)
-                            if s_item in obs_map:
-                                paged_obs_dict[oid_item] = obs_map[s_item]
+                    intersect = df_obs.index.intersection(paged_indices_list)
+                    if len(intersect) > 0:
+                        paged_obs_dict = df_obs.loc[intersect].to_dict('index')
 
                 loc_keys = {lcol: lcol.lower().replace(" ", "_") for lcol in location_fields}
 
@@ -2091,36 +2060,33 @@ self.addEventListener('fetch', (event) => {
                     if reg_by_id is not None:
                         # Try exact match first
                         if oid in reg_by_id.index:
-                            row = reg_by_id.loc[oid]
+                            rows = reg_by_id.loc[[oid]]
                         else:
                             # Try int match if numeric
                             try:
                                 if oid.isdigit() and int(oid) in reg_by_id.index:
-                                    row = reg_by_id.loc[int(oid)]
+                                    rows = reg_by_id.loc[[int(oid)]]
                                 else:
                                     continue
                             except Exception:
                                 continue
 
-                        if isinstance(row, pd.DataFrame):
-                            row = row.iloc[0]
+                        for row_tuple in rows.itertuples(index=False, name=None):
+                            for col, val in zip(rows.columns, row_tuple):
+                                if pd.isna(val):
+                                    continue
+                                val_str = str(val).strip()
+                                if not val_str or val_str.lower() == "nan":
+                                    continue
 
-                        for col in row.index:
-                            val = row[col]
-                            if pd.isna(val):
-                                continue
-                            val_str = str(val).strip()
-                            if not val_str or val_str.lower() == "nan":
-                                continue
+                                if col not in suggestions:
+                                    suggestions[col] = {}
 
-                            if col not in suggestions:
-                                suggestions[col] = {}
+                                if val_str not in suggestions[col]:
+                                    suggestions[col][val_str] = []
 
-                            if val_str not in suggestions[col]:
-                                suggestions[col][val_str] = []
-
-                            if db_name not in suggestions[col][val_str]:
-                                suggestions[col][val_str].append(db_name)
+                                if db_name not in suggestions[col][val_str]:
+                                    suggestions[col][val_str].append(db_name)
 
             return jsonify({
                 "id": str(oid),
