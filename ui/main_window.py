@@ -7798,11 +7798,9 @@ class ObjectProgramUI(
         obs_dict = self._get_obs_dict()
 
         if col == "ID":
+            import re
             def id_key(oid):
-                try:
-                    return (0, int(oid))
-                except ValueError:
-                    return (1, str(oid))
+                return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(oid))]
             sorted_ids = sorted(ids, key=id_key, reverse=not ascending)
         elif col == "Genus":
             genus_dict = getattr(self, "_cached_genus_dict", None)
