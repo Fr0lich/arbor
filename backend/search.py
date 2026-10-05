@@ -123,7 +123,8 @@ class SearchEngine:
             return None # Indicate no match / return all
 
         p1 = []
-        p2 = []
+        p2_startswith = []
+        p2_contains = []
         p3 = []
         p4 = []
         p5 = []
@@ -134,8 +135,10 @@ class SearchEngine:
 
             if query == tokens_dict["id"]:
                 p1.append(oid)
+            elif tokens_dict["id"].startswith(query):
+                p2_startswith.append(oid)
             elif query in tokens_dict["id"]:
-                p2.append(oid)
+                p2_contains.append(oid)
             elif query in tokens_dict["genus_species"]:
                 p3.append(oid)
             elif query in tokens_dict["family"]:
@@ -143,7 +146,8 @@ class SearchEngine:
             else:
                 p5.append(oid)
 
-        p1.extend(p2)
+        p1.extend(p2_startswith)
+        p1.extend(p2_contains)
         p1.extend(p3)
         p1.extend(p4)
         p1.extend(p5)

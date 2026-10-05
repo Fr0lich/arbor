@@ -1700,18 +1700,23 @@ self.addEventListener('fetch', (event) => {
                     # p1: exact ID match
                     p1_mask = idx_str == query
 
-                    # p2: partial ID match
-                    p2_mask = idx_str.str.contains(query, regex=False) & ~p1_mask
+                    # p2_start: starts with ID match
+                    p2_start_mask = idx_str.str.startswith(query, na=False) & ~p1_mask
+
+                    # p2_contain: contains ID match
+                    p2_contain_mask = idx_str.str.contains(query, regex=False, na=False) & ~(p1_mask | p2_start_mask)
+
+                    p2_mask_total = p1_mask | p2_start_mask | p2_contain_mask
 
                     # p3: genus/species match
                     genus_col = df_reg["Genus"].fillna("").astype(str).str.lower() if "Genus" in df_reg.columns else pd.Series("", index=df_reg.index)
                     species_col = df_reg["Species"].fillna("").astype(str).str.lower() if "Species" in df_reg.columns else pd.Series("", index=df_reg.index)
                     gen_spec = genus_col + " " + species_col
-                    p3_mask = gen_spec.str.contains(query, regex=False) & ~(p1_mask | p2_mask)
+                    p3_mask = gen_spec.str.contains(query, regex=False) & ~p2_mask_total
 
                     # p4: family match
                     family_col = df_reg["Family"].fillna("").astype(str).str.lower() if "Family" in df_reg.columns else pd.Series("", index=df_reg.index)
-                    p4_mask = family_col.str.contains(query, regex=False) & ~(p1_mask | p2_mask | p3_mask)
+                    p4_mask = family_col.str.contains(query, regex=False) & ~(p2_mask_total | p3_mask)
 
                     # p5: other columns match
                     p5_mask = pd.Series(False, index=df_reg.index)
@@ -1722,9 +1727,9 @@ self.addEventListener('fetch', (event) => {
                     for col in search_cols:
                         if col in df_reg.columns and col not in ["Genus", "Species", "Family"]:
                             p5_mask |= df_reg[col].fillna("").astype(str).str.lower().str.contains(query, regex=False)
-                    p5_mask = p5_mask & ~(p1_mask | p2_mask | p3_mask | p4_mask)
+                    p5_mask = p5_mask & ~(p2_mask_total | p3_mask | p4_mask)
 
-                    all_matched_list = df_reg.index[p1_mask].tolist() + df_reg.index[p2_mask].tolist() + df_reg.index[p3_mask].tolist() + df_reg.index[p4_mask].tolist() + df_reg.index[p5_mask].tolist()
+                    all_matched_list = df_reg.index[p1_mask].tolist() + df_reg.index[p2_start_mask].tolist() + df_reg.index[p2_contain_mask].tolist() + df_reg.index[p3_mask].tolist() + df_reg.index[p4_mask].tolist() + df_reg.index[p5_mask].tolist()
                     matched_indices = pd.Index(all_matched_list)
 
                 # Status filter with index dtype safety
@@ -1963,15 +1968,11 @@ self.addEventListener('fetch', (event) => {
                 if sort_by in ['id', 'genus', 'cabinet'] and not is_search_active:
                     ascending = (sort_dir == 'asc')
                     if sort_by == 'id':
-                        # Use numeric sorting if possible, otherwise string sorting
-                        try:
-                            # index might be strings of integers
-                            num_index = matched_indices.astype(int)
-                            matched_indices = matched_indices[num_index.argsort()]
-                            if not ascending:
-                                matched_indices = matched_indices[::-1]
-                        except Exception:
-                            matched_indices = matched_indices.sort_values(ascending=ascending)
+                        # Use natural numeric sorting
+                        def natural_sort_key(s):
+                            return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
+                        sorted_list = sorted(matched_indices.tolist(), key=natural_sort_key, reverse=not ascending)
+                        matched_indices = pd.Index(sorted_list)
                     elif sort_by == 'genus':
                         if "Genus" in df_reg.columns:
                             sort_series = _clean_series(df_reg["Genus"].reindex(matched_indices))
@@ -3145,10 +3146,10 @@ INDEX_TEMPLATE = """
               onchange="handleSortChange()"
               class="bg-transparent font-sans text-[11px] font-medium text-ink outline-none cursor-pointer"
             >
-              <option value="location">Sort by Physical Location</option>
+              <option value="id-asc">Sort by Accession / ID Number</option>
+              <option value="location">Physical Location</option>
               <option value="name-asc">Scientific Name (A-Z)</option>
               <option value="name-desc">Scientific Name (Z-A)</option>
-              <option value="id-asc">Accession / ID Number</option>
             </select>
           </div>
         </div>
@@ -3907,7 +3908,7 @@ INDEX_TEMPLATE = """
     let activeStatusFilter = 'all';
     let noImageFilterActive = false;
     let activeAdvancedFilters = { locations: {}, problems: {} };
-    let activeSortBy = 'location';
+    let activeSortBy = 'id-asc';
     let searchQuery = '';
     let searchDebounceTimer = null;
     let autoSaveTimer = null;
@@ -7437,10 +7438,10 @@ INDEX_TEMPLATE_V2 = """
           <div class="flex items-center space-x-1.5">
             <div class="relative inline-flex items-center">
               <select id="sortBySelect" onchange="handleSortChange()" class="appearance-none bg-white border border-bordercol rounded-md px-2 py-1 pr-6 text-[10.5px] font-mono text-ink focus:outline-none focus:border-fern shadow-2xs cursor-pointer">
-                <option value="location">⇅ Sort: Physical Location</option>
+                <option value="id_asc">⇅ Sort: Accession ID (0894...)</option>
+                <option value="location">Physical Location</option>
                 <option value="name_asc">Scientific Name (A–Z)</option>
                 <option value="name_desc">Scientific Name (Z–A)</option>
-                <option value="id_asc">Accession ID (0894...)</option>
                 <option value="flagged_first">Flagged / Problems First</option>
               </select>
               <div class="absolute right-1.5 pointer-events-none text-ink-faint">
@@ -8147,7 +8148,7 @@ INDEX_TEMPLATE_V2 = """
       activeStatusFilter: 'all',
       noImageFilterActive: false,
       activeAdvancedFilters: { locations: {}, problems: {} },
-      activeSortBy: 'location',
+      activeSortBy: 'id_asc',
       searchQuery: '',
       isReviewed: false,
       showFilterPills: false,
