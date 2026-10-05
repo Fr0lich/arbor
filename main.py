@@ -330,8 +330,6 @@ if __name__ == "__main__":
                 pass
             root.deiconify()
             root.state("zoomed")
-            from ui.tutorial import TutorialManager
-            TutorialManager().continue_pending_tutorial(root)
         else:
             try:
                 root.attributes("-alpha", 1.0)
@@ -339,8 +337,6 @@ if __name__ == "__main__":
                 pass
             root.deiconify()
             root.state("zoomed")
-            from ui.tutorial import TutorialManager
-            TutorialManager().continue_pending_tutorial(root)
 
         # Check for crash logs from previous sessions (shows a banner after 2 s)
         _check_previous_crash_logs(root, ui_ref)

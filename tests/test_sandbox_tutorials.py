@@ -162,8 +162,49 @@ class TestSandboxTutorials(unittest.TestCase):
         self.assertEqual(runner.steps[0].step_id, "open_db_wizard")
         self.assertEqual(runner.steps[1].step_id, "add_new_object")
 
-        runner.exit_tutorial()
+    def test_sandbox_exit_when_initial_state_was_none(self):
+        self.ui.app.excel_path = None
+        self.ui.app.df_reg = None
+        self.ui.app.df_obs = None
+        self.ui.app.current_object_id = None
+
+        self.sm.enter_sandbox(self.ui, mock_type="review")
+        self.assertTrue(self.sm.is_sandboxed)
+        self.assertEqual(self.ui.app.excel_path, "[Tutorial Sandbox]")
+
+        self.sm.exit_sandbox(self.ui)
         self.assertFalse(self.sm.is_sandboxed)
+        self.assertIsNone(self.ui.app.excel_path)
+        self.assertIsNone(self.ui.app.df_reg)
+
+    def test_tutorial_runner_validator_advancement(self):
+        self.ui.test_action_done = False
+        step = ActionStep(
+            step_id="val_test",
+            title="Validator Step",
+            instruction="Perform action",
+            validator=lambda u: getattr(u, "test_action_done", False) is True
+        )
+        step_end = ActionStep(
+            step_id="end_step",
+            title="Done Step",
+            instruction="Done"
+        )
+
+        runner = TutorialRunner(self.ui, [step, step_end], tutorial_name="Validator Runner")
+        self.assertEqual(runner.current_idx, 0)
+
+        # Trigger validator condition
+        self.ui.test_action_done = True
+        # Manually invoke poll validator check or process
+        runner._poll_validator(step.validator)
+        self.assertEqual(runner.current_idx, 1)
+        runner.exit_tutorial()
+
+    def test_show_main_help_window_creation(self):
+        from ui.help_dialogs import show_main_help
+        # Calling show_main_help should construct a top-level window without raising exceptions
+        show_main_help(self.ui)
 
 
 if __name__ == "__main__":

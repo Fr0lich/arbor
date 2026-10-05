@@ -143,6 +143,26 @@ class SandboxManager:
                             ui.load_object(oid)
                         except Exception:
                             pass
+            else:
+                app.excel_path = snap["excel_path"]
+                app.output_path = snap["output_path"]
+                app.df_reg = None
+                app.df_obs = None
+                app.df_photo = None
+                app.df_log = None
+                app.df_unvalidated = None
+                app.current_object_id = None
+                ui.current_id = None
+                if hasattr(ui, "refresh_list"):
+                    try:
+                        ui.refresh_list()
+                    except Exception:
+                        pass
+                if hasattr(ui, "reset_object_editor"):
+                    try:
+                        ui.reset_object_editor()
+                    except Exception:
+                        pass
 
         except Exception as e:
             debug_error("SandboxManager.exit_sandbox", str(e))

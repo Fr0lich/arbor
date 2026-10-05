@@ -1,68 +1,192 @@
+import os
+import sys
+import re
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 
-def show_main_help(root):
-    """Display the full Arbor System User Guide window."""
+def _render_markdown_to_text(txt_widget, md_text, is_dark=False):
+    """Parses markdown text and inserts it into a Tkinter Text widget with rich tags."""
+    from config import sc
+
+    fg_text = "#e8ebe9" if is_dark else "#2c302e"
+    fg_h1 = "#81c784" if is_dark else "#1b5e20"
+    fg_h2 = "#a5d6a7" if is_dark else "#2e7d32"
+    fg_h3 = "#c8e6c9" if is_dark else "#388e3c"
+    fg_code = "#ff7b72" if is_dark else "#b33939"
+    bg_code = "#2d333b" if is_dark else "#ebeff2"
+    bg_block = "#1e242c" if is_dark else "#f3f5f4"
+    fg_dim = "#8b949e" if is_dark else "#7f8c8d"
+
+    # Define Tags
+    txt_widget.tag_configure("h1", font=("Segoe UI", sc(14), "bold"), foreground=fg_h1, spacing1=sc(8), spacing3=sc(6))
+    txt_widget.tag_configure("h2", font=("Segoe UI", sc(11), "bold"), foreground=fg_h2, spacing1=sc(12), spacing3=sc(4))
+    txt_widget.tag_configure("h3", font=("Segoe UI", sc(10), "bold"), foreground=fg_h3, spacing1=sc(8), spacing3=sc(2))
+    txt_widget.tag_configure("body", font=("Segoe UI", sc(9.5)), foreground=fg_text, spacing1=sc(1), spacing3=sc(1))
+    txt_widget.tag_configure("bold", font=("Segoe UI", sc(9.5), "bold"), foreground=fg_text)
+    txt_widget.tag_configure("italic", font=("Segoe UI", sc(9.5), "italic"), foreground=fg_text)
+    txt_widget.tag_configure("bullet", font=("Segoe UI", sc(9.5)), foreground=fg_text, lmargin1=sc(16), lmargin2=sc(28))
+    txt_widget.tag_configure("code_inline", font=("Consolas", sc(9), "bold"), foreground=fg_code, background=bg_code)
+    txt_widget.tag_configure("code_block", font=("Consolas", sc(8.5)), foreground=fg_text, background=bg_block, lmargin1=sc(12), lmargin2=sc(12))
+    txt_widget.tag_configure("table", font=("Consolas", sc(8.5)), foreground=fg_text)
+    txt_widget.tag_configure("hr", font=("Segoe UI", sc(3)), foreground=fg_dim)
+
+    in_code_block = False
+
+    def insert_inline(line_text, base_tag=None):
+        # Match backticks `code` or bold **bold** or normal
+        parts = re.split(r'(`[^`]+`|\*\*[^*]+\*\*)', line_text)
+        for part in parts:
+            if not part:
+                continue
+            if part.startswith('`') and part.endswith('`') and len(part) >= 2:
+                txt_widget.insert("end", part[1:-1], "code_inline")
+            elif part.startswith('**') and part.endswith('**') and len(part) >= 4:
+                txt_widget.insert("end", part[2:-2], ("bold", base_tag) if base_tag else "bold")
+            else:
+                if base_tag:
+                    txt_widget.insert("end", part, base_tag)
+                else:
+                    txt_widget.insert("end", part, "body")
+
+    for raw_line in md_text.splitlines():
+        line = raw_line.rstrip()
+
+        # Handle code fences
+        if line.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+
+        if in_code_block:
+            txt_widget.insert("end", raw_line + "\n", "code_block")
+            continue
+
+        # Horizontal rule
+        if line.strip() in ("---", "***", "___"):
+            txt_widget.insert("end", " " * 80 + "\n", "hr")
+            continue
+
+        # Headers
+        if line.startswith("# "):
+            txt_widget.insert("end", line[2:].strip() + "\n", "h1")
+        elif line.startswith("## "):
+            txt_widget.insert("end", line[3:].strip() + "\n", "h2")
+        elif line.startswith("### "):
+            txt_widget.insert("end", line[4:].strip() + "\n", "h3")
+        elif line.startswith("|") and line.endswith("|"):
+            # Table line
+            txt_widget.insert("end", raw_line + "\n", "table")
+        elif line.startswith("* ") or line.startswith("- "):
+            txt_widget.insert("end", "• ", "bullet")
+            insert_inline(line[2:], base_tag="bullet")
+            txt_widget.insert("end", "\n")
+        elif line.startswith("  * ") or line.startswith("  - "):
+            txt_widget.insert("end", "    - ", "bullet")
+            insert_inline(line[4:], base_tag="bullet")
+            txt_widget.insert("end", "\n")
+        elif line.strip() == "":
+            txt_widget.insert("end", "\n")
+        else:
+            insert_inline(raw_line)
+            txt_widget.insert("end", "\n")
+
+
+def show_main_help(root_or_ui):
+    """Display the full Arbor System User Guide window loaded from USER_GUIDE.md."""
     from config import sc
     import utils
 
-    message = (
-        "ARBOR SYSTEM USER GUIDE\n\n"
-        "1. WORKSPACE PANELS\n"
-        " - Left Panel: Displays the list of objects. Use the search bar to find objects by ID, genus, or species.\n"
-        " - Middle Panel: Displays the high-resolution images. Supports zoom/pan (mouse drag & scroll) and rotation.\n"
-        " - Right Panel: The registration editor. Re-write or choose fields, flag/clear problem statuses, and save your changes.\n\n"
-        "2. PROBLEM WORKFLOW\n"
-        " - Fields with errors are flagged in red. Unmapped problems appear below the main fields.\n"
-        " - Review historical databases by clicking the 'History' indicator when discrepancies occur.\n"
-        " - Once problems are resolved, click 'Mark as Reviewed' at the bottom of the right panel.\n\n"
-        "3. FOCUS & LAYOUT SETTINGS\n"
-        " - Toggle panels or customize sashes from the View and Layout menus.\n"
-        " - Focus mode hides sections or fields that you do not need, making it ideal for small laptop screens."
-    )
+    root = getattr(root_or_ui, "root", root_or_ui)
+    is_dark = getattr(root_or_ui, "dark_mode_active", False)
+
+    # Locate USER_GUIDE.md
+    guide_path = None
+    try:
+        from utils import get_resource_path
+        guide_path = get_resource_path("USER_GUIDE.md")
+    except Exception:
+        pass
+
+    if not guide_path or not os.path.exists(guide_path):
+        if getattr(sys, 'frozen', False):
+            base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        guide_path = os.path.join(base_dir, "USER_GUIDE.md")
+
+    content = ""
+    if os.path.exists(guide_path):
+        try:
+            with open(guide_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except Exception as e:
+            content = f"# Arbor System User Guide\n\nFailed to load guide file: {e}"
+    else:
+        content = "# Arbor System User Guide\n\nUSER_GUIDE.md could not be found."
 
     win = tk.Toplevel(root)
-    win.title("User Guide")
-    utils.center_and_fit_toplevel(win, 620, 700)
+    win.title("Arbor System User Guide")
+    w_width = sc(760)
+    w_height = sc(780)
+    utils.center_and_fit_toplevel(win, w_width, w_height)
     win.bind("<Escape>", lambda e: win.destroy())
 
-    canvas = tk.Canvas(win)
-    sb = ttk.Scrollbar(win, orient="vertical", command=canvas.yview)
-    frame = ttk.Frame(canvas, padding=16)
-    frame.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
-    canvas.create_window((0, 0), window=frame, anchor="nw")
-    canvas.configure(yscrollcommand=sb.set)
-    canvas.pack(side="left", fill="both", expand=True)
-    sb.pack(side="right", fill="y")
+    bg_color = "#181c19" if is_dark else "#fafbfa"
+    fg_color = "#e8ebe9" if is_dark else "#2c302e"
+    win.configure(background=bg_color)
 
+    # Header Bar
+    hdr_frame = tk.Frame(win, bg=bg_color, padx=sc(16), pady=sc(10))
+    hdr_frame.pack(fill="x")
+
+    tk.Label(
+        hdr_frame,
+        text="ARBOR USER GUIDE",
+        font=("Segoe UI", sc(13), "bold"),
+        fg=fg_color,
+        bg=bg_color
+    ).pack(side="left")
+
+    # Content Frame with Text & Scrollbar
+    content_frame = tk.Frame(win, bg=bg_color, padx=sc(16), pady=sc(4))
+    content_frame.pack(fill="both", expand=True)
+
+    sb = ttk.Scrollbar(content_frame, orient="vertical")
     txt = tk.Text(
-        frame,
+        content_frame,
         wrap="word",
-        width=72,
-        height=40,
-        font=("Consolas", sc(9)),
+        font=("Segoe UI", sc(9.5)),
         relief="flat",
-        bg=win.cget("bg"),
+        bg=bg_color,
+        fg=fg_color,
+        padx=sc(12),
+        pady=sc(8),
+        yscrollcommand=sb.set,
+        highlightthickness=0,
         state="normal"
     )
-    txt.pack(fill="both", expand=True)
-    txt.insert("1.0", message)
+    sb.config(command=txt.yview)
+
+    sb.pack(side="right", fill="y")
+    txt.pack(side="left", fill="both", expand=True)
+
+    _render_markdown_to_text(txt, content, is_dark=is_dark)
     txt.config(state="disabled")
 
-    def _on_mousewheel(event):
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-    canvas.bind_all("<MouseWheel>", _on_mousewheel)
-    win.protocol("WM_DELETE_WINDOW", lambda: (
-        canvas.unbind_all("<MouseWheel>"), win.destroy()
-    ))
+    # Footer
+    footer = tk.Frame(win, bg=bg_color, padx=sc(16), pady=sc(10))
+    footer.pack(fill="x", side="bottom")
 
-    ttk.Button(win, text="Close", command=lambda: (
-        canvas.unbind_all("<MouseWheel>"), win.destroy()
-    ), cursor="hand2").pack(side="bottom", pady=8)
+    tk.Label(
+        footer,
+        text="Press Escape to close.",
+        font=("Segoe UI", sc(8.5), "italic"),
+        fg="#888888",
+        bg=bg_color
+    ).pack(side="left")
+
+    close_btn = ttk.Button(footer, text="Close", command=win.destroy, cursor="hand2")
+    close_btn.pack(side="right")
 
 
 def show_quick_help():

@@ -436,13 +436,6 @@ class ObjectProblemResolver:
         self.canvas.tutorial_id = "hr_cards"
         btn_apply_all.tutorial_id = "hr_apply_all"
 
-        # Check and launch tutorial
-        import config
-        prefs = config.load_prefs()
-        if "historical_resolver" not in prefs.get("completed_tutorials", []):
-            from ui.tutorial import TutorialManager
-            self.win.after(500, lambda: TutorialManager().start_tutorial("historical_resolver", self.win))
-        
         self.win.bind("<Control-a>", lambda e: self.apply_all())
         self.update_stats()
 

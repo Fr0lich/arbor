@@ -4,23 +4,36 @@
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)
 
-Arbor is a Python-based desktop application designed to visualize, edit, and review museum object databases stored in Excel. It provides a robust interface for collections management, featuring offline mobile support, extensive undo/redo capabilities, and a highly customizable Tkinter-based UI.
-
-> *[Placeholder: Screenshot of the main Desktop Application UI]*
+Arbor is a Python-based desktop application designed to visualize, edit, and review museum object databases stored in Excel. All of the code was written by Gemini, Claude and other AI agents. 
 
 ---
 
 ## Table of Contents
-1. [Features](#features)
-2. [Prerequisites & Installation](#prerequisites--installation)
-3. [Usage](#usage)
+1. [Documentation & User Guide](#documentation--user-guide)
+2. [Features](#features)
+3. [Prerequisites & Installation](#prerequisites--installation)
+4. [Usage](#usage)
     - [Desktop Application](#desktop-application)
     - [Mobile Companion App](#mobile-companion-app)
-4. [Testing](#testing)
-5. [Project Architecture](#project-architecture)
-6. [Configuration](#configuration)
-7. [Troubleshooting & FAQ](#troubleshooting--faq)
-8. [Contributing Guidelines](#contributing-guidelines)
+5. [Testing](#testing)
+6. [Project Architecture](#project-architecture)
+7. [Configuration](#configuration)
+8. [Troubleshooting & FAQ](#troubleshooting--faq)
+9. [Contributing Guidelines](#contributing-guidelines)
+
+---
+
+## Documentation & User Guide
+
+For full operational instructions, user interface walkthroughs, workflow explanations, and shortcut references, please consult the **[User Guide (USER_GUIDE.md)](USER_GUIDE.md)**:
+
+* **UI Layout & Workspace Panels:** Object directory, high-resolution image tools, and metadata editor.
+* **Problem Workflow:** Identifying validation flags, historical conflict resolution, and marking records as reviewed.
+* **Mobile Companion Setup:** QR code pairing, network tunneling, and offline IndexedDB sync.
+* **Filtering & Searching:** Multi-criteria filters, search bar syntax, and preset queries.
+* **ICEDIG Annotations & Keyboard Shortcuts:** Standardized missing data tags and navigation hotkeys.
+
+Inside the application, the User Guide can also be accessed at any time via **Help → User Guide**.
 
 ---
 
@@ -60,8 +73,6 @@ python main.py
 
 ### Mobile Companion App
 The Mobile Companion App runs as a local background Flask service, allowing a mobile device on the same network (or via tunnel) to interact with the database.
-
-> *[Placeholder: Screenshot of the Mobile Companion App interface]*
 
 - **Starting the Server:** The desktop application dynamically assigns available ports and spawns the background daemon thread.
 - **Tunneling:** You can expose this local server using tunnels like Pinggy. The desktop app manages authentication via an `X-Session-Token`.

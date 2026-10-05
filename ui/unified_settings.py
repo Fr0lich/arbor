@@ -290,7 +290,7 @@ class UnifiedSettingsWindow:
         show_srch = _get_val("show_search_var", p.get("show_search", True))
         show_rg = _get_val("show_reg_var", p.get("show_reg", True))
         show_imgs = _get_val("show_images_var", p.get("show_images", True))
-        loc_center = _get_val("location_in_center_var", p.get("location_in_center", False))
+        loc_center = _get_val("location_in_center_var", p.get("location_in_center", True))
         
         loc_2r = True
         if app and hasattr(app, "location_panel_horiz") and getattr(app, "location_panel_horiz", None) is not None:
@@ -639,12 +639,6 @@ class UnifiedSettingsWindow:
     def _build_tab_layout(self):
         c = self._create_scrollable_tab("layout")
 
-        btn_start_tutorial = ttk.Button(
-            c, text="Start Layout Tutorial",
-            command=lambda: __import__('ui.tutorial', fromlist=['TutorialManager']).TutorialManager().start_tutorial("layout_settings", self.win, force=True)
-        , cursor="hand2")
-        btn_start_tutorial.pack(anchor="ne", padx=10, pady=5)
-
         # Card 1: Workspace Panels
         card1 = self._create_card(c, "Workspace Panel Visibility")
         card1.tutorial_id = "layout_toggles"
@@ -857,12 +851,6 @@ class UnifiedSettingsWindow:
     # ── TAB 4: FOCUS MODE ────────────────────────────────────────────────────
     def _build_tab_focus(self):
         c = self._create_scrollable_tab("focus")
-
-        btn_start_tutorial = ttk.Button(
-            c, text="Start Focus Tutorial",
-            command=lambda: __import__('ui.tutorial', fromlist=['TutorialManager']).TutorialManager().start_tutorial("focus_settings", self.win, force=True)
-        , cursor="hand2")
-        btn_start_tutorial.pack(anchor="ne", padx=10, pady=5)
 
         # Card 1: Focus Master Switches
         card1 = self._create_card(c, "Focus Mode Controls")
@@ -1304,15 +1292,8 @@ class UnifiedSettingsWindow:
             p = config.load_prefs() or {}
             p["completed_tutorials"] = []
             config.save_prefs(p)
-            try:
-                from ui.tutorial import TutorialManager
-                tm = TutorialManager()
-                tm.pending_main_tutorial = False
-                tm.close_tutorial()
-            except Exception:
-                pass
             messagebox.showinfo("Tutorials Reset",
-                                "Tutorial progress has been reset. Interactive guides will appear again when relevant screens open.",
+                                "Tutorial progress has been reset. Interactive tutorials can be launched from the Help Center at any time.",
                                 parent=self.win)
             return
         if not self.app:
@@ -1489,14 +1470,6 @@ class UnifiedSettingsWindow:
                     self.app._schedule_autosave()
             except Exception as e:
                 print(f"[UnifiedSettings] Autosave reschedule error: {e}")
-
-        # 2. Close tutorial manager if tutorials were disabled
-        if new_disable_tutorials and not old_disable_tutorials:
-            try:
-                from ui.tutorial import TutorialManager
-                TutorialManager().close_tutorial()
-            except Exception:
-                pass
 
         # 3. Push layout changes & apply
         if self.app:

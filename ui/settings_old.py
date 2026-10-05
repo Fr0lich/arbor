@@ -249,12 +249,6 @@ def _LEGACY_open_settings_window(self):
                 self._schedule_autosave()
         if new_disable_tutorials != old_disable_tutorials:
             prefs["disable_tutorials"] = new_disable_tutorials
-            if new_disable_tutorials:
-                from ui.tutorial import TutorialManager
-                try:
-                    TutorialManager().close_tutorial()
-                except Exception:
-                    pass
         if scale_changed:
             prefs["ui_scale"] = new_ui_scale
             prefs["user_set"] = True
@@ -368,14 +362,6 @@ def _LEGACY_open_layout_settings(self):
     preset_lf.tutorial_id = "layout_presets"
     scroll_container.tutorial_id = "layout_toggles"
 
-    import config
-    prefs = config.load_prefs()
-    if "layout_settings" not in prefs.get("completed_tutorials", []):
-        try:
-            from ui.tutorial import TutorialManager
-            win.after(500, lambda: TutorialManager().start_tutorial("layout_settings", win))
-        except Exception:
-            pass
     try:
         from ui.main_window import _apply_hover_to_all_tk_buttons
         _apply_hover_to_all_tk_buttons(win, self)
@@ -614,14 +600,6 @@ def _LEGACY_open_focus_settings(self):
     opts_lf.tutorial_id = "focus_options"
     reg_lf.tutorial_id = "focus_fields"
 
-    import config
-    prefs = config.load_prefs()
-    if "focus_settings" not in prefs.get("completed_tutorials", []):
-        try:
-            from ui.tutorial import TutorialManager
-            win.after(500, lambda: TutorialManager().start_tutorial("focus_settings", win))
-        except Exception:
-            pass
     try:
         from ui.main_window import _apply_hover_to_all_tk_buttons
         _apply_hover_to_all_tk_buttons(win, self)

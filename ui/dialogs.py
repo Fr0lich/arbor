@@ -434,13 +434,6 @@ class StartupDialog:
         # Refresh LAUNCH state based on pre-populated path
         self._refresh_launch_state()
 
-        # Tutorial Prompt Hook
-        from ui.tutorial import TutorialManager
-        tm = TutorialManager()
-        prefs = _cfg.load_prefs()
-        if not prefs.get("tutorial_skipped", False):
-            self.win.after(1000, lambda: tm.start_tutorial("startup_tutorial", self.win))
-
     # ------------------------------------------------------------------
     # Window construction
     # ------------------------------------------------------------------
@@ -1353,19 +1346,11 @@ class StartupDialog:
         self.win.destroy()
 
     def show_help(self):
-        import config
-        prefs = config.load_prefs()
-        disable_tutorials = prefs.get("disable_tutorials", False)
+        from ui.help_dialogs import show_main_help
 
         menu = tk.Menu(self.win, tearoff=0)
         menu.add_command(label="Setup Help", command=self._show_setup_help_msg)
-
-        from ui.tutorial import TutorialManager
-        if not disable_tutorials:
-            menu.add_command(label="Start Tutorial", command=lambda: TutorialManager().start_tutorial("startup_tutorial", self.win))
-            menu.add_command(label="Disable All Tutorials", command=self._toggle_disable_tutorials)
-        else:
-            menu.add_command(label="Enable Tutorials", command=self._toggle_disable_tutorials)
+        menu.add_command(label="User Guide", command=lambda: show_main_help(self.win))
 
         try:
             if hasattr(self, "help_btn") and self.help_btn.winfo_exists():
@@ -1382,20 +1367,6 @@ class StartupDialog:
                 menu.grab_release()
             except Exception:
                 pass
-
-    def _toggle_disable_tutorials(self):
-        import config
-        prefs = config.load_prefs()
-        curr = prefs.get("disable_tutorials", False)
-        prefs["disable_tutorials"] = not curr
-        config.save_prefs(prefs)
-
-        if not curr:  # meaning we just set it to True (disabled)
-            from ui.tutorial import TutorialManager
-            TutorialManager().close_tutorial()
-            messagebox.showinfo("Tutorials Disabled", "All interactive tutorials have been disabled globally.")
-        else:
-            messagebox.showinfo("Tutorials Enabled", "Interactive tutorials are now enabled.")
 
     def _show_setup_help_msg(self):
         messagebox.showinfo(
@@ -1536,9 +1507,5 @@ class LoadingWindow:
             pass
         self.parent.deiconify()
         self.parent.state("zoomed")
-        
-        # Run tutorial manager
-        from ui.tutorial import TutorialManager
-        TutorialManager().continue_pending_tutorial(self.parent)
 
 

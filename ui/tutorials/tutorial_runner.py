@@ -122,6 +122,8 @@ class TutorialRunner:
         self.hud_win.attributes("-topmost", True)
         self.hud_win.resizable(False, False)
         self.hud_win.config(bg="#1e1e2d")
+        self.hud_win.protocol("WM_DELETE_WINDOW", self.exit_tutorial)
+        self.hud_win.bind("<Escape>", lambda e: self.exit_tutorial())
 
         # Main HUD container
         frame = tk.Frame(self.hud_win, bg="#1e1e2d", padx=sc(16), pady=sc(14))
@@ -311,6 +313,8 @@ class TutorialRunner:
             self._poll_validator(step.validator)
 
     def _poll_validator(self, validator_fn):
+        if not self.hud_win or not self.hud_win.winfo_exists():
+            return
         try:
             if validator_fn(self.ui):
                 self.next_step()
