@@ -90,7 +90,7 @@ QPushButton:hover {
 }
 
 QPushButton:pressed {
-    background-color: #dadada;
+    background-color: #e9ece5;
 }
 
 QPushButton#btn_clear_filter {
@@ -181,7 +181,7 @@ QScrollBar:vertical {
 QScrollBar::handle:vertical {
     background: #c4c7c7;
     min-height: 20px;
-    border-radius: 4px;
+    border-radius: 2px;
 }
 
 QScrollBar::handle:vertical:hover {
