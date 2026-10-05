@@ -8,3 +8,4 @@ flask
 qrcode
 pytest-xvfb
 xvfbwrapper
+PySide6

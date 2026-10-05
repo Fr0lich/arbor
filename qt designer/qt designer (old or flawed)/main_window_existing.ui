@@ -1,0 +1,2074 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1440</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>1000</width>
+    <height>640</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>arbor — Review Workspace</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">/* =========================================
+   Arbor Main Review Workspace Theme &amp; Tokens
+   (mirrors qt designer/arbor.ui conventions)
+   ========================================= */
+
+QMainWindow#MainWindow, QWidget#centralwidget {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    font-family: 'Segoe UI', 'Inter', sans-serif;
+    font-size: 12px;
+}
+
+QLabel { background: transparent; color: #2c302e; }
+QToolTip { background-color: #2c302e; color: #ffffff; border: none; padding: 4px 6px; }
+
+/* ---------- LAYER 1: Navigation bar ---------- */
+QFrame#nav_bar {
+    background-color: #e9ece5;
+    border: 1px solid #8b948d;
+}
+QLabel#lbl_title {
+    color: #000000;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 0px 16px;
+}
+QFrame#nav_sep_1, QFrame#nav_sep_2, QFrame#nav_sep_3, QFrame#nav_sep_4 {
+    background-color: #8b948d; border: none; max-width: 1px; min-width: 1px;
+}
+QPushButton#btn_nav_file, QPushButton#btn_nav_data, QPushButton#btn_nav_images,
+QPushButton#btn_nav_create, QPushButton#btn_nav_recent, QPushButton#btn_nav_gbif,
+QPushButton#btn_nav_mobile, QPushButton#btn_prev, QPushButton#btn_next,
+QPushButton#btn_last, QPushButton#btn_filter, QPushButton#btn_peek,
+QPushButton#btn_sync_mobile {
+    background-color: transparent;
+    color: #2c302e;
+    border: none;
+    border-radius: 0px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#btn_nav_file:hover, QPushButton#btn_nav_data:hover, QPushButton#btn_nav_images:hover,
+QPushButton#btn_nav_create:hover, QPushButton#btn_nav_recent:hover, QPushButton#btn_nav_gbif:hover,
+QPushButton#btn_nav_mobile:hover, QPushButton#btn_prev:hover, QPushButton#btn_next:hover,
+QPushButton#btn_last:hover, QPushButton#btn_filter:hover, QPushButton#btn_peek:hover,
+QPushButton#btn_sync_mobile:hover {
+    background-color: #ffffff;
+}
+QPushButton#btn_sync_mobile:disabled { color: #747878; }
+QPushButton#btn_filter, QPushButton#btn_peek, QPushButton#btn_sync_mobile {
+    background-color: #fbfaf8; border: 1px solid #c4c7c7; padding: 4px 8px; font-size: 11px;
+}
+QPushButton#btn_next_problem, QPushButton#btn_next_hist {
+    background-color: #000000;
+    color: #ffffff;
+    border: none;
+    border-radius: 0px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QPushButton#btn_next_problem:hover, QPushButton#btn_next_hist:hover { background-color: #2c302e; }
+QPushButton#btn_next_hist:disabled { background-color: #dadada; color: #747878; }
+QLabel#lbl_system_status { color: #444748; }
+QLabel#lbl_data_status { font-weight: bold; color: #3a7d44; }
+QLabel#lbl_data_status[unsaved="true"] { color: #d9a036; }
+QLabel#lbl_online_dot { color: #3a7d44; font-size: 11px; }
+QLabel#lbl_online {
+    color: #444748; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px;
+}
+
+/* ---------- LAYER 2: Inline banner (hidden by default) ---------- */
+QFrame#banner_frame { background-color: #fcf5e3; border: 1px solid #d9a036; }
+QLabel#lbl_banner_text { color: #5e4311; font-weight: 600; }
+QPushButton#btn_banner_action, QPushButton#btn_banner_close {
+    background: transparent; border: none; color: #5e4311; font-weight: bold; padding: 2px 8px;
+}
+
+/* ---------- Splitter ---------- */
+QSplitter::handle { background-color: #c4c7c7; }
+QSplitter::handle:horizontal { width: 2px; }
+QSplitter::handle:vertical { height: 2px; }
+
+/* ---------- LEFT PANE ---------- */
+QFrame#action_rail { background-color: #e9ece5; border: 1px solid #c4c7c7; }
+QPushButton#btn_rail_pin, QPushButton#btn_rail_drawer {
+    background: transparent; border: none; border-radius: 0px; padding: 4px; font-size: 15px;
+}
+QPushButton#btn_rail_pin:hover, QPushButton#btn_rail_drawer:hover { background-color: #ffffff; }
+QLabel#lbl_filter_indicator { color: #c93a40; font-size: 14px; font-weight: bold; }
+
+QWidget#left_content, QWidget#list_container, QWidget#left_bottom_container {
+    background-color: #fbfaf8;
+}
+QLabel#lbl_filter_status { color: #c0392b; font-size: 11px; font-weight: bold; }
+
+QComboBox#combo_sort {
+    background-color: #f2f5f1; color: #2c302e; border: 1px solid #747878;
+    border-radius: 0px; padding: 3px 8px; font-size: 12px;
+}
+QComboBox#combo_sort:hover { background-color: #e9ece5; }
+QComboBox#combo_sort::drop-down { border: none; width: 18px; }
+
+QFrame#search_frame { background-color: #ffffff; border: 1px solid #d1d1d1; }
+QLineEdit#edit_search {
+    background-color: #ffffff; color: #2c302e; border: none; padding: 5px 4px; font-size: 13px;
+}
+QLabel#lbl_search_count {
+    color: #747878; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px;
+}
+QPushButton#btn_clear_search {
+    background: transparent; border: none; color: #747878; font-weight: bold; padding: 2px 6px;
+}
+QPushButton#btn_clear_search:hover { color: #c93a40; }
+
+QTreeWidget#tree_objects {
+    background-color: #ffffff; alternate-background-color: #ffffff;
+    border: 1px solid #c4c7c7; outline: 0;
+    font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; color: #2c302e;
+}
+QTreeWidget#tree_objects::item { padding: 3px 4px; border-bottom: 1px solid #f2f5f1; }
+QTreeWidget#tree_objects::item:hover { background-color: #f2f5f1; }
+QTreeWidget#tree_objects::item:selected { background-color: #e9ece5; color: #000000; }
+QTreeWidget#tree_objects QHeaderView::section {
+    background-color: #f2f5f1; color: #2c302e; border: none;
+    border-bottom: 1px solid #747878; border-right: 1px solid #c4c7c7;
+    padding: 4px 6px; font-family: 'Segoe UI', sans-serif; font-size: 11px; font-weight: bold;
+}
+QPushButton#btn_bulk_edit {
+    background-color: #fbfaf8; color: #2c302e; border: 1px solid #747878;
+    border-radius: 0px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+}
+QPushButton#btn_bulk_edit:hover { background-color: #e9ece5; }
+QPushButton#btn_bulk_edit:disabled { color: #747878; border-color: #c4c7c7; }
+
+QFrame#location_container { background-color: #fbfaf8; border-top: 1px solid #c4c7c7; }
+
+/* ---------- CENTER PANE ---------- */
+QWidget#pane_center { background-color: #fbfaf8; }
+QFrame#context_bar { background-color: #ffffff; border: 1px solid #d1d1d1; }
+QLabel#lbl_id_badge {
+    background-color: #e9ece5; color: #2c302e; border: 1px solid #c4c7c7;
+    padding: 2px 8px; font-family: 'Courier New', 'JetBrains Mono', monospace;
+    font-size: 13px; font-weight: bold;
+}
+QLabel#lbl_specimen_name {
+    color: #2c302e; font-family: 'Georgia', 'Lora', serif; font-size: 17px;
+    font-weight: bold; font-style: italic;
+}
+QLabel#lbl_status_badge {
+    background-color: #fef3c7; color: #92400e; padding: 2px 6px;
+    font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold;
+}
+QLabel#lbl_status_badge[state="reviewed"] { background-color: #eef8f0; color: #214a27; }
+QLabel#lbl_status_badge[state="problem"] { background-color: #f9e6e7; color: #6e1d21; }
+QPushButton#btn_gbif, QPushButton#btn_check_books {
+    background-color: #f2f5f1; color: #2c302e; border: 1px solid #747878;
+    border-radius: 0px; padding: 3px 8px; font-size: 12px; font-weight: bold;
+}
+QPushButton#btn_gbif:hover, QPushButton#btn_check_books:hover { background-color: #e9ece5; }
+QPushButton#btn_push_phone {
+    background-color: #ffffff; color: #757d77; border: 1px solid #747878;
+    border-radius: 0px; padding: 3px 8px; font-size: 12px;
+}
+QPushButton#btn_push_phone:hover { background-color: #f2f5f1; color: #2c302e; }
+
+QFrame#image_panel { background-color: #ffffff; border: 1px solid #c4c7c7; }
+QFrame#image_header { background-color: #f2f5f1; border-bottom: 1px solid #c4c7c7; }
+QLabel#lbl_images_title {
+    color: #2c302e; font-family: 'Courier New', 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: bold; letter-spacing: 1px;
+}
+QLabel#lbl_online_images, QLabel#lbl_images_count, QLabel#lbl_images_missing {
+    color: #747878; font-size: 11px;
+}
+QPushButton#btn_view_mode {
+    background-color: #fbfaf8; color: #2c302e; border: 1px solid #747878;
+    border-radius: 0px; padding: 2px 8px; font-size: 11px;
+}
+QPushButton#btn_view_mode:hover { background-color: #e9ece5; }
+QFrame#image_toolbar { background-color: #fbfaf8; border-bottom: 1px solid #c4c7c7; }
+QPushButton#btn_zoom_in, QPushButton#btn_zoom_out, QPushButton#btn_rotate_ccw,
+QPushButton#btn_rotate_cw, QPushButton#btn_reset_view, QPushButton#btn_fit_view {
+    background-color: #ffffff; color: #2c302e; border: 1px solid #747878;
+    border-radius: 0px; padding: 3px 10px; font-size: 12px; font-weight: 600;
+}
+QPushButton#btn_zoom_in:hover, QPushButton#btn_zoom_out:hover, QPushButton#btn_rotate_ccw:hover,
+QPushButton#btn_rotate_cw:hover, QPushButton#btn_reset_view:hover, QPushButton#btn_fit_view:hover {
+    background-color: #e9ece5;
+}
+QPushButton#btn_zoom_in:pressed, QPushButton#btn_zoom_out:pressed, QPushButton#btn_rotate_ccw:pressed,
+QPushButton#btn_rotate_cw:pressed, QPushButton#btn_reset_view:pressed, QPushButton#btn_fit_view:pressed {
+    background-color: #dadada;
+}
+QLabel#lbl_zoom_status {
+    color: #747878; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px;
+}
+QGraphicsView#image_view { background-color: #f2f5f1; border: none; }
+
+/* ---------- RIGHT PANE ---------- */
+QWidget#pane_right { background-color: #fbfaf8; }
+QFrame#right_header { background-color: #fbfaf8; border-bottom: 1px solid #c4c7c7; }
+QLabel#lbl_reg_title { font-size: 16px; font-weight: bold; color: #2c302e; }
+QPushButton#btn_history {
+    background-color: #ffffff; color: #2c302e; border: 1px solid #747878;
+    border-radius: 0px; padding: 2px 8px; font-size: 12px;
+}
+QPushButton#btn_history:hover { background-color: #e9ece5; }
+QLabel#lbl_history_indicator { color: #444748; font-size: 12px; }
+QLabel#lbl_focus_mode { font-size: 12px; }
+QCheckBox#chk_focus_mode::indicator {
+    width: 28px; height: 14px; border: 1px solid #747878; border-radius: 7px; background-color: #ffffff;
+}
+QCheckBox#chk_focus_mode::indicator:checked { background-color: #3a7d44; border-color: #3a7d44; }
+
+QTabWidget#tabs_registration::pane { border: none; border-top: 1px solid #c4c7c7; background-color: #fbfaf8; }
+QTabWidget#tabs_registration QTabBar::tab {
+    background-color: #e9ece5; color: #444748; border: 1px solid #c4c7c7; border-bottom: none;
+    padding: 6px 16px; font-size: 12px; font-weight: 600;
+}
+QTabWidget#tabs_registration QTabBar::tab:selected {
+    background-color: #ffffff; color: #000000; border-top: 2px solid #000000;
+}
+QTabWidget#tabs_registration QTabBar::tab:hover:!selected { background-color: #f2f5f1; }
+
+QScrollArea#scroll_general, QScrollArea#scroll_problems { border: none; background-color: #fbfaf8; }
+QWidget#scroll_general_contents, QWidget#scroll_problems_contents { background-color: #fbfaf8; }
+
+/* Dynamic registration cards (built at runtime from reg_groups) */
+QGroupBox, QFrame[role="card"] {
+    background-color: #ffffff; border: 1px solid #c4c7c7; border-radius: 2px;
+    margin-top: 10px; padding-top: 8px; font-weight: bold;
+}
+QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #2c302e; background-color: #fbfaf8; }
+
+/* Dynamic form inputs */
+QLineEdit, QPlainTextEdit, QComboBox {
+    background-color: #f2f5f1; color: #2c302e; border: 1px solid #747878;
+    border-radius: 0px; padding: 4px 6px;
+    font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 13px;
+}
+QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus { background-color: #ffffff; border: 1px solid #000000; }
+QLineEdit:read-only, QPlainTextEdit:read-only { background-color: #e9ece5; color: #747878; }
+/* Problem-flag highlight: soft yellow tint + solid left bar (Genus_Problem etc.) */
+QLineEdit[problem="true"], QPlainTextEdit[problem="true"], QComboBox[problem="true"] {
+    background-color: #fef9e7; border: 1px solid #d9a036; border-left: 3px solid #d9a036;
+}
+QLabel[problem="true"] { color: #c93a40; font-weight: bold; }
+
+QCheckBox { spacing: 6px; color: #2c302e; font-size: 12px; }
+QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #747878; background-color: #ffffff; }
+QCheckBox::indicator:checked { background-color: #000000; border-color: #000000; }
+
+/* Fixed bottom action bar */
+QFrame#action_bar { background-color: #fbfaf8; border-top: 1px solid #c4c7c7; }
+QPushButton#btn_mark_reviewed {
+    background-color: #3a7d44; color: #ffffff; border: none; border-radius: 0px;
+    padding: 9px 12px; font-size: 13px; font-weight: bold;
+}
+QPushButton#btn_mark_reviewed:hover { background-color: #2f6638; }
+QPushButton#btn_mark_reviewed:pressed { background-color: #13521a; }
+QPushButton#btn_mark_reviewed[reviewed="true"] { background-color: #adf0a6; color: #13521a; }
+QPushButton#btn_mark_reviewed:disabled { background-color: #dadada; color: #747878; }
+QLabel#lbl_data_status_action, QLabel#lbl_reviewed_time {
+    color: #757d77; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px;
+}
+
+/* ---------- LAYER 4: Global status bar ---------- */
+QFrame#status_bar_frame { background-color: #1c1b1b; }
+QFrame#status_top, QFrame#status_bottom { background-color: #1c1b1b; border: none; }
+QPushButton#btn_sb_settings, QPushButton#btn_sb_help {
+    background-color: transparent; color: #e2e2e2; border: 1px solid #555555;
+    border-radius: 0px; padding: 3px 14px; font-size: 11px; font-weight: bold;
+}
+QPushButton#btn_sb_settings:hover, QPushButton#btn_sb_help:hover { background-color: #2c302e; color: #ffffff; }
+QLabel#lbl_sb_object_count, QLabel#lbl_sb_reviewed, QLabel#lbl_sb_problems,
+QLabel#lbl_sb_last_save, QLabel#lbl_sb_sep_1, QLabel#lbl_sb_sep_2, QLabel#lbl_sb_sep_3 {
+    color: #e2e2e2; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; padding: 0px 6px;
+}
+QLabel#lbl_sb_sep_1, QLabel#lbl_sb_sep_2, QLabel#lbl_sb_sep_3 { color: #555555; padding: 0px; }
+QLabel#lbl_sb_filter_badge {
+    color: #e07b39; font-family: 'Courier New', 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: bold; padding: 0px 4px;
+}
+QPushButton#btn_sb_db_status, QPushButton#btn_sb_log_viewer {
+    background: transparent; border: none; color: #c8c8c8;
+    font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; padding: 0px 8px;
+}
+QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color: #ffffff; }
+</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="root_layout" stretch="0,0,1,0">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QFrame" name="nav_bar">
+      <property name="frameShape">
+       <enum>QFrame::Shape::NoFrame</enum>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>48</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>48</height>
+       </size>
+      </property>
+      <layout class="QHBoxLayout" name="nav_layout">
+       <property name="spacing">
+        <number>2</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lbl_title">
+         <property name="text">
+          <string>arbor</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="nav_sep_1">
+         <property name="frameShape">
+          <enum>QFrame::Shape::VLine</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Shadow::Plain</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_file">
+         <property name="text">
+          <string>FILE ▾</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Database file options</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_data">
+         <property name="text">
+          <string>DATA</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Load historical databases</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_images">
+         <property name="text">
+          <string>IMAGES ▾</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Image source and view options</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_create">
+         <property name="text">
+          <string>CREATE</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Create a new object or database</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_recent">
+         <property name="text">
+          <string>RECENT</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>View recently visited objects</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_gbif">
+         <property name="text">
+          <string>🌿 GBIF ▾</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>GBIF batch taxonomy validation &amp; rollback</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_mobile">
+         <property name="text">
+          <string>📱 MOBILE</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Connect your phone to review &amp; edit records remotely</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="nav_sep_2">
+         <property name="frameShape">
+          <enum>QFrame::Shape::VLine</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Shadow::Plain</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_prev">
+         <property name="text">
+          <string>◄</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Previous in list</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_next">
+         <property name="text">
+          <string>►</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Next in list</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_last">
+         <property name="text">
+          <string>Last</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Return to last visited object</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="nav_sep_3">
+         <property name="frameShape">
+          <enum>QFrame::Shape::VLine</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Shadow::Plain</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_next_problem">
+         <property name="text">
+          <string>⚠ Next Problem</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Jump to next problem</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_next_hist">
+         <property name="text">
+          <string>Next+Hist</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+         <property name="toolTip">
+          <string>Jump to next object with suggestions</string>
+         </property>
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="nav_sep_4">
+         <property name="frameShape">
+          <enum>QFrame::Shape::VLine</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Shadow::Plain</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="nav_spacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_system_status">
+         <property name="text">
+          <string />
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_data_status">
+         <property name="text">
+          <string>Saved</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_online_dot">
+         <property name="text">
+          <string>●</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_online">
+         <property name="text">
+          <string>STATUS: ONLINE</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QFrame" name="banner_frame">
+      <property name="frameShape">
+       <enum>QFrame::Shape::StyledPanel</enum>
+      </property>
+      <property name="visible">
+       <bool>false</bool>
+      </property>
+      <layout class="QHBoxLayout" name="banner_layout">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+       <property name="leftMargin">
+        <number>10</number>
+       </property>
+       <property name="topMargin">
+        <number>4</number>
+       </property>
+       <property name="rightMargin">
+        <number>10</number>
+       </property>
+       <property name="bottomMargin">
+        <number>4</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lbl_banner_text">
+         <property name="text">
+          <string />
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="banner_spacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>0</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_banner_action">
+         <property name="text">
+          <string>View</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_banner_close">
+         <property name="text">
+          <string>✕</string>
+         </property>
+         <property name="cursor">
+          <enum>Qt::PointingHandCursor</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QSplitter" name="splitter_main">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="childrenCollapsible">
+       <bool>false</bool>
+      </property>
+      <property name="handleWidth">
+       <number>2</number>
+      </property>
+      <widget class="QWidget" name="pane_left">
+       <property name="minimumSize">
+        <size>
+         <width>240</width>
+         <height>0</height>
+        </size>
+       </property>
+       <layout class="QHBoxLayout" name="pane_left_layout">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="QFrame" name="action_rail">
+          <property name="frameShape">
+           <enum>QFrame::Shape::StyledPanel</enum>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>40</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>40</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <layout class="QVBoxLayout" name="rail_layout">
+           <property name="spacing">
+            <number>4</number>
+           </property>
+           <property name="leftMargin">
+            <number>4</number>
+           </property>
+           <property name="topMargin">
+            <number>6</number>
+           </property>
+           <property name="rightMargin">
+            <number>4</number>
+           </property>
+           <property name="bottomMargin">
+            <number>6</number>
+           </property>
+           <item>
+            <widget class="QPushButton" name="btn_rail_pin">
+             <property name="text">
+              <string>📌</string>
+             </property>
+             <property name="cursor">
+              <enum>Qt::PointingHandCursor</enum>
+             </property>
+             <property name="toolTip">
+              <string>Toggle Docked / Unpinned Focus Mode</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_rail_drawer">
+             <property name="text">
+              <string>🔍</string>
+             </property>
+             <property name="cursor">
+              <enum>Qt::PointingHandCursor</enum>
+             </property>
+             <property name="toolTip">
+              <string>Open Object Drawer (Ctrl+O)</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_filter_indicator">
+             <property name="text">
+              <string>⚡</string>
+             </property>
+             <property name="visible">
+              <bool>false</bool>
+             </property>
+             <property name="alignment">
+              <enum>Qt::AlignCenter</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="rail_spacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>0</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="left_content">
+          <layout class="QVBoxLayout" name="left_content_layout">
+           <property name="spacing">
+            <number>2</number>
+           </property>
+           <property name="leftMargin">
+            <number>4</number>
+           </property>
+           <property name="topMargin">
+            <number>2</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="lbl_filter_status">
+             <property name="text">
+              <string />
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="sort_row">
+             <layout class="QHBoxLayout" name="sort_layout">
+              <property name="spacing">
+               <number>4</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QComboBox" name="combo_sort">
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>ID</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Genus A-Z</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Reviewed first</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Problems first</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_filter">
+                <property name="text">
+                 <string>Filter</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Ctrl+G</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_peek">
+                <property name="text">
+                 <string>🔍 Peek</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Quick Peek at objects (Ctrl+P)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_sync_mobile">
+                <property name="text">
+                 <string>📱 Sync to Mobile</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Push working batch filter to mobile session</string>
+                </property>
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="sort_spacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSplitter" name="splitter_left">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="childrenCollapsible">
+              <bool>false</bool>
+             </property>
+             <widget class="QWidget" name="list_container">
+              <layout class="QVBoxLayout" name="list_layout">
+               <property name="spacing">
+                <number>6</number>
+               </property>
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QFrame" name="search_frame">
+                 <property name="frameShape">
+                  <enum>QFrame::Shape::StyledPanel</enum>
+                 </property>
+                 <layout class="QHBoxLayout" name="search_layout">
+                  <property name="spacing">
+                   <number>4</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>4</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>4</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QLineEdit" name="edit_search">
+                    <property name="placeholderText">
+                     <string>Search ID, Genus, Species...</string>
+                    </property>
+                    <property name="toolTip">
+                     <string>Live search (Ctrl+F)</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="lbl_search_count">
+                    <property name="text">
+                     <string />
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="btn_clear_search">
+                    <property name="text">
+                     <string>✕</string>
+                    </property>
+                    <property name="cursor">
+                     <enum>Qt::PointingHandCursor</enum>
+                    </property>
+                    <property name="toolTip">
+                     <string>Clear Search (resets filter)</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QTreeWidget" name="tree_objects">
+                 <property name="selectionMode">
+                  <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
+                 </property>
+                 <property name="rootIsDecorated">
+                  <bool>false</bool>
+                 </property>
+                 <property name="uniformRowHeights">
+                  <bool>true</bool>
+                 </property>
+                 <property name="itemsExpandable">
+                  <bool>false</bool>
+                 </property>
+                 <property name="allColumnsShowFocus">
+                  <bool>true</bool>
+                 </property>
+                 <property name="frameShape">
+                  <enum>QFrame::Shape::NoFrame</enum>
+                 </property>
+                 <column>
+                  <property name="text">
+                   <string>✓</string>
+                  </property>
+                 </column>
+                 <column>
+                  <property name="text">
+                   <string>ID</string>
+                  </property>
+                 </column>
+                 <column>
+                  <property name="text">
+                   <string>Genus</string>
+                  </property>
+                 </column>
+                 <column>
+                  <property name="text">
+                   <string>Species</string>
+                  </property>
+                 </column>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btn_bulk_edit">
+                 <property name="text">
+                  <string>Bulk Edit Selected</string>
+                 </property>
+                 <property name="cursor">
+                  <enum>Qt::PointingHandCursor</enum>
+                 </property>
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="left_bottom_container">
+              <layout class="QVBoxLayout" name="left_bottom_layout">
+               <property name="spacing">
+                <number>0</number>
+               </property>
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QFrame" name="location_container">
+                 <property name="frameShape">
+                  <enum>QFrame::Shape::NoFrame</enum>
+                 </property>
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>60</height>
+                  </size>
+                 </property>
+                 <layout class="QVBoxLayout" name="location_layout">
+                  <property name="spacing">
+                   <number>4</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>8</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>6</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>8</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>6</number>
+                  </property>
+                 </layout>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="pane_center">
+       <property name="minimumSize">
+        <size>
+         <width>320</width>
+         <height>0</height>
+        </size>
+       </property>
+       <layout class="QVBoxLayout" name="pane_center_layout">
+        <property name="spacing">
+         <number>2</number>
+        </property>
+        <property name="leftMargin">
+         <number>2</number>
+        </property>
+        <property name="topMargin">
+         <number>1</number>
+        </property>
+        <property name="rightMargin">
+         <number>2</number>
+        </property>
+        <property name="bottomMargin">
+         <number>2</number>
+        </property>
+        <item>
+         <widget class="QFrame" name="context_bar">
+          <property name="frameShape">
+           <enum>QFrame::Shape::StyledPanel</enum>
+          </property>
+          <layout class="QHBoxLayout" name="context_layout">
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <property name="leftMargin">
+            <number>10</number>
+           </property>
+           <property name="topMargin">
+            <number>4</number>
+           </property>
+           <property name="rightMargin">
+            <number>10</number>
+           </property>
+           <property name="bottomMargin">
+            <number>4</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="lbl_id_badge">
+             <property name="text">
+              <string>ID: --</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_specimen_name">
+             <property name="text">
+              <string>No Specimen Selected</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_status_badge">
+             <property name="text">
+              <string>PENDING</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="context_spacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>0</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_gbif">
+             <property name="text">
+              <string>🧬 Validate GBIF</string>
+             </property>
+             <property name="cursor">
+              <enum>Qt::PointingHandCursor</enum>
+             </property>
+             <property name="toolTip">
+              <string>Validate botanical nomenclature with GBIF Backbone Taxonomy</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_check_books">
+             <property name="text">
+              <string>📖 Check Books</string>
+             </property>
+             <property name="cursor">
+              <enum>Qt::PointingHandCursor</enum>
+             </property>
+             <property name="toolTip">
+              <string>Open Historical Database Conflict Resolver</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_push_phone">
+             <property name="text">
+              <string>📱 Send to Phone</string>
+             </property>
+             <property name="cursor">
+              <enum>Qt::PointingHandCursor</enum>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="image_panel">
+          <property name="frameShape">
+           <enum>QFrame::Shape::StyledPanel</enum>
+          </property>
+          <layout class="QVBoxLayout" name="image_panel_layout">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QFrame" name="image_header">
+             <property name="frameShape">
+              <enum>QFrame::Shape::NoFrame</enum>
+             </property>
+             <layout class="QHBoxLayout" name="image_header_layout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <property name="leftMargin">
+               <number>8</number>
+              </property>
+              <property name="topMargin">
+               <number>4</number>
+              </property>
+              <property name="rightMargin">
+               <number>8</number>
+              </property>
+              <property name="bottomMargin">
+               <number>4</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="lbl_images_title">
+                <property name="text">
+                 <string>SPECIMEN IMAGES</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="lbl_online_images">
+                <property name="text">
+                 <string>Online images:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="lbl_images_count">
+                <property name="text">
+                 <string />
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="lbl_images_missing">
+                <property name="text">
+                 <string>No images available</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="image_header_spacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_view_mode">
+                <property name="text">
+                 <string>View: gallery</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="image_toolbar">
+             <property name="frameShape">
+              <enum>QFrame::Shape::NoFrame</enum>
+             </property>
+             <layout class="QHBoxLayout" name="image_toolbar_layout">
+              <property name="spacing">
+               <number>4</number>
+              </property>
+              <property name="leftMargin">
+               <number>8</number>
+              </property>
+              <property name="topMargin">
+               <number>4</number>
+              </property>
+              <property name="rightMargin">
+               <number>8</number>
+              </property>
+              <property name="bottomMargin">
+               <number>4</number>
+              </property>
+              <item>
+               <widget class="QPushButton" name="btn_zoom_in">
+                <property name="text">
+                 <string>＋ Zoom In</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Zoom in on image canvas (Ctrl+Plus)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_zoom_out">
+                <property name="text">
+                 <string>－ Zoom Out</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Zoom out on image canvas (Ctrl+Minus)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_rotate_ccw">
+                <property name="text">
+                 <string>↺ Rotate -90°</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Rotate image counter-clockwise (Ctrl+Shift+R)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_rotate_cw">
+                <property name="text">
+                 <string>↻ Rotate 90°</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Rotate image clockwise (Ctrl+R)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_reset_view">
+                <property name="text">
+                 <string>Reset</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Reset zoom and rotation (Esc)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_fit_view">
+                <property name="text">
+                 <string>Fit View</string>
+                </property>
+                <property name="cursor">
+                 <enum>Qt::PointingHandCursor</enum>
+                </property>
+                <property name="toolTip">
+                 <string>Fit image to viewport (Double-Click)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="image_toolbar_spacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QLabel" name="lbl_zoom_status">
+                <property name="text">
+                 <string>100% | 0°</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGraphicsView" name="image_view">
+             <property name="frameShape">
+              <enum>QFrame::Shape::NoFrame</enum>
+             </property>
+             <property name="dragMode">
+              <enum>QGraphicsView::DragMode::ScrollHandDrag</enum>
+             </property>
+             <property name="resizeAnchor">
+              <enum>QGraphicsView::ViewportAnchor::AnchorUnderMouse</enum>
+             </property>
+             <property name="transformationAnchor">
+              <enum>QGraphicsView::ViewportAnchor::AnchorUnderMouse</enum>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="pane_right">
+       <property name="minimumSize">
+        <size>
+         <width>360</width>
+         <height>0</height>
+        </size>
+       </property>
+       <layout class="QVBoxLayout" name="pane_right_layout">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="QFrame" name="right_header">
+          <property name="frameShape">
+           <enum>QFrame::Shape::NoFrame</enum>
+          </property>
+          <layout class="QHBoxLayout" name="right_header_layout">
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <property name="leftMargin">
+            <number>8</number>
+           </property>
+           <property name="topMargin">
+            <number>6</number>
+           </property>
+           <property name="rightMargin">
+            <number>8</number>
+           </property>
+           <property name="bottomMargin">
+            <number>6</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="lbl_reg_title">
+             <property name="text">
+              <string>Registration Data</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_history">
+             <property name="text">
+              <string>History</string>
+             </property>
+             <property name="cursor">
+              <enum>Qt::PointingHandCursor</enum>
+             </property>
+             <property name="toolTip">
+              <string>Show historical data (Ctrl+H)</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_history_indicator">
+             <property name="text">
+              <string />
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="right_header_spacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>0</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_focus_mode">
+             <property name="text">
+              <string>Focus Mode</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="chk_focus_mode">
+             <property name="cursor">
+              <enum>Qt::PointingHandCursor</enum>
+             </property>
+             <property name="toolTip">
+              <string>Hide fields without active problems</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTabWidget" name="tabs_registration">
+          <property name="currentIndex">
+           <number>0</number>
+          </property>
+          <property name="documentMode">
+           <bool>true</bool>
+          </property>
+          <widget class="QWidget" name="tab_general">
+           <attribute name="title">
+            <string>General Data</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="tab_general_layout">
+            <property name="spacing">
+             <number>0</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QScrollArea" name="scroll_general">
+              <property name="frameShape">
+               <enum>QFrame::Shape::NoFrame</enum>
+              </property>
+              <property name="widgetResizable">
+               <bool>true</bool>
+              </property>
+              <property name="horizontalScrollBarPolicy">
+               <enum>Qt::ScrollBarAlwaysOff</enum>
+              </property>
+              <widget class="QWidget" name="scroll_general_contents">
+               <layout class="QVBoxLayout" name="general_fields_layout">
+                <property name="spacing">
+                 <number>8</number>
+                </property>
+                <property name="leftMargin">
+                 <number>8</number>
+                </property>
+                <property name="topMargin">
+                 <number>8</number>
+                </property>
+                <property name="rightMargin">
+                 <number>8</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>8</number>
+                </property>
+                <item>
+                 <spacer name="general_fields_layout_spacer">
+                  <property name="orientation">
+                   <enum>Qt::Vertical</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>0</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </widget>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="tab_problems">
+           <attribute name="title">
+            <string>Problems</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="tab_problems_layout">
+            <property name="spacing">
+             <number>0</number>
+            </property>
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QScrollArea" name="scroll_problems">
+              <property name="frameShape">
+               <enum>QFrame::Shape::NoFrame</enum>
+              </property>
+              <property name="widgetResizable">
+               <bool>true</bool>
+              </property>
+              <property name="horizontalScrollBarPolicy">
+               <enum>Qt::ScrollBarAlwaysOff</enum>
+              </property>
+              <widget class="QWidget" name="scroll_problems_contents">
+               <layout class="QVBoxLayout" name="problems_layout">
+                <property name="spacing">
+                 <number>8</number>
+                </property>
+                <property name="leftMargin">
+                 <number>8</number>
+                </property>
+                <property name="topMargin">
+                 <number>8</number>
+                </property>
+                <property name="rightMargin">
+                 <number>8</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>8</number>
+                </property>
+                <item>
+                 <spacer name="problems_layout_spacer">
+                  <property name="orientation">
+                   <enum>Qt::Vertical</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>0</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </widget>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="action_bar">
+          <property name="frameShape">
+           <enum>QFrame::Shape::NoFrame</enum>
+          </property>
+          <layout class="QVBoxLayout" name="action_bar_layout">
+           <property name="spacing">
+            <number>4</number>
+           </property>
+           <property name="leftMargin">
+            <number>8</number>
+           </property>
+           <property name="topMargin">
+            <number>4</number>
+           </property>
+           <property name="rightMargin">
+            <number>8</number>
+           </property>
+           <property name="bottomMargin">
+            <number>4</number>
+           </property>
+           <item>
+            <widget class="QPushButton" name="btn_mark_reviewed">
+             <property name="text">
+              <string>✓ MARK AS REVIEWED (Ctrl+Enter)</string>
+             </property>
+             <property name="cursor">
+              <enum>Qt::PointingHandCursor</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="action_row2">
+             <layout class="QHBoxLayout" name="action_row2_layout">
+              <property name="spacing">
+               <number>10</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QCheckBox" name="chk_clear_problems">
+                <property name="text">
+                 <string>Clear Problems</string>
+                </property>
+                <property name="toolTip">
+                 <string>Uncheck all problem flags and mark this object as reviewed</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_auto_next">
+                <property name="text">
+                 <string>Auto-next</string>
+                </property>
+                <property name="toolTip">
+                 <string>Automatically advance to the next item when marked as reviewed</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_auto_hist">
+                <property name="text">
+                 <string>Auto+Hist</string>
+                </property>
+                <property name="toolTip">
+                 <string>Automatically advance to the next unreviewed item with historical suggestions</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="action_row2_spacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>20</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QLabel" name="lbl_data_status_action">
+                <property name="text">
+                 <string />
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="lbl_reviewed_time">
+                <property name="text">
+                 <string />
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+    <item>
+     <widget class="QFrame" name="status_bar_frame">
+      <property name="frameShape">
+       <enum>QFrame::Shape::NoFrame</enum>
+      </property>
+      <layout class="QVBoxLayout" name="status_bar_layout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="status_top">
+         <property name="frameShape">
+          <enum>QFrame::Shape::NoFrame</enum>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>32</height>
+          </size>
+         </property>
+         <layout class="QHBoxLayout" name="status_top_layout">
+          <property name="spacing">
+           <number>4</number>
+          </property>
+          <property name="leftMargin">
+           <number>6</number>
+          </property>
+          <property name="topMargin">
+           <number>3</number>
+          </property>
+          <property name="rightMargin">
+           <number>6</number>
+          </property>
+          <property name="bottomMargin">
+           <number>3</number>
+          </property>
+          <item>
+           <widget class="QPushButton" name="btn_sb_settings">
+            <property name="text">
+             <string>SETTINGS</string>
+            </property>
+            <property name="cursor">
+             <enum>Qt::PointingHandCursor</enum>
+            </property>
+            <property name="toolTip">
+             <string>Open Application Settings</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_sb_help">
+            <property name="text">
+             <string>HELP</string>
+            </property>
+            <property name="cursor">
+             <enum>Qt::PointingHandCursor</enum>
+            </property>
+            <property name="toolTip">
+             <string>Open Help Window</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="status_top_spacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>0</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="status_bottom">
+         <property name="frameShape">
+          <enum>QFrame::Shape::NoFrame</enum>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>24</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>24</height>
+          </size>
+         </property>
+         <layout class="QHBoxLayout" name="status_bottom_layout">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_sb_object_count">
+            <property name="text">
+             <string>OBJECT_COUNT: —</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_sb_sep_1">
+            <property name="text">
+             <string>|</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_sb_reviewed">
+            <property name="text">
+             <string>REVIEWED: —</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_sb_sep_2">
+            <property name="text">
+             <string>|</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_sb_problems">
+            <property name="text">
+             <string>PROBLEMS: —</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_sb_sep_3">
+            <property name="text">
+             <string>|</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_sb_last_save">
+            <property name="text">
+             <string>LAST_SAVE: —</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_sb_filter_badge">
+            <property name="text">
+             <string />
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="status_bottom_spacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>0</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_sb_db_status">
+            <property name="text">
+             <string>DB_STATUS</string>
+            </property>
+            <property name="cursor">
+             <enum>Qt::PointingHandCursor</enum>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_sb_log_viewer">
+            <property name="text">
+             <string>LOG_VIEWER</string>
+            </property>
+            <property name="cursor">
+             <enum>Qt::PointingHandCursor</enum>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources />
+ <connections />
+</ui>

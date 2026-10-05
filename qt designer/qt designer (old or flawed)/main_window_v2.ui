@@ -1,0 +1,1580 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindowV2</class>
+ <widget class="QMainWindow" name="MainWindowV2">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1380</width>
+    <height>880</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>980</width>
+    <height>640</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>arbor — Specimen Curator Workspace</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">/* =========================================================
+   ARBOR DESIGN SYSTEM: CURATOR WORKSPACE (v2)
+   Inspiration: AI_UI_GUIDE, Historical Resolver, Mobile Companion, Startup Dialog
+   ========================================================= */
+
+QMainWindow {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+QSplitter::handle {
+    background-color: #c4c7c7;
+    width: 1px;
+}
+QSplitter::handle:hover {
+    background-color: #000000;
+}
+
+/* ---------------------------------------------------------
+   1. TOP NAVIGATION BAR (40px)
+   --------------------------------------------------------- */
+QFrame#top_bar_frame {
+    background-color: #ffffff;
+    border-bottom: 1px solid #c4c7c7;
+}
+
+QLabel#lbl_brand {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #000000;
+    letter-spacing: 0.05em;
+}
+
+QPushButton.NavTopBtn {
+    background-color: transparent;
+    color: #2c302e;
+    border: none;
+    border-radius: 2px;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 5px 9px;
+}
+QPushButton.NavTopBtn:hover {
+    background-color: #e9ece5;
+    color: #000000;
+}
+QPushButton.NavTopBtn:pressed {
+    background-color: #dadada;
+}
+
+QLabel#lbl_save_status {
+    font-family: 'JetBrains Mono', monospace;
+    color: #3a7d44;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QPushButton.IconNavBtn {
+    background-color: transparent;
+    color: #444748;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 4px 8px;
+}
+QPushButton.IconNavBtn:hover {
+    background-color: #e9ece5;
+    border-color: #c4c7c7;
+    color: #000000;
+}
+
+/* ---------------------------------------------------------
+   2. IDENTITY STRIP (Full Width)
+   --------------------------------------------------------- */
+QFrame#identity_strip_frame {
+    background-color: #f2f5f1;
+    border-bottom: 1px solid #747878;
+}
+
+QLabel#lbl_id_badge {
+    background-color: #ffffff;
+    color: #000000;
+    border: 1px solid #747878;
+    border-radius: 2px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 7px;
+}
+
+QLabel#lbl_taxon_name {
+    font-family: 'Lora', 'Georgia', serif;
+    font-size: 16px;
+    font-weight: 700;
+    font-style: italic;
+    color: #2c302e;
+}
+
+QPushButton#btn_status_pill {
+    background-color: #ffdad6;
+    color: #93000a;
+    border: 1px solid #ba1a1a;
+    border-radius: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 3px 9px;
+}
+QPushButton#btn_status_pill:hover {
+    background-color: #ffb4ab;
+}
+
+QLabel#lbl_location_breadcrumb {
+    font-family: 'Inter', sans-serif;
+    color: #757d77;
+    font-size: 12px;
+}
+
+QPushButton.IdentityActionBtn {
+    background-color: #ffffff;
+    color: #2c302e;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 9px;
+}
+QPushButton.IdentityActionBtn:hover {
+    background-color: #e9ece5;
+    border-color: #747878;
+}
+
+/* ---------------------------------------------------------
+   3. 40px QUEUE RAIL
+   --------------------------------------------------------- */
+QFrame#rail_frame {
+    background-color: #f2f5f1;
+    border-right: 1px solid #c4c7c7;
+}
+
+QPushButton#btn_rail_toggle {
+    background-color: #ffffff;
+    color: #2c302e;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 6px 0px;
+}
+QPushButton#btn_rail_toggle:hover {
+    background-color: #e9ece5;
+    border-color: #747878;
+}
+
+QLabel#lbl_rail_progress {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: #3a7d44;
+}
+
+/* ---------------------------------------------------------
+   4. HERO SPECIMEN IMAGE SURFACE
+   --------------------------------------------------------- */
+QFrame#image_surface_frame {
+    background-color: #181c19;
+    border: 1px solid #747878;
+}
+
+QFrame#floating_image_capsule {
+    background-color: rgba(255, 255, 255, 0.94);
+    border: 1px solid #747878;
+    border-radius: 14px;
+}
+QFrame#floating_image_capsule QPushButton {
+    background-color: transparent;
+    color: #2c302e;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 7px;
+}
+QFrame#floating_image_capsule QPushButton:hover {
+    background-color: #e9ece5;
+    border-radius: 10px;
+    color: #000000;
+}
+
+QFrame#filmstrip_frame {
+    background-color: rgba(24, 28, 25, 0.92);
+    border-top: 1px solid #444748;
+}
+
+QPushButton.FilmstripThumb {
+    background-color: #2c302e;
+    color: #ffffff;
+    border: 1px solid #757d77;
+    border-radius: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 8px;
+}
+QPushButton.FilmstripThumb:hover {
+    border-color: #3a7d44;
+    background-color: #3a7d44;
+}
+
+/* ---------------------------------------------------------
+   5. RIGHT REGISTRATION &amp; CURATOR INSPECTOR
+   --------------------------------------------------------- */
+QFrame#inspector_column {
+    background-color: #fbfaf8;
+    border-left: 1px solid #c4c7c7;
+}
+
+QFrame#inspector_header_bar {
+    background-color: #f2f5f1;
+    border-bottom: 1px solid #c4c7c7;
+}
+
+QLabel#lbl_inspector_title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #2c302e;
+}
+
+/* Tonal Accordion Cards */
+QFrame.TonalCard {
+    background-color: #ffffff;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+}
+
+QFrame.TonalCardHeader {
+    background-color: #f2f5f1;
+    border-bottom: 1px solid #c4c7c7;
+    padding: 4px 8px;
+}
+
+QLabel.MicroLabelCaps {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #757d77;
+}
+
+/* Input Fields with 3px Left Accent Bars */
+QLineEdit {
+    background-color: #f2f5f1;
+    color: #2c302e;
+    border: 1px solid #c4c7c7;
+    border-left: 3px solid #757d77;
+    border-radius: 0px;
+    padding: 5px 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+}
+QLineEdit:focus {
+    background-color: #ffffff;
+    border: 1px solid #000000;
+    border-left: 3px solid #000000;
+}
+
+/* Problem Highlighted Input (e.g. Genus Problem) */
+QLineEdit.ProblemFlaggedInput {
+    background-color: #fff9e6;
+    border: 1px solid #d9a036;
+    border-left: 3px solid #c93a40;
+    color: #2c302e;
+}
+
+QPushButton.InlineProblemBtn {
+    background-color: #ffffff;
+    color: #c93a40;
+    border: 1px solid #c93a40;
+    border-radius: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 6px;
+}
+QPushButton.InlineProblemBtn:hover {
+    background-color: #ffdad6;
+}
+
+/* Problem Checklist Box */
+QFrame#card_problems_container {
+    background-color: #ffffff;
+    border: 1px solid #ba1a1a;
+    border-radius: 2px;
+}
+
+QCheckBox {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    color: #2c302e;
+    spacing: 6px;
+}
+QCheckBox::indicator {
+    width: 14px;
+    height: 14px;
+    border: 1px solid #757d77;
+    border-radius: 2px;
+    background-color: #ffffff;
+}
+QCheckBox::indicator:checked {
+    background-color: #c93a40;
+    border-color: #c93a40;
+}
+
+/* Sticky Review Action Box */
+QFrame#sticky_review_box {
+    background-color: #ffffff;
+    border-top: 1px solid #747878;
+}
+
+QPushButton#btn_mark_reviewed {
+    background-color: #3a7d44;
+    color: #ffffff;
+    border: none;
+    border-radius: 2px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 9px 16px;
+    letter-spacing: 0.03em;
+}
+QPushButton#btn_mark_reviewed:hover {
+    background-color: #2e6436;
+}
+QPushButton#btn_mark_reviewed:pressed {
+    background-color: #1e4524;
+}
+
+/* ---------------------------------------------------------
+   6. GLOBAL STATUS BAR (22px)
+   --------------------------------------------------------- */
+QFrame#status_bar_frame {
+    background-color: #f2f5f1;
+    border-top: 1px solid #c4c7c7;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #444748;
+}
+
+QLabel#lbl_filter_pill {
+    background-color: #ffdad6;
+    color: #93000a;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 2px;
+}
+</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="root_vlayout">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QFrame" name="top_bar_frame">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>40</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>40</height>
+       </size>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::NoFrame</enum>
+      </property>
+      <layout class="QHBoxLayout" name="layout_top_bar">
+       <property name="leftMargin">
+        <number>12</number>
+       </property>
+       <property name="topMargin">
+        <number>4</number>
+       </property>
+       <property name="rightMargin">
+        <number>12</number>
+       </property>
+       <property name="bottomMargin">
+        <number>4</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lbl_brand">
+         <property name="text">
+          <string>arbor │</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_top_file">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="styleSheet">
+          <string notr="true"/>
+         </property>
+         <property name="text">
+          <string>FILE ▾</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>NavTopBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_top_data">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>DATA</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>NavTopBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_top_recent">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>RECENT</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>NavTopBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_top_gbif">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>🌿 GBIF ▾</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>NavTopBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_top_mobile">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>📱 MOBILE</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>NavTopBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="spacer_top_bar">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_save_status">
+         <property name="text">
+          <string>● Saved</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_top_overflow">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>⋯</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>IconNavBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_top_settings">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>⚙</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>IconNavBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_top_help">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>?</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>IconNavBtn</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QFrame" name="identity_strip_frame">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>38</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>38</height>
+       </size>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::NoFrame</enum>
+      </property>
+      <layout class="QHBoxLayout" name="layout_identity_strip">
+       <property name="leftMargin">
+        <number>12</number>
+       </property>
+       <property name="topMargin">
+        <number>4</number>
+       </property>
+       <property name="rightMargin">
+        <number>12</number>
+       </property>
+       <property name="bottomMargin">
+        <number>4</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lbl_id_badge">
+         <property name="text">
+          <string>[O-V-OE-0042]</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_taxon_name">
+         <property name="text">
+          <string>Betula pendula</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_status_pill">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>● UNREVIEWED</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_location_breadcrumb">
+         <property name="text">
+          <string>Fam: Betulaceae · Cab 04 · Sh 02</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="spacer_identity">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_identity_gbif">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>🧬 GBIF</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>IdentityActionBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_identity_books">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>📖 Books</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>IdentityActionBtn</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_identity_phone">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>📱 Phone</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>IdentityActionBtn</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QSplitter" name="main_workspace_splitter">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <widget class="QFrame" name="rail_frame">
+       <property name="minimumSize">
+        <size>
+         <width>40</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>40</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <layout class="QVBoxLayout" name="layout_rail">
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <property name="leftMargin">
+         <number>4</number>
+        </property>
+        <property name="topMargin">
+         <number>8</number>
+        </property>
+        <property name="rightMargin">
+         <number>4</number>
+        </property>
+        <property name="bottomMargin">
+         <number>8</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_rail_toggle">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="toolTip">
+           <string>Open Specimen Queue (Ctrl+O)</string>
+          </property>
+          <property name="text">
+           <string>☰</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_rail_progress">
+          <property name="text">
+           <string>4%</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="spacer_rail">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QFrame" name="image_surface_frame">
+       <layout class="QVBoxLayout" name="layout_image_surface">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="QWidget" name="image_canvas_container" native="true">
+          <layout class="QVBoxLayout" name="layout_canvas_inner">
+           <property name="leftMargin">
+            <number>12</number>
+           </property>
+           <property name="topMargin">
+            <number>12</number>
+           </property>
+           <property name="rightMargin">
+            <number>12</number>
+           </property>
+           <property name="bottomMargin">
+            <number>12</number>
+           </property>
+           <item>
+            <layout class="QHBoxLayout" name="layout_floating_tools">
+             <item>
+              <spacer name="spacer_capsule_left">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QFrame" name="floating_image_capsule">
+               <layout class="QHBoxLayout" name="layout_capsule_btns">
+                <property name="spacing">
+                 <number>2</number>
+                </property>
+                <property name="leftMargin">
+                 <number>6</number>
+                </property>
+                <property name="topMargin">
+                 <number>2</number>
+                </property>
+                <property name="rightMargin">
+                 <number>6</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>2</number>
+                </property>
+                <item>
+                 <widget class="QPushButton" name="btn_zoom_in">
+                  <property name="cursor">
+                   <cursorShape>PointingHandCursor</cursorShape>
+                  </property>
+                  <property name="text">
+                   <string>🔍 +</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btn_zoom_out">
+                  <property name="cursor">
+                   <cursorShape>PointingHandCursor</cursorShape>
+                  </property>
+                  <property name="text">
+                   <string>🔍 -</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btn_fit_view">
+                  <property name="cursor">
+                   <cursorShape>PointingHandCursor</cursorShape>
+                  </property>
+                  <property name="text">
+                   <string>Fit</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btn_rotate_ccw">
+                  <property name="cursor">
+                   <cursorShape>PointingHandCursor</cursorShape>
+                  </property>
+                  <property name="text">
+                   <string>↺</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btn_rotate_cw">
+                  <property name="cursor">
+                   <cursorShape>PointingHandCursor</cursorShape>
+                  </property>
+                  <property name="text">
+                   <string>↻</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QGraphicsView" name="image_viewport">
+             <property name="styleSheet">
+              <string notr="true">background-color: transparent; border: none;</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="filmstrip_frame">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>44</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>44</height>
+           </size>
+          </property>
+          <layout class="QHBoxLayout" name="layout_filmstrip">
+           <property name="leftMargin">
+            <number>12</number>
+           </property>
+           <property name="topMargin">
+            <number>4</number>
+           </property>
+           <property name="rightMargin">
+            <number>12</number>
+           </property>
+           <property name="bottomMargin">
+            <number>4</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="lbl_filmstrip_title">
+             <property name="styleSheet">
+              <string notr="true">color: #c4c7c7; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold;</string>
+             </property>
+             <property name="text">
+              <string>PHOTOS (3):</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_thumb_1">
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="text">
+              <string>[Photo 1 · Primary]</string>
+             </property>
+             <property name="class" stdset="0">
+              <string>FilmstripThumb</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_thumb_2">
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="text">
+              <string>[Photo 2 · Label Zoom]</string>
+             </property>
+             <property name="class" stdset="0">
+              <string>FilmstripThumb</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_thumb_3">
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="text">
+              <string>[Photo 3 · Micro]</string>
+             </property>
+             <property name="class" stdset="0">
+              <string>FilmstripThumb</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="spacer_filmstrip">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QFrame" name="inspector_column">
+       <property name="minimumSize">
+        <size>
+         <width>380</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>480</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <layout class="QVBoxLayout" name="layout_inspector_col">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="QFrame" name="inspector_header_bar">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>32</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>32</height>
+           </size>
+          </property>
+          <layout class="QHBoxLayout" name="layout_insp_hdr">
+           <property name="leftMargin">
+            <number>12</number>
+           </property>
+           <property name="topMargin">
+            <number>2</number>
+           </property>
+           <property name="rightMargin">
+            <number>12</number>
+           </property>
+           <property name="bottomMargin">
+            <number>2</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="lbl_inspector_title">
+             <property name="text">
+              <string>REGISTRATION DATA</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="spacer_insp_hdr">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_history_toggle">
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: transparent; color: #4a7b9d; border: 1px solid #4a7b9d; border-radius: 2px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; padding: 2px 6px;</string>
+             </property>
+             <property name="text">
+              <string>[History]</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_focus_mode_toggle">
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: #3a7d44; color: #ffffff; border: none; border-radius: 2px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; padding: 2px 6px;</string>
+             </property>
+             <property name="text">
+              <string>Focus Mode: ON</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QScrollArea" name="scroll_accordions">
+          <property name="widgetResizable">
+           <bool>true</bool>
+          </property>
+          <widget class="QWidget" name="scrollAreaWidgetContents">
+           <property name="geometry">
+            <rect>
+             <x>0</x>
+             <y>0</y>
+             <width>378</width>
+             <height>620</height>
+            </rect>
+           </property>
+           <layout class="QVBoxLayout" name="layout_scroll_inner">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <property name="leftMargin">
+             <number>12</number>
+            </property>
+            <property name="topMargin">
+             <number>12</number>
+            </property>
+            <property name="rightMargin">
+             <number>12</number>
+            </property>
+            <property name="bottomMargin">
+             <number>12</number>
+            </property>
+            <item>
+             <widget class="QFrame" name="card_taxonomy">
+              <property name="class" stdset="0">
+               <string>TonalCard</string>
+              </property>
+              <layout class="QVBoxLayout" name="layout_card_tax">
+               <property name="spacing">
+                <number>8</number>
+               </property>
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>10</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>10</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="row_tax_header">
+                 <item>
+                  <widget class="QLabel" name="lbl_tax_heading">
+                   <property name="styleSheet">
+                    <string notr="true">font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; color: #2c302e;</string>
+                   </property>
+                   <property name="text">
+                    <string>▾ 🧬 TAXONOMY</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="spacer_tax_hdr">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>40</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="badge_tax_status">
+                   <property name="styleSheet">
+                    <string notr="true">background-color: #ffdad6; color: #93000a; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; border-radius: 2px; padding: 1px 5px;</string>
+                   </property>
+                   <property name="text">
+                    <string>⚠ 2</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="row_genus">
+                 <item>
+                  <widget class="QLabel" name="lbl_genus">
+                   <property name="minimumSize">
+                    <size>
+                     <width>65</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="text">
+                    <string>GENUS</string>
+                   </property>
+                   <property name="class" stdset="0">
+                    <string>MicroLabelCaps</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="input_genus">
+                   <property name="text">
+                    <string>Betula</string>
+                   </property>
+                   <property name="class" stdset="0">
+                    <string>ProblemFlaggedInput</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_prob_genus">
+                   <property name="cursor">
+                    <cursorShape>PointingHandCursor</cursorShape>
+                   </property>
+                   <property name="toolTip">
+                    <string>Toggle Genus Doubt Flag (Space)</string>
+                   </property>
+                   <property name="text">
+                    <string>⚠</string>
+                   </property>
+                   <property name="class" stdset="0">
+                    <string>InlineProblemBtn</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="row_species">
+                 <item>
+                  <widget class="QLabel" name="lbl_species">
+                   <property name="minimumSize">
+                    <size>
+                     <width>65</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="text">
+                    <string>SPECIES</string>
+                   </property>
+                   <property name="class" stdset="0">
+                    <string>MicroLabelCaps</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="input_species">
+                   <property name="text">
+                    <string>pendula</string>
+                   </property>
+                   <property name="class" stdset="0">
+                    <string>ProblemFlaggedInput</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_prob_species">
+                   <property name="cursor">
+                    <cursorShape>PointingHandCursor</cursorShape>
+                   </property>
+                   <property name="toolTip">
+                    <string>Toggle Species Doubt Flag (Space)</string>
+                   </property>
+                   <property name="text">
+                    <string>⚠</string>
+                   </property>
+                   <property name="class" stdset="0">
+                    <string>InlineProblemBtn</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="card_collection">
+              <property name="class" stdset="0">
+               <string>TonalCard</string>
+              </property>
+              <layout class="QHBoxLayout" name="layout_card_col">
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>8</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>8</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="lbl_col_title">
+                 <property name="styleSheet">
+                  <string notr="true">font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; color: #444748;</string>
+                 </property>
+                 <property name="text">
+                  <string>▸ 📦 COLLECTION</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_col_preview">
+                 <property name="styleSheet">
+                  <string notr="true">color: #757d77; font-size: 11px;</string>
+                 </property>
+                 <property name="text">
+                  <string>Collector • Date • Notes …</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="card_storage">
+              <property name="class" stdset="0">
+               <string>TonalCard</string>
+              </property>
+              <layout class="QHBoxLayout" name="layout_card_stor">
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>8</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>8</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="lbl_stor_title">
+                 <property name="styleSheet">
+                  <string notr="true">font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; color: #444748;</string>
+                 </property>
+                 <property name="text">
+                  <string>▸ 📍 STORAGE</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_stor_preview">
+                 <property name="styleSheet">
+                  <string notr="true">color: #757d77; font-size: 11px;</string>
+                 </property>
+                 <property name="text">
+                  <string>Cab 04 · Sh 02</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="card_problems_container">
+              <layout class="QVBoxLayout" name="layout_card_prob">
+               <property name="spacing">
+                <number>8</number>
+               </property>
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>10</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>10</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="lbl_prob_heading">
+                 <property name="styleSheet">
+                  <string notr="true">font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; color: #c93a40;</string>
+                 </property>
+                 <property name="text">
+                  <string>▾ ⚠ PROBLEMS (2)</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <layout class="QGridLayout" name="grid_prob_checklist">
+                 <item row="0" column="0">
+                  <widget class="QCheckBox" name="chk_p1">
+                   <property name="text">
+                    <string>Genus Doubt</string>
+                   </property>
+                   <property name="checked">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QCheckBox" name="chk_p2">
+                   <property name="text">
+                    <string>Species Doubt</string>
+                   </property>
+                   <property name="checked">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QCheckBox" name="chk_p3">
+                   <property name="text">
+                    <string>Label Damaged</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QCheckBox" name="chk_p4">
+                   <property name="text">
+                    <string>Missing Barcode</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <spacer name="spacer_accordion_end">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>10</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="sticky_review_box">
+          <layout class="QVBoxLayout" name="layout_sticky_review">
+           <property name="spacing">
+            <number>6</number>
+           </property>
+           <property name="leftMargin">
+            <number>12</number>
+           </property>
+           <property name="topMargin">
+            <number>10</number>
+           </property>
+           <property name="rightMargin">
+            <number>12</number>
+           </property>
+           <property name="bottomMargin">
+            <number>10</number>
+           </property>
+           <item>
+            <widget class="QPushButton" name="btn_mark_reviewed">
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+             <property name="text">
+              <string>✓ MARK AS REVIEWED  Ctrl+Enter</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="row_review_options">
+             <item>
+              <widget class="QCheckBox" name="chk_clear_problems">
+               <property name="text">
+                <string>Clear Problems</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="spacer_rev_opts">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_after_review">
+               <property name="styleSheet">
+                <string notr="true">font-family: 'JetBrains Mono', monospace; color: #757d77; font-size: 11px;</string>
+               </property>
+               <property name="text">
+                <string>After: Stay │ Next │ N+Hist</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+    <item>
+     <widget class="QFrame" name="status_bar_frame">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>24</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>24</height>
+       </size>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::NoFrame</enum>
+      </property>
+      <layout class="QHBoxLayout" name="layout_status_bar">
+       <property name="leftMargin">
+        <number>12</number>
+       </property>
+       <property name="topMargin">
+        <number>2</number>
+       </property>
+       <property name="rightMargin">
+        <number>12</number>
+       </property>
+       <property name="bottomMargin">
+        <number>2</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lbl_filter_pill">
+         <property name="text">
+          <string>FILTER ● Has problems ✕</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_status_metrics">
+         <property name="styleSheet">
+          <string notr="true">color: #444748; font-size: 11px; margin-left: 8px;</string>
+         </property>
+         <property name="text">
+          <string>OBJECT_COUNT 3400 · REVIEWED 128 · PROBLEMS 41 · LAST_SAVE 12:04</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="spacer_status_bar">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
