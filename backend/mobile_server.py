@@ -7865,21 +7865,13 @@ INDEX_TEMPLATE_V2 = """
           <div class="pt-1">
             <div class="flex items-center justify-between mb-1">
               <span class="font-mono text-[9px] uppercase text-muted font-bold">Stored As</span>
-              <span class="font-mono text-[10px] text-ink font-semibold" id="batchStoredAsLabel">Herbarium Sheet</span>
+              <span class="font-mono text-[10px] text-ink font-semibold" id="batchStoredAsLabel">Not Selected</span>
             </div>
-            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" id="batchStoredAsPills">
-              <button type="button" onclick="selectBatchStoragePill(this, 'Herbarium Sheet')" class="batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border-2 border-fern bg-emerald-50 text-fern-dark font-semibold">
-                Herbarium Sheet
-              </button>
-              <button type="button" onclick="selectBatchStoragePill(this, 'Standard Box')" class="batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted">
-                Standard Box
-              </button>
-              <button type="button" onclick="selectBatchStoragePill(this, 'Free Standing')" class="batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted">
-                Free Standing
-              </button>
-              <button type="button" onclick="selectBatchStoragePill(this, 'Petri dish')" class="batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted">
-                Petri dish
-              </button>
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 whitespace-nowrap" id="batchStoredAsPills">
+              <!-- Dynamically populated via renderBatchStoredAsPills -->
+            </div>
+            <div id="batchStoredAsCustomContainer" class="hidden mt-1.5">
+              <input type="text" id="batchStoredAsCustomInput" placeholder="Enter custom storage..." class="w-full bg-white border border-bordercol rounded px-2 py-1 text-xs font-mono text-ink focus:outline-none focus:border-fern">
             </div>
           </div>
         </section>
@@ -8163,14 +8155,15 @@ INDEX_TEMPLATE_V2 = """
         floor: -1,
         cabinet: 4,
         shelf: 2,
-        storedAs: 'Herbarium Sheet'
+        storedAs: ''
       },
       batchQueue: [], // array of { oid, sciName, prevLoc }
       customPresets: ['Herbarium Sheet', 'Standard Box', 'Free Standing'],
       allStorageOptions: [
         'Herbarium Sheet', 'Standard Box', 'Free Standing', 'Petri dish', 
         'Liquid / Glass Jar', 'Capsule / Envelope', 'Microscope Slide', 'Mounted platform', 'Oversized Folder'
-      ]
+      ],
+      storedAsChoices: []
     };
 
     let searchDebounceTimer = null;
@@ -8265,6 +8258,12 @@ INDEX_TEMPLATE_V2 = """
           state.activeSchema = data;
           document.getElementById('headerDbName').textContent = data.database_name || 'Active Database';
           document.getElementById('connModalDbName').textContent = data.database_name || 'Active Database';
+          if (data.stored_as_choices) {
+            state.storedAsChoices = data.stored_as_choices;
+            if (typeof renderBatchStoredAsPills === 'function') {
+                renderBatchStoredAsPills();
+            }
+          }
         }
       } catch(err) {
         console.error('Failed to fetch schema:', err);
@@ -9096,11 +9095,14 @@ INDEX_TEMPLATE_V2 = """
       document.getElementById('batchFloorVal').textContent = state.batchAnchor.floor !== undefined ? state.batchAnchor.floor : '-1';
       document.getElementById('batchCabVal').textContent = String(state.batchAnchor.cabinet || '4').padStart(2, '0');
       document.getElementById('batchShelfVal').textContent = String(state.batchAnchor.shelf || '2').padStart(2, '0');
-      document.getElementById('batchStoredAsLabel').textContent = state.batchAnchor.storedAs || 'Herbarium Sheet';
+      document.getElementById('batchStoredAsLabel').textContent = state.batchAnchor.storedAs || 'Not Selected';
       
       const nextShelf = (parseInt(state.batchAnchor.shelf, 10) || 1) + 1;
       document.getElementById('btnAdvanceNextShelfText').textContent = `Advance to Shelf ${String(nextShelf).padStart(2, '0')}`;
 
+      if (typeof renderBatchStoredAsPills === 'function') {
+          renderBatchStoredAsPills();
+      }
       renderBatchQueue();
     }
 
@@ -9118,13 +9120,46 @@ INDEX_TEMPLATE_V2 = """
       updateBatchAnchorUI();
     }
 
+    function renderBatchStoredAsPills() {
+      const container = document.getElementById('batchStoredAsPills');
+      if (!container) return;
+      const choices = state.storedAsChoices && state.storedAsChoices.length > 0
+                      ? state.storedAsChoices
+                      : state.customPresets; // Fallback
+
+      container.innerHTML = choices.map(opt => {
+        const isSel = (opt === state.batchAnchor.storedAs);
+        const className = isSel
+          ? 'batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border-2 border-fern bg-emerald-50 text-fern-dark font-semibold'
+          : 'batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted';
+        return `
+          <button type="button" onclick="selectBatchStoragePill(this, '${opt}')" class="${className}">
+            ${opt}
+          </button>
+        `;
+      }).join('');
+
+      const customContainer = document.getElementById('batchStoredAsCustomContainer');
+      if (customContainer) {
+          if (state.batchAnchor.storedAs === 'Custom') {
+              customContainer.classList.remove('hidden');
+          } else {
+              customContainer.classList.add('hidden');
+          }
+      }
+    }
+
     function selectBatchStoragePill(btn, opt) {
-      document.querySelectorAll('.batch-storage-pill').forEach(el => {
-        el.className = 'batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted';
-      });
-      btn.className = 'batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border-2 border-fern bg-emerald-50 text-fern-dark font-semibold';
-      state.batchAnchor.storedAs = opt;
-      document.getElementById('batchStoredAsLabel').textContent = opt;
+      if (state.batchAnchor.storedAs === opt) {
+        // Deselect
+        state.batchAnchor.storedAs = '';
+        document.getElementById('batchStoredAsLabel').textContent = 'Not Selected';
+      } else {
+        // Select
+        state.batchAnchor.storedAs = opt;
+        document.getElementById('batchStoredAsLabel').textContent = opt;
+      }
+      renderBatchStoredAsPills();
     }
 
     function advanceToNextShelf() {
@@ -9224,13 +9259,21 @@ INDEX_TEMPLATE_V2 = """
         return;
       }
 
+      let storedAsVal = state.batchAnchor.storedAs;
+      if (storedAsVal === 'Custom') {
+        const customInput = document.getElementById('batchStoredAsCustomInput');
+        if (customInput) {
+          storedAsVal = customInput.value.trim();
+        }
+      }
+
       const payload = {
         location: {
           Building: state.batchAnchor.building,
           Floor: String(state.batchAnchor.floor),
           Cabinet: String(state.batchAnchor.cabinet),
           Shelf: String(state.batchAnchor.shelf),
-          'Stored as': state.batchAnchor.storedAs
+          'Stored as': storedAsVal
         },
         items: state.batchQueue.map(i => i.oid),
         timestamp: new Date().toISOString()
