@@ -17,3 +17,4 @@ user_prefs.json
 .vscode/
 logs/
 
+node_modules/
