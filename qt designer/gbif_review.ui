@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>GBIFReviewDialog</class>
+ <widget class="QDialog" name="GBIFReviewDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>950</width>
+    <height>650</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>750</width>
+    <height>480</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>GBIF Batch Review &amp; Reconciliation</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#GBIFReviewDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
+}
+
+QTableWidget {
+    background-color: #ffffff;
+    color: #2c302e;
+    border: 1px solid #747878;
+    gridline-color: #c4c7c7;
+    font-size: 12px;
+}
+QTableWidget::item {
+    padding: 6px;
+}
+
+QHeaderView::section {
+    background-color: #f2f5f1;
+    color: #2c302e;
+    border: none;
+    border-bottom: 1px solid #747878;
+    font-weight: bold;
+    padding: 6px;
+}
+
+QLineEdit {
+    background-color: #ffffff;
+    color: #2c302e;
+    border: 1px solid #747878;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
+QPushButton {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    border: 1px solid #747878;
+    border-radius: 0px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background-color: #e9ece5;
+}
+
+QPushButton#btn_accept_selected {
+    background-color: #3a7d44;
+    color: #ffffff;
+    border: none;
+    padding: 6px 20px;
+}
+QPushButton#btn_accept_selected:hover {
+    background-color: #2e6636;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_layout">
+   <property name="spacing">
+    <number>12</number>
+   </property>
+   <property name="leftMargin">
+    <number>16</number>
+   </property>
+   <property name="topMargin">
+    <number>16</number>
+   </property>
+   <property name="rightMargin">
+    <number>16</number>
+   </property>
+   <property name="bottomMargin">
+    <number>16</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="header_layout">
+     <item>
+      <widget class="QLabel" name="lbl_title">
+       <property name="styleSheet">
+        <string notr="true">font-size: 15px; font-weight: bold; color: #2c302e;</string>
+       </property>
+       <property name="text">
+        <string>GBIF BATCH TAXONOMY RECONCILIATION</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacer_hdr">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="input_search_review">
+       <property name="minimumSize">
+        <size>
+         <width>250</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="placeholderText">
+        <string>Search review results...</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="selection_actions_layout">
+     <item>
+      <widget class="QPushButton" name="btn_select_all">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Select All</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_deselect_all">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Deselect All</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_select_confident">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Only High Confidence (&gt;90%)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacer_sel">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLabel" name="lbl_match_count">
+       <property name="styleSheet">
+        <string notr="true">font-family: 'Courier New', monospace; font-size: 11px; color: #747878;</string>
+       </property>
+       <property name="text">
+        <string>Matches: 0 of 0 selected</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QTableWidget" name="table_review">
+     <property name="editTriggers">
+      <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+     </property>
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
+     </property>
+     <property name="columnCount">
+      <number>6</number>
+     </property>
+     <column>
+      <property name="text">
+       <string>Apply</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Object ID</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Original Name</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Matched GBIF Name</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Status</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Confidence</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="footer_layout">
+     <item>
+      <widget class="QPushButton" name="btn_cancel">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Cancel</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacer_footer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_accept_selected">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Apply Selected Changes</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

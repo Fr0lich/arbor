@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>BulkEditDialog</class>
+ <widget class="QDialog" name="BulkEditDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>560</width>
+    <height>460</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>480</width>
+    <height>380</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Bulk Edit Records</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#BulkEditDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
+}
+
+QComboBox, QLineEdit {
+    background-color: #ffffff;
+    color: #2c302e;
+    border: 1px solid #747878;
+    border-radius: 0px;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+QComboBox:focus, QLineEdit:focus {
+    border: 1px solid #000000;
+}
+
+QCheckBox, QRadioButton {
+    font-size: 12px;
+    color: #2c302e;
+}
+
+QPushButton {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    border: 1px solid #747878;
+    border-radius: 0px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background-color: #e9ece5;
+}
+
+QPushButton#btn_apply {
+    background-color: #000000;
+    color: #ffffff;
+    border: none;
+    padding: 6px 20px;
+}
+QPushButton#btn_apply:hover {
+    background-color: #2c302e;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_layout">
+   <property name="spacing">
+    <number>12</number>
+   </property>
+   <property name="leftMargin">
+    <number>16</number>
+   </property>
+   <property name="topMargin">
+    <number>16</number>
+   </property>
+   <property name="rightMargin">
+    <number>16</number>
+   </property>
+   <property name="bottomMargin">
+    <number>16</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="lbl_title">
+     <property name="styleSheet">
+      <string notr="true">font-size: 15px; font-weight: bold; color: #2c302e;</string>
+     </property>
+     <property name="text">
+      <string>BULK EDIT RECORDS</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="lbl_desc">
+     <property name="styleSheet">
+      <string notr="true">color: #747878; font-size: 12px;</string>
+     </property>
+     <property name="text">
+      <string>Find and replace values across multiple records simultaneously.</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QFormLayout" name="form_layout">
+     <property name="labelAlignment">
+      <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+     </property>
+     <property name="horizontalSpacing">
+      <number>12</number>
+     </property>
+     <property name="verticalSpacing">
+      <number>10</number>
+     </property>
+     <item row="0" column="0">
+      <widget class="QLabel" name="lbl_target_field">
+       <property name="text">
+        <string>Target Field:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="combo_field">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="lbl_find">
+       <property name="text">
+        <string>Find Text:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QLineEdit" name="input_find">
+       <property name="placeholderText">
+        <string>Text to match...</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QLabel" name="lbl_replace">
+       <property name="text">
+        <string>Replace With:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <widget class="QLineEdit" name="input_replace">
+       <property name="placeholderText">
+        <string>Replacement text...</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="options_layout">
+     <item>
+      <widget class="QCheckBox" name="chk_regex">
+       <property name="text">
+        <string>Use Regular Expressions</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="chk_match_case">
+       <property name="text">
+        <string>Match Case</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacer_opts">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QFrame" name="frame_scope">
+     <property name="styleSheet">
+      <string notr="true">background-color: #f2f5f1; border: 1px solid #747878; border-radius: 2px;</string>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::Shape::StyledPanel</enum>
+     </property>
+     <layout class="QVBoxLayout" name="scope_layout">
+      <property name="spacing">
+       <number>6</number>
+      </property>
+      <property name="leftMargin">
+       <number>12</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_scope_title">
+        <property name="styleSheet">
+         <string notr="true">font-weight: bold; border: none; font-size: 11px; color: #444748;</string>
+        </property>
+        <property name="text">
+         <string>APPLICATION SCOPE</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="radio_selected">
+        <property name="styleSheet">
+         <string notr="true">border: none;</string>
+        </property>
+        <property name="text">
+         <string>Selected objects only in list</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="radio_all">
+        <property name="styleSheet">
+         <string notr="true">border: none;</string>
+        </property>
+        <property name="text">
+         <string>All objects in active filter</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="lbl_status">
+     <property name="styleSheet">
+      <string notr="true">color: #747878; font-family: 'Courier New', monospace; font-size: 11px;</string>
+     </property>
+     <property name="text">
+      <string>Ready to preview changes.</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="footer_layout">
+     <item>
+      <spacer name="spacer_footer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_cancel">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Cancel</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_apply">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Apply Changes</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

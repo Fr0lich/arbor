@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>NewDatabaseWizard</class>
+ <widget class="QWizard" name="NewDatabaseWizard">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>700</width>
+    <height>540</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>600</width>
+    <height>440</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Create New Botanical Database</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWizard {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
+}
+
+QWizardPage {
+    background-color: #fbfaf8;
+}
+
+QLineEdit, QComboBox {
+    background-color: #ffffff;
+    color: #2c302e;
+    border: 1px solid #747878;
+    border-radius: 0px;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+QLineEdit:focus, QComboBox:focus {
+    border: 1px solid #000000;
+}
+
+QListWidget {
+    background-color: #ffffff;
+    border: 1px solid #747878;
+    font-size: 12px;
+}
+
+QPushButton {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    border: 1px solid #747878;
+    border-radius: 0px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background-color: #e9ece5;
+}</string>
+  </property>
+  <property name="wizardStyle">
+   <enum>QWizard::WizardStyle::ModernStyle</enum>
+  </property>
+  <widget class="QWizardPage" name="page_template">
+   <property name="title">
+    <string>Step 1: Choose Schema Template</string>
+   </property>
+   <property name="subTitle">
+    <string>Select an existing schema profile or start with a standard herbarium template.</string>
+   </property>
+   <layout class="QVBoxLayout" name="layout_page1">
+    <property name="spacing">
+     <number>12</number>
+    </property>
+    <property name="leftMargin">
+     <number>16</number>
+    </property>
+    <property name="topMargin">
+     <number>16</number>
+    </property>
+    <property name="rightMargin">
+     <number>16</number>
+    </property>
+    <property name="bottomMargin">
+     <number>16</number>
+    </property>
+    <item>
+     <widget class="QLabel" name="lbl_choose_template">
+      <property name="text">
+       <string>Available Schema Profiles:</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QListWidget" name="list_templates"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWizardPage" name="page_file">
+   <property name="title">
+    <string>Step 2: Database File Location</string>
+   </property>
+   <property name="subTitle">
+    <string>Choose where to save the new Excel workbook or SQLite database.</string>
+   </property>
+   <layout class="QVBoxLayout" name="layout_page2">
+    <property name="spacing">
+     <number>12</number>
+    </property>
+    <property name="leftMargin">
+     <number>16</number>
+    </property>
+    <property name="topMargin">
+     <number>16</number>
+    </property>
+    <property name="rightMargin">
+     <number>16</number>
+    </property>
+    <property name="bottomMargin">
+     <number>16</number>
+    </property>
+    <item>
+     <layout class="QFormLayout" name="form_file">
+      <property name="horizontalSpacing">
+       <number>12</number>
+      </property>
+      <property name="verticalSpacing">
+       <number>10</number>
+      </property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="lbl_db_name">
+        <property name="text">
+         <string>Collection Name:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="input_collection_name">
+        <property name="placeholderText">
+         <string>e.g. Vascular Herbarium 2026</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="lbl_target_path">
+        <property name="text">
+         <string>Save File As:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="layout_browse">
+        <item>
+         <widget class="QLineEdit" name="input_save_path"/>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_browse_save">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Browse…</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <spacer name="spacer_page2">
+      <property name="orientation">
+       <enum>Qt::Orientation::Vertical</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>20</width>
+        <height>40</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

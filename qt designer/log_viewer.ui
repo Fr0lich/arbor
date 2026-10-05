@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LogViewerDialog</class>
+ <widget class="QDialog" name="LogViewerDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>750</width>
+    <height>540</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>600</width>
+    <height>400</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Error Log</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#LogViewerDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
+}
+
+QLineEdit {
+    background-color: #ffffff;
+    color: #2c302e;
+    border: 1px solid #747878;
+    border-radius: 0px;
+    padding: 6px 10px;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
+    font-size: 12px;
+}
+QLineEdit:focus {
+    border: 1px solid #000000;
+}
+
+QPlainTextEdit {
+    background-color: #1a1a2e;
+    color: #e0e0e0;
+    border: 1px solid #747878;
+    border-radius: 2px;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 8px;
+}
+
+QPushButton {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    border: 1px solid #747878;
+    border-radius: 0px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background-color: #e9ece5;
+}
+QPushButton:pressed {
+    background-color: #dadada;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_layout">
+   <property name="spacing">
+    <number>12</number>
+   </property>
+   <property name="leftMargin">
+    <number>16</number>
+   </property>
+   <property name="topMargin">
+    <number>16</number>
+   </property>
+   <property name="rightMargin">
+    <number>16</number>
+   </property>
+   <property name="bottomMargin">
+    <number>16</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="header_layout">
+     <item>
+      <widget class="QLabel" name="lbl_title">
+       <property name="styleSheet">
+        <string notr="true">font-size: 14px; font-weight: bold; color: #2c302e;</string>
+       </property>
+       <property name="text">
+        <string>SESSION ERROR LOG</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacer_header">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="input_search">
+       <property name="minimumSize">
+        <size>
+         <width>260</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="placeholderText">
+        <string>Filter lines (e.g. ERROR, Exception)...</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="text_area">
+     <property name="readOnly">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="footer_layout">
+     <item>
+      <widget class="QPushButton" name="btn_copy">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Copy to Clipboard</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_explorer">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Open in Explorer</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="spacer_footer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_close">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Close</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

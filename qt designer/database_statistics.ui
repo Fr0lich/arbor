@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DatabaseStatisticsDialog</class>
+ <widget class="QDialog" name="DatabaseStatisticsDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>650</width>
+    <height>720</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>550</width>
+    <height>500</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Database Statistics</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#DatabaseStatisticsDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
+}
+
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}
+QScrollArea &gt; QWidget &gt; QWidget {
+    background-color: transparent;
+}
+
+QFrame.card {
+    background-color: #ffffff;
+    border: 1px solid #747878;
+    border-radius: 2px;
+}
+
+QProgressBar {
+    border: 1px solid #747878;
+    border-radius: 0px;
+    background-color: #e9ece5;
+    text-align: center;
+    height: 18px;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #2c302e;
+}
+QProgressBar::chunk {
+    background-color: #3a7d44;
+}
+
+QTableWidget {
+    background-color: #ffffff;
+    border: 1px solid #747878;
+    font-size: 12px;
+}
+QTableWidget::item {
+    padding: 4px;
+}
+
+QPushButton {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    border: 1px solid #747878;
+    border-radius: 0px;
+    padding: 6px 18px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background-color: #e9ece5;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_layout">
+   <property name="spacing">
+    <number>12</number>
+   </property>
+   <property name="leftMargin">
+    <number>16</number>
+   </property>
+   <property name="topMargin">
+    <number>16</number>
+   </property>
+   <property name="rightMargin">
+    <number>16</number>
+   </property>
+   <property name="bottomMargin">
+    <number>16</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="lbl_title">
+     <property name="styleSheet">
+      <string notr="true">font-size: 16px; font-weight: bold; color: #2c302e;</string>
+     </property>
+     <property name="text">
+      <string>DATABASE STATISTICS</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="lbl_db_info">
+     <property name="styleSheet">
+      <string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; color: #747878;</string>
+     </property>
+     <property name="text">
+      <string>Active Database</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scroll_area">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scroll_content">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>618</width>
+        <height>580</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="content_layout">
+       <property name="spacing">
+        <number>14</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="card_progress">
+         <property name="styleSheet">
+          <string notr="true">background-color: #ffffff; border: 1px solid #747878; border-radius: 2px;</string>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::Shape::StyledPanel</enum>
+         </property>
+         <layout class="QVBoxLayout" name="layout_card_prog">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>14</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>14</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_prog_header">
+            <property name="styleSheet">
+             <string notr="true">font-size: 13px; font-weight: bold; color: #2c302e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>REVIEW PROGRESS</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QProgressBar" name="bar_review_progress">
+            <property name="value">
+             <number>0</number>
+            </property>
+            <property name="textVisible">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_prog_stats">
+            <property name="styleSheet">
+             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #444748; border: none;</string>
+            </property>
+            <property name="text">
+             <string>Reviewed: 0 / 0 objects (0.0%)</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="card_counts">
+         <property name="styleSheet">
+          <string notr="true">background-color: #ffffff; border: 1px solid #747878; border-radius: 2px;</string>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::Shape::StyledPanel</enum>
+         </property>
+         <layout class="QVBoxLayout" name="layout_card_counts">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>14</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>14</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_counts_header">
+            <property name="styleSheet">
+             <string notr="true">font-size: 13px; font-weight: bold; color: #2c302e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>RECORD METRICS</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_total_objects">
+            <property name="styleSheet">
+             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #2c302e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>Total Objects: 0</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_gbif_validated">
+            <property name="styleSheet">
+             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #2c302e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>Taxonomy Validated: 0</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_books_matched">
+            <property name="styleSheet">
+             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #2c302e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>Historical Records Matched: 0</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="card_problems">
+         <property name="styleSheet">
+          <string notr="true">background-color: #ffffff; border: 1px solid #747878; border-radius: 2px;</string>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::Shape::StyledPanel</enum>
+         </property>
+         <layout class="QVBoxLayout" name="layout_card_probs">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>14</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>14</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_probs_header">
+            <property name="styleSheet">
+             <string notr="true">font-size: 13px; font-weight: bold; color: #2c302e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>VALIDATION &amp; PROBLEMS BREAKDOWN</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_probs_total">
+            <property name="styleSheet">
+             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; font-weight: bold; color: #c93a40; border: none;</string>
+            </property>
+            <property name="text">
+             <string>Objects with Flagged Problems: 0</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QTableWidget" name="table_problems">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>180</height>
+             </size>
+            </property>
+            <property name="editTriggers">
+             <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+            </property>
+            <property name="selectionMode">
+             <enum>QAbstractItemView::SelectionMode::NoSelection</enum>
+            </property>
+            <property name="columnCount">
+             <number>2</number>
+            </property>
+            <column>
+             <property name="text">
+              <string>Problem Category</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Count</string>
+             </property>
+            </column>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="spacer_scroll_bottom">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>10</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="footer_layout">
+     <item>
+      <spacer name="spacer_footer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_close">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Close</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -10,7 +10,13 @@ DESIGNER_DIR = os.path.join(_ROOT, "qt designer")
 
 def ui_path(name: str) -> str:
     """Absolute path of a .ui file inside the designer directory."""
-    return os.path.join(DESIGNER_DIR, name)
+    primary = os.path.join(DESIGNER_DIR, name)
+    if os.path.exists(primary):
+        return primary
+    for root, _, files in os.walk(DESIGNER_DIR):
+        if name in files:
+            return os.path.join(root, name)
+    return primary
 
 
 def load_ui(name: str, parent=None):

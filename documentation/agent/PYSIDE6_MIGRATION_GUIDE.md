@@ -3,6 +3,13 @@
 ## Executive Summary & Mission
 Arbor is undergoing a systematic UI modernization from **Tkinter** to **PySide6 (Qt 6)** using **Qt Designer (`.ui` files)**. 
 
+### Core Visual Directive: Exact Tkinter Parity
+> **CRITICAL DESIGN GOAL**: The `.ui` files must look as **accurate to the original Tkinter designs as possible**.
+> The Tkinter interface is the **gold standard** for visual layout, styling, and ergonomics:
+> * Every `.ui` file must replicate the exact colors, paddings, margins, card outlines, and typography of its corresponding Tkinter window in `ui/`.
+> * Do not introduce arbitrary new UI styles, round bubble buttons, or mismatched colors.
+> * Maintain the distinct Arbor aesthetic: flat, high-contrast, clean 1px borders, monospace technical data fields, and card-encapsulated sections.
+
 To ensure stability, continuity, and zero regression for existing users and production workflows, this migration is strictly executed as a **Parallel Process**.
 
 ---
@@ -186,36 +193,139 @@ def set_image_mode(self, mode: str):
 
 ---
 
-## 4. Phase-by-Phase Parallel Migration Roadmap
+## 4. Codebase Map: Where to Find Existing Menus, Panels & Windows
 
-AI Agents implementing the migration must work according to these sequential phases:
+Arbor's Tkinter interface does not use a traditional OS top menubar; instead, it uses a custom action bar with popup menus, alongside modular secondary dialogs. AI agents must use this directory to locate original Tkinter components when porting them to Qt:
 
-### Phase 1: Startup & Main Shell (Current Phase)
-- [x] Create `ui_qt/loader.py` and `ui_qt/qss_tokens.py`.
-- [x] Design startup window UI (`qt designer/arbor.ui`).
-- [x] Create basic `ui_qt/main_window.py` shell and `main_qt.py`.
-- [ ] Implement complete `QtStartupDialog` controller (`ui_qt/startup_dialog.py`).
-- [ ] Wire `main_qt.py` to run `QtStartupDialog`, load database into `AppState`, and pass state to `QtMainWindow`.
+### 4.1 Main Review Workspace Orchestrator
+* **`ui/main_window.py` (`ObjectProgramUI`)**:
+  * `build_ui()`: Constructs the entire main layout (Header action bar, 3-column split, Footer).
+  * Splitter proportions: Left column (`weight 0` / fixed ~380px), Center column (`weight 3` / ~640px), Right column (`weight 3` / ~420px).
 
-### Phase 2: Core Workspace Panes & Data Binding
-- [ ] Left Pane: Object tree/list (`tree_objects` in `main_window_existing.ui`), search bar, status count.
-- [ ] Center Pane: Dynamic observation and registry detail form fields (card container, field generators matching Arbor schema).
-- [ ] Right Pane: High-performance image viewer (`QGraphicsView` replacing Tkinter `Canvas`), pan/zoom, thumbnail strip.
+### 4.2 Header Action Bar & Dropdown Menus
+Located inside `ui/main_window.py`:
+* **File Menu** (`show_file_dropdown`): *New Database, Open Excel, Save, Save As...*
+* **Data Menu** (`show_data_dropdown`): *Load Books, Load earlier databases, Process Objects with Problems...*
+* **GBIF Menu** (`show_gbif_dropdown`): *Validate Current Specimen, Run GBIF Taxonomy Check...*
+* **Images Menu** (`show_images_dropdown`): *Image Source selection, Toggle image view...*
+* **Create Menu** (`show_create_dropdown`): *New Object, New Database...*
+* **Context Menus** (`ui/context_menu.py`): Right-click menus for the object list/tree and image canvas.
+* **Presets Menu** (`ui/presets_panel.py` & `self.data_presets_menu`): Save/load field display presets.
 
-### Phase 3: Secondary Dialogs & Subsystems
-- [ ] New Database Creation Wizard.
-- [ ] Settings / Preferences dialog.
-- [ ] Filter dialogs and export windows.
-- [ ] Full Mobile Companion launcher integration.
+### 4.3 The Three Core Workspace Panes
+1. **Left Pane (Navigation & Search)**:
+   * **Object Tree / List**: `ui/main_window.py` (`_build_treeview`, `object_list_box`).
+   * **Search & Filters**: `ui/filter_panel.py` (`FilterPanel`) and `backend/search.py`.
+   * **Context Status Bar**: `ui/object_context_bar.py` (total count, active index, problems indicator).
+2. **Center Pane (Data Entry & Forms)**:
+   * **Registry Panel**: `ui/registry_panel.py` (`RegistryPanel`).
+   * **Location Panel**: `ui/location_panel.py` (`LocationPanel`).
+   * **Dynamic Form Fields & Checkboxes**: `ui/widgets.py` and `ui/object_problem_resolver.py`.
+3. **Right Pane (Image Viewer)**:
+   * **Image Canvas**: `ui/image_panel.py` (`ImagePanel`).
+   * **Zoom/Pan & Toolbar**: `ui/image_toolbar.py` and `ui/image_handler.py`.
 
-### Phase 4: Verification & Parity Cutover
-- [ ] Run full test suite against both Tkinter and PySide6 runtimes.
-- [ ] Automated side-by-side behavioral verification.
-- [ ] User approval for default cutover.
+### 4.4 Catalog of Secondary Dialogs & Subwindows
+When wiring menu triggers, reference and port from these modular dialogs in `ui/`:
+
+| Subsystem / Dialog | Tkinter Source File & Class | Purpose |
+| :--- | :--- | :--- |
+| **Startup / Launcher** | `ui/dialogs.py` (`StartupDialog`) | Project setup, DB & image source selection (migrated to `qt designer/arbor.ui`). |
+| **Unified Settings** | `ui/unified_settings.py` (`UnifiedSettingsDialog`) | General, Appearance, Database, GBIF, Mobile, Advanced tabs. |
+| **New Database Wizard** | `ui/new_database_wizard.py` (`NewDatabaseWizard`) | Multi-step database creation and schema configuration. |
+| **Object Additions** | `ui/add_objects.py` (`AddObjectsDialog`) | Batch or single object creation modal. |
+| **Bulk Edit** | `ui/bulk_edit.py` (`BulkEditDialog`) | Batch editing fields across multiple records. |
+| **Group Editor** | `ui/group_editor.py` (`GroupEditorDialog`) | Specimen/object group association. |
+| **Problem Resolver** | `ui/object_problem_resolver.py` (`ObjectProblemResolver`) | Queue for reviewing and resolving validation errors. |
+| **Filter Query Builder** | `ui/filter_dialog.py` (`FilterDialog`) | Advanced multi-condition query and filter builder. |
+| **GBIF Validation** | `ui/gbif_dialog.py`, `ui/gbif_review.py` | Taxonomy verification dialog and review workspace. |
+| **GBIF Batch Config** | `ui/gbif_batch_config.py` (`GbifBatchConfig`) | Configuration for batch taxonomy updates. |
+| **Historical Resolver** | `ui/historical_resolver.py`, `historical_suggestions.py` | Match records against historical book archives. |
+| **Mobile Companion** | `ui/mobile_dialog.py`, `ui/mobile_host_app.py` | Mobile sync server launcher and QR connection modal. |
+| **Mobile Conflict** | `ui/mobile_conflict_resolver.py` | Resolution modal for desktop/mobile edit conflicts. |
+| **Recent Activity** | `ui/recent_activity_dialog.py` (`RecentActivityDialog`) | Audit log of edits and session operations. |
+| **Log Viewer** | `ui/log_viewer.py` (`LogViewerDialog`) | View application session and error logs. |
+| **Help & Guide** | `ui/help_dialogs.py` (`show_main_help`) | User guide and contextual help dialogs. |
+| **Layout Manager** | `ui/layout_settings.py`, `ui/layout_manager.py` | Pane layout and sizing customizations. |
+| **Status Bar** | `ui/status_bar.py` (`StatusBar`) | Bottom workspace status and save indicator. |
+
+### 4.5 Qt Designer Files Catalog
+All visual UI layouts are stored as pure declarative `.ui` XML files in `qt designer/`. Every file is verified to open cleanly in Qt Designer and load via PySide6 `QUiLoader`:
+
+| File Name in `qt designer/` | Root Class | Purpose |
+| :--- | :--- | :--- |
+| **`arbor.ui`** | `QDialog` (`StartupDialog`) | Startup launcher & project setup. |
+| **`loading_dialog.ui`** | `QDialog` (`LoadingDialog`) | Database indexing & loading splash card. |
+| **`shortcuts_hud.ui`** | `QDialog` (`ShortcutsDialog`) | Searchable keyboard shortcuts HUD cheat sheet. |
+| **`user_guide.ui`** | `QDialog` (`UserGuideDialog`) | Searchable markdown documentation browser. |
+| **`log_viewer.ui`** | `QDialog` (`LogViewerDialog`) | Monospace error & session log viewer with live search. |
+| **`ignored_words.ui`** | `QDialog` (`IgnoredWordsDialog`) | Custom dictionary whitelist editor. |
+| **`database_statistics.ui`** | `QDialog` (`DatabaseStatisticsDialog`) | Dashboard statistics, progress bars, and problem breakdown. |
+| **`recent_activity.ui`** | `QDialog` (`RecentActivityDialog`) | Audit log of visited objects and session edits. |
+| **`quick_peek.ui`** | `QDialog` (`QuickPeekDialog`) | Lightweight inspector overlay card with thumbnail preview. |
+| **`filter_dialog.ui`** | `QDialog` (`FilterDialog`) | 4-tab query builder with tri-state toggles and presets. |
+| **`bulk_edit.ui`** | `QDialog` (`BulkEditDialog`) | Batch find-and-replace across multiple records. |
+| **`group_editor.ui`** | `QDialog` (`GroupEditorDialog`) | Specimen group creator, member manager, and association. |
+| **`add_objects.ui`** | `QDialog` (`AddObjectsDialog`) | Sequential ID range generator and batch object creator. |
+| **`unified_settings.ui`** | `QDialog` (`UnifiedSettingsDialog`) | General, Appearance, Database profiles, and Advanced preferences. |
+| **`gbif_dialog.ui`** | `QDialog` (`GBIFUpdateDialog`) | Single-record taxonomy validator and side-by-side diff. |
+| **`gbif_review.ui`** | `QDialog` (`GBIFReviewDialog`) | Batch GBIF reconciliation review table. |
+| **`historical_resolver.ui`** | `QDialog` (`HistoricalResolverDialog`) | Historical books discrepancy table and resolver. |
+| **`problem_queue.ui`** | `QDialog` (`ProblemQueueDialog`) | Interactive queue for navigating and fixing flagged validation issues. |
+| **`new_database_wizard.ui`** | `QWizard` (`NewDatabaseWizard`) | Multi-step database creation wizard. |
+| **`main_window_existing.ui`** | `QMainWindow` (`MainWindow`) | Full 3-pane main workstation shell (in `qt designer/qt designer (old or flawed)/`). |
 
 ---
 
-## 5. Agent Rules of Engagement
+## 5. Phase-by-Phase Parallel Migration Roadmap (Easiest First)
+
+> **Scope Boundary**: Per project specifications, the **Mobile Companion UI** (`ui/mobile_dialog.py`, `ui/mobile_conflict_resolver.py`, `ui/mobile_host_app.py`) is **strictly excluded** from the PySide6 migration scope.
+
+AI agents must execute migrations following this complexity-ordered roadmap, unlocking self-contained quick wins first before tackling complex workstations:
+
+### Phase 1: Quick Wins (Self-Contained & Low Complexity)
+* **Goal**: Establish standard dialog controller patterns, closing behaviors, and styling conventions without touching mutable application state.
+- [x] **Startup Dialog**: Implemented in `ui_qt/startup_dialog.py` wrapping verified `qt designer/arbor.ui`.
+- [x] **Help & Guide Modals**: `QtUserGuideDialog`, `QtKeyboardShortcutsDialog`, `show_about`, `show_quick_help` (`ui_qt/help_dialogs.py`).
+- [x] **Log Viewer Dialog**: `QtErrorLogDialog` with line filtering, clipboard copy, and explorer opening (`ui_qt/log_viewer.py`).
+- [x] **Ignored Words Dialog**: `QtIgnoredWordsDialog` custom dictionary editor (`ui_qt/ignored_words_dialog.py`).
+- [x] **Loading Splash**: `QtLoadingDialog` progress bar card with determinate/indeterminate modes (`ui_qt/loading_dialog.py`).
+
+### Phase 2: Read-Only Displays, Menus & Action Bars
+* **Goal**: Wire up user action menus, summary dashboards, and tabular audit logs.
+- [ ] **Header Action Bar & Context Menus**: File, Data, GBIF, Images, Create, and Presets menus (`ui/main_window.py`, `ui/context_menu.py`).
+- [ ] **Database Statistics Dashboard**: Aggregated metric counts, completion ratios, progress bars (`ui/dashboard.py`).
+- [ ] **Recent Activity Dialog**: Tabular audit trail of session operations (`ui/recent_activity_dialog.py`).
+- [ ] **Quick Peek Dialog**: Fast record metadata & thumbnail inspector card (`ui/quick_peek.py`).
+
+### Phase 3: Focused Editing Dialogs & Settings
+* **Goal**: Allow modal configuration and batch field manipulations.
+- [ ] **Unified Settings Window**: Tabbed preferences (General, Appearance, Database profiles, Advanced) (`ui/unified_settings.py`).
+- [ ] **Group Editor**: Specimen group assignment and management (`ui/group_editor.py`).
+- [ ] **Bulk Edit Dialog**: Column find/replace and regex operations (`ui/bulk_edit.py`).
+- [ ] **Add Objects Wizard**: Range generator and sequential record creation (`ui/add_objects.py`).
+
+### Phase 4: Query Builder & Single-Item Verification
+* **Goal**: Multi-tab filtering and live scientific verification.
+- [ ] **Filter Dialog & Panel**: 4-tab query builder with tri-state toggles and preset management (`ui/filter_dialog.py`, `ui/filter_panel.py`).
+- [ ] **GBIF Specimen Validator**: Single-record live taxonomy match and side-by-side diff (`ui/gbif_dialog.py`).
+
+### Phase 5: High-Complexity Workspaces & Deep Resolvers
+* **Goal**: Core application workstation and complex multi-dataframe reconciliation.
+- [ ] **Main Review Workspace**: 3-pane `QSplitter` (Left: Object Tree, Center: Dynamic Form Cards, Right: `QGraphicsView` Image Viewer).
+- [ ] **New Database Wizard**: Multi-step `QWizard` for schema creation and Excel initialization (`ui/new_database_wizard.py`).
+- [ ] **GBIF Batch Review**: Multi-row batch taxonomy review table and thread workers (`ui/gbif_batch_config.py`, `ui/gbif_review.py`).
+- [ ] **Historical Books Conflict Resolver**: Side-by-side book diff table and merge tools (`ui/historical_resolver.py`).
+- [ ] **Problem Queue Resolver**: Interactive error queue navigation and inline validation (`ui/object_problem_resolver.py`).
+
+### Phase 6: Parity Verification & Cutover
+- [ ] Run test suite against both Tkinter and PySide6 runtimes.
+- [ ] Side-by-side functional and behavioral parity verification.
+- [ ] User approval for production cutover.
+
+---
+
+## 6. Agent Rules of Engagement
 
 When working on any PySide6 migration task, all AI agents must follow these rules:
 
@@ -227,3 +337,5 @@ When working on any PySide6 migration task, all AI agents must follow these rule
    - Do not invent arbitrary colors or font sizes. Always reference `documentation/agent/AI_UI_GUIDE.md` and `ui_qt/qss_tokens.py`.
 4. **Use Qt Designer for layout structure**:
    - Do not write monolithic 500-line Python UI construction code. Create or adjust `.ui` files in `qt designer/` and keep Python controllers thin, event-driven, and focused on domain models.
+5. **Match Tkinter visual design strictly**:
+   - When creating or modifying `.ui` files in `qt designer/`, inspect the corresponding Tkinter implementation in `ui/`. Replicate its window dimensions, margins, paddings, card container outlines (`#747878`), button palettes, and typography (`Courier New` monospace for data, `Segoe UI` sans-serif for UI labels). Tkinter is the gold standard for design parity.
