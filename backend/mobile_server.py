@@ -2568,7 +2568,21 @@ self.addEventListener('fetch', (event) => {
 
             if updated_ids and self.on_edit_callback:
                 try:
-                    loc_summary = f"{location.get('Building', '')} Fl {location.get('Floor', '')} Cab {location.get('Cabinet', '')} Sh {location.get('Shelf', '')}".strip()
+                    locations_seen = set()
+                    for raw_item in items:
+                        l = raw_item.get('location') if isinstance(raw_item, dict) else location
+                        if l:
+                            sig = f"{l.get('Building', '')} Cab {l.get('Cabinet', '')} Sh {l.get('Shelf', '')}".strip()
+                            if sig:
+                                locations_seen.add(sig)
+
+                    if len(locations_seen) == 1:
+                        loc_summary = next(iter(locations_seen))
+                    elif len(locations_seen) > 1:
+                        loc_summary = f"{len(locations_seen)} locations/shelves"
+                    else:
+                        loc_summary = f"{location.get('Building', '')} Fl {location.get('Floor', '')} Cab {location.get('Cabinet', '')} Sh {location.get('Shelf', '')}".strip() or "staged locations"
+
                     self.on_edit_callback(f"Batch ({len(updated_ids)} items)", f"Relocated {len(updated_ids)} items to {loc_summary}")
                 except Exception:
                     pass
@@ -7916,7 +7930,7 @@ INDEX_TEMPLATE_V2 = """
         <section class="space-y-2">
           <div class="flex items-center justify-between py-1 border-b border-stone-100">
             <div class="flex items-center gap-1.5">
-              <span class="font-serif font-bold text-xs text-ink">Objects on Shelf</span>
+              <span class="font-serif font-bold text-xs text-ink">Staged Specimens</span>
               <span class="font-mono text-[11px] text-fern font-bold" id="batchQueueCount">(0 items)</span>
             </div>
             <button type="button" onclick="clearBatchQueue()" class="text-[11px] font-mono text-brick hover:underline">
@@ -7927,7 +7941,7 @@ INDEX_TEMPLATE_V2 = """
           <div class="space-y-2" id="batchStreamList">
             <!-- Dynamically populated batch items -->
             <div class="p-6 text-center text-stone-400 font-mono text-xs" id="batchEmptyPlaceholder">
-              No items queued for this shelf yet.<br>Type an Object ID above to begin.
+              No items queued yet.<br>Type an Object ID above to begin.
             </div>
           </div>
         </section>
@@ -8494,6 +8508,9 @@ INDEX_TEMPLATE_V2 = """
       document.getElementById('batchLocationView').classList.remove('hidden');
       if (typeof populateBatchBuildingOptions === 'function') {
         populateBatchBuildingOptions();
+      }
+      if (typeof loadBatchQueueFromStorage === 'function') {
+        loadBatchQueueFromStorage();
       }
       updateBatchAnchorUI();
       document.getElementById('batchIdInput')?.focus();
@@ -9228,12 +9245,36 @@ INDEX_TEMPLATE_V2 = """
       renderBatchStoredAsPills();
     }
 
+    function saveBatchQueueToStorage() {
+      try {
+        sessionStorage.setItem('arbor_batch_queue', JSON.stringify(state.batchQueue || []));
+        sessionStorage.setItem('arbor_batch_anchor', JSON.stringify(state.batchAnchor || {}));
+      } catch(e) {}
+    }
+
+    function loadBatchQueueFromStorage() {
+      try {
+        const q = sessionStorage.getItem('arbor_batch_queue');
+        if (q) {
+          const parsed = JSON.parse(q);
+          if (Array.isArray(parsed)) state.batchQueue = parsed;
+        }
+        const a = sessionStorage.getItem('arbor_batch_anchor');
+        if (a) {
+          const parsedA = JSON.parse(a);
+          if (parsedA && typeof parsedA === 'object') {
+            state.batchAnchor = Object.assign(state.batchAnchor, parsedA);
+          }
+        }
+      } catch(e) {}
+    }
+
     function advanceToNextShelf() {
       const cur = parseInt(state.batchAnchor.shelf, 10) || 1;
       state.batchAnchor.shelf = cur + 1;
-      state.batchQueue = []; // Clear queue for the new shelf
       updateBatchAnchorUI();
-      showToast(`⚡ Advanced to Shelf ${String(state.batchAnchor.shelf).padStart(2, '0')}`);
+      saveBatchQueueToStorage();
+      showToast(`⚡ Advanced to Shelf ${String(state.batchAnchor.shelf).padStart(2, '0')} (${state.batchQueue.length} items staged)`);
       document.getElementById('batchIdInput')?.focus();
     }
 
@@ -9249,12 +9290,35 @@ INDEX_TEMPLATE_V2 = """
         return;
       }
 
+      // Gate 1: Custom Storage Validation
+      let currentStoredAs = state.batchAnchor.storedAs || '';
+      if (currentStoredAs === 'Custom') {
+        const customInp = document.getElementById('batchStoredAsCustomInput');
+        const customText = customInp ? customInp.value.trim() : '';
+        if (!customText) {
+          showToast('Please specify a custom storage value or mark as other');
+          customInp?.focus();
+          return;
+        }
+        currentStoredAs = customText;
+      }
+
+      // Snapshot target location at time of addition
+      const targetLocation = {
+        Building: state.batchAnchor.building || 'Økern',
+        Floor: String(state.batchAnchor.floor !== undefined ? state.batchAnchor.floor : '-1'),
+        Cabinet: String(state.batchAnchor.cabinet || '4'),
+        Shelf: String(state.batchAnchor.shelf || '2'),
+        'Stored as': currentStoredAs
+      };
+
       // Fetch quick details from server or local list
       let sciName = 'Vascular Specimen';
       let prevLoc = 'Unrecorded';
       const existing = state.objectList.find(o => String(o.id) === String(rawOid));
       if (existing) {
-        sciName = existing.scientific_name;
+        sciName = existing.scientific_name || 'Vascular Specimen';
+        const l = existing.location || {};
         const flStr = (l.floor !== undefined && l.floor !== null) ? l.floor : '';
         prevLoc = `${l.building || ''} Fl ${flStr} Cab ${l.cabinet || ''} Sh ${l.shelf || ''}`.trim() || 'Unrecorded';
       }
@@ -9262,19 +9326,23 @@ INDEX_TEMPLATE_V2 = """
       state.batchQueue.unshift({
         oid: rawOid,
         sciName: sciName,
-        prevLoc: prevLoc
+        prevLoc: prevLoc,
+        targetLocation: targetLocation
       });
 
+      saveBatchQueueToStorage();
       renderBatchQueue();
     }
 
     function removeBatchItem(idx) {
       state.batchQueue.splice(idx, 1);
+      saveBatchQueueToStorage();
       renderBatchQueue();
     }
 
     function clearBatchQueue() {
       state.batchQueue = [];
+      saveBatchQueueToStorage();
       renderBatchQueue();
     }
 
@@ -9290,33 +9358,46 @@ INDEX_TEMPLATE_V2 = """
       if (count === 0) {
         if (container) container.innerHTML = `
           <div class="p-6 text-center text-stone-400 font-mono text-xs" id="batchEmptyPlaceholder">
-            No items queued for this shelf yet.<br>Type an Object ID above to begin.
+            No items queued yet.<br>Type an Object ID above to begin.
           </div>
         `;
         return;
       }
 
-      const targetLocStr = `${state.batchAnchor.building} · Cab ${String(state.batchAnchor.cabinet).padStart(2, '0')} · Sh ${String(state.batchAnchor.shelf).padStart(2, '0')}`;
+      container.innerHTML = state.batchQueue.map((item, idx) => {
+        const t = item.targetLocation || {};
+        const cabStr = String(t.Cabinet || '1').padStart(2, '0');
+        const shStr = String(t.Shelf || '1').padStart(2, '0');
+        const bldgStr = t.Building || 'Økern';
+        const flStr = t.Floor !== undefined ? t.Floor : '-1';
+        const targetLocStr = `${bldgStr} · Fl ${flStr} · Cab ${cabStr} · Sh ${shStr}`;
+        const storedBadge = t['Stored as']
+          ? `<span class="px-1.5 py-0.5 rounded bg-emerald-50 border border-fern/30 text-[9px] font-mono font-medium text-fern-dark truncate max-w-[120px]" title="${t['Stored as']}">${t['Stored as']}</span>`
+          : '';
 
-      container.innerHTML = state.batchQueue.map((item, idx) => `
-        <article class="relative bg-white rounded border border-bordercol p-3 shadow-2xs flex flex-col gap-1">
-          <div class="flex items-start justify-between">
-            <div class="flex flex-col min-w-0">
-              <div class="flex items-center gap-1.5">
-                <span class="font-mono text-xs font-bold text-fern-dark">#${item.oid}</span>
-                <span class="text-[9px] font-mono px-1 py-0.2 bg-emerald-50 text-fern rounded border border-fern/30">QUEUED</span>
+        return `
+          <article class="relative bg-white rounded border border-bordercol p-3 shadow-2xs flex flex-col gap-1.5">
+            <div class="flex items-start justify-between">
+              <div class="flex flex-col min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono text-xs font-bold text-fern-dark">#${item.oid}</span>
+                  <span class="text-[9px] font-mono px-1 py-0.2 bg-emerald-50 text-fern rounded border border-fern/30">QUEUED</span>
+                </div>
+                <div class="font-serif italic text-xs text-ink truncate">${item.sciName}</div>
               </div>
-              <div class="font-serif italic text-xs text-ink truncate">${item.sciName}</div>
+              <button type="button" onclick="removeBatchItem(${idx})" class="text-stone-400 hover:text-brick p-1 text-sm font-bold">✕</button>
             </div>
-            <button type="button" onclick="removeBatchItem(${idx})" class="text-stone-400 hover:text-brick p-1 text-sm font-bold">✕</button>
-          </div>
-          <div class="flex items-center gap-1.5 text-[10px] font-mono text-muted pt-1 border-t border-stone-100">
-            <span class="truncate">${item.prevLoc}</span>
-            <span class="text-fern font-bold">→</span>
-            <span class="font-semibold text-fern-dark truncate">${targetLocStr}</span>
-          </div>
-        </article>
-      `).join('');
+            <div class="flex items-center justify-between text-[10px] font-mono pt-1 border-t border-stone-100 gap-2">
+              <div class="flex items-center gap-1 text-muted truncate min-w-0">
+                <span class="truncate max-w-[110px]">${item.prevLoc}</span>
+                <span class="text-fern font-bold">→</span>
+                <span class="font-semibold text-fern-dark truncate">${targetLocStr}</span>
+              </div>
+              ${storedBadge}
+            </div>
+          </article>
+        `;
+      }).join('');
     }
 
     async function commitBatchLocationUpdate() {
@@ -9325,26 +9406,19 @@ INDEX_TEMPLATE_V2 = """
         return;
       }
 
-      let storedAsVal = state.batchAnchor.storedAs;
-      if (storedAsVal === 'Custom') {
-        const customInput = document.getElementById('batchStoredAsCustomInput');
-        const customText = customInput ? customInput.value.trim() : '';
-        if (!customText) {
+      // Gate 2: Validate all staged items
+      for (const item of state.batchQueue) {
+        if (item.targetLocation && item.targetLocation['Stored as'] === 'Custom') {
           showToast('Please specify a custom storage value or mark as other');
           return;
         }
-        storedAsVal = customText;
       }
 
       const payload = {
-        location: {
-          Building: state.batchAnchor.building,
-          Floor: String(state.batchAnchor.floor),
-          Cabinet: String(state.batchAnchor.cabinet),
-          Shelf: String(state.batchAnchor.shelf),
-          'Stored as': storedAsVal
-        },
-        items: state.batchQueue.map(i => i.oid),
+        items: state.batchQueue.map(i => ({
+          oid: i.oid,
+          location: i.targetLocation
+        })),
         timestamp: new Date().toISOString()
       };
 
@@ -9357,6 +9431,7 @@ INDEX_TEMPLATE_V2 = """
         if (res && res.success) {
           showToast(`✓ Batch committed! Relocated ${res.updated_count} specimens`);
           state.batchQueue = [];
+          saveBatchQueueToStorage();
           renderBatchQueue();
           fetchObjects(false);
         } else {
