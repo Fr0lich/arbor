@@ -386,7 +386,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>FILE ▾</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Database file options</string>
@@ -399,7 +399,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>DATA</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Load historical databases</string>
@@ -412,7 +412,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>IMAGES ▾</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Image source and view options</string>
@@ -425,7 +425,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>CREATE</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Create a new object or database</string>
@@ -438,7 +438,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>RECENT</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>View recently visited objects</string>
@@ -451,7 +451,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>🌿 GBIF ▾</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>GBIF batch taxonomy validation &amp; rollback</string>
@@ -464,7 +464,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>📱 MOBILE</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Connect your phone to review &amp; edit records remotely</string>
@@ -487,7 +487,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>◄</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Previous in list</string>
@@ -500,7 +500,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>►</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Next in list</string>
@@ -513,7 +513,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>Last</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Return to last visited object</string>
@@ -536,7 +536,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>⚠ Next Problem</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Jump to next problem</string>
@@ -549,7 +549,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>Next+Hist</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
          <property name="toolTip">
           <string>Jump to next object with suggestions</string>
@@ -663,7 +663,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>View</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
         </widget>
        </item>
@@ -673,7 +673,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
           <string>✕</string>
          </property>
          <property name="cursor">
-          <enum>Qt::PointingHandCursor</enum>
+          <cursorShape>PointingHandCursor</cursorShape>
          </property>
         </widget>
        </item>
@@ -753,7 +753,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
               <string>📌</string>
              </property>
              <property name="cursor">
-              <enum>Qt::PointingHandCursor</enum>
+              <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
               <string>Toggle Docked / Unpinned Focus Mode</string>
@@ -766,7 +766,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
               <string>🔍</string>
              </property>
              <property name="cursor">
-              <enum>Qt::PointingHandCursor</enum>
+              <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
               <string>Open Object Drawer (Ctrl+O)</string>
@@ -848,7 +848,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
               <item>
                <widget class="QComboBox" name="combo_sort">
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <item>
                  <property name="text">
@@ -878,7 +878,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>Filter</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Ctrl+G</string>
@@ -891,7 +891,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>🔍 Peek</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Quick Peek at objects (Ctrl+P)</string>
@@ -904,7 +904,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>📱 Sync to Mobile</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Push working batch filter to mobile session</string>
@@ -999,7 +999,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                      <string>✕</string>
                     </property>
                     <property name="cursor">
-                     <enum>Qt::PointingHandCursor</enum>
+                     <cursorShape>PointingHandCursor</cursorShape>
                     </property>
                     <property name="toolTip">
                      <string>Clear Search (resets filter)</string>
@@ -1057,7 +1057,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                   <string>Bulk Edit Selected</string>
                  </property>
                  <property name="cursor">
-                  <enum>Qt::PointingHandCursor</enum>
+                  <cursorShape>PointingHandCursor</cursorShape>
                  </property>
                  <property name="enabled">
                   <bool>false</bool>
@@ -1206,7 +1206,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
               <string>🧬 Validate GBIF</string>
              </property>
              <property name="cursor">
-              <enum>Qt::PointingHandCursor</enum>
+              <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
               <string>Validate botanical nomenclature with GBIF Backbone Taxonomy</string>
@@ -1219,7 +1219,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
               <string>📖 Check Books</string>
              </property>
              <property name="cursor">
-              <enum>Qt::PointingHandCursor</enum>
+              <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
               <string>Open Historical Database Conflict Resolver</string>
@@ -1232,7 +1232,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
               <string>📱 Send to Phone</string>
              </property>
              <property name="cursor">
-              <enum>Qt::PointingHandCursor</enum>
+              <cursorShape>PointingHandCursor</cursorShape>
              </property>
             </widget>
            </item>
@@ -1328,7 +1328,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>View: gallery</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                </widget>
               </item>
@@ -1362,7 +1362,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>＋ Zoom In</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Zoom in on image canvas (Ctrl+Plus)</string>
@@ -1375,7 +1375,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>－ Zoom Out</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Zoom out on image canvas (Ctrl+Minus)</string>
@@ -1388,7 +1388,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>↺ Rotate -90°</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Rotate image counter-clockwise (Ctrl+Shift+R)</string>
@@ -1401,7 +1401,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>↻ Rotate 90°</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Rotate image clockwise (Ctrl+R)</string>
@@ -1414,7 +1414,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>Reset</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Reset zoom and rotation (Esc)</string>
@@ -1427,7 +1427,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                  <string>Fit View</string>
                 </property>
                 <property name="cursor">
-                 <enum>Qt::PointingHandCursor</enum>
+                 <cursorShape>PointingHandCursor</cursorShape>
                 </property>
                 <property name="toolTip">
                  <string>Fit image to viewport (Double-Click)</string>
@@ -1535,7 +1535,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
               <string>History</string>
              </property>
              <property name="cursor">
-              <enum>Qt::PointingHandCursor</enum>
+              <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
               <string>Show historical data (Ctrl+H)</string>
@@ -1572,7 +1572,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
            <item>
             <widget class="QCheckBox" name="chk_focus_mode">
              <property name="cursor">
-              <enum>Qt::PointingHandCursor</enum>
+              <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="toolTip">
               <string>Hide fields without active problems</string>
@@ -1753,7 +1753,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
               <string>✓ MARK AS REVIEWED (Ctrl+Enter)</string>
              </property>
              <property name="cursor">
-              <enum>Qt::PointingHandCursor</enum>
+              <cursorShape>PointingHandCursor</cursorShape>
              </property>
             </widget>
            </item>
@@ -1902,7 +1902,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
              <string>SETTINGS</string>
             </property>
             <property name="cursor">
-             <enum>Qt::PointingHandCursor</enum>
+             <cursorShape>PointingHandCursor</cursorShape>
             </property>
             <property name="toolTip">
              <string>Open Application Settings</string>
@@ -1915,7 +1915,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
              <string>HELP</string>
             </property>
             <property name="cursor">
-             <enum>Qt::PointingHandCursor</enum>
+             <cursorShape>PointingHandCursor</cursorShape>
             </property>
             <property name="toolTip">
              <string>Open Help Window</string>
@@ -2046,7 +2046,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
              <string>DB_STATUS</string>
             </property>
             <property name="cursor">
-             <enum>Qt::PointingHandCursor</enum>
+             <cursorShape>PointingHandCursor</cursorShape>
             </property>
            </widget>
           </item>
@@ -2056,7 +2056,7 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
              <string>LOG_VIEWER</string>
             </property>
             <property name="cursor">
-             <enum>Qt::PointingHandCursor</enum>
+             <cursorShape>PointingHandCursor</cursorShape>
             </property>
            </widget>
           </item>
