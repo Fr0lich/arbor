@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = QApplication.instance() or QApplication(sys.argv)
 
-files = sys.argv[1:] or sorted(glob.glob(os.path.join(ROOT, "qt designer", "*.ui")))
+files = sys.argv[1:] or sorted(glob.glob(os.path.join(ROOT, "qt designer", "**", "*.ui"), recursive=True))
 failed = 0
 for path in files:
     if not os.path.isabs(path) and not os.path.exists(path):
