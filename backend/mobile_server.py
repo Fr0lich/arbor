@@ -7834,7 +7834,7 @@ INDEX_TEMPLATE_V2 = """
             <!-- Building -->
             <div class="bg-white rounded p-1.5 border border-bordercol flex items-center justify-between">
               <span class="font-mono text-[9px] uppercase font-bold text-muted">Bldg</span>
-              <select id="batchBuildingSelect" class="bg-transparent font-mono text-xs font-bold text-ink outline-none text-right">
+              <select id="batchBuildingSelect" onchange="handleBatchBuildingChange(this.value)" class="bg-transparent font-mono text-xs font-bold text-ink outline-none text-right">
                 <option value="Økern">Økern</option>
                 <option value="Lid's hus">Lid's hus</option>
               </select>
@@ -8275,6 +8275,9 @@ INDEX_TEMPLATE_V2 = """
                 renderBatchStoredAsPills();
             }
           }
+          if (typeof populateBatchBuildingOptions === 'function') {
+            populateBatchBuildingOptions();
+          }
         }
       } catch(err) {
         console.error('Failed to fetch schema:', err);
@@ -8489,6 +8492,9 @@ INDEX_TEMPLATE_V2 = """
       document.getElementById('listView').classList.add('hidden');
       document.getElementById('detailView').classList.add('hidden');
       document.getElementById('batchLocationView').classList.remove('hidden');
+      if (typeof populateBatchBuildingOptions === 'function') {
+        populateBatchBuildingOptions();
+      }
       updateBatchAnchorUI();
       document.getElementById('batchIdInput')?.focus();
     }
@@ -9101,8 +9107,52 @@ INDEX_TEMPLATE_V2 = """
     // -------------------------------------------------------------
     // SCREEN 3: BATCH LOCATION REGISTRATOR LOGIC
     // -------------------------------------------------------------
+    function handleBatchBuildingChange(val) {
+      state.batchAnchor.building = val;
+      updateBatchAnchorUI();
+    }
+
+    function populateBatchBuildingOptions() {
+      const select = document.getElementById('batchBuildingSelect');
+      if (!select) return;
+
+      let bldgChoices = [];
+      if (state.activeSchema && state.activeSchema.ui_sections && Array.isArray(state.activeSchema.ui_sections.location)) {
+        const bldgField = state.activeSchema.ui_sections.location.find(f => f && f.name === 'Building' && Array.isArray(f.choices));
+        if (bldgField) {
+          bldgChoices = bldgField.choices;
+        }
+      }
+      if ((!bldgChoices || bldgChoices.length === 0) && state.activeSchema && state.activeSchema.vocabulary && Array.isArray(state.activeSchema.vocabulary.Building)) {
+        bldgChoices = state.activeSchema.vocabulary.Building;
+      }
+      if (!bldgChoices || bldgChoices.length === 0) {
+        bldgChoices = ['Økern', "Lid's hus"];
+      }
+
+      const currentVal = state.batchAnchor.building || select.value || 'Økern';
+      const allChoices = Array.from(new Set([...bldgChoices, currentVal])).filter(Boolean);
+
+      select.innerHTML = allChoices.map(b => `<option value="${b.replace(/"/g, '&quot;')}">${b}</option>`).join('');
+      select.value = currentVal;
+      state.batchAnchor.building = currentVal;
+    }
+
     function updateBatchAnchorUI() {
-      document.getElementById('batchBuildingSelect').value = state.batchAnchor.building || 'Økern';
+      const bldgSelect = document.getElementById('batchBuildingSelect');
+      if (bldgSelect) {
+        if (state.batchAnchor.building) {
+          if (!Array.from(bldgSelect.options).some(o => o.value === state.batchAnchor.building)) {
+            const opt = document.createElement('option');
+            opt.value = state.batchAnchor.building;
+            opt.textContent = state.batchAnchor.building;
+            bldgSelect.appendChild(opt);
+          }
+          bldgSelect.value = state.batchAnchor.building;
+        } else if (bldgSelect.value) {
+          state.batchAnchor.building = bldgSelect.value;
+        }
+      }
       document.getElementById('batchFloorVal').textContent = state.batchAnchor.floor !== undefined ? state.batchAnchor.floor : '-1';
       document.getElementById('batchCabVal').textContent = String(state.batchAnchor.cabinet || '4').padStart(2, '0');
       document.getElementById('batchShelfVal').textContent = String(state.batchAnchor.shelf || '2').padStart(2, '0');
