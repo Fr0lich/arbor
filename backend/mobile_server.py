@@ -1488,10 +1488,17 @@ self.addEventListener('fetch', (event) => {
             else:
                 vocabulary = self.app_state.vocabulary_cache
 
+            stored_as_choices = []
+            for item in ui_sections.get("location", []):
+                if isinstance(item, dict) and item.get("name") in ("Stored as", "Stored_As") and "choices" in item:
+                    stored_as_choices = [str(c) for c in item.get("choices", []) if str(c).strip()]
+                    break
+
             return jsonify({
                 "database_name": db_name,
                 "config_name": self.app_state.config_name or "",
                 "ui_sections": ui_sections,
+                "stored_as_choices": stored_as_choices,
                 "problem_category_themes": getattr(config, "PROBLEM_CATEGORY_THEMES", {}),
                 "image_url_pattern": image_url_pattern,
                 "vocabulary": vocabulary
@@ -8258,8 +8265,12 @@ INDEX_TEMPLATE_V2 = """
           state.activeSchema = data;
           document.getElementById('headerDbName').textContent = data.database_name || 'Active Database';
           document.getElementById('connModalDbName').textContent = data.database_name || 'Active Database';
-          if (data.stored_as_choices) {
-            state.storedAsChoices = data.stored_as_choices;
+          if (data.stored_as_choices && Array.isArray(data.stored_as_choices)) {
+            const choices = [...data.stored_as_choices];
+            ['Other', 'Custom'].forEach(opt => {
+              if (!choices.includes(opt)) choices.push(opt);
+            });
+            state.storedAsChoices = choices;
             if (typeof renderBatchStoredAsPills === 'function') {
                 renderBatchStoredAsPills();
             }
@@ -9108,7 +9119,8 @@ INDEX_TEMPLATE_V2 = """
 
     function adjustBatchCoord(coord, delta) {
       if (coord === 'floor') {
-        const cur = parseInt(state.batchAnchor.floor, 10) || -1;
+        const parsed = parseInt(state.batchAnchor.floor, 10);
+        const cur = isNaN(parsed) ? -1 : parsed;
         state.batchAnchor.floor = cur + delta;
       } else if (coord === 'cab') {
         const cur = parseInt(state.batchAnchor.cabinet, 10) || 4;
@@ -9123,17 +9135,21 @@ INDEX_TEMPLATE_V2 = """
     function renderBatchStoredAsPills() {
       const container = document.getElementById('batchStoredAsPills');
       if (!container) return;
-      const choices = state.storedAsChoices && state.storedAsChoices.length > 0
-                      ? state.storedAsChoices
-                      : state.customPresets; // Fallback
+      let choices = state.storedAsChoices && state.storedAsChoices.length > 0
+                      ? [...state.storedAsChoices]
+                      : [...state.customPresets]; // Fallback
+      ['Other', 'Custom'].forEach(opt => {
+        if (!choices.includes(opt)) choices.push(opt);
+      });
 
       container.innerHTML = choices.map(opt => {
         const isSel = (opt === state.batchAnchor.storedAs);
         const className = isSel
           ? 'batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border-2 border-fern bg-emerald-50 text-fern-dark font-semibold'
           : 'batch-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted';
+        const escapedOpt = opt.replace(/'/g, "\\'");
         return `
-          <button type="button" onclick="selectBatchStoragePill(this, '${opt}')" class="${className}">
+          <button type="button" onclick="selectBatchStoragePill(this, '${escapedOpt}')" class="${className}">
             ${opt}
           </button>
         `;
@@ -9189,8 +9205,8 @@ INDEX_TEMPLATE_V2 = """
       const existing = state.objectList.find(o => String(o.id) === String(rawOid));
       if (existing) {
         sciName = existing.scientific_name;
-        const l = existing.location || {};
-        prevLoc = `${l.building || ''} Fl ${l.floor || ''} Cab ${l.cabinet || ''} Sh ${l.shelf || ''}`.trim() || 'Unrecorded';
+        const flStr = (l.floor !== undefined && l.floor !== null) ? l.floor : '';
+        prevLoc = `${l.building || ''} Fl ${flStr} Cab ${l.cabinet || ''} Sh ${l.shelf || ''}`.trim() || 'Unrecorded';
       }
 
       state.batchQueue.unshift({
@@ -9262,9 +9278,12 @@ INDEX_TEMPLATE_V2 = """
       let storedAsVal = state.batchAnchor.storedAs;
       if (storedAsVal === 'Custom') {
         const customInput = document.getElementById('batchStoredAsCustomInput');
-        if (customInput) {
-          storedAsVal = customInput.value.trim();
+        const customText = customInput ? customInput.value.trim() : '';
+        if (!customText) {
+          showToast('Please specify a custom storage value or mark as other');
+          return;
         }
+        storedAsVal = customText;
       }
 
       const payload = {
