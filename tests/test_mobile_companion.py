@@ -1401,6 +1401,20 @@ def test_v2_template_features(mock_app_state):
     # 3. Numeric floor with negative support
     assert 'type="number"' in html or 'input_observation_Floor' in html
 
+    # 4. Batch Registrator Walk Mode toggle & sync
+    assert 'id="btnBatchWakeLock"' in html
+    assert 'id="batchWakeLockIcon"' in html
+    assert 'updateWakeLockUI' in html
+    assert 'arbor_walk_mode' in html
+
+    # 5. One-tap search clear
+    assert 'handleSearchInput' in html
+    assert 'id="searchClearBtn"' in html
+
+    # 6. Undo Toast on Batch Queue removal / clear all
+    assert 'toastActionBtn' in html
+    assert "actionText: 'Undo'" in html or 'actionText: "Undo"' in html
+
 
 
 

@@ -137,10 +137,10 @@ class QtTriStateRow(QFrame):
         self.set_state(next_state)
 
     def set_state(self, new_state: str, emit_signal: bool = True) -> None:
-        s = str(new_state).strip().capitalize()
-        if s in ("Has", "True", "1"):
+        s_val = str(new_state).strip().lower()
+        if s_val in ("has", "true", "1", "yes", "y"):
             s = "Has"
-        elif s in ("Not", "False", "-1"):
+        elif s_val in ("not", "false", "-1", "no", "n"):
             s = "Not"
         else:
             s = "Ignore"
@@ -189,13 +189,14 @@ class QtTriStateRow(QFrame):
 class QtLoadPresetDialog(QDialog):
     """Modal dialog to select and load a saved filter preset."""
 
-    def __init__(self, presets: dict, parent: QWidget | None = None):
+    def __init__(self, presets: dict, presets_file: str | None = None, parent: QWidget | None = None):
         super().__init__(parent)
         self.presets = presets
+        self.presets_file = presets_file
         self.selected_preset_name: str | None = None
 
         self.setWindowTitle("Load Preset")
-        self.resize(380, 440)
+        self.resize(420, 440)
         self.setStyleSheet(
             f"QDialog {{ background-color: {qss_tokens.SURFACE}; }}"
             f"QLabel {{ color: {qss_tokens.TEXT}; }}"
@@ -234,6 +235,16 @@ class QtLoadPresetDialog(QDialog):
 
         btn_box = QHBoxLayout()
         btn_box.setSpacing(8)
+
+        self.btn_delete = QPushButton("DELETE PRESET", self)
+        self.btn_delete.setStyleSheet(
+            f"QPushButton {{ background-color: #ffffff; color: {qss_tokens.RED}; "
+            f"border: 1px solid {qss_tokens.RED}; padding: 6px 14px; font-family: 'Segoe UI'; font-weight: bold; }}"
+            f"QPushButton:hover {{ background-color: #ffebee; }}"
+        )
+        self.btn_delete.clicked.connect(self._on_delete_clicked)
+        btn_box.addWidget(self.btn_delete)
+
         btn_box.addStretch(1)
 
         btn_cancel = QPushButton("CANCEL", self)
@@ -261,6 +272,30 @@ class QtLoadPresetDialog(QDialog):
         if item:
             self.selected_preset_name = item.text()
             self.accept()
+
+    def _on_delete_clicked(self) -> None:
+        item = self.list_widget.currentItem()
+        if not item:
+            return
+        name = item.text()
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Are you sure you want to delete preset '{name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        if name in self.presets:
+            del self.presets[name]
+            if self.presets_file:
+                try:
+                    with open(self.presets_file, "w", encoding="utf-8") as f:
+                        json.dump(self.presets, f, indent=2)
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to delete preset file: {e}")
+        row = self.list_widget.row(item)
+        self.list_widget.takeItem(row)
 
 
 class QtFilterDialog:
@@ -457,7 +492,7 @@ class QtFilterDialog:
             inp.textChanged.connect(lambda: self.update_matched_count())
             row_layout.addWidget(lbl)
             row_layout.addWidget(inp)
-            self.dialog.layout_location_extra.addLayout(row_layout)
+            self.dialog.layout_location_criteria.addLayout(row_layout)
             self.location_inputs[fname] = inp
 
     def _wire_signals(self) -> None:
@@ -523,12 +558,15 @@ class QtFilterDialog:
         prefs_dir = os.path.dirname(getattr(config, "_PREFS_PATH", "user_prefs.json"))
         return os.path.join(prefs_dir, "filter_presets.json")
 
-    def save_preset(self) -> None:
-        """Prompt user for a preset name and save non-default values to JSON."""
-        name, ok = QInputDialog.getText(self.dialog, "Save Preset", "Enter preset name:")
-        if not ok or not name.strip():
-            return
-        name = name.strip()
+    def save_preset(self, name: str | None = None) -> bool:
+        """Prompt user or use provided preset name and save non-default values to JSON."""
+        if name is None:
+            prompt_name, ok = QInputDialog.getText(self.dialog, "Save Preset", "Enter preset name:")
+            if not ok or not prompt_name.strip():
+                return False
+            name = prompt_name.strip()
+        else:
+            name = name.strip()
 
         vars_to_save = {}
         for k, row in self.rows.items():
@@ -553,33 +591,41 @@ class QtFilterDialog:
             data[name] = preset
             with open(presets_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
-            QMessageBox.information(self.dialog, "Preset Saved", f"Successfully saved preset '{name}'.")
+            return True
         except Exception as e:
             QMessageBox.critical(self.dialog, "Error", f"Failed to save preset: {e}")
+            return False
 
-    def load_preset(self) -> None:
-        """Open preset picker and apply chosen preset."""
+    def load_preset(self, preset_name: str | None = None) -> bool:
+        """Open preset picker or apply chosen preset directly."""
         presets_file = self._get_preset_path()
         if not os.path.exists(presets_file):
-            QMessageBox.information(self.dialog, "Presets", "No presets saved yet.")
-            return
+            if preset_name is None:
+                QMessageBox.information(self.dialog, "Presets", "No presets saved yet.")
+            return False
 
         try:
             with open(presets_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
             QMessageBox.critical(self.dialog, "Error", f"Failed to load presets: {e}")
-            return
+            return False
 
         if not data:
-            QMessageBox.information(self.dialog, "Presets", "No presets saved yet.")
-            return
+            if preset_name is None:
+                QMessageBox.information(self.dialog, "Presets", "No presets saved yet.")
+            return False
 
-        picker = QtLoadPresetDialog(data, parent=self.dialog)
-        if picker.exec() != QDialog.Accepted or not picker.selected_preset_name:
-            return
+        if preset_name is None:
+            picker = QtLoadPresetDialog(data, presets_file=presets_file, parent=self.dialog)
+            if picker.exec() != QDialog.Accepted or not picker.selected_preset_name:
+                return False
+            preset_name = picker.selected_preset_name
 
-        preset = data[picker.selected_preset_name]
+        if preset_name not in data:
+            return False
+
+        preset = data[preset_name]
 
         # Reset current filters before applying preset
         self.clear_filter(show_feedback=False)
@@ -589,18 +635,18 @@ class QtFilterDialog:
             mapped_k = k
             if k == "Images_Missing":
                 mapped_k = "Has_Images"
-                v = "Not" if str(v).lower() in ("has", "true", "1") else "Has"
+                v = "Not" if str(v).lower() in ("has", "true", "1", "yes") else "Has"
             elif k == "Not_Reviewed":
                 mapped_k = "Reviewed"
-                v = "Not" if str(v).lower() in ("has", "true", "1") else "Has"
+                v = "Not" if str(v).lower() in ("has", "true", "1", "yes") else "Has"
             elif k in ("Comment_Not_Empty", "Comment_Empty"):
                 mapped_k = "Has_Comment"
                 if k == "Comment_Empty":
-                    v = "Not" if str(v).lower() in ("has", "true", "1") else "Has"
+                    v = "Not" if str(v).lower() in ("has", "true", "1", "yes") else "Has"
             elif k in ("Extra_Not_Empty", "Extra_Empty"):
                 mapped_k = "Has_Location_Comment"
                 if k == "Extra_Empty":
-                    v = "Not" if str(v).lower() in ("has", "true", "1") else "Has"
+                    v = "Not" if str(v).lower() in ("has", "true", "1", "yes") else "Has"
 
             if mapped_k in self.rows:
                 self.rows[mapped_k].set_state(v, emit_signal=False)
@@ -621,6 +667,24 @@ class QtFilterDialog:
             self.dialog.input_old_taxonomy.setText(preset["old_taxonomy"])
 
         self.update_matched_count()
+        return True
+
+    def delete_preset(self, name: str) -> bool:
+        """Delete a preset by name from saved presets."""
+        presets_file = self._get_preset_path()
+        if not os.path.exists(presets_file):
+            return False
+        try:
+            with open(presets_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if name in data:
+                del data[name]
+                with open(presets_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                return True
+        except Exception:
+            return False
+        return False
 
     def clear_filter(self, show_feedback: bool = True) -> None:
         """Reset all filter states to Ignore and empty location fields."""
@@ -632,6 +696,10 @@ class QtFilterDialog:
 
         self.dialog.input_old_taxonomy.clear()
         self.dialog.radio_mode_and.setChecked(True)
+
+        if self.app and getattr(self.app, "df_reg", None) is not None:
+            self.app.active_object_ids = list(self.app.df_reg.index)
+
         self.update_matched_count()
 
         if self.on_clear:

@@ -64,10 +64,10 @@ QPushButton#btn_sync_mobile {
     font-weight: 600;
 }
 QPushButton#btn_nav_file:hover, QPushButton#btn_nav_data:hover, QPushButton#btn_nav_images:hover,
-QPushButton#btn_nav_create:hover, QPushButton#btn_nav_recent:hover, QPushButton#btn_nav_gbif:hover,
-QPushButton#btn_nav_mobile:hover, QPushButton#btn_prev:hover, QPushButton#btn_next:hover,
-QPushButton#btn_last:hover, QPushButton#btn_filter:hover, QPushButton#btn_peek:hover,
-QPushButton#btn_sync_mobile:hover {
+QPushButton#btn_nav_create:hover, QPushButton#btn_nav_recent:hover, QPushButton#btn_nav_presets:hover,
+QPushButton#btn_nav_gbif:hover, QPushButton#btn_nav_mobile:hover, QPushButton#btn_prev:hover,
+QPushButton#btn_next:hover, QPushButton#btn_last:hover, QPushButton#btn_filter:hover,
+QPushButton#btn_peek:hover, QPushButton#btn_sync_mobile:hover {
     background-color: #ffffff;
 }
 QPushButton#btn_sync_mobile:disabled { color: #747878; }
@@ -442,6 +442,19 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
          </property>
          <property name="toolTip">
           <string>View recently visited objects</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_nav_presets">
+         <property name="text">
+          <string>PRESETS ▾</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="toolTip">
+          <string>Field view and focus presets</string>
          </property>
         </widget>
        </item>

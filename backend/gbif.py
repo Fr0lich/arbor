@@ -86,6 +86,9 @@ def check_gbif(genus: str, species: str):
             "family": data.get("family", ""),
             "higherClassification": higher_classification,
             "rank": data.get("rank"),
+            "confidence": data.get("confidence", 0),
+            "usageKey": data.get("usageKey"),
+            "taxonKey": data.get("usageKey"),
             "synonym": data.get("status") == "SYNONYM",
             "acceptedUsageKey": data.get("acceptedUsageKey"),
         }
@@ -128,6 +131,10 @@ def get_accepted_name(usage_key: int):
             "author": author,
             "family": data.get("family", ""),
             "higherClassification": higher_classification,
+            "rank": data.get("rank"),
+            "status": data.get("status", "ACCEPTED"),
+            "usageKey": usage_key,
+            "taxonKey": usage_key,
         }
     except Exception as e:
         print(f"Error checking GBIF accepted name: {e}")

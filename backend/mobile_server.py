@@ -7371,7 +7371,7 @@ INDEX_TEMPLATE_V2 = """
 
             <!-- Walk Mode (Wake Lock) Toggle -->
             <button id="btnListWakeLock" onclick="toggleWakeLock()" title="Keep screen awake during audit" class="w-8 h-8 rounded-md bg-stone-100 border border-stone-200 text-stone-600 hover:text-ink flex items-center justify-center tap-active transition-colors">
-              <span id="listWakeLockIcon" class="text-xs">☀️</span>
+              <span id="listWakeLockIcon" class="text-xs">🌙</span>
             </button>
 
             <!-- Batch Location Registrator Trigger -->
@@ -7406,13 +7406,13 @@ INDEX_TEMPLATE_V2 = """
               type="text" 
               id="searchBox" 
               placeholder="Search taxonomy, accession, cabinet..." 
-              oninput="debounceSearch()"
+              oninput="handleSearchInput()"
               autocomplete="off"
               spellcheck="false"
               class="w-full pl-9 pr-16 py-2 bg-stone-100/90 hover:bg-stone-100 focus:bg-white text-xs font-mono text-ink placeholder:text-ink-faint placeholder:font-sans rounded-lg border border-stone-200 focus:border-fern focus:ring-1 focus:ring-fern focus:outline-none transition-all shadow-inner"
             />
             <div class="absolute right-2 flex items-center space-x-1">
-              <button id="searchClearBtn" onclick="clearSearch()" class="hidden text-ink-faint hover:text-ink p-1 rounded text-xs font-mono leading-none" title="Clear search">
+              <button id="searchClearBtn" onclick="clearSearch()" class="hidden w-6 h-6 flex items-center justify-center rounded-full bg-stone-200/80 hover:bg-stone-300 text-ink-muted hover:text-ink active:scale-95 text-xs font-bold leading-none transition-all" title="Clear search">
                 ✕
               </button>
               <button id="btnFilterModalTrigger" onclick="openFilterModal()" title="Curatorial Filters" class="relative p-1.5 rounded-md hover:bg-stone-200/70 text-ink-muted hover:text-ink transition-colors">
@@ -7828,6 +7828,9 @@ INDEX_TEMPLATE_V2 = """
           </div>
         </div>
         <div class="flex items-center gap-1.5">
+          <button id="btnBatchWakeLock" onclick="toggleWakeLock()" title="Keep screen awake during audit" class="w-8 h-8 rounded-md bg-stone-100 border border-stone-200 text-stone-600 hover:text-ink flex items-center justify-center tap-active transition-colors">
+            <span id="batchWakeLockIcon" class="text-xs">🌙</span>
+          </button>
           <div class="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[10.5px] font-mono text-emerald-800">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Live</span>
@@ -8137,8 +8140,9 @@ INDEX_TEMPLATE_V2 = """
     </div>
 
     <!-- Toast Notification -->
-    <div id="toast" class="hidden fixed bottom-20 left-4 right-4 max-w-sm mx-auto bg-fern-dark text-white text-xs font-bold py-2.5 px-4 rounded shadow-lg text-center z-50 transition-opacity">
-      Edits saved & synchronized
+    <div id="toast" class="hidden fixed bottom-20 left-4 right-4 max-w-sm mx-auto bg-stone-900/95 text-white text-xs py-2.5 px-4 rounded-lg shadow-xl flex items-center justify-between z-50 transition-opacity">
+      <span id="toastMsg" class="font-medium truncate mr-2">Edits saved & synchronized</span>
+      <button id="toastActionBtn" class="hidden shrink-0 px-2.5 py-1 rounded bg-fern hover:bg-fern-dark text-white font-mono text-[11px] font-bold uppercase tracking-wider tap-active transition-colors">Undo</button>
     </div>
 
   </div>
@@ -8184,7 +8188,8 @@ INDEX_TEMPLATE_V2 = """
         'Herbarium Sheet', 'Standard Box', 'Free Standing', 'Petri dish', 
         'Liquid / Glass Jar', 'Capsule / Envelope', 'Microscope Slide', 'Mounted platform', 'Oversized Folder'
       ],
-      storedAsChoices: []
+      storedAsChoices: [],
+      isWalkModeWanted: false
     };
 
     let searchDebounceTimer = null;
@@ -8194,10 +8199,13 @@ INDEX_TEMPLATE_V2 = """
     let currentTabIdx = 0;
     let wakeLockSentinel = null;
     let eventSource = null;
+    let toastTimer = null;
+    let toastHideTimer = null;
 
     // Load persisted settings
     try {
       state.showFilterPills = localStorage.getItem('arbor_show_filter_pills') === 'true';
+      state.isWalkModeWanted = localStorage.getItem('arbor_walk_mode') === 'true';
       const savedPresets = localStorage.getItem('arbor_storage_presets');
       if (savedPresets) state.customPresets = JSON.parse(savedPresets);
       const savedLastLoc = localStorage.getItem('arbor_last_location');
@@ -8220,16 +8228,49 @@ INDEX_TEMPLATE_V2 = """
       return res.json();
     }
 
-    function showToast(msg) {
+    function showToast(msg, options = null) {
       const toast = document.getElementById('toast');
+      const msgEl = document.getElementById('toastMsg') || toast;
+      const actionBtn = document.getElementById('toastActionBtn');
       if (!toast) return;
-      toast.textContent = msg;
+
+      if (toastTimer) clearTimeout(toastTimer);
+      if (toastHideTimer) clearTimeout(toastHideTimer);
+
+      msgEl.textContent = msg;
+
+      if (actionBtn) {
+        if (options && options.actionText && typeof options.onAction === 'function') {
+          actionBtn.textContent = options.actionText;
+          actionBtn.onclick = (e) => {
+            e.stopPropagation();
+            hideToast();
+            options.onAction();
+          };
+          actionBtn.classList.remove('hidden');
+        } else {
+          actionBtn.classList.add('hidden');
+          actionBtn.onclick = null;
+        }
+      }
+
       toast.classList.remove('hidden');
       toast.style.opacity = '1';
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.classList.add('hidden'), 200);
-      }, 2000);
+
+      const duration = (options && options.duration) ? options.duration : (options && options.onAction ? 5000 : 2200);
+      toastTimer = setTimeout(hideToast, duration);
+    }
+
+    function hideToast() {
+      const toast = document.getElementById('toast');
+      if (!toast) return;
+      if (toastTimer) clearTimeout(toastTimer);
+      toast.style.opacity = '0';
+      toastHideTimer = setTimeout(() => {
+        toast.classList.add('hidden');
+        const actionBtn = document.getElementById('toastActionBtn');
+        if (actionBtn) actionBtn.classList.add('hidden');
+      }, 200);
     }
 
     // -------------------------------------------------------------
@@ -8240,8 +8281,18 @@ INDEX_TEMPLATE_V2 = """
       await fetchSchema();
       await fetchObjects();
       setupEventSource();
+      if (state.isWalkModeWanted) {
+        acquireWakeLock(true);
+      } else {
+        updateWakeLockUI(false);
+      }
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') setupEventSource();
+        if (document.visibilityState === 'visible') {
+          setupEventSource();
+          if (state.isWalkModeWanted && !wakeLockSentinel) {
+            acquireWakeLock(true);
+          }
+        }
       });
       renderStorageQuickGrid();
     }
@@ -8419,10 +8470,19 @@ INDEX_TEMPLATE_V2 = """
       document.getElementById('pillCountUnknown').textContent = `(${facets.unknown_count || 0})`;
     }
 
+    function handleSearchInput() {
+      const searchBox = document.getElementById('searchBox');
+      const val = searchBox ? searchBox.value.trim() : '';
+      const clearBtn = document.getElementById('searchClearBtn');
+      if (val) clearBtn?.classList.remove('hidden');
+      else clearBtn?.classList.add('hidden');
+      debounceSearch();
+    }
+
     function debounceSearch() {
       clearTimeout(searchDebounceTimer);
       searchDebounceTimer = setTimeout(() => {
-        state.searchQuery = document.getElementById('searchBox').value.trim();
+        state.searchQuery = document.getElementById('searchBox')?.value.trim() || '';
         const clearBtn = document.getElementById('searchClearBtn');
         if (state.searchQuery) clearBtn?.classList.remove('hidden');
         else clearBtn?.classList.add('hidden');
@@ -8431,7 +8491,12 @@ INDEX_TEMPLATE_V2 = """
     }
 
     function clearSearch() {
-      document.getElementById('searchBox').value = '';
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+      const searchBox = document.getElementById('searchBox');
+      if (searchBox) {
+        searchBox.value = '';
+        searchBox.focus();
+      }
       state.searchQuery = '';
       document.getElementById('searchClearBtn')?.classList.add('hidden');
       fetchObjects();
@@ -9335,15 +9400,38 @@ INDEX_TEMPLATE_V2 = """
     }
 
     function removeBatchItem(idx) {
+      if (idx < 0 || idx >= state.batchQueue.length) return;
+      const removed = state.batchQueue[idx];
       state.batchQueue.splice(idx, 1);
       saveBatchQueueToStorage();
       renderBatchQueue();
+      showToast(`Removed #${removed.oid}`, {
+        actionText: 'Undo',
+        onAction: () => {
+          const insertIdx = Math.min(idx, state.batchQueue.length);
+          state.batchQueue.splice(insertIdx, 0, removed);
+          saveBatchQueueToStorage();
+          renderBatchQueue();
+          showToast(`Restored #${removed.oid}`);
+        }
+      });
     }
 
     function clearBatchQueue() {
+      if (!state.batchQueue || state.batchQueue.length === 0) return;
+      const previousQueue = [...state.batchQueue];
       state.batchQueue = [];
       saveBatchQueueToStorage();
       renderBatchQueue();
+      showToast(`Cleared ${previousQueue.length} items`, {
+        actionText: 'Undo',
+        onAction: () => {
+          state.batchQueue = previousQueue;
+          saveBatchQueueToStorage();
+          renderBatchQueue();
+          showToast(`Restored ${previousQueue.length} items`);
+        }
+      });
     }
 
     function renderBatchQueue() {
@@ -9530,22 +9618,67 @@ INDEX_TEMPLATE_V2 = """
       showToast('✓ Settings saved');
     }
 
-    async function toggleWakeLock() {
-      if (!wakeLockSentinel) {
-        try {
-          if ('wakeLock' in navigator) {
-            wakeLockSentinel = await navigator.wakeLock.request('screen');
-            document.getElementById('listWakeLockIcon').textContent = '☀️';
-            showToast('☀️ Walk Mode active (screen awake)');
+    function updateWakeLockUI(active) {
+      ['listWakeLockIcon', 'batchWakeLockIcon'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = active ? '☀️' : '🌙';
+      });
+      ['btnListWakeLock', 'btnBatchWakeLock'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          if (active) {
+            btn.className = 'w-8 h-8 rounded-md bg-amber-100 border border-amber-300 text-amber-900 shadow-xs ring-1 ring-amber-300 font-bold flex items-center justify-center tap-active transition-colors';
+          } else {
+            btn.className = 'w-8 h-8 rounded-md bg-stone-100 border border-stone-200 text-stone-600 hover:text-ink flex items-center justify-center tap-active transition-colors';
           }
-        } catch(err) {}
-      } else {
-        try {
-          await wakeLockSentinel.release();
+        }
+      });
+    }
+
+    async function acquireWakeLock(silent = false) {
+      if (!('wakeLock' in navigator)) {
+        if (!silent) showToast('Wake Lock not supported on this browser');
+        return false;
+      }
+      try {
+        if (wakeLockSentinel) {
+          try { await wakeLockSentinel.release(); } catch(e) {}
           wakeLockSentinel = null;
-          document.getElementById('listWakeLockIcon').textContent = '🌙';
-          showToast('🌙 Walk Mode disabled');
-        } catch(err) {}
+        }
+        wakeLockSentinel = await navigator.wakeLock.request('screen');
+        updateWakeLockUI(true);
+        wakeLockSentinel.addEventListener('release', () => {
+          wakeLockSentinel = null;
+          if (!state.isWalkModeWanted) {
+            updateWakeLockUI(false);
+          }
+        });
+        if (!silent) showToast('☀️ Walk Mode active (screen awake)');
+        return true;
+      } catch(err) {
+        if (!silent) showToast('Wake Lock unavailable on this device');
+        return false;
+      }
+    }
+
+    async function releaseWakeLock(silent = false) {
+      state.isWalkModeWanted = false;
+      try { localStorage.setItem('arbor_walk_mode', 'false'); } catch(e) {}
+      if (wakeLockSentinel) {
+        try { await wakeLockSentinel.release(); } catch(e) {}
+        wakeLockSentinel = null;
+      }
+      updateWakeLockUI(false);
+      if (!silent) showToast('🌙 Walk Mode disabled');
+    }
+
+    async function toggleWakeLock() {
+      if (state.isWalkModeWanted || wakeLockSentinel) {
+        await releaseWakeLock();
+      } else {
+        state.isWalkModeWanted = true;
+        try { localStorage.setItem('arbor_walk_mode', 'true'); } catch(e) {}
+        await acquireWakeLock();
       }
     }
 

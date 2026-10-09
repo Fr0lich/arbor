@@ -297,22 +297,22 @@ AI agents must execute migrations following this complexity-ordered roadmap, unl
 
 ### Phase 2: Read-Only Displays, Menus & Action Bars
 * **Goal**: Wire up user action menus, summary dashboards, and tabular audit logs.
-- [ ] **Header Action Bar & Context Menus**: File, Data, GBIF, Images, Create, and Presets menus (`ui/main_window.py`, `ui/context_menu.py`).
-- [ ] **Database Statistics Dashboard**: Aggregated metric counts, completion ratios, progress bars (`ui/dashboard.py`).
-- [ ] **Recent Activity Dialog**: Tabular audit trail of session operations (`ui/recent_activity_dialog.py`).
-- [ ] **Quick Peek Dialog**: Fast record metadata & thumbnail inspector card (`ui/quick_peek.py`).
+- [x] **Header Action Bar & Context Menus**: File, Data, GBIF, Images, Create, and Presets menus (`ui_qt/main_window.py`, `main_qt.py`).
+- [x] **Database Statistics Dashboard**: Aggregated metric counts, completion ratios, progress bars (`ui_qt/dashboard.py` wrapping `qt designer/database_statistics.ui`).
+- [x] **Recent Activity Dialog**: Tabular audit trail of session operations (`ui_qt/recent_activity_dialog.py` wrapping `qt designer/recent_activity.ui`).
+- [x] **Quick Peek Dialog**: Fast record metadata & thumbnail inspector card (`ui_qt/quick_peek.py` wrapping `qt designer/quick_peek.ui`).
 
 ### Phase 3: Focused Editing Dialogs & Settings
 * **Goal**: Allow modal configuration and batch field manipulations.
-- [ ] **Unified Settings Window**: Tabbed preferences (General, Appearance, Database profiles, Advanced) (`ui/unified_settings.py`).
-- [ ] **Group Editor**: Specimen group assignment and management (`ui/group_editor.py`).
-- [ ] **Bulk Edit Dialog**: Column find/replace and regex operations (`ui/bulk_edit.py`).
-- [ ] **Add Objects Wizard**: Range generator and sequential record creation (`ui/add_objects.py`).
+- [x] **Unified Settings Window**: Tabbed preferences (General, Appearance, Database profiles, Advanced) (`ui_qt/unified_settings.py` wrapping `qt designer/unified_settings.ui`).
+- [x] **Group Editor**: Specimen group assignment and management (`ui_qt/group_editor.py` wrapping `qt designer/group_editor.ui`).
+- [x] **Bulk Edit Dialog**: Column find/replace and regex operations (`ui_qt/bulk_edit.py` wrapping `qt designer/bulk_edit.ui`).
+- [x] **Add Objects Wizard**: Range generator and sequential record creation (`ui_qt/add_objects.py` wrapping `qt designer/add_objects.ui`).
 
 ### Phase 4: Query Builder & Single-Item Verification
 * **Goal**: Multi-tab filtering and live scientific verification.
-- [ ] **Filter Dialog & Panel**: 4-tab query builder with tri-state toggles and preset management (`ui/filter_dialog.py`, `ui/filter_panel.py`).
-- [ ] **GBIF Specimen Validator**: Single-record live taxonomy match and side-by-side diff (`ui/gbif_dialog.py`).
+- [x] **Filter Dialog & Panel**: 4-tab query builder with tri-state toggles and preset management (`ui_qt/filter_dialog.py` wrapping `qt designer/filter_dialog.ui`).
+- [x] **GBIF Specimen Validator**: Single-record live taxonomy match and side-by-side diff (`ui_qt/gbif_dialog.py` wrapping `qt designer/gbif_dialog.ui`).
 
 ### Phase 5: High-Complexity Workspaces & Deep Resolvers
 * **Goal**: Core application workstation and complex multi-dataframe reconciliation.

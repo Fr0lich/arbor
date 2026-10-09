@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>560</width>
-    <height>520</height>
+    <height>600</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -114,27 +114,41 @@ QPushButton#btn_create:hover {
       <number>8</number>
      </property>
      <item row="0" column="0">
-      <widget class="QLabel" name="lbl_start_id">
+      <widget class="QLabel" name="lbl_prefix">
        <property name="text">
-        <string>Starting Object ID:</string>
+        <string>ID Prefix (optional):</string>
        </property>
       </widget>
      </item>
      <item row="0" column="1">
-      <widget class="QLineEdit" name="input_start_id">
+      <widget class="QLineEdit" name="input_prefix">
        <property name="placeholderText">
-        <string>e.g. 1001 or SPEC-001</string>
+        <string>e.g. SPEC-</string>
        </property>
       </widget>
      </item>
      <item row="1" column="0">
+      <widget class="QLabel" name="lbl_start_id">
+       <property name="text">
+        <string>Starting Number / ID:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QLineEdit" name="input_start_id">
+       <property name="placeholderText">
+        <string>e.g. 1001</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
       <widget class="QLabel" name="lbl_count">
        <property name="text">
         <string>Number of Objects:</string>
        </property>
       </widget>
      </item>
-     <item row="1" column="1">
+     <item row="2" column="1">
       <widget class="QSpinBox" name="spin_count">
        <property name="minimum">
         <number>1</number>
@@ -144,6 +158,20 @@ QPushButton#btn_create:hover {
        </property>
        <property name="value">
         <number>1</number>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="0">
+      <widget class="QLabel" name="lbl_suffix">
+       <property name="text">
+        <string>ID Suffix (optional):</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="1">
+      <widget class="QLineEdit" name="input_suffix">
+       <property name="placeholderText">
+        <string>e.g. -A</string>
        </property>
       </widget>
      </item>
@@ -199,6 +227,19 @@ QPushButton#btn_create:hover {
          <number>6</number>
         </property>
         <item row="0" column="0">
+         <widget class="QLabel" name="lbl_def_collection">
+          <property name="styleSheet">
+           <string notr="true">border: none;</string>
+          </property>
+          <property name="text">
+           <string>Collection:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLineEdit" name="input_def_collection"/>
+        </item>
+        <item row="1" column="0">
          <widget class="QLabel" name="lbl_def_genus">
           <property name="styleSheet">
            <string notr="true">border: none;</string>
@@ -208,10 +249,10 @@ QPushButton#btn_create:hover {
           </property>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item row="1" column="1">
          <widget class="QLineEdit" name="input_def_genus"/>
         </item>
-        <item row="1" column="0">
+        <item row="2" column="0">
          <widget class="QLabel" name="lbl_def_species">
           <property name="styleSheet">
            <string notr="true">border: none;</string>
@@ -221,10 +262,10 @@ QPushButton#btn_create:hover {
           </property>
          </widget>
         </item>
-        <item row="1" column="1">
+        <item row="2" column="1">
          <widget class="QLineEdit" name="input_def_species"/>
         </item>
-        <item row="2" column="0">
+        <item row="3" column="0">
          <widget class="QLabel" name="lbl_def_collector">
           <property name="styleSheet">
            <string notr="true">border: none;</string>
@@ -234,8 +275,21 @@ QPushButton#btn_create:hover {
           </property>
          </widget>
         </item>
-        <item row="2" column="1">
+        <item row="3" column="1">
          <widget class="QLineEdit" name="input_def_collector"/>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="lbl_def_location">
+          <property name="styleSheet">
+           <string notr="true">border: none;</string>
+          </property>
+          <property name="text">
+           <string>Location / Building:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QLineEdit" name="input_def_location"/>
         </item>
        </layout>
       </item>

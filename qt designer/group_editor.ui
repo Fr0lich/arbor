@@ -217,7 +217,17 @@ QPushButton#btn_add_group:hover {
             <cursorShape>PointingHandCursor</cursorShape>
            </property>
            <property name="text">
-            <string>+ Add Current Object</string>
+            <string>+ Add Current</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_add_filtered">
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="text">
+            <string>+ Add Filtered</string>
            </property>
           </widget>
          </item>
