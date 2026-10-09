@@ -78,7 +78,7 @@ QPushButton:hover {
     background-color: #e9ece5;
 }
 QPushButton:pressed {
-    background-color: #dadada;
+    background-color: #e9ece5;
 }
 
 QPushButton#btn_browse_db, 
@@ -233,7 +233,7 @@ QPushButton#btn_mobile:hover {
     background-color: #1b4332;
 }
 QPushButton#btn_mobile:disabled {
-    background-color: #dadada;
+    background-color: #e9ece5;
     color: #747878;
 }
 
@@ -252,10 +252,10 @@ QPushButton#btn_launch:hover {
     background-color: #2c302e;
 }
 QPushButton#btn_launch:pressed {
-    background-color: #1a1a1a;
+    background-color: #2c302e;
 }
 QPushButton#btn_launch:disabled {
-    background-color: #dadada;
+    background-color: #e9ece5;
     color: #747878;
 }
 

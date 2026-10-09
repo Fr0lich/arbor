@@ -62,7 +62,7 @@ QPushButton:hover {
     background-color: #e9ece5;
 }
 QPushButton:pressed {
-    background-color: #dadada;
+    background-color: #e9ece5;
 }</string>
   </property>
   <layout class="QVBoxLayout" name="root_layout">
