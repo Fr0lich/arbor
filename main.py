@@ -214,6 +214,10 @@ def select_ui_framework(argv: list | None = None, env: dict | None = None, is_in
     if env is None:
         env = os.environ
 
+    # Frozen production builds strictly use Tkinter (zero migration risk)
+    if getattr(sys, "frozen", False):
+        return "tk"
+
     # 1. CLI flags
     # Check --ui=... format
     for arg in list(argv):

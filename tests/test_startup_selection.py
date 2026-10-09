@@ -97,6 +97,13 @@ class TestStartupSelection(unittest.TestCase):
         choice = select_ui_framework(argv=argv, env={}, is_interactive=True)
         self.assertEqual(choice, "tk")
 
+    def test_frozen_executable_strictly_defaults_to_tk(self):
+        """When running inside a frozen Arbor.exe, always return 'tk' with zero migration risk."""
+        with patch.object(sys, "frozen", True, create=True):
+            # Even if flags or env variables specify qt, frozen exe enforces stable Tkinter
+            choice = select_ui_framework(argv=["main.py", "--ui", "qt"], env={"ARBOR_UI": "qt"}, is_interactive=True)
+            self.assertEqual(choice, "tk")
+
 
 if __name__ == "__main__":
     unittest.main()

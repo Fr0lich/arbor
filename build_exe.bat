@@ -60,20 +60,20 @@ if %ERRORLEVEL% NEQ 0 (
 :: 4. Copy external resources to dist folder
 echo.
 echo [3/3] Copying external configuration and data resources...
-if exist "tutorials.json" (
-    copy /Y "tutorials.json" "dist\tutorials.json" >nul
-    if %ERRORLEVEL% NEQ 0 (
-        echo [WARNING] Failed to copy tutorials.json to dist.
+if exist "USER_GUIDE.md" (
+    copy /Y "USER_GUIDE.md" "dist\USER_GUIDE.md" >nul
+    if !ERRORLEVEL! NEQ 0 (
+        echo [WARNING] Failed to copy USER_GUIDE.md to dist.
     ) else (
-        echo   - tutorials.json copied
+        echo   - USER_GUIDE.md copied
     )
 ) else (
-    echo [WARNING] tutorials.json not found in root.
+    echo [WARNING] USER_GUIDE.md not found in root.
 )
 
 if exist "ignored_words.json" (
     copy /Y "ignored_words.json" "dist\ignored_words.json" >nul
-    if %ERRORLEVEL% NEQ 0 (
+    if !ERRORLEVEL! NEQ 0 (
         echo [WARNING] Failed to copy ignored_words.json to dist.
     ) else (
         echo   - ignored_words.json copied
