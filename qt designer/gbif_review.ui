@@ -181,7 +181,7 @@ QPushButton#btn_accept_selected:hover {
      <item>
       <widget class="QLabel" name="lbl_match_count">
        <property name="styleSheet">
-        <string notr="true">font-family: 'Courier New', monospace; font-size: 11px; color: #747878;</string>
+        <string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px; color: #747878;</string>
        </property>
        <property name="text">
         <string>Matches: 0 of 0 selected</string>

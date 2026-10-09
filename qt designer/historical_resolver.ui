@@ -98,7 +98,7 @@ QPushButton#btn_apply_all:hover {
    <item>
     <widget class="QLabel" name="lbl_object_info">
      <property name="styleSheet">
-      <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #747878;</string>
+      <string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; color: #747878;</string>
      </property>
      <property name="text">
       <string>Comparing active Excel entry against historical archival book records.</string>

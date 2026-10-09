@@ -125,7 +125,7 @@ QPushButton#btn_open_full:hover {
      <item>
       <widget class="QLabel" name="badge_status">
        <property name="styleSheet">
-        <string notr="true">background-color: #3a7d44; color: #ffffff; font-family: 'Courier New', monospace; font-size: 10px; font-weight: bold; padding: 3px 6px;</string>
+        <string notr="true">background-color: #3a7d44; color: #ffffff; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; padding: 3px 6px;</string>
        </property>
        <property name="text">
         <string>REVIEWED</string>

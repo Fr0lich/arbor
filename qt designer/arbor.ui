@@ -101,7 +101,7 @@ QPushButton#btn_create_db {
     background-color: #f2f5f1;
     color: #000000;
     border: 1px solid #747878;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
     font-size: 12px;
     font-weight: bold;
     padding: 5px 14px;
@@ -210,7 +210,7 @@ QPushButton#btn_help {
     color: #2c302e;
     border: 1px solid #747878;
     border-radius: 0px;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
     font-size: 13px;
     font-weight: bold;
     padding: 7px 18px;
@@ -224,7 +224,7 @@ QPushButton#btn_mobile {
     color: #ffffff;
     border: none;
     border-radius: 0px;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
     font-size: 13px;
     font-weight: bold;
     padding: 7px 16px;
@@ -242,7 +242,7 @@ QPushButton#btn_launch {
     color: #ffffff;
     border: none;
     border-radius: 0px;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
     font-size: 13px;
     font-weight: bold;
     padding: 7px 24px;
@@ -405,7 +405,7 @@ QScrollArea &gt; QWidget &gt; QWidget {
                <item>
                 <widget class="QLabel" name="badge_db_required">
                  <property name="styleSheet">
-                  <string notr="true">background-color: #c93a40; color: #ffffff; font-family: 'Courier New', monospace; font-size: 10px; font-weight: bold; border-radius: 0px; padding: 2px 4px;</string>
+                  <string notr="true">background-color: #c93a40; color: #ffffff; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; border-radius: 0px; padding: 2px 4px;</string>
                  </property>
                  <property name="text">
                   <string> REQUIRED </string>
@@ -492,7 +492,7 @@ QScrollArea &gt; QWidget &gt; QWidget {
                <item>
                 <widget class="QLabel" name="lbl_profile">
                  <property name="styleSheet">
-                  <string notr="true">font-family: 'Segoe UI', sans-serif; font-size: 12px; font-weight: bold; color: #444748;</string>
+                  <string notr="true">font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif; font-size: 12px; font-weight: bold; color: #444748;</string>
                  </property>
                  <property name="text">
                   <string>Profile:</string>
@@ -540,7 +540,7 @@ QScrollArea &gt; QWidget &gt; QWidget {
                <item>
                 <widget class="QLabel" name="badge_img_recommended">
                  <property name="styleSheet">
-                  <string notr="true">background-color: #3a7d44; color: #ffffff; font-family: 'Courier New', monospace; font-size: 10px; font-weight: bold; border-radius: 0px; padding: 2px 4px;</string>
+                  <string notr="true">background-color: #3a7d44; color: #ffffff; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; border-radius: 0px; padding: 2px 4px;</string>
                  </property>
                  <property name="text">
                   <string> RECOMMENDED </string>
@@ -725,7 +725,7 @@ QScrollArea &gt; QWidget &gt; QWidget {
                <item>
                 <widget class="QLabel" name="badge_books_optional">
                  <property name="styleSheet">
-                  <string notr="true">background-color: #747878; color: #ffffff; font-family: 'Courier New', monospace; font-size: 10px; font-weight: bold; border-radius: 0px; padding: 2px 4px;</string>
+                  <string notr="true">background-color: #747878; color: #ffffff; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; border-radius: 0px; padding: 2px 4px;</string>
                  </property>
                  <property name="text">
                   <string> OPTIONAL </string>

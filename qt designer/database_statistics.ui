@@ -189,7 +189,7 @@ QPushButton:hover {
           <item>
            <widget class="QLabel" name="lbl_prog_stats">
             <property name="styleSheet">
-             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #444748; border: none;</string>
+             <string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; color: #444748; border: none;</string>
             </property>
             <property name="text">
              <string>Reviewed: 0 / 0 objects (0.0%)</string>
@@ -236,7 +236,7 @@ QPushButton:hover {
           <item>
            <widget class="QLabel" name="lbl_total_objects">
             <property name="styleSheet">
-             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #2c302e; border: none;</string>
+             <string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; color: #2c302e; border: none;</string>
             </property>
             <property name="text">
              <string>Total Objects: 0</string>
@@ -246,7 +246,7 @@ QPushButton:hover {
           <item>
            <widget class="QLabel" name="lbl_gbif_validated">
             <property name="styleSheet">
-             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #2c302e; border: none;</string>
+             <string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; color: #2c302e; border: none;</string>
             </property>
             <property name="text">
              <string>Taxonomy Validated: 0</string>
@@ -256,7 +256,7 @@ QPushButton:hover {
           <item>
            <widget class="QLabel" name="lbl_books_matched">
             <property name="styleSheet">
-             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; color: #2c302e; border: none;</string>
+             <string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; color: #2c302e; border: none;</string>
             </property>
             <property name="text">
              <string>Historical Records Matched: 0</string>
@@ -303,7 +303,7 @@ QPushButton:hover {
           <item>
            <widget class="QLabel" name="lbl_probs_total">
             <property name="styleSheet">
-             <string notr="true">font-family: 'Courier New', monospace; font-size: 12px; font-weight: bold; color: #c93a40; border: none;</string>
+             <string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 12px; font-weight: bold; color: #c93a40; border: none;</string>
             </property>
             <property name="text">
              <string>Objects with Flagged Problems: 0</string>

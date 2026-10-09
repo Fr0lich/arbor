@@ -52,7 +52,7 @@ QLineEdit {
     color: #2c302e;
     border: 1px solid #747878;
     padding: 5px 8px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
     font-size: 12px;
 }
 
@@ -61,7 +61,7 @@ QTableWidget {
     color: #2c302e;
     border: none;
     gridline-color: #c4c7c7;
-    font-family: 'Courier New', monospace;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
     font-size: 11px;
 }
 QTableWidget::item {

@@ -199,6 +199,84 @@ if sys.stderr is None:
     sys.stderr = _NullWriterErr()
 
 
+def select_ui_framework(argv: list | None = None, env: dict | None = None, is_interactive: bool | None = None) -> str:
+    """
+    Determine whether to launch 'tk' (Tkinter) or 'qt' (PySide6).
+
+    Resolution priority:
+    1. CLI flags (--ui qt|tk, --ui=qt|tk, --qt, --tk, --ui pyside6)
+    2. Environment variable ARBOR_UI ('qt' or 'tk')
+    3. Interactive CLI prompt if running in an interactive terminal (TTY)
+    4. Default fallback: 'tk' (Tkinter - Production Stable)
+    """
+    if argv is None:
+        argv = sys.argv
+    if env is None:
+        env = os.environ
+
+    # 1. CLI flags
+    # Check --ui=... format
+    for arg in list(argv):
+        if arg.startswith("--ui="):
+            val = arg.split("=", 1)[1].strip().lower()
+            argv.remove(arg)
+            if val in ("qt", "pyside", "pyside6"):
+                return "qt"
+            elif val in ("tk", "tkinter"):
+                return "tk"
+
+    # Check --ui <val> format
+    if "--ui" in argv:
+        idx = argv.index("--ui")
+        val = ""
+        if idx + 1 < len(argv):
+            val = argv[idx + 1].strip().lower()
+            del argv[idx:idx + 2]
+        else:
+            del argv[idx]
+        if val in ("qt", "pyside", "pyside6"):
+            return "qt"
+        elif val in ("tk", "tkinter"):
+            return "tk"
+
+    # Check shorthand flags
+    if "--qt" in argv:
+        argv.remove("--qt")
+        return "qt"
+    if "--tk" in argv:
+        argv.remove("--tk")
+        return "tk"
+
+    # 2. Environment variable
+    env_choice = env.get("ARBOR_UI", "").strip().lower()
+    if env_choice in ("qt", "pyside", "pyside6"):
+        return "qt"
+    elif env_choice in ("tk", "tkinter"):
+        return "tk"
+
+    # 3. Interactive CLI prompt (only when run in an interactive terminal)
+    interactive = is_interactive if is_interactive is not None else (
+        sys.stdin is not None and hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+    )
+    if interactive:
+        try:
+            print("\n" + "=" * 52)
+            print("  Arbor Specimen Management System - UI Launcher")
+            print("=" * 52)
+            print("Select UI framework to launch:")
+            print("  [1] Tkinter (Default / Production-stable)")
+            print("  [2] PySide6 (Qt 6 Modernized / Parallel preview)")
+            user_input = input("Choose [1/2] (press Enter for default [1]): ").strip().lower()
+            if user_input in ("2", "qt", "pyside", "pyside6"):
+                return "qt"
+            return "tk"
+        except (EOFError, KeyboardInterrupt):
+            return "tk"
+
+    # 4. Fallback default: Tkinter production interface
+    return "tk"
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -215,6 +293,11 @@ if __name__ == "__main__":
             host = MobileHostApp(target_file)
             host.run()
             sys.exit(0)
+
+        # Check which UI framework to load (Tkinter or PySide6)
+        if select_ui_framework() == "qt":
+            import main_qt
+            sys.exit(main_qt.main())
 
         # Import heavy/third-party modules inside the try block to prevent silent startup/import crashes
         from models import AppState

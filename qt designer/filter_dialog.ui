@@ -48,15 +48,15 @@ QFrame#footer_frame {
 
 QFrame#frame_search {
     background-color: #ffffff;
-    border: 1px solid #d9480f;
+    border: 1px solid #d95c14;
     border-radius: 2px;
 }
 
 QLineEdit#input_filter_search {
     background-color: transparent;
     border: none;
-    color: #d9480f;
-    font-family: 'Segoe UI', 'Inter', sans-serif;
+    color: #d95c14;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
     font-size: 12px;
 }
 
@@ -66,7 +66,7 @@ QLineEdit {
     border: 1px solid #747878;
     border-radius: 0px;
     padding: 5px 8px;
-    font-family: 'Segoe UI', 'Inter', sans-serif;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
     font-size: 12px;
 }
 
@@ -80,7 +80,7 @@ QPushButton {
     border: 1px solid #747878;
     border-radius: 0px;
     padding: 5px 12px;
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
     font-size: 11px;
     font-weight: bold;
 }
@@ -100,14 +100,14 @@ QPushButton#btn_clear_filter {
 }
 
 QPushButton#btn_clear_filter:hover {
-    background-color: #ffebee;
+    background-color: #e9ece5;
 }
 
 QPushButton#btn_apply_filter {
     background-color: #000000;
     border: 1px solid #000000;
     color: #ffffff;
-    font-family: 'Segoe UI', 'Inter', sans-serif;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
     font-size: 12px;
     font-weight: bold;
     padding: 6px 16px;
@@ -124,12 +124,12 @@ QTabWidget::pane {
 }
 
 QTabBar::tab {
-    background: #e2e2e2;
+    background: #e9ece5;
     color: #747878;
     padding: 8px 18px;
     border: 1px solid #c4c7c7;
     border-bottom: none;
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
     font-size: 11px;
     font-weight: bold;
     margin-right: 2px;
@@ -138,7 +138,7 @@ QTabBar::tab {
 QTabBar::tab:selected {
     background: #ffffff;
     color: #2c302e;
-    border-top: 2px solid #000000;
+    border-top: 1px solid #000000;
     border-bottom: 1px solid #ffffff;
 }
 
@@ -147,7 +147,7 @@ QTabBar::tab:hover:!selected {
 }
 
 QGroupBox {
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
     font-size: 11px;
     font-weight: bold;
     color: #747878;
@@ -193,7 +193,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 }
 
 QRadioButton {
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-family: 'Courier New', 'JetBrains Mono', monospace;
     font-size: 11px;
     font-weight: bold;
     color: #2c302e;
@@ -253,7 +253,7 @@ QRadioButton {
             <item>
              <widget class="QLabel" name="lbl_search_icon">
               <property name="text"><string>⌕</string></property>
-              <property name="styleSheet"><string notr="true">color: #d9480f; font-size: 14px; font-weight: bold;</string></property>
+              <property name="styleSheet"><string notr="true">color: #d95c14; font-size: 14px; font-weight: bold;</string></property>
              </widget>
             </item>
             <item>
@@ -309,7 +309,7 @@ QRadioButton {
              <item>
               <widget class="QLabel" name="lbl_mode_title">
                <property name="text"><string>LOGIC MODE:</string></property>
-               <property name="styleSheet"><string notr="true">font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #747878; border: none;</string></property>
+               <property name="styleSheet"><string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #747878; border: none;</string></property>
               </widget>
              </item>
              <item>
@@ -575,7 +575,7 @@ QRadioButton {
                      <property name="minimumSize"><size><width>140</width><height>0</height></size></property>
                      <property name="maximumSize"><size><width>140</width><height>16777215</height></size></property>
                      <property name="text"><string>Building</string></property>
-                     <property name="styleSheet"><string notr="true">font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #2c302e;</string></property>
+                     <property name="styleSheet"><string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #2c302e;</string></property>
                     </widget>
                    </item>
                    <item>
@@ -594,7 +594,7 @@ QRadioButton {
                      <property name="minimumSize"><size><width>140</width><height>0</height></size></property>
                      <property name="maximumSize"><size><width>140</width><height>16777215</height></size></property>
                      <property name="text"><string>Floor</string></property>
-                     <property name="styleSheet"><string notr="true">font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #2c302e;</string></property>
+                     <property name="styleSheet"><string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #2c302e;</string></property>
                     </widget>
                    </item>
                    <item>
@@ -613,7 +613,7 @@ QRadioButton {
                      <property name="minimumSize"><size><width>140</width><height>0</height></size></property>
                      <property name="maximumSize"><size><width>140</width><height>16777215</height></size></property>
                      <property name="text"><string>Cabinet</string></property>
-                     <property name="styleSheet"><string notr="true">font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #2c302e;</string></property>
+                     <property name="styleSheet"><string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #2c302e;</string></property>
                     </widget>
                    </item>
                    <item>
@@ -632,7 +632,7 @@ QRadioButton {
                      <property name="minimumSize"><size><width>140</width><height>0</height></size></property>
                      <property name="maximumSize"><size><width>140</width><height>16777215</height></size></property>
                      <property name="text"><string>Drawer</string></property>
-                     <property name="styleSheet"><string notr="true">font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #2c302e;</string></property>
+                     <property name="styleSheet"><string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; color: #2c302e;</string></property>
                     </widget>
                    </item>
                    <item>
@@ -680,7 +680,7 @@ QRadioButton {
          <item>
           <widget class="QLabel" name="lbl_matched_count">
            <property name="text"><string>Ready</string></property>
-           <property name="styleSheet"><string notr="true">font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #747878; font-weight: bold;</string></property>
+           <property name="styleSheet"><string notr="true">font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px; color: #747878; font-weight: bold;</string></property>
           </widget>
          </item>
          <item>

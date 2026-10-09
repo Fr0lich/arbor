@@ -19,9 +19,13 @@ To ensure stability, continuity, and zero regression for existing users and prod
 ### 1.1 Dual-Stack Coexistence Rules
 1. **Tkinter Remains Primary & Stable**:
    - `main.py` continues to launch the Tkinter interface by default until Phase 4 (Full Parity & Cutover).
+   - **Unified Selection Mechanism**: Users can explicitly launch either UI via:
+     - CLI flags: `python main.py --ui qt` (or `--ui tk`, `--qt`, `--tk`)
+     - Environment variable: `ARBOR_UI=qt python main.py`
+     - Interactive terminal prompt: Selecting `[1] Tkinter` (default) or `[2] PySide6` when run interactively without flags.
    - **Never break, modify without reason, or deprecate Tkinter code** while developing Qt equivalents. All existing Tkinter tests and workflows must pass unconditionally.
 2. **PySide6 is the Parallel Development Stack**:
-   - `main_qt.py` is the entry point for the PySide6 application.
+   - `main_qt.py` remains the dedicated direct entry point for the PySide6 application.
    - All Qt controllers, helpers, and custom widgets live in the `ui_qt/` package.
    - All visual layouts are created in Qt Designer and stored as `.ui` files in `qt designer/`.
 3. **Single Shared Backend & Data Layer**:

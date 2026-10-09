@@ -251,7 +251,7 @@ QPushButton#btn_apply:hover {
    <item>
     <widget class="QLabel" name="lbl_status">
      <property name="styleSheet">
-      <string notr="true">color: #747878; font-family: 'Courier New', monospace; font-size: 11px;</string>
+      <string notr="true">color: #747878; font-family: 'Courier New', 'JetBrains Mono', monospace; font-size: 11px;</string>
      </property>
      <property name="text">
       <string>Ready to preview changes.</string>
