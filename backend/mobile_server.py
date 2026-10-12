@@ -78,6 +78,14 @@ def get_problem_to_field_map(config):
                     problem_to_field[name] = p["target"]
     return problem_to_field
 
+def _natural_sort_key(s):
+    """Sort key for natural alphanumeric ordering (e.g., 1, 2, 3, 4, ..., 10, 100)."""
+    return [
+        (0, int(t)) if t.isdigit() else (1, t.lower())
+        for t in re.split(r'(\d+)', str(s).strip())
+        if t
+    ]
+
 def get_history_set(app_state):
     presence_set, _ = get_historical_cache(app_state)
     return presence_set
@@ -1499,6 +1507,8 @@ self.addEventListener('fetch', (event) => {
                 "config_name": self.app_state.config_name or "",
                 "ui_sections": ui_sections,
                 "stored_as_choices": stored_as_choices,
+                "icedig_code_labels": getattr(config, "ICEDIG_CODE_LABELS", {}),
+                "problem_to_field": get_problem_to_field_map(getattr(self.app_state, "config", None)),
                 "problem_category_themes": getattr(config, "PROBLEM_CATEGORY_THEMES", {}),
                 "image_url_pattern": image_url_pattern,
                 "vocabulary": vocabulary
@@ -1608,7 +1618,7 @@ self.addEventListener('fetch', (event) => {
                 if k.startswith('loc_') and v.strip():
                     loc_filters[k[4:]] = v.strip().lower()
 
-            sort_by = request.args.get('sort_by', '').strip().lower()
+            sort_by = request.args.get('sort_by', 'id').strip().lower() or 'id'
             sort_dir = request.args.get('sort_dir', 'asc').strip().lower()
 
             limit = max(1, min(int(request.args.get('limit', 100)), 500))
@@ -1703,12 +1713,21 @@ self.addEventListener('fetch', (event) => {
                 is_search_active = bool(query)
                 if is_search_active:
                     idx_str = df_reg.index.astype(str).str.lower()
+                    oid_col = None
+                    for c in ("ObjectID", "id", "Accession"):
+                        if c in df_reg.columns:
+                            oid_col = df_reg[c].fillna("").astype(str).str.lower()
+                            break
 
                     # p1: exact ID match
                     p1_mask = idx_str == query
+                    if oid_col is not None:
+                        p1_mask |= (oid_col == query)
 
                     # p2: partial ID match
                     p2_mask = idx_str.str.contains(query, regex=False) & ~p1_mask
+                    if oid_col is not None:
+                        p2_mask |= (oid_col.str.contains(query, regex=False) & ~p1_mask)
 
                     # p3: genus/species match
                     genus_col = df_reg["Genus"].fillna("").astype(str).str.lower() if "Genus" in df_reg.columns else pd.Series("", index=df_reg.index)
@@ -1970,15 +1989,8 @@ self.addEventListener('fetch', (event) => {
                 if sort_by in ['id', 'genus', 'cabinet'] and not is_search_active:
                     ascending = (sort_dir == 'asc')
                     if sort_by == 'id':
-                        # Use numeric sorting if possible, otherwise string sorting
-                        try:
-                            # index might be strings of integers
-                            num_index = matched_indices.astype(int)
-                            matched_indices = matched_indices[num_index.argsort()]
-                            if not ascending:
-                                matched_indices = matched_indices[::-1]
-                        except Exception:
-                            matched_indices = matched_indices.sort_values(ascending=ascending)
+                        # Natural numeric sorting (e.g. 1, 2, 3, 4, ..., 10, 100, 1000)
+                        matched_indices = pd.Index(sorted(matched_indices, key=_natural_sort_key, reverse=not ascending))
                     elif sort_by == 'genus':
                         if "Genus" in df_reg.columns:
                             sort_series = _clean_series(df_reg["Genus"].reindex(matched_indices))
@@ -2000,24 +2012,53 @@ self.addEventListener('fetch', (event) => {
 
                 objects = []
                 paged_indices_list = paged_indices.tolist()
-                paged_reg_dict = df_reg.loc[paged_indices_list].to_dict('index')
 
+                # Safe row dictionary extraction handling duplicate indices and dtype mismatches
+                paged_reg_dict = {}
                 obs_cols = set(df_obs.columns) if df_obs is not None else set()
                 reg_cols = set(df_reg.columns)
-
                 paged_obs_dict = {}
+
+                # Fast index lookup maps for robust retrieval
+                reg_idx_map = {}
+                for pos, idx_val in enumerate(df_reg.index):
+                    s_key = str(idx_val)
+                    if s_key not in reg_idx_map:
+                        reg_idx_map[s_key] = pos
+
+                obs_idx_map = {}
                 if df_obs is not None:
-                    if df_obs.index.dtype == df_reg.index.dtype:
-                        intersect = df_obs.index.intersection(paged_indices_list)
-                        if len(intersect) > 0:
-                            paged_obs_dict = df_obs.loc[intersect].to_dict('index')
+                    for pos, idx_val in enumerate(df_obs.index):
+                        s_key = str(idx_val)
+                        if s_key not in obs_idx_map:
+                            obs_idx_map[s_key] = pos
+
+                for oid_item in paged_indices_list:
+                    # 1. Registration row
+                    s_oid = str(oid_item)
+                    if s_oid in reg_idx_map:
+                        pos = reg_idx_map[s_oid]
+                        paged_reg_dict[oid_item] = df_reg.iloc[pos].to_dict()
+                    elif oid_item in df_reg.index:
+                        try:
+                            loc_res = df_reg.loc[oid_item]
+                            paged_reg_dict[oid_item] = loc_res.iloc[0].to_dict() if isinstance(loc_res, pd.DataFrame) else loc_res.to_dict()
+                        except Exception:
+                            paged_reg_dict[oid_item] = {}
                     else:
-                        obs_dict_full = df_obs.to_dict('index')
-                        obs_map = {str(k): v for k, v in obs_dict_full.items()}
-                        for oid_item in paged_indices_list:
-                            s_item = str(oid_item)
-                            if s_item in obs_map:
-                                paged_obs_dict[oid_item] = obs_map[s_item]
+                        paged_reg_dict[oid_item] = {}
+
+                    # 2. Observation row
+                    if df_obs is not None:
+                        if s_oid in obs_idx_map:
+                            pos = obs_idx_map[s_oid]
+                            paged_obs_dict[oid_item] = df_obs.iloc[pos].to_dict()
+                        elif oid_item in df_obs.index:
+                            try:
+                                loc_res = df_obs.loc[oid_item]
+                                paged_obs_dict[oid_item] = loc_res.iloc[0].to_dict() if isinstance(loc_res, pd.DataFrame) else loc_res.to_dict()
+                            except Exception:
+                                pass
 
                 loc_keys = {lcol: lcol.lower().replace(" ", "_") for lcol in location_fields}
 
@@ -2053,9 +2094,11 @@ self.addEventListener('fetch', (event) => {
 
                 flags = compute_status_flags(reg_row, obs_row, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
 
+                acc_num = _clean_val(reg_row.get("ObjectID") or reg_row.get("Accession") or reg_row.get("AccessionID") or reg_row.get("id")) or str(oid)
+
                 objects.append({
                     "id": str(oid),
-                    "accession_number": str(oid),
+                    "accession_number": acc_num,
                     "scientific_name": sci_name,
                     "genus": genus,
                     "species": species,
@@ -3166,10 +3209,10 @@ INDEX_TEMPLATE = """
               onchange="handleSortChange()"
               class="bg-transparent font-sans text-[11px] font-medium text-ink outline-none cursor-pointer"
             >
+              <option value="id-asc" selected>Accession / ID Number</option>
               <option value="location">Sort by Physical Location</option>
               <option value="name-asc">Scientific Name (A-Z)</option>
               <option value="name-desc">Scientific Name (Z-A)</option>
-              <option value="id-asc">Accession / ID Number</option>
             </select>
           </div>
         </div>
@@ -3928,7 +3971,7 @@ INDEX_TEMPLATE = """
     let activeStatusFilter = 'all';
     let noImageFilterActive = false;
     let activeAdvancedFilters = { locations: {}, problems: {} };
-    let activeSortBy = 'location';
+    let activeSortBy = 'id-asc';
     let searchQuery = '';
     let searchDebounceTimer = null;
     let autoSaveTimer = null;
@@ -7458,10 +7501,10 @@ INDEX_TEMPLATE_V2 = """
           <div class="flex items-center space-x-1.5">
             <div class="relative inline-flex items-center">
               <select id="sortBySelect" onchange="handleSortChange()" class="appearance-none bg-white border border-bordercol rounded-md px-2 py-1 pr-6 text-[10.5px] font-mono text-ink focus:outline-none focus:border-fern shadow-2xs cursor-pointer">
+                <option value="id_asc" selected>Accession ID (0894...)</option>
                 <option value="location">⇅ Sort: Physical Location</option>
                 <option value="name_asc">Scientific Name (A–Z)</option>
                 <option value="name_desc">Scientific Name (Z–A)</option>
-                <option value="id_asc">Accession ID (0894...)</option>
                 <option value="flagged_first">Flagged / Problems First</option>
               </select>
               <div class="absolute right-1.5 pointer-events-none text-ink-faint">
@@ -7612,126 +7655,78 @@ INDEX_TEMPLATE_V2 = """
             </div>
 
             <!-- 2. Main Physical Coordinate Audit Card -->
-            <div class="bg-surface border border-bordercol rounded p-3.5 shadow-xs space-y-3.5">
-              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+            <section class="bg-stone-50 border border-bordercol rounded-lg p-3 space-y-2.5 shadow-2xs">
+              <div class="flex items-center justify-between">
                 <div>
-                  <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Physical Coordinates Audit</h2>
-                  <p class="text-[10px] font-mono text-subdued">Thumb-optimized steppers · Continuous numeric coordinates</p>
+                  <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Physical Coordinate Audit</h2>
+                  <p class="text-[10px] font-mono text-subdued">Continuous numeric coordinates · Selected Specimen</p>
                 </div>
                 <span class="text-[10px] font-mono text-fern font-semibold flex items-center gap-1" id="locSyncIndicator">
-                  <svg class="w-3 h-3 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.5 12.75l6 6 9-13.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   Synced
                 </span>
               </div>
 
-              <!-- SECTION A: BUILDING SELECTOR -->
-              <div class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued">Building / Facility</label>
-                  <button class="text-[10px] font-mono text-slate hover:text-ink flex items-center gap-0.5 tap-highlight-transparent" onclick="toggleCustomBuildingInput()" type="button">+ Other</button>
+              <div class="grid grid-cols-2 gap-2">
+                <!-- Building (Default blank: --) -->
+                <div class="bg-white rounded p-1.5 border border-bordercol flex items-center justify-between">
+                  <span class="font-mono text-[9px] uppercase font-bold text-muted">Bldg</span>
+                  <select id="detailBuildingSelect" onchange="handleDetailBuildingChange(this.value)" class="bg-transparent font-mono text-xs font-bold text-ink outline-none text-right">
+                    <option value="">--</option>
+                  </select>
                 </div>
-                <div class="grid grid-cols-2 gap-2" id="buildingChipsGrid">
-                  <button class="bldg-chip min-h-[44px] px-3 py-2 rounded border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs bg-[#1c3829] text-white border-transparent" data-building="Økern" onclick="setBuildingSelection('Økern', this)" type="button">
-                    <span>Økern</span>
-                  </button>
-                  <button class="bldg-chip min-h-[44px] px-3 py-2 rounded border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs" data-building="Lid's hus" onclick="setBuildingSelection('Lid\'s hus', this)" type="button">
-                    <span>Lid's hus</span>
-                  </button>
+                <!-- Floor (Continuous signed integer: -2, -1, 0, 1, 2... or — when unrecorded) -->
+                <div class="bg-white rounded p-1.5 border border-bordercol flex items-center justify-between">
+                  <span class="font-mono text-[9px] uppercase font-bold text-muted">Floor</span>
+                  <div class="flex items-center gap-1">
+                    <button type="button" class="w-5 h-5 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-xs" onclick="adjustCoordinate('floor', -1)">−</button>
+                    <span class="font-mono text-xs font-bold text-ink px-1 min-w-[20px] text-center" id="detailFloorVal">—</span>
+                    <button type="button" class="w-5 h-5 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-xs" onclick="adjustCoordinate('floor', 1)">+</button>
+                  </div>
                 </div>
-                <!-- Inline Manual Custom Building -->
-                <div class="hidden pt-1 space-y-1" id="customBuildingWrap">
+                <!-- Cabinet (01, 02... or — when unrecorded) -->
+                <div class="bg-white rounded p-2 border border-bordercol flex items-center justify-between">
+                  <span class="font-mono text-[10px] uppercase font-bold text-muted">Cabinet</span>
                   <div class="flex items-center gap-1.5">
-                    <input class="flex-1 text-xs font-mono px-2.5 py-1.5 min-h-[38px] bg-alabaster border border-bordercol rounded text-ink focus:bg-white focus:border-ink focus:outline-none" id="input_observation_Building" placeholder="Specify facility name..." type="text">
-                    <button class="px-2.5 py-1.5 min-h-[38px] text-xs font-mono font-semibold bg-stone-800 text-white rounded active:bg-black tap-highlight-transparent" onclick="applyCustomBuilding()" type="button">Set</button>
+                    <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustCoordinate('cab', -1)">−</button>
+                    <span class="font-mono text-sm font-bold text-ink px-1 min-w-[24px] text-center" id="detailCabVal">—</span>
+                    <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustCoordinate('cab', 1)">+</button>
+                  </div>
+                </div>
+                <!-- Shelf (Highlighted Fern Border, 01, 02... or — when unrecorded) -->
+                <div class="bg-white rounded p-2 border-2 border-fern flex items-center justify-between">
+                  <span class="font-mono text-[10px] uppercase font-bold text-fern-dark">Shelf</span>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustCoordinate('shelf', -1)">−</button>
+                    <span class="font-mono text-sm font-bold text-fern-dark px-1 min-w-[24px] text-center" id="detailShelfVal">—</span>
+                    <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustCoordinate('shelf', 1)">+</button>
                   </div>
                 </div>
               </div>
 
-              <!-- SECTION B: CONTINUOUS NUMERIC STEPPERS (Floor, Cabinet, Shelf) -->
-              <div class="space-y-2 pt-1">
-                <div class="flex items-center justify-between text-[10px] font-mono uppercase font-bold text-subdued">
-                  <span>Physical Coordinates</span>
-                  <span class="text-[9px] text-muted lowercase">tap number for keypad</span>
+              <!-- Stored As Pill Carousel (Config-Driven) -->
+              <div class="pt-1">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-mono text-[9px] uppercase text-muted font-bold">Stored As</span>
+                  <span class="font-mono text-[10px] text-ink font-semibold" id="detailStoredAsLabel">Not Selected</span>
                 </div>
-                <div class="grid grid-cols-3 gap-2">
-                  <!-- FLOOR STEPPER (Signed Integer: -2, -1, 0, 1, 2...) -->
-                  <div class="p-2 bg-stone-50 border border-stone-200 rounded flex flex-col justify-between space-y-1.5 text-center">
-                    <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Floor</span>
-                    <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
-                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayFloorVal" onclick="activateDirectInput('Floor')">-1</span>
-                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded py-0.5 text-ink focus:outline-none" id="input_observation_Floor" inputmode="numeric" onblur="finishDirectInput('Floor')" onkeydown="if(event.key==='Enter')finishDirectInput('Floor')" pattern="[0-9-]*" type="text">
-                    </div>
-                    <div class="grid grid-cols-2 gap-1">
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', -1)" type="button">−</button>
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('floor', 1)" type="button">+</button>
-                    </div>
-                  </div>
-
-                  <!-- CABINET STEPPER (Positive Integer) -->
-                  <div class="p-2 bg-stone-50 border border-stone-200 rounded flex flex-col justify-between space-y-1.5 text-center">
-                    <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Cabinet</span>
-                    <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
-                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayCabVal" onclick="activateDirectInput('Cab')">04</span>
-                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded py-0.5 text-ink focus:outline-none" id="input_observation_Cabinet" inputmode="numeric" onblur="finishDirectInput('Cab')" onkeydown="if(event.key==='Enter')finishDirectInput('Cab')" pattern="[0-9]*" type="text">
-                    </div>
-                    <div class="grid grid-cols-2 gap-1">
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', -1)" type="button">−</button>
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('cab', 1)" type="button">+</button>
-                    </div>
-                  </div>
-
-                  <!-- SHELF STEPPER (Positive Integer) -->
-                  <div class="p-2 bg-stone-50 border border-stone-200 rounded flex flex-col justify-between space-y-1.5 text-center">
-                    <span class="text-[9px] font-mono uppercase font-bold text-subdued tracking-wider">Shelf</span>
-                    <div class="py-0.5 relative flex items-center justify-center min-h-[34px]">
-                      <span class="font-mono font-bold text-base text-ink cursor-pointer hover:underline underline-offset-2 tap-highlight-transparent" id="displayShelfVal" onclick="activateDirectInput('Shelf')">02</span>
-                      <input class="hidden w-full text-center font-mono font-bold text-base bg-white border border-ink rounded py-0.5 text-ink focus:outline-none" id="input_observation_Shelf" inputmode="numeric" onblur="finishDirectInput('Shelf')" onkeydown="if(event.key==='Enter')finishDirectInput('Shelf')" pattern="[0-9]*" type="text">
-                    </div>
-                    <div class="grid grid-cols-2 gap-1">
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', -1)" type="button">−</button>
-                      <button class="min-h-[44px] flex items-center justify-center bg-white border border-stone-300 hover:border-ink active:bg-stone-200 rounded text-ink font-mono font-bold text-base tap-highlight-transparent" onclick="adjustCoordinate('shelf', 1)" type="button">+</button>
-                    </div>
-                  </div>
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 whitespace-nowrap" id="detailStoredAsPills">
+                  <!-- Dynamically populated via renderDetailStoredAsPills -->
                 </div>
-
-                <!-- Live Breadcrumb Trail -->
-                <div class="bg-stone-100 border border-bordercol/60 rounded px-2.5 py-1.5 flex items-center justify-between text-[11px] font-mono mt-1">
-                  <div class="flex items-center gap-1 text-ink truncate">
-                    <span class="text-subdued uppercase text-[9px] font-sans font-bold">Live:</span>
-                    <span class="font-semibold truncate" id="liveLocBreadcrumb">Økern › Floor -1 › Cab 04 › Sh 02</span>
-                  </div>
-                  <span class="text-[10px] font-mono text-fern font-bold whitespace-nowrap ml-1">✓ Validated</span>
+                <div id="detailStoredAsCustomContainer" class="hidden mt-1.5">
+                  <input type="text" id="detailStoredAsCustomInput" oninput="onDetailCustomStorageInput(this.value)" placeholder="Enter custom storage..." class="w-full bg-white border border-bordercol rounded px-2 py-1 text-xs font-mono text-ink focus:outline-none focus:border-fern">
                 </div>
               </div>
 
-              <!-- SECTION C: STORED AS 2x2 PRESET MATRIX -->
-              <div class="space-y-2 pt-1 border-t border-stone-100">
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-1.5">
-                    <label class="text-[10px] font-mono uppercase tracking-wider font-bold text-subdued">Stored as</label>
-                    <button class="p-1 -my-1 text-stone-400 hover:text-ink rounded flex items-center justify-center" onclick="openPresetsModal()" title="Customize quick presets" type="button">
-                      <svg class="w-3.5 h-3.5 stroke-[2.2]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    </button>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-[10px] font-mono text-ink font-semibold truncate max-w-[170px]" id="activeStoredAsLabel">Herbarium Sheet</span>
-                    <button class="text-[10px] font-mono text-slate hover:text-ink tap-highlight-transparent" onclick="openPresetsModal()" type="button">Edit</button>
-                  </div>
+              <!-- Live Breadcrumb Trail -->
+              <div class="bg-stone-100 border border-bordercol/60 rounded px-2.5 py-1.5 flex items-center justify-between text-[11px] font-mono mt-1">
+                <div class="flex items-center gap-1 text-ink truncate">
+                  <span class="text-subdued uppercase text-[9px] font-sans font-bold">Live:</span>
+                  <span class="font-semibold truncate" id="liveLocBreadcrumb">Unrecorded location</span>
                 </div>
-
-                <div class="grid grid-cols-2 gap-2 text-xs font-mono" id="storageQuickGrid">
-                  <!-- Presets injected dynamically -->
-                </div>
-
-                <!-- Manual Storage Override -->
-                <div class="pt-1 space-y-1">
-                  <div class="relative flex items-center">
-                    <input class="w-full text-xs font-mono bg-alabaster border border-bordercol rounded pl-2.5 pr-8 py-2 min-h-[38px] text-ink focus:bg-white focus:border-ink focus:outline-none" id="manualStorageInput" oninput="onManualStorageChange(this.value)" placeholder="Or enter manual storage type..." type="text">
-                    <button class="absolute right-2 text-stone-400 hover:text-ink hidden p-1 leading-none text-xs font-mono font-bold" id="btnClearManualStorage" onclick="clearManualStorage()" type="button">✕</button>
-                  </div>
-                </div>
+                <span class="text-[10px] font-mono text-muted whitespace-nowrap ml-1" id="liveLocStatus">Coordinates</span>
               </div>
-            </div>
+            </section>
 
             <!-- 3. Availability / Loan Status Card -->
             <div class="bg-surface border border-bordercol rounded p-3 shadow-2xs space-y-2">
@@ -7783,26 +7778,31 @@ INDEX_TEMPLATE_V2 = """
 
           <!-- ================= TAB 2: PROBLEMS & CONFLICTS ================= -->
           <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentProblems">
-            <div class="bg-surface border border-bordercol rounded p-3.5 shadow-2xs space-y-3">
-              <div class="flex items-center justify-between">
-                <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Curatorial Problems & Flags</h3>
-                <button type="button" onclick="openModal('addDiscrepancyModal')" class="px-2.5 py-1 text-xs font-mono font-bold bg-ember text-white rounded tap-active">
-                  + Flag Issue
-                </button>
+            <!-- 1. Problem Summary Banner -->
+            <div id="problemSummaryBar" class="flex items-center justify-between p-3 bg-stone-100 border border-bordercol rounded-[3px] transition-colors duration-200">
+              <div class="flex items-center gap-2">
+                <span id="problemSummaryDot" class="w-2.5 h-2.5 rounded-full bg-stone-400"></span>
+                <span id="problemSummaryCountText" class="text-xs font-bold text-ink uppercase font-mono">0 Active Discrepancies</span>
               </div>
+              <span id="problemSummaryActionText" class="text-[10px] font-mono text-muted">Checking Data</span>
+            </div>
 
-              <!-- Problem Resolver Section -->
-              <div id="problemResolverContainer" class="space-y-2">
-                <!-- Inline problem fixer cards populated here -->
+            <!-- 2. Active Discrepancy Conflict Resolver Cards Container -->
+            <div id="activeDiscrepanciesContainer" class="space-y-3">
+              <!-- Dynamically populated per issue field -->
+            </div>
+
+            <!-- 3. Schema Data Integrity Flags Checklist -->
+            <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-2xs space-y-3">
+              <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+                <div>
+                  <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Data Integrity Flags</h3>
+                  <p class="text-[10px] font-mono text-subdued">Direct curatorial problem checklist</p>
+                </div>
+                <span class="text-[10px] font-mono text-muted" id="flaggedTotalBadge">0 Flagged</span>
               </div>
-
-              <!-- Historical Conflicts Container -->
-              <div id="historicalConflictsContainer" class="space-y-2 pt-2 border-t border-stone-100">
-                <!-- Historical DB conflict cards populated here -->
-              </div>
-
-              <div id="problemsListContainer" class="space-y-2">
-                <!-- General problem items injected dynamically -->
+              <div class="grid grid-cols-2 gap-2" id="problemFlagsGrid">
+                <!-- Dynamically populated from schema.ui_sections.problems -->
               </div>
             </div>
           </div>
@@ -8164,7 +8164,7 @@ INDEX_TEMPLATE_V2 = """
       activeStatusFilter: 'all',
       noImageFilterActive: false,
       activeAdvancedFilters: { locations: {}, problems: {} },
-      activeSortBy: 'location',
+      activeSortBy: 'id_asc',
       searchQuery: '',
       isReviewed: false,
       showFilterPills: false,
@@ -8189,7 +8189,9 @@ INDEX_TEMPLATE_V2 = """
         'Liquid / Glass Jar', 'Capsule / Envelope', 'Microscope Slide', 'Mounted platform', 'Oversized Folder'
       ],
       storedAsChoices: [],
-      isWalkModeWanted: false
+      isWalkModeWanted: false,
+      currentHistoricalData: null,
+      problemToField: {}
     };
 
     let searchDebounceTimer = null;
@@ -8294,7 +8296,9 @@ INDEX_TEMPLATE_V2 = """
           }
         }
       });
-      renderStorageQuickGrid();
+      if (typeof renderDetailStoredAsPills === 'function') {
+        renderDetailStoredAsPills();
+      }
     }
 
     function setupEventSource() {
@@ -8328,6 +8332,8 @@ INDEX_TEMPLATE_V2 = """
         const data = await apiFetch('/api/schema');
         if (data) {
           state.activeSchema = data;
+          state.problemToField = data.problem_to_field || {};
+          state.icedigCodes = data.icedig_code_labels || {};
           document.getElementById('headerDbName').textContent = data.database_name || 'Active Database';
           document.getElementById('connModalDbName').textContent = data.database_name || 'Active Database';
           if (data.stored_as_choices && Array.isArray(data.stored_as_choices)) {
@@ -8339,9 +8345,15 @@ INDEX_TEMPLATE_V2 = """
             if (typeof renderBatchStoredAsPills === 'function') {
                 renderBatchStoredAsPills();
             }
+            if (typeof renderDetailStoredAsPills === 'function') {
+                renderDetailStoredAsPills();
+            }
           }
           if (typeof populateBatchBuildingOptions === 'function') {
             populateBatchBuildingOptions();
+          }
+          if (typeof populateDetailBuildingOptions === 'function') {
+            populateDetailBuildingOptions();
           }
         }
       } catch(err) {
@@ -8583,10 +8595,14 @@ INDEX_TEMPLATE_V2 = """
 
     async function fetchObjectDetail(oid, renderFull = true) {
       try {
-        const data = await apiFetch('/api/object/' + encodeURIComponent(oid));
+        const [data, hist] = await Promise.all([
+          apiFetch('/api/object/' + encodeURIComponent(oid)),
+          apiFetch('/api/object/' + encodeURIComponent(oid) + '/history').catch(() => null)
+        ]);
         if (data) {
           state.currentRecord = data;
           state.isReviewed = data.review_status === 'reviewed';
+          state.currentHistoricalData = (hist && hist.historical_data) ? hist.historical_data : null;
           renderDetailView(renderFull);
         }
       } catch(err) {
@@ -8627,11 +8643,11 @@ INDEX_TEMPLATE_V2 = """
       // Coordinate Steppers
       renderCoordinateSteppers(obs);
 
-      // Building Chips
-      renderBuildingChips(obs.Building || 'Økern');
+      // Building Dropdown Options (Blank by default if unrecorded)
+      populateDetailBuildingOptions(obs.Building || '');
 
       // Stored As Selection
-      renderStoredAsGrid(obs['Stored as'] || obs.Stored_As || 'Herbarium Sheet');
+      renderDetailStoredAsPills(obs['Stored as'] || obs.Stored_As || '');
 
       // Loan Status
       renderLoanStatus(obs['Loaned out']);
@@ -8643,42 +8659,40 @@ INDEX_TEMPLATE_V2 = """
       renderPhotos(rec.images);
 
       // Problems & Discrepancies in Problems Tab
-      renderProblems(rec.flagged_issues);
-      renderProblemResolvers(rec);
-      renderHistoricalConflicts(rec);
+      renderProblemsAndDiscrepancies(rec);
 
       // Breadcrumb
       updateDetailLocBreadcrumbs(obs);
     }
 
-    function renderCoordinateSteppers(obs) {
-      // Floor (supports negative)
-      const fl = (obs.Floor !== undefined && obs.Floor !== null && String(obs.Floor).trim() !== '') ? String(obs.Floor) : '-1';
-      document.getElementById('displayFloorVal').textContent = fl;
-      const inpFl = document.getElementById('input_observation_Floor');
-      if (inpFl) inpFl.value = fl;
-
-      // Cabinet
-      const cab = (obs.Cabinet !== undefined && obs.Cabinet !== null && String(obs.Cabinet).trim() !== '') ? String(obs.Cabinet).padStart(2, '0') : '04';
-      document.getElementById('displayCabVal').textContent = cab;
-      const inpCab = document.getElementById('input_observation_Cabinet');
-      if (inpCab) inpCab.value = cab;
-
-      // Shelf
-      const sh = (obs.Shelf !== undefined && obs.Shelf !== null && String(obs.Shelf).trim() !== '') ? String(obs.Shelf).padStart(2, '0') : '02';
-      document.getElementById('displayShelfVal').textContent = sh;
-      const inpSh = document.getElementById('input_observation_Shelf');
-      if (inpSh) inpSh.value = sh;
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
-    function onLocationCoordChange(field, val) {
-      if (!state.currentRecord) return;
-      state.currentRecord.observation = state.currentRecord.observation || {};
-      state.currentRecord.observation[field] = val;
-      markDirty(field);
-      renderCoordinateSteppers(state.currentRecord.observation);
-      updateDetailLocBreadcrumbs(state.currentRecord.observation);
-      triggerAutoSave();
+    function renderCoordinateSteppers(obs = {}) {
+      // Floor (supports continuous signed numbers, em-dash if unset)
+      const hasFloor = (obs.Floor !== undefined && obs.Floor !== null && String(obs.Floor).trim() !== '' && String(obs.Floor).trim() !== '—');
+      const fl = hasFloor ? String(obs.Floor).trim() : '—';
+      const flEl = document.getElementById('detailFloorVal');
+      if (flEl) flEl.textContent = fl;
+
+      // Cabinet (2-digit zero-padded, em-dash if unset)
+      const hasCab = (obs.Cabinet !== undefined && obs.Cabinet !== null && String(obs.Cabinet).trim() !== '' && String(obs.Cabinet).trim() !== '—');
+      const cab = hasCab ? String(obs.Cabinet).trim().padStart(2, '0') : '—';
+      const cabEl = document.getElementById('detailCabVal');
+      if (cabEl) cabEl.textContent = cab;
+
+      // Shelf (2-digit zero-padded, em-dash if unset)
+      const hasShelf = (obs.Shelf !== undefined && obs.Shelf !== null && String(obs.Shelf).trim() !== '' && String(obs.Shelf).trim() !== '—');
+      const sh = hasShelf ? String(obs.Shelf).trim().padStart(2, '0') : '—';
+      const shEl = document.getElementById('detailShelfVal');
+      if (shEl) shEl.textContent = sh;
     }
 
     function adjustCoordinate(coord, delta) {
@@ -8687,18 +8701,36 @@ INDEX_TEMPLATE_V2 = """
       const obs = state.currentRecord.observation;
 
       if (coord === 'floor') {
-        const current = parseInt(obs.Floor !== undefined && obs.Floor !== null ? obs.Floor : '-1', 10);
-        const next = isNaN(current) ? -1 : current + delta;
+        const isUnset = (obs.Floor === undefined || obs.Floor === null || String(obs.Floor).trim() === '' || String(obs.Floor).trim() === '—');
+        let next;
+        if (isUnset) {
+          next = delta > 0 ? 1 : -1;
+        } else {
+          const current = parseInt(obs.Floor, 10);
+          next = isNaN(current) ? (delta > 0 ? 1 : -1) : current + delta;
+        }
         obs.Floor = String(next);
         markDirty('Floor');
       } else if (coord === 'cab') {
-        const current = parseInt(obs.Cabinet || '4', 10);
-        const next = Math.max(1, (isNaN(current) ? 1 : current) + delta);
+        const isUnset = (obs.Cabinet === undefined || obs.Cabinet === null || String(obs.Cabinet).trim() === '' || String(obs.Cabinet).trim() === '—');
+        let next;
+        if (isUnset) {
+          next = 1;
+        } else {
+          const current = parseInt(obs.Cabinet, 10);
+          next = Math.max(1, (isNaN(current) ? 1 : current) + delta);
+        }
         obs.Cabinet = String(next);
         markDirty('Cabinet');
       } else if (coord === 'shelf') {
-        const current = parseInt(obs.Shelf || '2', 10);
-        const next = Math.max(1, (isNaN(current) ? 1 : current) + delta);
+        const isUnset = (obs.Shelf === undefined || obs.Shelf === null || String(obs.Shelf).trim() === '' || String(obs.Shelf).trim() === '—');
+        let next;
+        if (isUnset) {
+          next = 1;
+        } else {
+          const current = parseInt(obs.Shelf, 10);
+          next = Math.max(1, (isNaN(current) ? 1 : current) + delta);
+        }
         obs.Shelf = String(next);
         markDirty('Shelf');
       }
@@ -8708,191 +8740,116 @@ INDEX_TEMPLATE_V2 = """
       triggerAutoSave();
     }
 
-    function activateDirectInput(field) {
-      document.getElementById('display' + field + 'Val').classList.add('hidden');
-      const input = document.getElementById('input_observation_' + field) || document.getElementById('input' + field + 'Val');
-      if (input) {
-        input.classList.remove('hidden');
-        input.focus();
-        input.select();
+    function populateDetailBuildingOptions(currentBldg) {
+      const select = document.getElementById('detailBuildingSelect');
+      if (!select) return;
+
+      let bldgChoices = [];
+      if (state.activeSchema && state.activeSchema.ui_sections && Array.isArray(state.activeSchema.ui_sections.location)) {
+        const bldgField = state.activeSchema.ui_sections.location.find(f => f && f.name === 'Building' && Array.isArray(f.choices));
+        if (bldgField) {
+          bldgChoices = bldgField.choices;
+        }
       }
-    }
-
-    function finishDirectInput(field) {
-      const input = document.getElementById('input_observation_' + field) || document.getElementById('input' + field + 'Val');
-      const display = document.getElementById('display' + field + 'Val');
-      if (input) input.classList.add('hidden');
-      if (display) display.classList.remove('hidden');
-
-      if (!state.currentRecord || !input) return;
-      state.currentRecord.observation = state.currentRecord.observation || {};
-      const obs = state.currentRecord.observation;
-
-      const val = input.value.trim();
-      if (field === 'Floor') {
-        obs.Floor = val;
-        markDirty('Floor');
-      } else if (field === 'Cab') {
-        obs.Cabinet = val;
-        markDirty('Cabinet');
-      } else if (field === 'Shelf') {
-        obs.Shelf = val;
-        markDirty('Shelf');
+      if ((!bldgChoices || bldgChoices.length === 0) && state.activeSchema && state.activeSchema.vocabulary && Array.isArray(state.activeSchema.vocabulary.Building)) {
+        bldgChoices = state.activeSchema.vocabulary.Building;
+      }
+      if (!bldgChoices || bldgChoices.length === 0) {
+        bldgChoices = ['Økern', "Lid's hus"];
       }
 
-      renderCoordinateSteppers(obs);
-      updateDetailLocBreadcrumbs(obs);
-      triggerAutoSave();
+      const activeVal = (currentBldg !== undefined && currentBldg !== null)
+        ? String(currentBldg).trim()
+        : ((state.currentRecord && state.currentRecord.observation && state.currentRecord.observation.Building !== undefined)
+            ? String(state.currentRecord.observation.Building).trim()
+            : '');
+
+      const allChoices = Array.from(new Set([...bldgChoices, activeVal])).filter(Boolean);
+
+      let optionsHtml = '<option value="">--</option>';
+      optionsHtml += allChoices.map(b => `<option value="${b.replace(/"/g, '&quot;')}">${b}</option>`).join('');
+
+      select.innerHTML = optionsHtml;
+      select.value = activeVal;
     }
 
-    function setBuildingSelection(bldg, btnEl) {
+    function handleDetailBuildingChange(val) {
       if (!state.currentRecord) return;
       state.currentRecord.observation = state.currentRecord.observation || {};
-      state.currentRecord.observation.Building = bldg;
+      state.currentRecord.observation.Building = val;
       markDirty('Building');
-
-      renderBuildingChips(bldg);
       updateDetailLocBreadcrumbs(state.currentRecord.observation);
       triggerAutoSave();
     }
 
-    function renderBuildingChips(activeBldg) {
-      document.querySelectorAll('.bldg-chip').forEach(el => {
-        const b = el.getAttribute('data-building');
-        if (b === activeBldg) {
-          el.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded border text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs bg-[#1c3829] text-white border-transparent';
-        } else {
-          el.className = 'bldg-chip min-h-[44px] px-3 py-2 rounded border border-bordercol bg-stone-50 hover:bg-stone-100 active:bg-stone-200 text-ink text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all shadow-2xs';
-        }
+    function renderDetailStoredAsPills(currentStored) {
+      const container = document.getElementById('detailStoredAsPills');
+      if (!container) return;
+      const storedVal = currentStored !== undefined ? currentStored : (state.currentRecord?.observation?.['Stored as'] || '');
+      let choices = state.storedAsChoices && state.storedAsChoices.length > 0
+                      ? [...state.storedAsChoices]
+                      : ['Herbarium Sheet', 'Box', 'Envelope', 'Jar', 'Packet', 'Other', 'Custom'];
+      ['Other', 'Custom'].forEach(opt => {
+        if (!choices.includes(opt)) choices.push(opt);
       });
-      const bldgInp = document.getElementById('input_observation_Building');
-      if (bldgInp) bldgInp.value = activeBldg;
-    }
 
-    function toggleCustomBuildingInput() {
-      document.getElementById('customBuildingWrap')?.classList.toggle('hidden');
-    }
+      const isCustomVal = storedVal && !choices.includes(storedVal) && storedVal !== 'Custom' && storedVal !== 'Other';
 
-    function applyCustomBuilding() {
-      const val = document.getElementById('input_observation_Building').value.trim();
-      if (!val) return;
-      setBuildingSelection(val);
-      document.getElementById('customBuildingWrap')?.classList.add('hidden');
-    }
-
-    // Stored As Matrix
-    function renderStorageQuickGrid() {
-      const grid = document.getElementById('storageQuickGrid');
-      if (!grid) return;
-      const currentStored = state.currentRecord?.observation?.['Stored as'] || 'Herbarium Sheet';
-
-      const presets = state.customPresets.slice(0, 3);
-      let html = presets.map((opt, i) => {
-        const isSel = (opt === currentStored);
+      container.innerHTML = choices.map(opt => {
+        const isSel = (opt === storedVal) || (opt === 'Custom' && isCustomVal);
+        const className = isSel
+          ? 'detail-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border-2 border-fern bg-emerald-50 text-fern-dark font-semibold'
+          : 'detail-storage-pill px-2.5 py-1 rounded-full text-[11px] font-mono border border-bordercol bg-white text-muted';
+        const escapedOpt = opt.replace(/'/g, "\\'");
         return `
-          <button type="button" onclick="selectStoredAsOption('${opt}')" class="storage-quick-btn min-h-[44px] p-2.5 rounded border text-left flex items-center justify-between transition-all tap-highlight-transparent shadow-2xs ${isSel ? 'border-2 border-ink bg-stone-100 text-ink font-semibold' : 'border-stone-300 hover:border-ink bg-white text-muted'}">
-            <span class="truncate">${opt}</span>
-            <span class="w-2 h-2 rounded-full ${isSel ? 'bg-fern' : 'bg-transparent border border-stone-300'} flex-none ml-1"></span>
+          <button type="button" onclick="selectDetailStoragePill('${escapedOpt}')" class="${className}">
+            ${opt}
           </button>
         `;
       }).join('');
 
-      html += `
-        <button type="button" onclick="openStoredAsBottomSheet()" class="min-h-[44px] p-2.5 rounded border border-dashed border-stone-400 hover:border-ink bg-stone-50 text-ink text-left flex items-center justify-between tap-highlight-transparent shadow-2xs">
-          <span class="font-semibold text-muted">More...</span>
-          <span class="text-muted text-xs">▼</span>
-        </button>
-      `;
+      const labelEl = document.getElementById('detailStoredAsLabel');
+      if (labelEl) labelEl.textContent = storedVal || 'Not Selected';
 
-      grid.innerHTML = html;
-      document.getElementById('activeStoredAsLabel').textContent = currentStored;
-      document.getElementById('manualStorageInput').value = currentStored;
+      const customContainer = document.getElementById('detailStoredAsCustomContainer');
+      const customInput = document.getElementById('detailStoredAsCustomInput');
+      if (customContainer) {
+        if (storedVal === 'Custom' || isCustomVal) {
+          customContainer.classList.remove('hidden');
+          if (customInput) {
+            customInput.value = isCustomVal ? storedVal : (storedVal === 'Custom' ? '' : storedVal);
+          }
+        } else {
+          customContainer.classList.add('hidden');
+        }
+      }
     }
 
-    function renderStoredAsGrid(activeStored) {
-      renderStorageQuickGrid();
-    }
-
-    function selectStoredAsOption(opt) {
+    function selectDetailStoragePill(opt) {
       if (!state.currentRecord) return;
       state.currentRecord.observation = state.currentRecord.observation || {};
-      state.currentRecord.observation['Stored as'] = opt;
-      markDirty('Stored as');
+      const current = state.currentRecord.observation['Stored as'] || '';
 
-      renderStorageQuickGrid();
+      if (current === opt) {
+        state.currentRecord.observation['Stored as'] = '';
+      } else {
+        state.currentRecord.observation['Stored as'] = opt;
+      }
+      markDirty('Stored as');
+      renderDetailStoredAsPills(state.currentRecord.observation['Stored as']);
       updateDetailLocBreadcrumbs(state.currentRecord.observation);
       triggerAutoSave();
     }
 
-    function onManualStorageChange(val) {
+    function onDetailCustomStorageInput(val) {
       if (!state.currentRecord) return;
       state.currentRecord.observation = state.currentRecord.observation || {};
       state.currentRecord.observation['Stored as'] = val;
       markDirty('Stored as');
-      document.getElementById('activeStoredAsLabel').textContent = val;
+      const labelEl = document.getElementById('detailStoredAsLabel');
+      if (labelEl) labelEl.textContent = val || 'Custom';
+      updateDetailLocBreadcrumbs(state.currentRecord.observation);
       triggerAutoSave();
-    }
-
-    function clearManualStorage() {
-      document.getElementById('manualStorageInput').value = '';
-      onManualStorageChange('');
-    }
-
-    function openStoredAsBottomSheet() {
-      const container = document.getElementById('storedAsModalOptions');
-      if (container) {
-        container.innerHTML = state.allStorageOptions.map(opt => `
-          <button type="button" onclick="selectStoredAsOption('${opt}'); closeStoredAsBottomSheet();" class="w-full p-3 rounded border border-stone-200 hover:border-ink hover:bg-stone-50 flex items-center justify-between text-left tap-highlight-transparent min-h-[44px]">
-            <span class="font-bold text-ink">${opt}</span>
-            <span class="text-xs text-muted">Select</span>
-          </button>
-        `).join('');
-      }
-      document.getElementById('storedAsBottomSheet')?.classList.remove('hidden');
-    }
-
-    function closeStoredAsBottomSheet() {
-      document.getElementById('storedAsBottomSheet')?.classList.add('hidden');
-    }
-
-    function openPresetsModal() {
-      const container = document.getElementById('presetsSelectionList');
-      if (container) {
-        container.innerHTML = state.allStorageOptions.map(opt => {
-          const checked = state.customPresets.includes(opt);
-          return `
-            <label class="p-2 bg-stone-50 border border-stone-200 rounded flex items-center justify-between text-xs font-mono cursor-pointer hover:bg-stone-100">
-              <span class="text-ink font-medium">${opt}</span>
-              <input type="checkbox" value="${opt}" ${checked ? 'checked' : ''} onchange="onPresetCheckboxChange()" class="preset-cb w-4 h-4 text-fern rounded focus:ring-fern">
-            </label>
-          `;
-        }).join('');
-      }
-      onPresetCheckboxChange();
-      document.getElementById('presetsConfigModal')?.classList.remove('hidden');
-    }
-
-    function closePresetsModal() {
-      document.getElementById('presetsConfigModal')?.classList.add('hidden');
-    }
-
-    function onPresetCheckboxChange() {
-      const checked = Array.from(document.querySelectorAll('.preset-cb:checked')).map(cb => cb.value);
-      const counter = document.getElementById('presetSelectionCounter');
-      if (counter) counter.textContent = `${checked.length} of 3 selected`;
-      const saveBtn = document.getElementById('btnSavePresets');
-      if (saveBtn) saveBtn.disabled = (checked.length !== 3);
-    }
-
-    function savePresetsFromModal() {
-      const checked = Array.from(document.querySelectorAll('.preset-cb:checked')).map(cb => cb.value);
-      if (checked.length === 3) {
-        state.customPresets = checked;
-        try { localStorage.setItem('arbor_storage_presets', JSON.stringify(checked)); } catch(e) {}
-        renderStorageQuickGrid();
-        closePresetsModal();
-        showToast('✓ Storage presets updated');
-      }
     }
 
     // Availability / Loan Status
@@ -8946,8 +8903,8 @@ INDEX_TEMPLATE_V2 = """
       if (last.storedAs) { obs['Stored as'] = last.storedAs; markDirty('Stored as'); }
 
       renderCoordinateSteppers(obs);
-      renderBuildingChips(obs.Building);
-      renderStoredAsGrid(obs['Stored as']);
+      populateDetailBuildingOptions(obs.Building);
+      renderDetailStoredAsPills(obs['Stored as']);
       updateDetailLocBreadcrumbs(obs);
       triggerAutoSave();
       showToast('📋 Copied coordinates from previous specimen');
@@ -8955,24 +8912,38 @@ INDEX_TEMPLATE_V2 = """
 
     function updateDetailLocBreadcrumbs(obs = {}) {
       let locBreadcrumb = [];
-      if (obs.Building) locBreadcrumb.push(obs.Building);
-      if (obs.Floor !== undefined && obs.Floor !== null && String(obs.Floor).trim() !== '') locBreadcrumb.push(`Floor ${obs.Floor}`);
-      if (obs.Cabinet) locBreadcrumb.push(`Cab ${obs.Cabinet}`);
-      if (obs.Shelf) locBreadcrumb.push(`Sh ${obs.Shelf}`);
+      if (obs.Building && String(obs.Building).trim()) locBreadcrumb.push(obs.Building);
+      if (obs.Floor !== undefined && obs.Floor !== null && String(obs.Floor).trim() !== '' && String(obs.Floor).trim() !== '—') locBreadcrumb.push(`Floor ${obs.Floor}`);
+      if (obs.Cabinet && String(obs.Cabinet).trim() && String(obs.Cabinet).trim() !== '—') locBreadcrumb.push(`Cab ${String(obs.Cabinet).trim().padStart(2, '0')}`);
+      if (obs.Shelf && String(obs.Shelf).trim() && String(obs.Shelf).trim() !== '—') locBreadcrumb.push(`Sh ${String(obs.Shelf).trim().padStart(2, '0')}`);
       const locStr = locBreadcrumb.length > 0 ? locBreadcrumb.join(' › ') : 'Unrecorded location';
 
-      document.getElementById('liveLocBreadcrumb').textContent = locStr;
-      document.getElementById('headerLocSummary').textContent = locBreadcrumb.length > 0 ? locBreadcrumb.join(' · ') : 'Unrecorded';
+      const liveEl = document.getElementById('liveLocBreadcrumb');
+      if (liveEl) liveEl.textContent = locStr;
+      const headerEl = document.getElementById('headerLocSummary');
+      if (headerEl) headerEl.textContent = locBreadcrumb.length > 0 ? locBreadcrumb.join(' · ') : 'Unrecorded';
+      const statusEl = document.getElementById('liveLocStatus');
+      if (statusEl) {
+        if (locBreadcrumb.length > 0) {
+          statusEl.textContent = '✓ Validated';
+          statusEl.className = 'text-[10px] font-mono text-fern font-bold whitespace-nowrap ml-1';
+        } else {
+          statusEl.textContent = 'Coordinates';
+          statusEl.className = 'text-[10px] font-mono text-muted whitespace-nowrap ml-1';
+        }
+      }
 
-      // Cache for Copy from Previous
-      state.lastSavedLocation = {
-        building: obs.Building || state.lastSavedLocation.building,
-        floor: obs.Floor !== undefined ? obs.Floor : state.lastSavedLocation.floor,
-        cabinet: obs.Cabinet || state.lastSavedLocation.cabinet,
-        shelf: obs.Shelf || state.lastSavedLocation.shelf,
-        storedAs: obs['Stored as'] || state.lastSavedLocation.storedAs
-      };
-      try { localStorage.setItem('arbor_last_location', JSON.stringify(state.lastSavedLocation)); } catch(e) {}
+      // Cache for Copy from Previous (only if coordinates actually exist)
+      if (locBreadcrumb.length > 0) {
+        state.lastSavedLocation = {
+          building: obs.Building || state.lastSavedLocation.building,
+          floor: (obs.Floor !== undefined && obs.Floor !== '—') ? obs.Floor : state.lastSavedLocation.floor,
+          cabinet: (obs.Cabinet && obs.Cabinet !== '—') ? obs.Cabinet : state.lastSavedLocation.cabinet,
+          shelf: (obs.Shelf && obs.Shelf !== '—') ? obs.Shelf : state.lastSavedLocation.shelf,
+          storedAs: obs['Stored as'] || state.lastSavedLocation.storedAs
+        };
+        try { localStorage.setItem('arbor_last_location', JSON.stringify(state.lastSavedLocation)); } catch(e) {}
+      }
     }
 
     function toggleReviewed() {
@@ -9115,75 +9086,339 @@ INDEX_TEMPLATE_V2 = """
       if (img) img.style.transform = `scale(${photoZoom}) rotate(${photoRotation}deg)`;
     }
 
-    function renderProblems(issues = []) {
-      const container = document.getElementById('problemsListContainer');
-      const badge = document.getElementById('tabProblemBadge');
-      if (!container) return;
+    function isProblemActiveOnRecord(probName, rec) {
+      if (!rec) return false;
+      const obs = rec.observation || {};
+      const reg = rec.registration || {};
+      const v = obs[probName] !== undefined ? obs[probName] : reg[probName];
+      if (typeof v === 'boolean') return v;
+      if (typeof v === 'number') return v === 1;
+      const s = String(v || '').trim().toLowerCase();
+      return ['true', '1', 'yes', 'x'].includes(s);
+    }
 
-      if (issues.length > 0) {
-        badge?.classList.remove('hidden');
-        badge.textContent = issues.length;
-        container.innerHTML = issues.map(iss => `
-          <div class="p-2.5 bg-brick-light border border-brick/30 rounded flex items-center justify-between text-xs font-mono">
-            <div>
-              <span class="font-bold text-brick block">${iss.field || iss.id}</span>
-              <span class="text-[10px] text-muted block">${iss.reason || 'Flagged curatorial discrepancy'}</span>
+    function renderProblemsAndDiscrepancies(rec) {
+      if (!rec) return;
+      const obs = rec.observation || {};
+      const reg = rec.registration || {};
+
+      let problemDefs = (state.activeSchema && state.activeSchema.ui_sections && Array.isArray(state.activeSchema.ui_sections.problems))
+        ? [...state.activeSchema.ui_sections.problems]
+        : [];
+
+      if (problemDefs.length === 0) {
+        problemDefs = [
+          { name: 'Author_Problem', label: 'Author Discrepancy', maps_to: 'Author' },
+          { name: 'Family_Problem', label: 'Family Discrepancy', maps_to: 'Family' },
+          { name: 'Genus_Problem', label: 'Genus Discrepancy', maps_to: 'Genus' },
+          { name: 'Species_Problem', label: 'Species Discrepancy', maps_to: 'Species' },
+          { name: 'Collector_Problem', label: 'Collector Discrepancy', maps_to: 'Collector' },
+          { name: 'Date_Problem', label: 'Date Discrepancy', maps_to: 'Collection Date' },
+          { name: 'Locality_Problem', label: 'Locality Discrepancy', maps_to: 'Locality' },
+          { name: 'County_Problem', label: 'County Discrepancy', maps_to: 'County' },
+          { name: 'Country_Problem', label: 'Country Discrepancy', maps_to: 'Country' },
+          { name: 'Location_Problem', label: 'Location Discrepancy', maps_to: 'Cabinet' },
+          { name: 'General_Problem', label: 'General Discrepancy', maps_to: 'Notes' }
+        ];
+      }
+
+      // Collect all active discrepancies
+      const activeProblems = [];
+      problemDefs.forEach(pDef => {
+        if (isProblemActiveOnRecord(pDef.name, rec)) {
+          activeProblems.push({
+            name: pDef.name,
+            label: pDef.label || pDef.name,
+            maps_to: pDef.maps_to || state.problemToField[pDef.name] || (pDef.name.endsWith('_Problem') ? pDef.name.replace(/_Problem$/, '') : pDef.name)
+          });
+        }
+      });
+
+      if (Array.isArray(rec.flagged_issues)) {
+        rec.flagged_issues.forEach(iss => {
+          const id = iss.id || iss.field;
+          if (id && !activeProblems.some(p => p.name === id) && isProblemActiveOnRecord(id, rec)) {
+            activeProblems.push({
+              name: id,
+              label: iss.field || iss.reason || id,
+              maps_to: iss.field || state.problemToField[id] || (id.endsWith('_Problem') ? id.replace(/_Problem$/, '') : id)
+            });
+          }
+        });
+      }
+
+      const count = activeProblems.length;
+
+      // 1. Tab Badge
+      const tabBadge = document.getElementById('tabProblemBadge');
+      if (tabBadge) {
+        if (count > 0) {
+          tabBadge.textContent = count;
+          tabBadge.classList.remove('hidden');
+        } else {
+          tabBadge.classList.add('hidden');
+        }
+      }
+
+      // 2. Summary Banner
+      const summaryBar = document.getElementById('problemSummaryBar');
+      const summaryDot = document.getElementById('problemSummaryDot');
+      const summaryCountText = document.getElementById('problemSummaryCountText');
+      const summaryActionText = document.getElementById('problemSummaryActionText');
+      if (summaryBar) {
+        if (count > 0) {
+          summaryBar.className = 'flex items-center justify-between p-3 bg-brick-light/50 border border-brick/30 rounded-[3px] transition-colors duration-200';
+          if (summaryDot) summaryDot.className = 'w-2.5 h-2.5 rounded-full bg-brick animate-pulse';
+          if (summaryCountText) {
+            summaryCountText.className = 'text-xs font-bold text-brick uppercase font-mono';
+            summaryCountText.textContent = `${count} Active Discrepanc${count === 1 ? 'y' : 'ies'}`;
+          }
+          if (summaryActionText) {
+            summaryActionText.className = 'text-[10px] font-mono text-brick font-semibold';
+            summaryActionText.textContent = 'Review & Resolve';
+          }
+        } else {
+          summaryBar.className = 'flex items-center justify-between p-3 bg-emerald-50/70 border border-fern/30 rounded-[3px] transition-colors duration-200';
+          if (summaryDot) summaryDot.className = 'w-2.5 h-2.5 rounded-full bg-fern';
+          if (summaryCountText) {
+            summaryCountText.className = 'text-xs font-bold text-fern-dark uppercase font-mono';
+            summaryCountText.textContent = '0 Discrepancies · Clean Data';
+          }
+          if (summaryActionText) {
+            summaryActionText.className = 'text-[10px] font-mono text-fern font-medium';
+            summaryActionText.textContent = 'All Validated';
+          }
+        }
+      }
+
+      // 3. Discrepancy Cards Container
+      const container = document.getElementById('activeDiscrepanciesContainer');
+      if (container) {
+        if (count === 0) {
+          container.innerHTML = `
+            <div class="p-6 bg-surface border border-bordercol rounded-[3px] text-center space-y-2">
+              <div class="w-8 h-8 rounded-full bg-emerald-50 text-fern border border-fern/30 flex items-center justify-center mx-auto text-base">✓</div>
+              <div class="text-xs font-mono font-bold text-ink">No Curatorial Discrepancies</div>
+              <p class="text-[11px] text-subdued font-sans max-w-xs mx-auto">This specimen currently has no flagged discrepancies. You can toggle data integrity flags below if curatorial attention is needed.</p>
             </div>
-            <span class="text-xs text-brick">⚠</span>
-          </div>
-        `).join('');
-      } else {
-        badge?.classList.add('hidden');
-        container.innerHTML = `
-          <div class="p-4 text-center text-stone-400 font-mono text-xs">
-            ✓ No curatorial problems flagged.
-          </div>
-        `;
+          `;
+        } else {
+          container.innerHTML = activeProblems.map(p => {
+            const probName = p.name;
+            const label = p.label;
+            const targetField = p.maps_to;
+            const currentVal = (obs[targetField] !== undefined && obs[targetField] !== '') ? obs[targetField] : ((reg[targetField] !== undefined && reg[targetField] !== '') ? reg[targetField] : '—');
+
+            const histMap = state.currentHistoricalData ? (state.currentHistoricalData[targetField] || {}) : {};
+            const histEntries = Object.entries(histMap);
+
+            let histHtml = '';
+            if (histEntries.length > 0) {
+              histHtml = `
+                <div class="space-y-1.5">
+                  <span class="text-[9px] uppercase font-bold text-muted block">Historical Records / Prior Determinations</span>
+                  <div class="space-y-1.5">
+                    ${histEntries.map(([hVal, sources]) => {
+                      const sourcesStr = Array.isArray(sources) ? sources.join(', ') : String(sources);
+                      const safeVal = escapeHtml(hVal);
+                      const jsVal = safeVal.replace(/'/g, "\\'");
+                      return `
+                        <div class="p-2 bg-emerald-50/50 border border-fern/30 rounded flex items-center justify-between gap-2">
+                          <div class="truncate min-w-0">
+                            <span class="font-mono text-xs font-bold text-ink block truncate">${safeVal}</span>
+                            <span class="text-[9px] font-mono text-fern-dark block truncate">Sources: ${escapeHtml(sourcesStr)}</span>
+                          </div>
+                          <button type="button" onclick="resolveFieldDiscrepancy('${targetField}', '${probName}', '${jsVal}', true)" class="flex-none px-2.5 py-1 bg-fern hover:bg-fern-dark text-white rounded text-[10px] font-mono font-bold shadow-2xs">
+                            Apply Fix
+                          </button>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `;
+            } else {
+              histHtml = `
+                <div class="p-2 bg-stone-50 border border-dashed border-stone-200 rounded text-[10.5px] font-mono text-muted text-center">
+                  No earlier historical determinations found for this field.
+                </div>
+              `;
+            }
+
+            return `
+              <div class="bg-surface border border-bordercol rounded-[3px] p-3.5 shadow-2xs space-y-3">
+                <div class="flex items-center justify-between border-b border-stone-100 pb-2">
+                  <div class="flex items-center gap-1.5 truncate mr-2">
+                    <span class="w-2 h-2 rounded-full bg-brick flex-none"></span>
+                    <span class="text-xs font-mono font-bold text-ink truncate">${escapeHtml(targetField)}</span>
+                    <span class="text-[10px] font-mono text-brick bg-brick-light px-1.5 py-0.5 rounded border border-brick/20 font-medium whitespace-nowrap">${escapeHtml(label)}</span>
+                  </div>
+                  <button type="button" onclick="resolveFieldDiscrepancy('${targetField}', '${probName}', undefined, true)" class="flex-none text-[10px] font-mono text-muted hover:text-ink px-2 py-1 rounded bg-stone-100 hover:bg-stone-200 border border-stone-200">
+                    Dismiss Flag
+                  </button>
+                </div>
+
+                <div class="bg-stone-50 border border-stone-200 rounded p-2 text-xs font-mono flex items-center justify-between">
+                  <div class="truncate mr-2">
+                    <span class="text-[9px] uppercase font-bold text-muted block">Current Value</span>
+                    <span class="font-bold text-ink truncate">${escapeHtml(currentVal)}</span>
+                  </div>
+                  <span class="text-[10px] text-muted whitespace-nowrap bg-white px-1.5 py-0.5 rounded border border-stone-200">Active</span>
+                </div>
+
+                ${histHtml}
+
+                <div class="pt-1">
+                  <span class="text-[9px] uppercase font-bold text-muted block mb-1">Manual Override</span>
+                  <div class="flex items-center gap-1.5">
+                    <input type="text" id="manualInput_${probName}" placeholder="Enter new value..." class="flex-1 bg-white border border-bordercol rounded px-2.5 py-1.5 text-xs font-mono text-ink focus:outline-none focus:border-fern" />
+                    <button type="button" onclick="applyManualProblemResolution('${targetField}', '${probName}')" class="px-2.5 py-1.5 rounded bg-stone-100 hover:bg-stone-200 active:bg-stone-300 border border-stone-300 text-ink text-xs font-mono font-semibold min-h-[34px] whitespace-nowrap">
+                      Apply Manual
+                    </button>
+                  </div>
+                </div>
+
+                <div class="pt-1">
+                  <button type="button" onclick="toggleIcedigTray('${probName}')" class="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-stone-50 hover:bg-stone-100 border border-stone-200 text-ink text-xs font-mono font-medium transition-colors">
+                    <span class="flex items-center gap-1.5">
+                      <span class="text-fern font-bold">?</span>
+                      <span>Set as Unknown (ICEDIG)...</span>
+                    </span>
+                    <span id="icedigArrow_${probName}" class="text-[10px] text-muted">▼</span>
+                  </button>
+
+                  <div id="icedigTray_${probName}" class="hidden mt-2 p-2 bg-stone-50 border border-bordercol rounded space-y-1.5">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      ${(() => {
+                        const icedigMap = (state.icedigCodes && Object.keys(state.icedigCodes).length > 0)
+                          ? state.icedigCodes
+                          : ((state.activeSchema && state.activeSchema.icedig_code_labels) || {
+                              "unknown:missing": "unknown:missing  (blank on original label)",
+                              "unknown:indecipherable": "unknown:indecipherable  (illegible on label)",
+                              "unknown:undigitized": "unknown:undigitized  (skipped during digitisation)",
+                              "withheld": "withheld  (known but intentionally hidden)"
+                            });
+
+                        return Object.entries(icedigMap).map(([code, fullLabel]) => {
+                          const isSel = (String(currentVal).trim().toLowerCase() === code.toLowerCase());
+                          let subText = '';
+                          const parenMatch = fullLabel.match(/\\((.*?)\\)/);
+                          if (parenMatch) {
+                            subText = parenMatch[1];
+                          } else if (fullLabel.includes('  ')) {
+                            subText = fullLabel.split(/\\s{2,}/)[1] || '';
+                          } else {
+                            subText = fullLabel.replace(code, '').trim();
+                          }
+
+                          const pillClass = isSel
+                            ? 'w-full text-left p-2 rounded border-2 border-fern bg-emerald-50 text-fern-dark font-semibold shadow-2xs transition-all'
+                            : 'w-full text-left p-2 rounded border border-bordercol bg-white text-ink hover:border-fern/50 hover:bg-stone-50 active:scale-[0.99] transition-all';
+
+                          const jsCode = code.replace(/'/g, "\\'");
+                          return `
+                            <button type="button" onclick="resolveFieldDiscrepancy('${targetField}', '${probName}', '${jsCode}', true)" class="${pillClass}">
+                              <div class="flex items-center justify-between gap-1">
+                                <span class="font-mono text-xs font-bold truncate">${escapeHtml(code)}</span>
+                                ${isSel ? '<span class="text-[10px] text-fern font-bold flex-none">✓</span>' : ''}
+                              </div>
+                              ${subText ? `<span class="text-[9.5px] font-sans text-subdued block leading-tight mt-0.5 truncate">${escapeHtml(subText)}</span>` : ''}
+                            </button>
+                          `;
+                        }).join('')}
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // 4. Schema Data Integrity Flags Checklist Grid
+      const flagsGrid = document.getElementById('problemFlagsGrid');
+      const flaggedBadge = document.getElementById('flaggedTotalBadge');
+      if (flaggedBadge) {
+        flaggedBadge.textContent = `${count} Flagged`;
+      }
+      if (flagsGrid) {
+        flagsGrid.innerHTML = problemDefs.map(pDef => {
+          const probName = pDef.name;
+          const isAct = isProblemActiveOnRecord(probName, rec);
+          const label = pDef.label || probName;
+          return `
+            <button type="button" onclick="toggleProblemFlag('${probName}')" class="p-2.5 rounded border text-left flex items-start justify-between transition-all tap-highlight-transparent min-h-[44px] ${isAct ? 'border-brick bg-brick-light text-brick font-semibold' : 'border-stone-200 bg-white text-muted hover:border-stone-300'}">
+              <div class="min-w-0 pr-1">
+                <span class="text-xs font-mono block truncate ${isAct ? 'text-brick' : 'text-ink'}">${escapeHtml(label)}</span>
+                <span class="text-[9px] font-mono block truncate opacity-70">${probName}</span>
+              </div>
+              <span class="w-3.5 h-3.5 rounded-full flex-none mt-0.5 flex items-center justify-center text-[9px] font-bold ${isAct ? 'bg-brick text-white' : 'border border-stone-300'}">
+                ${isAct ? '✓' : ''}
+              </span>
+            </button>
+          `;
+        }).join('');
       }
     }
 
-    function renderProblemResolvers(record) {
-      const container = document.getElementById('problemResolverContainer');
-      if (!container) return;
-      const issues = record.flagged_issues || [];
-      if (issues.length === 0) {
-        container.innerHTML = '';
+    function toggleIcedigTray(probName) {
+      const tray = document.getElementById(`icedigTray_${probName}`);
+      const arrow = document.getElementById(`icedigArrow_${probName}`);
+      if (!tray) return;
+      const isHidden = tray.classList.contains('hidden');
+      if (isHidden) {
+        tray.classList.remove('hidden');
+        if (arrow) arrow.textContent = '▲';
+      } else {
+        tray.classList.add('hidden');
+        if (arrow) arrow.textContent = '▼';
+      }
+    }
+
+    function applyManualProblemResolution(targetField, probName) {
+      const inp = document.getElementById(`manualInput_${probName}`);
+      if (!inp) return;
+      const val = inp.value.trim();
+      if (!val) {
+        showToast('Please enter a value before applying');
         return;
       }
-      container.innerHTML = issues.map(iss => `
-        <div class="p-2.5 bg-stone-50 border border-bordercol rounded flex items-center justify-between text-xs font-mono">
-          <span class="font-medium text-ink">${iss.field || iss.id}: ${iss.reason || ''}</span>
-          <button type="button" onclick="fixProblemInline('${iss.id}', 'resolve')" class="px-2 py-1 bg-fern hover:bg-fern-dark text-white rounded text-[10px] font-bold">
-            Resolve
-          </button>
-        </div>
-      `).join('');
+      resolveFieldDiscrepancy(targetField, probName, val, true);
     }
 
-    function fixProblemInline(field, action) {
+    function resolveFieldDiscrepancy(targetField, probName, newVal, clearFlag = true) {
       if (!state.currentRecord) return;
       state.currentRecord.observation = state.currentRecord.observation || {};
-      state.currentRecord.observation[field] = false;
-      markDirty(field);
+      state.currentRecord.registration = state.currentRecord.registration || {};
+
+      if (targetField && newVal !== undefined) {
+        state.currentRecord.observation[targetField] = newVal;
+        state.currentRecord.registration[targetField] = newVal;
+        markDirty(targetField);
+      }
+
+      if (clearFlag && probName) {
+        state.currentRecord.observation[probName] = false;
+        markDirty(probName);
+      }
+
       triggerAutoSave();
-      fetchObjectDetail(state.currentRecord.id, false);
-      showToast(`✓ Resolved problem ${field}`);
+      renderProblemsAndDiscrepancies(state.currentRecord);
+      renderDynamicForm(state.activeSchema, state.currentRecord);
+      showToast(newVal !== undefined ? `✓ Applied resolution for ${targetField}` : `✓ Dismissed flag for ${probName}`);
     }
 
-    function renderHistoricalConflicts(record) {
-      const container = document.getElementById('historicalConflictsContainer');
-      if (!container) return;
-      container.innerHTML = '';
-    }
-
-    function applyHistoricalAndFix(field, val) {
+    function toggleProblemFlag(probName) {
       if (!state.currentRecord) return;
       state.currentRecord.observation = state.currentRecord.observation || {};
-      state.currentRecord.observation[field] = val;
-      markDirty(field);
+      const isAct = isProblemActiveOnRecord(probName, state.currentRecord);
+      const nextVal = !isAct;
+      state.currentRecord.observation[probName] = nextVal;
+      markDirty(probName);
       triggerAutoSave();
-      fetchObjectDetail(state.currentRecord.id, false);
-      showToast(`✓ Applied historical determination to ${field}`);
+      renderProblemsAndDiscrepancies(state.currentRecord);
+      showToast(nextVal ? `⚠ Flagged ${probName}` : `✓ Cleared flag ${probName}`);
     }
 
     // -------------------------------------------------------------

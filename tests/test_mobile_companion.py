@@ -1184,15 +1184,15 @@ def test_v2_route_rendering_and_cache_headers(mock_app_state):
     assert 'id="tabContentLocation"' in html
     assert 'id="tabContentDetails"' in html
     assert 'id="tabContentProblems"' in html
-    assert 'id="problemResolverContainer"' in html
-    assert 'id="historicalConflictsContainer"' in html
+    assert 'id="activeDiscrepanciesContainer"' in html
+    assert 'id="problemFlagsGrid"' in html
     assert 'id="tabBtnLocation"' in html
     assert 'id="tabBtnDetails"' in html
     assert 'id="tabBtnProblems"' in html
     assert 'switchDetailTab' in html
-    assert 'fixProblemInline' in html
-    assert 'applyHistoricalAndFix' in html
-    assert 'renderHistoricalConflicts' in html
+    assert 'resolveFieldDiscrepancy' in html
+    assert 'renderProblemsAndDiscrepancies' in html
+    assert 'toggleProblemFlag' in html
     assert res.headers.get("Cache-Control") == "no-cache, no-store, must-revalidate, max-age=0"
     assert res.headers.get("Pragma") == "no-cache"
 
@@ -1243,12 +1243,14 @@ def test_mobile_panel_version_toggle(mock_app_state):
 
 def test_v2_template_includes_location_coordinates():
     from backend.mobile_server import INDEX_TEMPLATE_V2
-    # Verify coordinates card and inputs are present
-    assert "input_observation_Building" in INDEX_TEMPLATE_V2
-    assert "input_observation_Floor" in INDEX_TEMPLATE_V2
-    assert "input_observation_Cabinet" in INDEX_TEMPLATE_V2
-    assert "onLocationCoordChange" in INDEX_TEMPLATE_V2
-    assert "Physical Coordinates" in INDEX_TEMPLATE_V2
+    # Verify coordinates card, steppers, building selector, and stored as pills are present
+    assert "detailBuildingSelect" in INDEX_TEMPLATE_V2
+    assert "detailFloorVal" in INDEX_TEMPLATE_V2
+    assert "detailCabVal" in INDEX_TEMPLATE_V2
+    assert "detailShelfVal" in INDEX_TEMPLATE_V2
+    assert "adjustCoordinate" in INDEX_TEMPLATE_V2
+    assert "Physical Coordinate Audit" in INDEX_TEMPLATE_V2
+    assert "detailStoredAsPills" in INDEX_TEMPLATE_V2
 
 
 def test_desktop_smart_commit_preserves_mobile_edits(mock_app_state):
@@ -1398,8 +1400,8 @@ def test_v2_template_features(mock_app_state):
     # 2. Advance to next shelf button
     assert 'advanceToNextShelf' in html or 'btnAdvanceNextShelf' in html
 
-    # 3. Numeric floor with negative support
-    assert 'type="number"' in html or 'input_observation_Floor' in html
+    # 3. Signed continuous floor stepper with negative support
+    assert 'adjustCoordinate' in html and 'detailFloorVal' in html
 
     # 4. Batch Registrator Walk Mode toggle & sync
     assert 'id="btnBatchWakeLock"' in html
@@ -1415,11 +1417,134 @@ def test_v2_template_features(mock_app_state):
     assert 'toastActionBtn' in html
     assert "actionText: 'Undo'" in html or 'actionText: "Undo"' in html
 
+    # 7. Redesigned Problems tab discrepancy resolver and flags grid
+    assert 'id="activeDiscrepanciesContainer"' in html
+    assert 'id="problemFlagsGrid"' in html
+    assert 'resolveFieldDiscrepancy' in html
+    assert 'toggleProblemFlag' in html
+    assert 'renderProblemsAndDiscrepancies' in html
 
 
+def test_v2_location_and_problems_tab_parity(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    token = auth_res.json["token"]
+    headers = {"X-Session-Token": token}
+
+    # 1. Verify /api/schema returns problem_to_field mapping
+    schema_res = client.get('/api/schema', headers=headers)
+    assert schema_res.status_code == 200
+    schema_data = schema_res.json
+    assert "problem_to_field" in schema_data
+    assert isinstance(schema_data["problem_to_field"], dict)
+
+    # 2. Verify V2 template markup and controller wiring
+    cookie_header = {"Cookie": f"session_token={token}"}
+    res = client.get('/v2', headers=cookie_header)
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+
+    # Location Tab: Building select, continuous steppers, config-driven Stored as
+    assert 'id="detailBuildingSelect"' in html
+    assert 'populateDetailBuildingOptions' in html
+    assert 'id="detailFloorVal"' in html
+    assert 'id="detailCabVal"' in html
+    assert 'id="detailShelfVal"' in html
+    assert 'adjustCoordinate' in html
+    assert 'id="detailStoredAsPills"' in html
+    assert 'renderDetailStoredAsPills' in html
+    assert 'selectDetailStoragePill' in html
+    assert 'onDetailCustomStorageInput' in html
+
+    # Problems Tab: Summary bar, active discrepancies, historical resolution, integrity flags
+    assert 'id="problemSummaryBar"' in html
+    assert 'id="problemSummaryDot"' in html
+    assert 'id="problemSummaryCountText"' in html
+    assert 'id="activeDiscrepanciesContainer"' in html
+    assert 'id="problemFlagsGrid"' in html
+    assert 'id="flaggedTotalBadge"' in html
+    assert 'renderProblemsAndDiscrepancies' in html
+    assert 'resolveFieldDiscrepancy' in html
+    assert 'applyManualProblemResolution' in html
+    assert 'toggleProblemFlag' in html
+    assert 'isProblemActiveOnRecord' in html
+    assert '/api/object/' in html and '/history' in html
 
 
+def test_accession_id_natural_sort_and_defaults(mock_app_state):
+    import pandas as pd
+    sample_ids = ["1", "10", "100", "1000", "1001", "2", "3"]
+    df_reg = pd.DataFrame({
+        "Genus": ["Pinus"] * len(sample_ids),
+        "Species": ["sylvestris"] * len(sample_ids)
+    }, index=pd.Index(sample_ids, name="id"))
+    df_obs = pd.DataFrame(index=pd.Index(sample_ids, name="id"))
+    mock_app_state.df_reg = df_reg
+    mock_app_state.df_obs = df_obs
+
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    headers = {"X-Session-Token": auth_res.json["token"]}
+
+    # 1. Calling /api/objects defaults to natural sort: 1, 2, 3, 10, 100, 1000, 1001
+    res = client.get('/api/objects', headers=headers)
+    assert res.status_code == 200
+    returned_ids = [str(o["id"]) for o in res.json["objects"]]
+    assert returned_ids == ["1", "2", "3", "10", "100", "1000", "1001"]
+
+    # Explicit sort_by=id also respects natural sort
+    res_sort = client.get('/api/objects?sort_by=id&sort_dir=asc', headers=headers)
+    assert res_sort.status_code == 200
+    returned_ids_sort = [str(o["id"]) for o in res_sort.json["objects"]]
+    assert returned_ids_sort == ["1", "2", "3", "10", "100", "1000", "1001"]
+
+    # 2. V2 HTML defaults
+    cookie_header = {"Cookie": f"session_token={auth_res.json['token']}"}
+    v2_res = client.get('/v2', headers=cookie_header)
+    assert v2_res.status_code == 200
+    html = v2_res.get_data(as_text=True)
+
+    assert '<option value="id_asc" selected>Accession ID (0894...)</option>' in html
+    assert "activeSortBy: 'id_asc'" in html
+    assert '<option value="">--</option>' in html
+    assert 'id="detailFloorVal">—</span>' in html
+    assert 'id="detailCabVal">—</span>' in html
+    assert 'id="detailShelfVal">—</span>' in html
+    assert 'id="liveLocBreadcrumb">Unrecorded location</span>' in html
 
 
+def test_v2_icedig_unknown_standards_resolution(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
 
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    token = auth_res.json["token"]
+    headers = {"X-Session-Token": token}
+
+    # 1. Verify /api/schema returns icedig_code_labels dynamically from config
+    schema_res = client.get('/api/schema', headers=headers)
+    assert schema_res.status_code == 200
+    schema_data = schema_res.json
+    assert "icedig_code_labels" in schema_data
+    icedig_map = schema_data["icedig_code_labels"]
+    assert "unknown:missing" in icedig_map
+    assert "unknown:indecipherable" in icedig_map
+    assert "unknown:undigitized" in icedig_map
+    assert "withheld" in icedig_map
+
+    # 2. Verify V2 template contains ICEDIG tray toggle and state caching
+    cookie_header = {"Cookie": f"session_token={token}"}
+    res = client.get('/v2', headers=cookie_header)
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+
+    assert 'state.icedigCodes = data.icedig_code_labels' in html
+    assert 'toggleIcedigTray' in html
+    assert 'Set as Unknown (ICEDIG)...' in html
+    assert 'icedigTray_' in html
+    assert 'icedigArrow_' in html
 

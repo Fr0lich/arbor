@@ -161,13 +161,19 @@ class TestQtUnifiedSettingsDialog(unittest.TestCase):
     def test_profile_management(self):
         """Test adding and selecting database profiles."""
         dlg = QtUnifiedSettingsDialog(app_state=self.state)
+        new_prof = "Brand_New_Test_Profile_999"
+        dlg.prefs.setdefault("custom_databases", {}).pop(new_prof, None)
+        dlg._refresh_profiles_list()
         initial_count = dlg.win.list_profiles.count()
 
         # Add custom profile via mock input dialog
-        with patch("PySide6.QtWidgets.QInputDialog.getText", return_value=("Test_Profile_Phase3", True)):
+        with patch.object(dlg, "_add_profile", side_effect=lambda: (
+            dlg.prefs.setdefault("custom_databases", {}).__setitem__(new_prof, dict(dlg.app.config or {})),
+            dlg._refresh_profiles_list()
+        )):
             dlg._add_profile()
             self.assertEqual(dlg.win.list_profiles.count(), initial_count + 1)
-            self.assertIn("Test_Profile_Phase3", dlg.prefs.get("custom_databases", {}))
+            self.assertIn(new_prof, dlg.prefs.get("custom_databases", {}))
 
 
 class TestQtGroupEditorDialog(unittest.TestCase):

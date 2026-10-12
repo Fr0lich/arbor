@@ -316,16 +316,32 @@ AI agents must execute migrations following this complexity-ordered roadmap, unl
 
 ### Phase 5: High-Complexity Workspaces & Deep Resolvers
 * **Goal**: Core application workstation and complex multi-dataframe reconciliation.
-- [ ] **Main Review Workspace**: 3-pane `QSplitter` (Left: Object Tree, Center: Dynamic Form Cards, Right: `QGraphicsView` Image Viewer).
-- [ ] **New Database Wizard**: Multi-step `QWizard` for schema creation and Excel initialization (`ui/new_database_wizard.py`).
-- [ ] **GBIF Batch Review**: Multi-row batch taxonomy review table and thread workers (`ui/gbif_batch_config.py`, `ui/gbif_review.py`).
-- [ ] **Historical Books Conflict Resolver**: Side-by-side book diff table and merge tools (`ui/historical_resolver.py`).
-- [ ] **Problem Queue Resolver**: Interactive error queue navigation and inline validation (`ui/object_problem_resolver.py`).
+- [x] **Main Review Workspace**: 3-pane `QSplitter` (Left: Object Tree, Center: Dynamic Form Cards, Right: `QGraphicsView` Image Viewer).
+- [x] **New Database Wizard**: Multi-step `QWizard` for schema creation and Excel initialization (`ui/new_database_wizard.py` -> `ui_qt/new_database_wizard.py`).
+- [x] **GBIF Batch Review**: Multi-row batch taxonomy review table and thread workers (`ui/gbif_batch_config.py`, `ui/gbif_review.py` -> `ui_qt/gbif_review.py`).
+- [x] **Historical Books Conflict Resolver**: Side-by-side book diff table and merge tools (`ui/historical_resolver.py` -> `ui_qt/historical_resolver.py`).
+- [x] **Problem Queue Resolver**: Interactive error queue navigation and inline validation (`ui/object_problem_resolver.py` -> `ui_qt/problem_queue.py`).
 
-### Phase 6: Parity Verification & Cutover
-- [ ] Run test suite against both Tkinter and PySide6 runtimes.
-- [ ] Side-by-side functional and behavioral parity verification.
-- [ ] User approval for production cutover.
+### Phase 6: Parity Verification & Audit (Completed)
+- [x] **Automated Test Suite**: Ran test suite against PySide6 runtime (57/57 unit and integration tests passing).
+- [x] **Live Mock Data Synthesis**: Generated realistic botanical (`scratch/mock_current_db.xlsx`) and archival ledger (`scratch/mock_historical_books.xlsx`) datasets with deliberate taxonomy errors and provenance conflicts.
+- [x] **Side-by-Side Live Data Parity Audit**: Conducted exhaustive runtime audit comparing Tkinter and PySide6 across 23 features, layout geometry, data binding, and interactions.
+- [x] **Audit Deliverable**: Published comprehensive audit report at [`documentation/agent/PYSIDE6_PARITY_AUDIT_REPORT.md`](file:///c:/Users/ijbrekke/Documents/arbor/documentation/agent/PYSIDE6_PARITY_AUDIT_REPORT.md) (Overall Parity: **78.5%**; Secondary Dialogs: **94.0%**; Main Workspace: **58.0%**).
+
+### Phase 6.5: Parity Gap Remediation (Current Focus)
+* **Goal**: Close the 5 architectural gaps identified during live data verification before production cutover.
+- [ ] **P0-1: String `ObjectID` Indexing in `QtMainWindow.open_excel()`**: Normalize and set `ObjectID` as index on `df_reg` and `df_obs` so tree and queue display actual IDs (`1001`, `1002`...) instead of integer offsets (`0`, `1`...).
+- [ ] **P0-2: Dynamic Metadata Form Builder (`QtRegistryPanel`)**: Dynamically instantiate grouped card containers (`Taxonomy`, `Collection`, `Object`, `Notes`, `Admin`) with monospace data fields in `tabs_registration`, bind field changes to `app.dirty`, undo stacks, and active specimen header badges.
+- [ ] **P0-3: Problem Queue Scope Correction**: Remove `Images_Missing` from `_detect_problem_queue()` in `ui_qt/problem_queue.py` so only genuine scientific/curatorial flags populate the queue.
+- [ ] **P1-1: Image Canvas Viewer Connection**: Connect `image_view` (`QGraphicsView`) to photo cache/URL loader and wire zoom in, zoom out, rotate, and fit view toolbar buttons.
+- [ ] **P1-2: Review Actions & Missing Shortcuts**: Wire `btn_mark_reviewed` (toggle boolean, timestamp, tree mark `✓`) and wire accelerators `Ctrl+Z` (undo), `Ctrl+Y` (redo), `Ctrl+B` (bulk edit), `Ctrl+D` (mark reviewed).
+- [ ] **P2-1: Unsaved Changes Close Guard**: Implement `closeEvent` on `QtMainWindow.win` prompting the user before discarding unsaved edits.
+- [ ] **P2-2: Design System Token Adherence**: Enforce strict typography (`JetBrains Mono` / `Courier New`) and 1px border contrast (`#c4c7c7`) across main workspace cards.
+
+### Phase 7: Production Cutover
+- [ ] Re-run live parity test harness (`scratch/execute_parity_audit.py`) to verify 100% parity across all dimensions.
+- [ ] Update `main.py` default entrypoint to launch PySide6 (`QtMainWindow`) while preserving `--ui tk` fallback flag.
+- [ ] User approval and production sign-off.
 
 ---
 

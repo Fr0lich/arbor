@@ -444,7 +444,10 @@ class TestPhase4MainWindowIntegration(unittest.TestCase):
         """Verify context menu request handler on tree_objects."""
         pos = QPoint(10, 10)
         # Should execute safely without error
-        self.main_win._show_tree_context_menu(pos)
+        with patch.object(self.main_win, "_create_menu") as mock_create_menu:
+            mock_menu = mock_create_menu.return_value
+            self.main_win._show_tree_context_menu(pos)
+            self.assertTrue(mock_menu.exec.called)
 
 
 if __name__ == "__main__":

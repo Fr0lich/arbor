@@ -110,6 +110,9 @@ class QtStartupDialog:
         self.win.btn_mode_local.clicked.connect(lambda: self.set_image_mode("folder"))
         self.win.btn_mode_offline.clicked.connect(lambda: self.set_image_mode("offline"))
 
+        if hasattr(self.win, "btn_create_db"):
+            self.win.btn_create_db.clicked.connect(self.create_new_database)
+
         self.win.list_recent_projects.itemClicked.connect(self._on_recent_clicked)
         self.win.btn_help.clicked.connect(self.show_help)
         self.win.btn_launch.clicked.connect(self.finish)
@@ -206,6 +209,23 @@ class QtStartupDialog:
         )
         if path:
             self.win.input_books_path.setText(path)
+
+    def create_new_database(self) -> None:
+        """Launch the multi-step New Database Wizard."""
+        from ui_qt.new_database_wizard import QtNewDatabaseWizard
+
+        wizard = QtNewDatabaseWizard(
+            parent=self.win,
+            app_state=self.app,
+            on_completed=self._on_database_created,
+        )
+        wizard.exec()
+
+    def _on_database_created(self, save_path: str, profile_name: str) -> None:
+        """Handle completion of database creation."""
+        self.win.input_db_path.setText(save_path)
+        self.win.combo_profile.setCurrentText(profile_name)
+        self._refresh_launch_state()
 
     def _on_recent_clicked(self, item: QListWidgetItem) -> None:
         """Load selected path from recent projects list."""

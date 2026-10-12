@@ -40,10 +40,14 @@ from ui_qt.bulk_edit import QtBulkEditDialog
 from ui_qt.dashboard import QtDatabaseStatisticsDialog
 from ui_qt.filter_dialog import QtFilterDialog
 from ui_qt.gbif_dialog import QtGbifUpdateDialog
+from ui_qt.gbif_review import QtGbifReviewDialog
 from ui_qt.group_editor import QtGroupEditorDialog
 from ui_qt.help_dialogs import QtKeyboardShortcutsDialog, QtUserGuideDialog, show_about
+from ui_qt.historical_resolver import QtHistoricalResolverDialog
 from ui_qt.loader import load_ui
 from ui_qt.log_viewer import QtErrorLogDialog
+from ui_qt.new_database_wizard import QtNewDatabaseWizard
+from ui_qt.problem_queue import QtProblemQueueDialog
 from ui_qt.unified_settings import QtUnifiedSettingsDialog
 from ui_qt.qss_tokens import (
     BLACK,
@@ -158,6 +162,7 @@ class QtMainWindow:
         self.menu_data = self._create_menu()
         self.menu_data.addAction("Load Books...", self.load_books)
         self.menu_data.addAction("Load Earlier Databases...", self.load_historical_databases)
+        self.menu_data.addAction("Historical Books Conflict Resolver...", self.open_historical_resolver)
         self.menu_data.addSeparator()
         self.menu_data.addAction("Filter Objects...", self.open_filter_dialog)
         self.menu_data.addAction("📊 Database Statistics Dashboard...", self.open_database_statistics)
@@ -166,10 +171,10 @@ class QtMainWindow:
         self.menu_data.addAction("👥 Manage Specimen Groups...", self.open_group_editor)
         self.menu_data.addAction("✏️ Bulk Edit Records...", self.open_bulk_edit)
         self.menu_data.addSeparator()
-        self.menu_data.addAction("Process Objects with Problems...", self.filter_problems_only)
+        self.menu_data.addAction("Process Objects with Problems...", self.open_problem_queue)
         self.menu_data.addSeparator()
         self.menu_data.addAction("🔍 Validate Current Specimen (GBIF)", lambda: self.validate_current_specimen_gbif())
-        self.menu_data.addAction("🌿 Run GBIF Taxonomy Check...", self.run_gbif_check)
+        self.menu_data.addAction("🌿 Batch Taxonomy Review (GBIF)...", self.open_gbif_batch_review)
         self.menu_data.addAction("↩️ Revert Latest GBIF Taxonomy Update", self.rollback_gbif)
 
         if hasattr(self.win, "btn_nav_data"):
@@ -210,7 +215,7 @@ class QtMainWindow:
         self.menu_gbif = self._create_menu()
         self.menu_gbif.addAction("🔍 Validate Current Specimen", lambda: self.validate_current_specimen_gbif())
         self.menu_gbif.addSeparator()
-        self.menu_gbif.addAction("🌿 Run GBIF Taxonomy Check...", self.run_gbif_check)
+        self.menu_gbif.addAction("🌿 Batch Taxonomy Review (GBIF)...", self.open_gbif_batch_review)
         self.menu_gbif.addAction("↩️ Revert Latest GBIF Taxonomy Update", self.rollback_gbif)
 
         if hasattr(self.win, "btn_nav_gbif"):
@@ -259,8 +264,10 @@ class QtMainWindow:
         QShortcut(QKeySequence("Ctrl+O"), self.win).activated.connect(self.open_excel)
         QShortcut(QKeySequence("Ctrl+P"), self.win).activated.connect(self.open_quick_peek)
         QShortcut(QKeySequence("Ctrl+N"), self.win).activated.connect(self.create_new_object)
+        QShortcut(QKeySequence("Ctrl+Shift+N"), self.win).activated.connect(self.create_new_database)
         QShortcut(QKeySequence("Ctrl+F"), self.win).activated.connect(self.open_filter_dialog)
         QShortcut(QKeySequence("Ctrl+G"), self.win).activated.connect(lambda: self.validate_current_specimen_gbif())
+        QShortcut(QKeySequence("Ctrl+E"), self.win).activated.connect(self.open_problem_queue)
 
     # -------------------------------------------------------------------------
     # Dialog Openers
@@ -602,42 +609,22 @@ class QtMainWindow:
         self.update_status_bar()
 
     def create_new_database(self) -> None:
-        """Prompt for path and schema to initialize a new botanical collection."""
-        chosen, _ = QFileDialog.getSaveFileName(
-            self.win,
-            "Create New Database",
-            config.get_last_dir("last_db_dir") or "new_collection.xlsx",
-            "Excel Files (*.xlsx)",
+        """Launch the multi-step New Database Wizard."""
+        wizard = QtNewDatabaseWizard(
+            parent=self.win,
+            app_state=self.app,
+            on_completed=self._on_new_database_initialized,
         )
-        if not chosen:
-            return
+        wizard.exec()
 
-        profile_name = next(iter(config.DATABASE_CONFIGS)) if config.DATABASE_CONFIGS else "Default"
-        cfg = config.DATABASE_CONFIGS.get(profile_name, {})
-
-        # Generate empty dataframes from schema
-        reg_fields = ["ObjectID"] + [f["name"] for f in cfg.get("ui_sections", {}).get("registration", [])]
-        obs_fields = ["ObjectID", REVIEWED_COLUMN] + [p["name"] for p in cfg.get("ui_sections", {}).get("problems", [])]
-
-        df_reg = pd.DataFrame(columns=reg_fields).set_index("ObjectID")
-        df_obs = pd.DataFrame(columns=obs_fields).set_index("ObjectID")
-        df_photo = pd.DataFrame(columns=["ObjectID", "Photo_Path"])
-        df_log = pd.DataFrame(columns=["Timestamp", "ObjectID", "Action", "ChangedFields", "ChangedValues"])
-
-        self.app.excel_path = chosen
-        self.app.output_path = chosen
-        self.app.config = cfg
-        self.app.config_name = profile_name
-        self.app.df_reg = df_reg
-        self.app.df_obs = df_obs
-        self.app.df_photo = df_photo
-        self.app.df_log = df_log
-        self.app.active_object_ids = []
-        self.app.dirty = True
-
-        self.save_session(chosen)
+    def _on_new_database_initialized(self, path: str, profile_name: str) -> None:
+        """Refresh main workspace when a new database is initialized."""
+        self.search_engine.invalidate_search_index()
         self.refresh_object_tree()
+        self._update_filter_status_display()
         self.update_status_bar()
+        if hasattr(self.win, "lbl_db_path"):
+            self.win.lbl_db_path.setText(os.path.basename(path))
 
     def save_preset_dialog(self) -> None:
         """Prompt to save current field configuration as a named view preset."""
@@ -686,6 +673,71 @@ class QtMainWindow:
         problem_ids = [oid for oid in self.app.df_reg.index if oid in has_problem.index and has_problem.loc[oid]]
 
         self.on_filter_applied(problem_ids)
+
+    def open_problem_queue(self) -> None:
+        """Open the Problem Queue Resolver dialog."""
+        if self.app.df_reg is None or self.app.df_obs is None:
+            QMessageBox.warning(self.win, "No Database", "Please open or create a database first.")
+            return
+
+        dialog = QtProblemQueueDialog(
+            parent=self.win,
+            app_state=self.app,
+            on_resolved=self._on_problem_resolved,
+            on_inspect=self.navigate_to_object,
+        )
+        dialog.exec()
+
+    def _on_problem_resolved(self, oid: str) -> None:
+        """Handler called when a problem is resolved in the queue."""
+        self.refresh_object_tree()
+        self.update_status_bar()
+
+    def open_historical_resolver(self, oid: Optional[str] = None) -> None:
+        """Open the Historical Books Conflict Resolver dialog."""
+        target_oid = oid or self.app.current_object_id
+        if not target_oid:
+            QMessageBox.information(self.win, "Historical Resolver", "Please select a specimen from the list first.")
+            return
+
+        if not self.app.historical_dbs:
+            reply = QMessageBox.question(
+                self.win,
+                "No Historical Books Loaded",
+                "No archival historical books are currently loaded.\nWould you like to load a historical books file now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.load_books()
+            if not self.app.historical_dbs:
+                return
+
+        dialog = QtHistoricalResolverDialog(
+            parent=self.win,
+            app_state=self.app,
+            oid=target_oid,
+            on_resolved=lambda resolved_oid: self.refresh_object_tree(),
+        )
+        dialog.exec()
+
+    def open_gbif_batch_review(self) -> None:
+        """Open the GBIF Batch Taxonomy Reconciliation and Review workspace."""
+        if self.app.df_reg is None:
+            QMessageBox.warning(self.win, "No Database", "Please open or create a database first.")
+            return
+
+        dialog = QtGbifReviewDialog(
+            parent=self.win,
+            app_state=self.app,
+            on_applied=self._on_gbif_batch_applied,
+        )
+        dialog.exec()
+
+    def _on_gbif_batch_applied(self, count: int) -> None:
+        """Handler called after batch GBIF updates are committed."""
+        self.search_engine.invalidate_search_index()
+        self.refresh_object_tree()
+        self.update_status_bar()
 
     # -------------------------------------------------------------------------
     # Navigation & Selection
@@ -769,7 +821,9 @@ class QtMainWindow:
         menu = self._create_menu()
         menu.addAction("🔍 Validate Current Specimen (GBIF)", lambda: self.validate_current_specimen_gbif(oid))
         menu.addAction("🔍 Quick Peek", lambda: self.open_quick_peek())
+        menu.addAction("📖 Historical Books Resolver...", lambda: self.open_historical_resolver(oid))
         menu.addSeparator()
+        menu.addAction("⚠️ Problem Queue...", self.open_problem_queue)
         menu.addAction("Filter Objects...", self.open_filter_dialog)
         menu.addAction("✏️ Bulk Edit Records...", self.open_bulk_edit)
         menu.exec(self.win.tree_objects.mapToGlobal(pos))
