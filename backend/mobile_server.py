@@ -9325,7 +9325,7 @@ INDEX_TEMPLATE_V2 = """
                               ${subText ? `<span class="text-[9.5px] font-sans text-subdued block leading-tight mt-0.5 truncate">${escapeHtml(subText)}</span>` : ''}
                             </button>
                           `;
-                        }).join('')}
+                        }).join('')
                       })()}
                     </div>
                   </div>

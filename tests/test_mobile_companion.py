@@ -1547,4 +1547,21 @@ def test_v2_icedig_unknown_standards_resolution(mock_app_state):
     assert 'Set as Unknown (ICEDIG)...' in html
     assert 'icedigTray_' in html
     assert 'icedigArrow_' in html
+    assert "}).join('')}\n                      })()}" not in html
+
+
+def test_v2_template_javascript_syntax_integrity(mock_app_state):
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    token = auth_res.json["token"]
+    cookie_header = {"Cookie": f"session_token={token}"}
+    res = client.get('/v2', headers=cookie_header)
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+
+    # Ensure no stray closing brace in IIFE template interpolation
+    assert "}).join('')}\n                      })()}" not in html
+    assert "}).join('')\n                      })()}" in html
+    assert "function onPhotoError()" in html
 
