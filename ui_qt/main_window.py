@@ -94,6 +94,7 @@ class QtMainWindow:
         if hasattr(self.win, "scroll_general_contents") and self.win.scroll_general_contents.layout():
             self.registry_panel = QtRegistryPanel(self.win.scroll_general_contents.layout(), self.app.config)
             self.registry_panel.on_problem_changed_callback = self._on_problem_toggled
+            self.registry_panel.on_field_changed_callback = self._on_field_edited
 
         # Initialize dynamic Problems checklist in tab_problems
         self.problems_panel: QtProblemsPanel | None = None
@@ -150,6 +151,7 @@ class QtMainWindow:
             mode=loc_mode if self.location_in_center else "vertical",
         )
         self.location_panel.toggle_dock_requested.connect(self.toggle_location_panel_position)
+        self.location_panel.field_changed.connect(self._on_location_field_edited)
         self._mount_location_panel()
 
         # Wire all action bars, menus, and shortcuts
@@ -159,8 +161,12 @@ class QtMainWindow:
         self._wire_filter_actions()
         self._wire_shortcuts()
 
+        # Exit confirmation guard
+        self.win.closeEvent = self._on_close_event
+
         self.refresh_object_tree()
         self.update_status_bar()
+        self.update_save_status()
 
     # -------------------------------------------------------------------------
     # Header Action Bar & Dropdown Menus
@@ -299,6 +305,18 @@ class QtMainWindow:
         if hasattr(self.win, "btn_bulk_edit"):
             self.win.btn_bulk_edit.clicked.connect(self.open_bulk_edit)
 
+        # Mark Reviewed
+        if hasattr(self.win, "btn_mark_reviewed"):
+            self.win.btn_mark_reviewed.clicked.connect(self.toggle_reviewed)
+
+        # GBIF Single Specimen Validation
+        if hasattr(self.win, "btn_gbif"):
+            self.win.btn_gbif.clicked.connect(lambda: self.validate_current_specimen_gbif())
+
+        # Historical Books Resolver
+        if hasattr(self.win, "btn_check_books"):
+            self.win.btn_check_books.clicked.connect(lambda: self.open_historical_resolver())
+
         # Prev / Next / Last navigation
         if hasattr(self.win, "btn_prev"):
             self.win.btn_prev.clicked.connect(self.navigate_prev)
@@ -306,6 +324,16 @@ class QtMainWindow:
             self.win.btn_next.clicked.connect(self.navigate_next)
         if hasattr(self.win, "btn_last"):
             self.win.btn_last.clicked.connect(self.navigate_last)
+        if hasattr(self.win, "btn_next_problem"):
+            self.win.btn_next_problem.clicked.connect(self.navigate_next_problem)
+        if hasattr(self.win, "btn_next_hist"):
+            self.win.btn_next_hist.clicked.connect(self.navigate_next_hist)
+        if hasattr(self.win, "btn_history"):
+            self.win.btn_history.clicked.connect(self.open_recent_activity)
+
+        # Sorting ComboBox
+        if hasattr(self.win, "combo_sort"):
+            self.win.combo_sort.currentTextChanged.connect(self._on_sort_changed)
 
     def _wire_status_bar_actions(self) -> None:
         """Connect footer status bar buttons."""
@@ -328,6 +356,9 @@ class QtMainWindow:
         QShortcut(QKeySequence("Ctrl+F"), self.win).activated.connect(self.open_filter_dialog)
         QShortcut(QKeySequence("Ctrl+G"), self.win).activated.connect(lambda: self.validate_current_specimen_gbif())
         QShortcut(QKeySequence("Ctrl+E"), self.win).activated.connect(self.open_problem_queue)
+        QShortcut(QKeySequence("Ctrl+Z"), self.win).activated.connect(self.undo)
+        QShortcut(QKeySequence("Ctrl+R"), self.win).activated.connect(self.toggle_reviewed)
+        QShortcut(QKeySequence("Ctrl+Return"), self.win).activated.connect(self.toggle_reviewed)
 
     # -------------------------------------------------------------------------
     # Dialog Openers
@@ -478,6 +509,7 @@ class QtMainWindow:
             if hasattr(self.win, "scroll_general_contents") and self.win.scroll_general_contents.layout():
                 self.registry_panel = QtRegistryPanel(self.win.scroll_general_contents.layout(), self.app.config)
                 self.registry_panel.on_problem_changed_callback = self._on_problem_toggled
+                self.registry_panel.on_field_changed_callback = self._on_field_edited
 
             # Rebuild dynamic problems checklist for current database configuration
             if hasattr(self.win, "scroll_problems_contents") and self.win.scroll_problems_contents.layout():
@@ -495,11 +527,13 @@ class QtMainWindow:
             if hasattr(self, "location_panel") and self.location_panel:
                 self.location_panel.config_ref = self.app.config
                 self.location_panel.build_ui()
+                self.location_panel.field_changed.connect(self._on_location_field_edited)
                 self._mount_location_panel()
 
             self.refresh_object_tree()
             self._update_filter_status_display()
             self.update_status_bar()
+            self.update_save_status()
 
             if hasattr(self.win, "lbl_db_path"):
                 self.win.lbl_db_path.setText(os.path.basename(path))
@@ -531,6 +565,8 @@ class QtMainWindow:
             self.app.dirty = False
             self.app.output_path = target
             self.update_status_bar()
+            self.update_save_status()
+            self.log_action("SAVE", ["Session"], [f'Saved to: "{target}"'])
 
             # Record save in df_log if available
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -910,15 +946,24 @@ class QtMainWindow:
             self.win.tabs_registration.setTabText(1, tab_text)
 
         # 3. Update Status Badge (Reviewed > Problems > Pending)
-        if hasattr(self.win, "lbl_status_badge"):
-            is_reviewed = False
-            if df_obs is not None and oid in df_obs.index:
-                obs_row = df_obs.loc[oid]
-                if isinstance(obs_row, pd.DataFrame):
-                    obs_row = obs_row.iloc[0]
-                if REVIEWED_COLUMN in obs_row.index:
-                    is_reviewed = bool(obs_row[REVIEWED_COLUMN])
+        is_reviewed = False
+        reviewed_at = ""
+        if df_obs is not None and oid in df_obs.index:
+            obs_row = df_obs.loc[oid]
+            if isinstance(obs_row, pd.DataFrame):
+                obs_row = obs_row.iloc[0]
+            if REVIEWED_COLUMN in obs_row.index:
+                is_reviewed = bool(obs_row[REVIEWED_COLUMN])
+            if "ReviewedAt" in obs_row.index and not pd.isna(obs_row["ReviewedAt"]):
+                reviewed_at = str(obs_row["ReviewedAt"]).strip()
 
+        if hasattr(self.win, "lbl_reviewed_time"):
+            self.win.lbl_reviewed_time.setText(f"Reviewed: {reviewed_at}" if is_reviewed and reviewed_at else "")
+
+        if hasattr(self.win, "btn_mark_reviewed"):
+            self.win.btn_mark_reviewed.setText("✓ MARKED AS REVIEWED" if is_reviewed else "✓ MARK AS REVIEWED (Ctrl+Enter)")
+
+        if hasattr(self.win, "lbl_status_badge"):
             if is_reviewed:
                 self.win.lbl_status_badge.setText("REVIEWED")
                 self.win.lbl_status_badge.setProperty("state", "reviewed")
@@ -948,6 +993,7 @@ class QtMainWindow:
             self.location_panel.populate_specimen(oid, df_obs)
 
         self.update_status_bar()
+        self.update_save_status()
 
     def _on_problem_toggled(self, problem_name: str, checked: bool) -> None:
         """Synchronize problem flag toggles across dataframes, tabs, and status badges."""
@@ -1070,6 +1116,399 @@ class QtMainWindow:
             self.history_stack.pop()  # pop current
             prev_oid = self.history_stack.pop()
             self.navigate_to_object(prev_oid)
+
+    def navigate_next_problem(self) -> None:
+        """Advance to the next specimen in the list with active problem flags."""
+        if not self.app.active_object_ids or self.app.df_obs is None:
+            return
+
+        cur_oid = self.app.current_object_id
+        start_idx = self.app.active_object_ids.index(cur_oid) if cur_oid in self.app.active_object_ids else -1
+        total = len(self.app.active_object_ids)
+
+        prob_cols = [
+            c for c in self.app.df_obs.columns
+            if (c.endswith("_Problem") or c in ("Other_problem", "Images_Problem"))
+            and c != "Images_Missing"
+        ]
+        if not prob_cols:
+            return
+
+        for offset in range(1, total + 1):
+            check_idx = (start_idx + offset) % total
+            candidate_oid = self.app.active_object_ids[check_idx]
+            if candidate_oid in self.app.df_obs.index:
+                row = self.app.df_obs.loc[candidate_oid]
+                if isinstance(row, pd.DataFrame):
+                    row = row.iloc[0]
+                if any(bool(row.get(c)) for c in prob_cols):
+                    self.navigate_to_object(candidate_oid)
+                    return
+
+    def navigate_next_hist(self) -> None:
+        """Advance to the next specimen that has historical book entries."""
+        if not self.app.active_object_ids or not self.app.historical_dbs:
+            return
+
+        cur_oid = self.app.current_object_id
+        start_idx = self.app.active_object_ids.index(cur_oid) if cur_oid in self.app.active_object_ids else -1
+        total = len(self.app.active_object_ids)
+
+        hist_ids = set()
+        for hdb in self.app.historical_dbs:
+            df_hist = hdb.get("df")
+            if df_hist is not None and "ObjectID" in df_hist.columns:
+                hist_ids.update(df_hist["ObjectID"].astype(str).str.strip().tolist())
+
+        for offset in range(1, total + 1):
+            check_idx = (start_idx + offset) % total
+            candidate_oid = self.app.active_object_ids[check_idx]
+            if candidate_oid in hist_ids:
+                self.navigate_to_object(candidate_oid)
+                return
+
+    def _on_sort_changed(self, sort_mode: str) -> None:
+        """Re-sort active_object_ids according to selected sorting mode."""
+        if not self.app or self.app.df_reg is None or not self.app.active_object_ids:
+            return
+
+        df_reg = self.app.df_reg
+        df_obs = self.app.df_obs
+        oids = list(self.app.active_object_ids)
+
+        if sort_mode == "ID":
+            oids.sort(key=lambda x: (0, int(x)) if str(x).isdigit() else (1, str(x)))
+        elif sort_mode == "Genus A-Z":
+            def _genus_key(oid):
+                if oid in df_reg.index:
+                    row = df_reg.loc[oid]
+                    if isinstance(row, pd.DataFrame):
+                        row = row.iloc[0]
+                    genus = str(row["Genus"]).strip().lower() if "Genus" in row.index and not pd.isna(row["Genus"]) else ""
+                    species = str(row["Species"]).strip().lower() if "Species" in row.index and not pd.isna(row["Species"]) else ""
+                    return (genus, species, oid)
+                return ("", "", oid)
+            oids.sort(key=_genus_key)
+        elif sort_mode == "Reviewed first":
+            def _rev_key(oid):
+                if df_obs is not None and oid in df_obs.index and REVIEWED_COLUMN in df_obs.columns:
+                    val = df_obs.loc[oid, REVIEWED_COLUMN]
+                    is_rev = bool(val.iloc[0] if isinstance(val, pd.Series) else val)
+                    return (0 if is_rev else 1, int(oid) if str(oid).isdigit() else oid)
+                return (1, int(oid) if str(oid).isdigit() else oid)
+            oids.sort(key=_rev_key)
+        elif sort_mode == "Problems first":
+            prob_cols = [
+                c for c in df_obs.columns
+                if (c.endswith("_Problem") or c in ("Other_problem", "Images_Problem"))
+                and c != "Images_Missing"
+            ] if df_obs is not None else []
+            def _prob_key(oid):
+                if df_obs is not None and oid in df_obs.index and prob_cols:
+                    row = df_obs.loc[oid]
+                    if isinstance(row, pd.DataFrame):
+                        row = row.iloc[0]
+                    p_count = sum(1 for c in prob_cols if bool(row.get(c)))
+                    return (-p_count, int(oid) if str(oid).isdigit() else oid)
+                return (0, int(oid) if str(oid).isdigit() else oid)
+            oids.sort(key=_prob_key)
+
+        self.app.active_object_ids = oids
+        self.refresh_object_tree()
+
+    # -------------------------------------------------------------------------
+    # State Mutation, Undo Stack, Logging & Save Status
+    # -------------------------------------------------------------------------
+
+    def update_save_status(self) -> None:
+        """Update save indicator badges in workspace."""
+        if hasattr(self.win, "lbl_data_status"):
+            if getattr(self.app, "dirty", False):
+                self.win.lbl_data_status.setText("Unsaved*")
+                self.win.lbl_data_status.setStyleSheet("color: #d9a036; font-weight: bold;")
+            else:
+                self.win.lbl_data_status.setText("Saved")
+                self.win.lbl_data_status.setStyleSheet("color: #3a7d44; font-weight: bold;")
+
+    def push_undo_state(self, target_oid: str | None = None) -> None:
+        """Push a snapshot of the current specimen's df_reg and df_obs rows onto undo_stacks."""
+        oid = target_oid or self.app.current_object_id
+        if not oid or self.app.df_reg is None or self.app.df_obs is None:
+            return
+
+        with self.app.df_lock:
+            if oid not in self.app.df_reg.index or oid not in self.app.df_obs.index:
+                return
+            state = {
+                "reg": self.app.df_reg.loc[oid].copy(),
+                "obs": self.app.df_obs.loc[oid].copy(),
+            }
+
+        stack = self.app.undo_stacks.setdefault(oid, [])
+        stack.append(state)
+        if len(stack) > 50:
+            stack.pop(0)
+
+    def undo(self) -> None:
+        """Revert the most recent edit on the current specimen."""
+        oid = self.app.current_object_id
+        if not oid or oid not in self.app.undo_stacks or not self.app.undo_stacks[oid]:
+            return
+
+        state = self.app.undo_stacks[oid].pop()
+        with self.app.df_lock:
+            self.app.df_reg.loc[oid] = state["reg"]
+            self.app.df_obs.loc[oid] = state["obs"]
+
+        # Repopulate detail panels
+        df_reg = self.app.df_reg
+        df_obs = self.app.df_obs
+        if hasattr(self, "registry_panel") and self.registry_panel:
+            self.registry_panel.populate_specimen(oid, df_reg, df_obs)
+        if hasattr(self, "location_panel") and self.location_panel:
+            self.location_panel.populate_specimen(oid, df_obs)
+        if hasattr(self, "problems_panel") and self.problems_panel:
+            self.problems_panel.populate_specimen(oid, df_obs)
+
+        # Update nomenclature and tree taxon
+        row = df_reg.loc[oid]
+        if isinstance(row, pd.DataFrame):
+            row = row.iloc[0]
+        genus = str(row["Genus"]).strip() if "Genus" in row.index and not pd.isna(row["Genus"]) else ""
+        species = str(row["Species"]).strip() if "Species" in row.index and not pd.isna(row["Species"]) else ""
+        author = str(row["Author"]).strip() if "Author" in row.index and not pd.isna(row["Author"]) else ""
+        parts = [p for p in (genus, species, author) if p]
+        scientific_name = " ".join(parts) or "(unnamed specimen)"
+
+        if hasattr(self.win, "lbl_specimen_name"):
+            self.win.lbl_specimen_name.setText(scientific_name)
+
+        if hasattr(self.win, "tree_objects"):
+            cur_item = self.win.tree_objects.currentItem()
+            if cur_item and cur_item.text(1).strip() == oid:
+                cur_item.setText(2, f"{genus} {species}".strip() or "(unnamed)")
+
+        self.app.dirty = True
+        self.update_save_status()
+        self.update_status_bar()
+        self.log_action("UNDO", ["Object"], [f"Reverted state for #{oid}"], oid=oid)
+
+    def log_action(
+        self,
+        action: str,
+        changed_fields: list[str] | None = None,
+        changed_values: list[str] | None = None,
+        oid: str | None = None,
+    ) -> None:
+        """Append an audit record to app.df_log and app._log_records."""
+        target_oid = oid or self.app.current_object_id
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        username = os.environ.get("USERNAME") or os.environ.get("USER") or "User"
+
+        rec = {
+            "Timestamp": now_str,
+            "User": username,
+            "Action": action,
+            "ObjectID": str(target_oid) if target_oid is not None else "",
+            "ChangedFields": ", ".join(changed_fields) if changed_fields else "",
+            "ChangedValues": " | ".join(changed_values) if changed_values else "",
+        }
+        self.app._log_records.append(rec)
+        new_row_df = pd.DataFrame([rec])
+        if self.app.df_log is None or self.app.df_log.empty:
+            self.app.df_log = new_row_df
+        else:
+            self.app.df_log = pd.concat([self.app.df_log, new_row_df], ignore_index=True)
+
+    def _on_field_edited(self, field_name: str, value: str) -> None:
+        """Handle inline editing of a registration field in tab_general."""
+        oid = self.app.current_object_id
+        if not oid or self.app.df_reg is None or oid not in self.app.df_reg.index:
+            return
+
+        current_val = ""
+        if field_name in self.app.df_reg.columns:
+            raw = self.app.df_reg.loc[oid, field_name]
+            current_val = "" if pd.isna(raw) else str(raw)
+
+        if value == current_val:
+            return
+
+        self.push_undo_state(oid)
+
+        with self.app.df_lock:
+            self.app.df_reg.at[oid, field_name] = value
+
+        self.app.dirty = True
+        self.update_save_status()
+        self.log_action("EDIT", [field_name], [f'{field_name}: "{current_val}" -> "{value}"'], oid=oid)
+
+        if field_name in ("Genus", "Species", "Author"):
+            row = self.app.df_reg.loc[oid]
+            if isinstance(row, pd.DataFrame):
+                row = row.iloc[0]
+            genus = str(row["Genus"]).strip() if "Genus" in row.index and not pd.isna(row["Genus"]) else ""
+            species = str(row["Species"]).strip() if "Species" in row.index and not pd.isna(row["Species"]) else ""
+            author = str(row["Author"]).strip() if "Author" in row.index and not pd.isna(row["Author"]) else ""
+            parts = [p for p in (genus, species, author) if p]
+            scientific_name = " ".join(parts) or "(unnamed specimen)"
+
+            if hasattr(self.win, "lbl_specimen_name"):
+                self.win.lbl_specimen_name.setText(scientific_name)
+
+            if hasattr(self.win, "tree_objects"):
+                cur_item = self.win.tree_objects.currentItem()
+                if cur_item and cur_item.text(1).strip() == oid:
+                    cur_item.setText(2, f"{genus} {species}".strip() or "(unnamed)")
+
+    def _on_location_field_edited(self, field_name: str, value: str) -> None:
+        """Handle inline editing of a location field in location_panel."""
+        oid = self.app.current_object_id
+        if not oid or self.app.df_obs is None or oid not in self.app.df_obs.index:
+            return
+
+        current_val = ""
+        if field_name in self.app.df_obs.columns:
+            raw = self.app.df_obs.loc[oid, field_name]
+            current_val = "" if pd.isna(raw) else str(raw)
+
+        if str(value) == current_val:
+            return
+
+        self.push_undo_state(oid)
+
+        with self.app.df_lock:
+            if field_name == "Loaned out":
+                value_parsed = str(value).lower() in ("true", "1", "yes")
+                self.app.df_obs.at[oid, field_name] = value_parsed
+            else:
+                self.app.df_obs.at[oid, field_name] = value
+
+        self.app.dirty = True
+        self.update_save_status()
+        self.log_action("EDIT_LOCATION", [field_name], [f'{field_name}: "{current_val}" -> "{value}"'], oid=oid)
+
+    def toggle_reviewed(self) -> None:
+        """Toggle reviewed status for active specimen."""
+        oid = self.app.current_object_id
+        if not oid or self.app.df_obs is None or oid not in self.app.df_obs.index:
+            return
+
+        self.push_undo_state(oid)
+
+        current = False
+        if REVIEWED_COLUMN in self.app.df_obs.columns:
+            raw = self.app.df_obs.loc[oid, REVIEWED_COLUMN]
+            current = bool(raw.iloc[0] if isinstance(raw, pd.Series) else raw)
+
+        new_val = not current
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if new_val else ""
+
+        with self.app.df_lock:
+            if REVIEWED_COLUMN not in self.app.df_obs.columns:
+                self.app.df_obs[REVIEWED_COLUMN] = False
+            self.app.df_obs.at[oid, REVIEWED_COLUMN] = new_val
+            if "ReviewedAt" in self.app.df_obs.columns or new_val:
+                self.app.df_obs.at[oid, "ReviewedAt"] = now_str
+
+        self.app.dirty = True
+        self.update_save_status()
+        self.log_action("REVIEWED" if new_val else "UNREVIEWED", ["Reviewed"], [f'Reviewed: "{new_val}"'], oid=oid)
+
+        # Update Reviewed Time label and button text
+        if hasattr(self.win, "lbl_reviewed_time"):
+            self.win.lbl_reviewed_time.setText(f"Reviewed: {now_str}" if new_val else "")
+
+        if hasattr(self.win, "btn_mark_reviewed"):
+            self.win.btn_mark_reviewed.setText("✓ MARKED AS REVIEWED" if new_val else "✓ MARK AS REVIEWED (Ctrl+Enter)")
+
+        # Update Tree item checkmark
+        if hasattr(self.win, "tree_objects"):
+            cur_item = self.win.tree_objects.currentItem()
+            if cur_item and cur_item.text(1).strip() == oid:
+                cur_item.setText(0, "✓" if new_val else " ")
+                cur_item.setForeground(0, Qt.darkGreen if new_val else Qt.black)
+
+        # Update Middle Status Badge
+        active_problems = []
+        if hasattr(self, "problems_panel") and self.problems_panel:
+            active_problems = self.problems_panel.get_active_problems()
+
+        if hasattr(self.win, "lbl_status_badge"):
+            if new_val:
+                self.win.lbl_status_badge.setText("REVIEWED")
+                self.win.lbl_status_badge.setProperty("state", "reviewed")
+            elif active_problems:
+                self.win.lbl_status_badge.setText(f"{len(active_problems)} PROBLEM{'S' if len(active_problems) > 1 else ''}")
+                self.win.lbl_status_badge.setProperty("state", "problem")
+            else:
+                self.win.lbl_status_badge.setText("PENDING")
+                self.win.lbl_status_badge.setProperty("state", "pending")
+            repolish(self.win.lbl_status_badge)
+
+        self.update_status_bar()
+
+        # Workflow options when toggled ON to Reviewed:
+        if new_val:
+            # 1. Clear problems if checked
+            if hasattr(self.win, "chk_clear_problems") and self.win.chk_clear_problems.isChecked():
+                self.clear_current_problems()
+
+            # 2. Auto-next if checked
+            if hasattr(self.win, "chk_auto_next") and self.win.chk_auto_next.isChecked():
+                self.navigate_next()
+            # 3. Auto-hist if checked
+            elif hasattr(self.win, "chk_auto_hist") and self.win.chk_auto_hist.isChecked():
+                self.open_historical_resolver(oid)
+
+    def clear_current_problems(self) -> None:
+        """Clear all active problem flags for the current specimen."""
+        oid = self.app.current_object_id
+        if not oid or self.app.df_obs is None or oid not in self.app.df_obs.index:
+            return
+
+        prob_cols = [
+            c for c in self.app.df_obs.columns
+            if (c.endswith("_Problem") or c in ("Other_problem", "Images_Problem"))
+            and c != "Images_Missing"
+        ]
+
+        with self.app.df_lock:
+            for c in prob_cols:
+                self.app.df_obs.at[oid, c] = False
+
+        if hasattr(self, "problems_panel") and self.problems_panel:
+            self.problems_panel.populate_specimen(oid, self.app.df_obs)
+
+        if hasattr(self, "registry_panel") and self.registry_panel:
+            self.registry_panel.populate_specimen(oid, self.app.df_reg, self.app.df_obs)
+
+        if hasattr(self.win, "tabs_registration"):
+            self.win.tabs_registration.setTabText(1, "Problems")
+
+        self.update_status_bar()
+
+    def _on_close_event(self, event) -> None:
+        """Prompt to save unsaved modifications on window exit."""
+        if not getattr(self.app, "dirty", False):
+            event.accept()
+            return
+
+        reply = QMessageBox.question(
+            self.win,
+            "Unsaved Changes",
+            "There are unsaved changes in the database.\nDo you want to save before closing?",
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+            QMessageBox.Save,
+        )
+
+        if reply == QMessageBox.Save:
+            self.save_session()
+            event.accept()
+        elif reply == QMessageBox.Discard:
+            event.accept()
+        else:
+            event.ignore()
 
     # -------------------------------------------------------------------------
     # Filtering & Tree Population

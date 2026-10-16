@@ -376,21 +376,22 @@ AI agents must execute migrations following this complexity-ordered roadmap, unl
   - Update status bar total/reviewed/problem counters and active position index (`ID: 1001 (1 of 25)`).
   - *Milestone 3 Verification*: Verified with `scratch/test_milestone3_problems_tab.py` (5 of 5 tests passing). All 67 Qt test suite cases passing.
 
-#### Milestone 4: Workstation Actions, Review Bar, State Mutations & Dialog Integration
-- [ ] **4.1 Inline State Mutation, Dirty Tracking & Undo**:
+#### Milestone 4: Workstation Actions, Review Bar, State Mutations & Dialog Integration (Completed)
+- [x] **4.1 Inline State Mutation, Dirty Tracking & Undo**:
   - Wire field edits (`textEdited` / `currentTextChanged`) to update in-memory `df_reg`, trigger `app.dirty = True`, record undo snapshots to `app.undo_stacks[oid]`, append edit entries to `df_log`, and update the status bar save indicator.
-- [ ] **4.2 Review Action Bar & Workflow Toggles**:
+- [x] **4.2 Review Action Bar & Workflow Toggles**:
   - Wire `btn_mark_reviewed`: toggle `Reviewed` in `df_obs`, timestamp `ReviewedAt`, update `lbl_reviewed_time`, update tree mark (`✓`), and refresh status bar metrics.
   - Wire `chk_clear_problems`: clear active problem flags when reviewed is checked.
   - Wire `chk_auto_next`: automatically advance to the next specimen upon marking reviewed.
   - Wire `chk_auto_hist`: auto-inspect historical books if archival data is present.
-- [ ] **4.3 Dialog Integration & Navigation Controls**:
+- [x] **4.3 Dialog Integration & Navigation Controls**:
   - Wire `btn_gbif` (open single-specimen `QtGbifUpdateDialog`).
   - Wire `btn_check_books` (open `QtHistoricalResolverDialog`).
   - Wire `btn_peek` (open `QtQuickPeekDialog`).
   - Wire `combo_sort` (Sort by ID, Genus/Species, Reviewed Status).
   - Wire navigation buttons (`btn_prev`, `btn_next`, `btn_last`, `btn_next_problem`, `btn_next_hist`).
-- [ ] **4.4 Unsaved Changes Exit Guard**: Implement `closeEvent` on `QtMainWindow` to prompt user to save, discard, or cancel when closing with unsaved changes (`app.dirty == True`).
+- [x] **4.4 Unsaved Changes Exit Guard**: Implement `closeEvent` on `QtMainWindow` to prompt user to save, discard, or cancel when closing with unsaved changes (`app.dirty == True`).
+  - *Milestone 4 Verification*: Verified with `scratch/test_milestone4_workstation_actions.py` (6 of 6 tests passing). Full Qt regression suite passing (67 of 67 tests).
 
 ---
 
