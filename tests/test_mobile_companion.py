@@ -1512,8 +1512,8 @@ def test_accession_id_natural_sort_and_defaults(mock_app_state):
     assert "activeSortBy: 'id_asc'" in html
     assert '<option value="">--</option>' in html
     assert 'id="detailFloorVal">—</span>' in html
-    assert 'id="detailCabVal">—</span>' in html
-    assert 'id="detailShelfVal">—</span>' in html
+    assert 'id="detailCabVal"' in html and 'placeholder="—"' in html and 'inputmode="numeric"' in html
+    assert 'id="detailShelfVal"' in html and 'placeholder="—"' in html and 'inputmode="numeric"' in html
     assert 'id="liveLocBreadcrumb">Unrecorded location</span>' in html
 
 
@@ -1560,8 +1560,159 @@ def test_v2_template_javascript_syntax_integrity(mock_app_state):
     assert res.status_code == 200
     html = res.get_data(as_text=True)
 
-    # Ensure no stray closing brace in IIFE template interpolation
+    # 1. Ensure no stray closing brace in IIFE template interpolation
     assert "}).join('')}\n                      })()}" not in html
     assert "}).join('')\n                      })()}" in html
     assert "function onPhotoError()" in html
+
+    # 2. Ensure no raw unescaped newlines in JS single/double-quoted string literals
+    assert "strVal.includes('\n')" not in html
+    assert "strVal.indexOf('\\n') !== -1" in html
+
+    # 3. Ensure resilient app initialization
+    assert "document.readyState === 'loading'" in html
+
+    # 4. Ensure service worker excludes /v2 from stale cache
+    sw_res = client.get('/service-worker.js')
+    assert sw_res.status_code == 200
+    assert "url.pathname === '/v2'" in sw_res.get_data(as_text=True)
+
+
+def test_copy_previous_and_consecutive_edits_without_conflict(mock_app_state):
+    """Test that copying location from previous specimen and subsequent location or problem edits succeed without 409 conflicts."""
+    from datetime import datetime, timezone
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    token = auth_res.json["token"]
+    headers = {"X-Session-Token": token}
+
+    # Step 1: User on specimen 1025 clicks 'Copy from previous'
+    copy_payload = {
+        "id": "1025",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "observation": {
+            "Building": "Økern",
+            "Cabinet": "C-12",
+            "Shelf": "Shelf 3",
+            "Room": "Room 304"
+        }
+    }
+    res1 = client.post('/api/update', json=copy_payload, headers=headers)
+    assert res1.status_code == 200
+    assert mock_app_state.df_obs.at["1025", "Cabinet"] == "C-12"
+
+    # Step 2: User immediately adjusts Cabinet via stepper or changes coordinate
+    step_payload = {
+        "id": "1025",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "observation": {
+            "Cabinet": "C-14"
+        }
+    }
+    res2 = client.post('/api/update', json=step_payload, headers=headers)
+    assert res2.status_code == 200, f"Subsequent coordinate edit must not trigger 409 conflict: {res2.get_json()}"
+    assert mock_app_state.df_obs.at["1025", "Cabinet"] == "C-14"
+
+    # Step 3: User resolves or edits in the Problems tab (manual data write / flag clear)
+    prob_payload = {
+        "id": "1025",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "observation": {
+            "MissingLabel": False,
+            "Notes": "Manual override resolved"
+        }
+    }
+    res3 = client.post('/api/update', json=prob_payload, headers=headers)
+    assert res3.status_code == 200, f"Subsequent problem edit must not trigger 409 conflict: {res3.get_json()}"
+    assert mock_app_state.df_obs.at["1025", "MissingLabel"] == False
+    assert mock_app_state.df_obs.at["1025", "Notes"] == "Manual override resolved"
+
+
+def test_v2_direct_numeric_keypad_and_blank_batch_defaults(mock_app_state):
+    """Test that cabinet and shelf use direct numeric inputs with mobile number pad attributes and batch registrator defaults to blank."""
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    token = auth_res.json["token"]
+    cookie_header = {"Cookie": f"session_token={token}"}
+
+    v2_res = client.get('/v2', headers=cookie_header)
+    assert v2_res.status_code == 200
+    html = v2_res.get_data(as_text=True)
+
+    # 1. Location Tab: Cabinet and Shelf direct numeric inputs with mobile numbpad
+    assert 'inputmode="numeric"' in html
+    assert 'pattern="[0-9]*"' in html
+    assert 'id="detailCabVal"' in html
+    assert 'id="detailShelfVal"' in html
+    assert 'handleDirectCoordinateInput' in html
+
+    # 2. Batch Location Registrator: Cabinet and Shelf direct numeric inputs
+    assert 'id="batchCabVal"' in html
+    assert 'id="batchShelfVal"' in html
+    assert 'handleDirectBatchCoordInput' in html
+
+    # 3. Batch Location Registrator defaults start blank
+    assert 'batchAnchor: {\n        building: \'\',\n        floor: \'\',\n        cabinet: \'\',\n        shelf: \'\',\n        storedAs: \'\'\n      }' in html
+    assert 'id="batchFloorVal">—</span>' in html
+    assert 'id="batchBuildingSelect"' in html
+    assert '<select id="batchBuildingSelect"' in html
+    assert '<option value="">--</option>' in html
+
+
+def test_v2_details_tab_collection_place_box_label_and_comment(mock_app_state):
+    """Test that Details tab includes Collection place and Box label (replacing Locality, County, Country), and has Comment editor."""
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    token = auth_res.json["token"]
+    cookie_header = {"Cookie": f"session_token={token}"}
+
+    v2_res = client.get('/v2', headers=cookie_header)
+    assert v2_res.status_code == 200
+    html = v2_res.get_data(as_text=True)
+
+    # 1. Botanical Registration field replacements: Collection place and Box label present, Locality/County/Country removed from fields list
+    assert "'Collection place', 'Box label'" in html
+    assert "'Locality', 'County', 'Country'" not in html
+
+    # 2. Box label multiline support
+    assert "isBoxLabel && strVal" in html
+    assert "(Full label)" in html
+
+    # 3. Comment box and modal
+    assert 'id="commentEditorModal"' in html
+    assert 'id="commentEditTextarea"' in html
+    assert 'openCommentEditor' in html
+    assert 'saveCommentFromEditor' in html
+    assert 'closeCommentEditor' in html
+
+
+def test_v2_availability_status_in_collection_default(mock_app_state):
+    """Test that Availability Status displays 'In Collection' instead of 'In Repository', and defaults to 'In Collection'."""
+    server = MobileServer(mock_app_state, port=5099)
+    client = server.flask_app.test_client()
+    auth_res = client.post('/api/auth', json={"pin": server.pin})
+    token = auth_res.json["token"]
+    cookie_header = {"Cookie": f"session_token={token}"}
+
+    v2_res = client.get('/v2', headers=cookie_header)
+    assert v2_res.status_code == 200
+    html = v2_res.get_data(as_text=True)
+
+    # 1. 'In Repository' should be completely replaced by 'In Collection'
+    assert "In Repository" not in html
+    assert "In Collection" in html
+    assert 'id="loanStateTag">In Collection</span>' in html
+    assert '<span>In Collection</span>' in html
+    assert "tag.textContent = 'In Collection';" in html
+
+    # 2. isLoanedBool evaluates strictly truthy strings, so unset/False defaults to In Collection
+    assert "isLoanedBool" in html
+    assert "tag.textContent = 'Loaned Out';" in html
+
+
+
+
 

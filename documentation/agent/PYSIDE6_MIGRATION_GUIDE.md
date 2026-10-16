@@ -328,19 +328,58 @@ AI agents must execute migrations following this complexity-ordered roadmap, unl
 - [x] **Side-by-Side Live Data Parity Audit**: Conducted exhaustive runtime audit comparing Tkinter and PySide6 across 23 features, layout geometry, data binding, and interactions.
 - [x] **Audit Deliverable**: Published comprehensive audit report at [`documentation/agent/PYSIDE6_PARITY_AUDIT_REPORT.md`](file:///c:/Users/ijbrekke/Documents/arbor/documentation/agent/PYSIDE6_PARITY_AUDIT_REPORT.md) (Overall Parity: **78.5%**; Secondary Dialogs: **94.0%**; Main Workspace: **58.0%**).
 
-### Phase 6.5: Parity Gap Remediation (Current Focus)
-* **Goal**: Close the 5 architectural gaps identified during live data verification before production cutover.
-- [ ] **P0-1: String `ObjectID` Indexing in `QtMainWindow.open_excel()`**: Normalize and set `ObjectID` as index on `df_reg` and `df_obs` so tree and queue display actual IDs (`1001`, `1002`...) instead of integer offsets (`0`, `1`...).
-- [ ] **P0-2: Dynamic Metadata Form Builder (`QtRegistryPanel`)**: Dynamically instantiate grouped card containers (`Taxonomy`, `Collection`, `Object`, `Notes`, `Admin`) with monospace data fields in `tabs_registration`, bind field changes to `app.dirty`, undo stacks, and active specimen header badges.
-- [ ] **P0-3: Problem Queue Scope Correction**: Remove `Images_Missing` from `_detect_problem_queue()` in `ui_qt/problem_queue.py` so only genuine scientific/curatorial flags populate the queue.
-- [ ] **P1-1: Image Canvas Viewer Connection**: Connect `image_view` (`QGraphicsView`) to photo cache/URL loader and wire zoom in, zoom out, rotate, and fit view toolbar buttons.
-- [ ] **P1-2: Review Actions & Missing Shortcuts**: Wire `btn_mark_reviewed` (toggle boolean, timestamp, tree mark `✓`) and wire accelerators `Ctrl+Z` (undo), `Ctrl+Y` (redo), `Ctrl+B` (bulk edit), `Ctrl+D` (mark reviewed).
-- [ ] **P2-1: Unsaved Changes Close Guard**: Implement `closeEvent` on `QtMainWindow.win` prompting the user before discarding unsaved edits.
-- [ ] **P2-2: Design System Token Adherence**: Enforce strict typography (`JetBrains Mono` / `Courier New`) and 1px border contrast (`#c4c7c7`) across main workspace cards.
+### Phase 6.5: Main Desktop Workstation Migration (Active Focus)
+* **Goal**: Recreate all Tkinter main desktop workspace functionality in PySide6 as closely as possible.
+* **Scope Exclusions (Per Direct User Instruction)**:
+  - ⛔ **Mobile Companion UI**: Strictly excluded (lives in HTML / `mobile_server.py`).
+  - ⛔ **Card Container Widgets**: Deferred (custom collapsible card container wrappers/toggles are bypassed; raw form fields will be rendered cleanly into the tab layouts ahead of subsequent UI redesigns).
+
+#### Milestone 1: Data Pipeline, Indexing & Left Column
+- [ ] **1.1 Fix DataFrame Indexing in `QtMainWindow.open_excel()`**: Enforce string `ObjectID` indexing on `df_reg` and `df_obs` (via `_normalize_object_id_series` and `set_index("ObjectID")`), fixing the tree to display actual IDs (`1001`, `1002`...) instead of integer row offsets (`0`, `1`...).
+- [ ] **1.2 Fix Problem Queue Detection Scope**: In `ui_qt/problem_queue.py`, remove `Images_Missing` from `_detect_problem_queue()` so only actual scientific and curatorial problem flags populate the queue.
+- [ ] **1.3 Object List Sorting & Quick Peek**: Wire `combo_sort` in `QtMainWindow` (Sort by ID, Genus/Species, Reviewed Status) and connect `btn_peek` directly to `QtQuickPeekDialog`.
+- [ ] **1.4 Location Panel Form in Left Column**: Dynamically generate or bind location fields (`Stored as`, `Building`, `Floor`, `Cabinet`, `Shelf`, `Extra`, `Loaned out`) into `location_container`, updating with the selected record and committing edits.
+
+#### Milestone 2: Middle Column (Specimen Context Bar & Image Viewer)
+- [ ] **2.1 Active Specimen Context Bar Updates**: When selection changes in `tree_objects`:
+  - Update `lbl_id_badge` with formatted ID (e.g. `ID: 1001`).
+  - Update `lbl_specimen_name` with scientific name (e.g. `Pinus sylvestris (L.)`).
+  - Update `lbl_status_badge` with problem count or reviewed badge.
+  - Wire `btn_gbif` to open `QtGbifUpdateDialog` for active specimen.
+  - Wire `btn_check_books` to open `QtHistoricalResolverDialog` for active specimen.
+- [ ] **2.2 Image Viewer Canvas & Loading Pipeline**:
+  - Implement photo resolution in `image_view` (`QGraphicsView` / `QGraphicsScene`): load online URL from `Photo`/`df_reg` or local image directory; display a clear `"No image available"` placeholder when none exist.
+  - Update `lbl_images_count` (e.g. `1 / 2`) and `lbl_images_missing`.
+  - Wire image toolbar buttons: `btn_zoom_in`, `btn_zoom_out`, `btn_rotate_ccw`, `btn_rotate_cw`, `btn_reset_view`, `btn_fit_view`, and update `lbl_zoom_status`.
+
+#### Milestone 3: Right Column ("Registration Data" & Review Controls)
+- [ ] **3.1 Dynamic Registration Field Generation & Population**:
+  - In `tab_general`, dynamically construct input controls (QLineEdit for text, QComboBox for choice, QTextEdit for multiline) based on `config["ui_sections"]["registration"]`.
+  - On specimen selection, populate all fields with active values from `df_reg`.
+  - Implement problem highlight tints (amber/yellow background `#fef9e7` on fields whose corresponding `_Problem` flag is True).
+- [ ] **3.2 Problems Tab Checklist**:
+  - In `tab_problems`, dynamically render checkboxes for all `config["ui_sections"]["problems"]`.
+  - Populate states from `df_obs` on specimen change; toggling updates `df_obs`, sets `app.dirty`, and refreshes field highlight tints.
+- [ ] **3.3 Inline State Mutation, Dirty Tracking & Undo**:
+  - Wire field edits (`textChanged`) to update in-memory `df_reg`, trigger `app.dirty = True`, record undo snapshot to `app.undo_stacks[oid]`, append edit entries to `df_log`, and update the status bar save indicator.
+- [ ] **3.4 Review Action Bar & Workflow Toggles**:
+  - Wire `btn_mark_reviewed`: toggle `Reviewed` in `df_obs`, timestamp `ReviewedAt`, update `lbl_reviewed_time`, update tree mark (`✓`), and refresh status bar metrics.
+  - Wire `chk_clear_problems`: clear active problem flags when reviewed is checked.
+  - Wire `chk_auto_next`: automatically advance to the next specimen upon marking reviewed.
+  - Wire `chk_auto_hist`: auto-inspect historical books if archival data is present.
+
+#### Milestone 4: Keyboard Shortcuts, Navigation & Lifecycle Guards
+- [ ] **4.1 Navigation Controls**: Wire `btn_prev`, `btn_next`, `btn_last`, arrow key navigation, `btn_next_problem` (jump to next flagged record), and `btn_next_hist` (jump to next record with historical books data).
+- [ ] **4.2 Complete Keyboard Accelerator Parity**:
+  - `Ctrl+Z` (Undo last edit) & `Ctrl+Y` / `Ctrl+Shift+Z` (Redo).
+  - `Ctrl+B` (Bulk Edit).
+  - `Ctrl+D` or `Ctrl+Return` (Mark as Reviewed).
+  - `Ctrl+S` (Save session), `Ctrl+O` (Open database), `Ctrl+F` (Filter objects), `Ctrl+E` (Problem Queue), `Ctrl+G` (GBIF Check).
+- [ ] **4.3 Unsaved Changes Exit Guard**: Implement `closeEvent` on `QtMainWindow` to prompt user to save, discard, or cancel when closing with `app.dirty == True`.
 
 ### Phase 7: Production Cutover
-- [ ] Re-run live parity test harness (`scratch/execute_parity_audit.py`) to verify 100% parity across all dimensions.
-- [ ] Update `main.py` default entrypoint to launch PySide6 (`QtMainWindow`) while preserving `--ui tk` fallback flag.
+- [ ] Execute `scratch/execute_parity_audit.py` to confirm 100% parity across all dimensions.
+- [ ] Update `main.py` default launcher to PySide6 while preserving `--ui tk` fallback.
 - [ ] User approval and production sign-off.
 
 ---

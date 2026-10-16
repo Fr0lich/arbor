@@ -13,7 +13,7 @@ import socket
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for, send_file, Response, make_response
 import queue
 from werkzeug.utils import secure_filename
@@ -496,18 +496,8 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
             if last_edit_time:
                 is_stale = False
                 try:
-                    c_dt = pd.to_datetime(client_timestamp)
-                    if c_dt.tzinfo is None or c_dt.tz is None:
-                        c_dt = c_dt.tz_localize("local").tz_convert("UTC")
-                    else:
-                        c_dt = c_dt.tz_convert("UTC")
-
-                    h_dt = pd.to_datetime(last_edit_time)
-                    if h_dt.tzinfo is None or h_dt.tz is None:
-                        h_dt = h_dt.tz_localize("local").tz_convert("UTC")
-                    else:
-                        h_dt = h_dt.tz_convert("UTC")
-
+                    c_dt = pd.to_datetime(client_timestamp, utc=True)
+                    h_dt = pd.to_datetime(last_edit_time, utc=True)
                     is_stale = (c_dt < h_dt)
                 except Exception:
                     is_stale = (str(client_timestamp) < str(last_edit_time))
@@ -519,11 +509,7 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
                         snap_time = snap.get("timestamp")
                         if snap_time:
                             try:
-                                s_dt = pd.to_datetime(snap_time)
-                                if s_dt.tzinfo is None or s_dt.tz is None:
-                                    s_dt = s_dt.tz_localize("local").tz_convert("UTC")
-                                else:
-                                    s_dt = s_dt.tz_convert("UTC")
+                                s_dt = pd.to_datetime(snap_time, utc=True)
                                 if s_dt > c_dt:
                                     base_snapshot = snap
                                     break
@@ -588,61 +574,44 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
 
                     if conflict_reg or conflict_obs:
                         return None, f"Conflict: Host has newer changes for {oid}"
-                # Discard no-op edits that match current server state before declaring conflict
-                filtered_reg = {}
-                for k, v in effective_reg_updates.items():
-                    if k in curr_reg:
-                        val_cur = curr_reg[k]
-                        dtype = app_state.df_reg[k].dtype if k in app_state.df_reg.columns else object
-                        coerced = coerce_type(v, dtype)
-                        if pd.isna(val_cur) and (pd.isna(coerced) or coerced == ""):
-                            continue
-                        if str(val_cur).strip() != str(coerced).strip():
-                            filtered_reg[k] = v
-                    else:
-                        filtered_reg[k] = v
-                effective_reg_updates = filtered_reg
 
-                filtered_obs = {}
-                for k, v in effective_obs_updates.items():
-                    if curr_obs and k in curr_obs:
-                        val_cur = curr_obs[k]
-                        dtype = app_state.df_obs[k].dtype if app_state.df_obs is not None and k in app_state.df_obs.columns else object
-                        coerced = coerce_type(v, dtype)
-                        if pd.isna(val_cur) and (pd.isna(coerced) or coerced == ""):
-                            continue
-                        if str(val_cur).strip() != str(coerced).strip():
-                            filtered_obs[k] = v
-                    else:
-                        filtered_obs[k] = v
-                effective_obs_updates = filtered_obs
+    # Discard no-op edits that match current server state before writing
+    filtered_reg = {}
+    for k, v in effective_reg_updates.items():
+        if k in curr_reg:
+            val_cur = curr_reg[k]
+            dtype = app_state.df_reg[k].dtype if k in app_state.df_reg.columns else object
+            coerced = coerce_type(v, dtype)
+            if pd.isna(val_cur) and (pd.isna(coerced) or coerced == ""):
+                continue
+            if str(val_cur).strip() != str(coerced).strip():
+                filtered_reg[k] = v
+        else:
+            filtered_reg[k] = v
+    effective_reg_updates = filtered_reg
 
-                if effective_reviewed is not None and curr_obs:
-                    cur_rev = curr_obs.get("Reviewed", False)
-                    cur_rev_bool = str(cur_rev).strip().lower() in ("true", "1", "yes", "t") if isinstance(cur_rev, (str, int, bool)) else bool(cur_rev)
-                    if bool(effective_reviewed) == cur_rev_bool:
-                        effective_reviewed = None
+    filtered_obs = {}
+    for k, v in effective_obs_updates.items():
+        if curr_obs and k in curr_obs:
+            val_cur = curr_obs[k]
+            dtype = app_state.df_obs[k].dtype if app_state.df_obs is not None and k in app_state.df_obs.columns else object
+            coerced = coerce_type(v, dtype)
+            if pd.isna(val_cur) and (pd.isna(coerced) or coerced == ""):
+                continue
+            if str(val_cur).strip() != str(coerced).strip():
+                filtered_obs[k] = v
+        else:
+            filtered_obs[k] = v
+    effective_obs_updates = filtered_obs
 
-                if not effective_reg_updates and not effective_obs_updates and effective_reviewed is None and unvalidated_updates is None:
-                    return f"#{oid} (unchanged)", None
+    if effective_reviewed is not None and curr_obs:
+        cur_rev = curr_obs.get("Reviewed", False)
+        cur_rev_bool = str(cur_rev).strip().lower() in ("true", "1", "yes", "t") if isinstance(cur_rev, (str, int, bool)) else bool(cur_rev)
+        if bool(effective_reviewed) == cur_rev_bool:
+            effective_reviewed = None
 
-                if effective_reg_updates or effective_obs_updates or effective_reviewed is not None:
-                    # Check if client was attempting a meaningful mutation on fields modified by host
-                    latest_snapshot = stacks[-1]
-                    conflict = False
-                    for f in list(effective_reg_updates.keys()):
-                        if f in latest_snapshot.get("reg", {}) and latest_snapshot["reg"][f] != curr_reg.get(f):
-                            conflict = True
-                            break
-                    for f in list(effective_obs_updates.keys()):
-                        if f in latest_snapshot.get("obs", {}) and latest_snapshot["obs"][f] != curr_obs.get(f):
-                            conflict = True
-                            break
-                    if effective_reviewed is not None and "Reviewed" in latest_snapshot.get("obs", {}) and latest_snapshot["obs"]["Reviewed"] != curr_obs.get("Reviewed"):
-                        conflict = True
-
-                    if conflict:
-                        return None, f"Conflict: Host has newer changes for {oid}"
+    if not effective_reg_updates and not effective_obs_updates and effective_reviewed is None and unvalidated_updates is None:
+        return f"#{oid} (unchanged)", None
 
     # 1. Snapshot for Undo Stack
     old_reg = _get_row_dict_safe(app_state.df_reg, resolved_reg_oid)
@@ -654,7 +623,7 @@ def _execute_record_update(app_state, oid, reg_updates, obs_updates, reviewed, a
         "oid": str(oid),
         "reg": old_reg.copy(),
         "obs": old_obs.copy(),
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": "mobile",
         "_session_id": worker_sid
     }
@@ -1372,7 +1341,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
-    if (url.pathname === '/' || url.pathname.startsWith('/api/') || event.request.method !== 'GET') {
+    if (url.pathname === '/' || url.pathname === '/v2' || url.pathname.startsWith('/api/') || event.request.method !== 'GET') {
         return;
     }
     // Stale-While-Revalidate strategy for static assets
@@ -7689,7 +7658,14 @@ INDEX_TEMPLATE_V2 = """
                   <span class="font-mono text-[10px] uppercase font-bold text-muted">Cabinet</span>
                   <div class="flex items-center gap-1.5">
                     <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustCoordinate('cab', -1)">−</button>
-                    <span class="font-mono text-sm font-bold text-ink px-1 min-w-[24px] text-center" id="detailCabVal">—</span>
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="detailCabVal"
+                      class="font-mono text-sm font-bold text-ink w-9 text-center bg-transparent border-b border-bordercol/30 focus:border-fern focus:bg-stone-50 rounded-xs outline-none transition-colors"
+                      placeholder="—"
+                      onclick="this.select()"
+                      onfocus="this.select()"
+                      onkeydown="if(event.key==='Enter') this.blur();"
+                      onchange="handleDirectCoordinateInput('cab', this.value)"
+                      onblur="handleDirectCoordinateBlur('cab', this)" />
                     <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustCoordinate('cab', 1)">+</button>
                   </div>
                 </div>
@@ -7698,7 +7674,14 @@ INDEX_TEMPLATE_V2 = """
                   <span class="font-mono text-[10px] uppercase font-bold text-fern-dark">Shelf</span>
                   <div class="flex items-center gap-1.5">
                     <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustCoordinate('shelf', -1)">−</button>
-                    <span class="font-mono text-sm font-bold text-fern-dark px-1 min-w-[24px] text-center" id="detailShelfVal">—</span>
+                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="detailShelfVal"
+                      class="font-mono text-sm font-bold text-fern-dark w-9 text-center bg-transparent border-b border-fern/40 focus:border-fern focus:bg-emerald-50/50 rounded-xs outline-none transition-colors"
+                      placeholder="—"
+                      onclick="this.select()"
+                      onfocus="this.select()"
+                      onkeydown="if(event.key==='Enter') this.blur();"
+                      onchange="handleDirectCoordinateInput('shelf', this.value)"
+                      onblur="handleDirectCoordinateBlur('shelf', this)" />
                     <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustCoordinate('shelf', 1)">+</button>
                   </div>
                 </div>
@@ -7735,12 +7718,12 @@ INDEX_TEMPLATE_V2 = """
                   <span class="w-2 h-2 rounded-full bg-fern" id="loanStatusDot"></span>
                   <h2 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Availability Status</h2>
                 </div>
-                <span class="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-fern-light text-fern border border-fern/30" id="loanStateTag">In Repository</span>
+                <span class="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-fern-light text-fern border border-fern/30" id="loanStateTag">In Collection</span>
               </div>
               <div class="grid grid-cols-2 p-1 bg-stone-100 border border-stone-200 rounded gap-1">
                 <button class="py-1.5 px-2 rounded text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-ink border border-stone-300 min-h-[36px]" id="btnStatusAvailable" onclick="setLoanStatus(false)" type="button">
                   <svg class="w-3.5 h-3.5 text-fern stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  <span>In Repository</span>
+                  <span>In Collection</span>
                 </button>
                 <button class="py-1.5 px-2 rounded text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]" id="btnStatusLoan" onclick="setLoanStatus(true)" type="button">
                   <svg class="w-3.5 h-3.5 text-amber-600 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
@@ -7852,8 +7835,7 @@ INDEX_TEMPLATE_V2 = """
             <div class="bg-white rounded p-1.5 border border-bordercol flex items-center justify-between">
               <span class="font-mono text-[9px] uppercase font-bold text-muted">Bldg</span>
               <select id="batchBuildingSelect" onchange="handleBatchBuildingChange(this.value)" class="bg-transparent font-mono text-xs font-bold text-ink outline-none text-right">
-                <option value="Økern">Økern</option>
-                <option value="Lid's hus">Lid's hus</option>
+                <option value="">--</option>
               </select>
             </div>
             <!-- Floor (Continuous signed integer) -->
@@ -7861,7 +7843,7 @@ INDEX_TEMPLATE_V2 = """
               <span class="font-mono text-[9px] uppercase font-bold text-muted">Floor</span>
               <div class="flex items-center gap-1">
                 <button type="button" class="w-5 h-5 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-xs" onclick="adjustBatchCoord('floor', -1)">−</button>
-                <span class="font-mono text-xs font-bold text-ink px-1 min-w-[20px] text-center" id="batchFloorVal">-1</span>
+                <span class="font-mono text-xs font-bold text-ink px-1 min-w-[20px] text-center" id="batchFloorVal">—</span>
                 <button type="button" class="w-5 h-5 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-xs" onclick="adjustBatchCoord('floor', 1)">+</button>
               </div>
             </div>
@@ -7870,7 +7852,14 @@ INDEX_TEMPLATE_V2 = """
               <span class="font-mono text-[10px] uppercase font-bold text-muted">Cabinet</span>
               <div class="flex items-center gap-1.5">
                 <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustBatchCoord('cab', -1)">−</button>
-                <span class="font-mono text-sm font-bold text-ink px-1 min-w-[24px] text-center" id="batchCabVal">04</span>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" id="batchCabVal"
+                  class="font-mono text-sm font-bold text-ink w-9 text-center bg-transparent border-b border-bordercol/30 focus:border-fern focus:bg-stone-50 rounded-xs outline-none transition-colors"
+                  placeholder="—"
+                  onclick="this.select()"
+                  onfocus="this.select()"
+                  onkeydown="if(event.key==='Enter') this.blur();"
+                  onchange="handleDirectBatchCoordInput('cab', this.value)"
+                  onblur="handleDirectBatchCoordBlur('cab', this)" />
                 <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustBatchCoord('cab', 1)">+</button>
               </div>
             </div>
@@ -7879,7 +7868,14 @@ INDEX_TEMPLATE_V2 = """
               <span class="font-mono text-[10px] uppercase font-bold text-fern-dark">Shelf</span>
               <div class="flex items-center gap-1.5">
                 <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustBatchCoord('shelf', -1)">−</button>
-                <span class="font-mono text-sm font-bold text-fern-dark px-1 min-w-[24px] text-center" id="batchShelfVal">02</span>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" id="batchShelfVal"
+                  class="font-mono text-sm font-bold text-fern-dark w-9 text-center bg-transparent border-b border-fern/40 focus:border-fern focus:bg-emerald-50/50 rounded-xs outline-none transition-colors"
+                  placeholder="—"
+                  onclick="this.select()"
+                  onfocus="this.select()"
+                  onkeydown="if(event.key==='Enter') this.blur();"
+                  onchange="handleDirectBatchCoordInput('shelf', this.value)"
+                  onblur="handleDirectBatchCoordBlur('shelf', this)" />
                 <button type="button" class="w-6 h-6 rounded bg-stone-100 flex items-center justify-center font-mono font-bold text-sm" onclick="adjustBatchCoord('shelf', 1)">+</button>
               </div>
             </div>
@@ -8090,6 +8086,29 @@ INDEX_TEMPLATE_V2 = """
       </div>
     </div>
 
+    <!-- MODAL: Edit Comment -->
+    <div id="commentEditorModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div class="bg-surface border border-bordercol rounded w-full max-w-sm shadow-xl overflow-hidden">
+        <header class="p-3.5 bg-tonal1 border-b border-tonal2 flex items-center justify-between">
+          <div class="flex items-center gap-2 text-fern-dark">
+            <svg class="w-4 h-4 text-fern" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>
+            <h2 class="font-serif font-bold text-sm text-ink" id="commentModalTitle">Edit Comment</h2>
+          </div>
+          <button type="button" onclick="closeCommentEditor()" class="text-ink-muted hover:text-ink font-bold text-sm">✕</button>
+        </header>
+        <div class="p-4 space-y-3">
+          <div>
+            <label class="block font-sans text-xs font-medium text-ink mb-1">Comment / Curatorial Notes</label>
+            <textarea id="commentEditTextarea" rows="6" placeholder="Enter comments or curatorial notes..." class="w-full bg-surface border border-bordercol rounded p-2.5 text-xs font-mono text-ink outline-none focus:border-fern focus:ring-1 focus:ring-fern resize-none leading-relaxed"></textarea>
+          </div>
+          <div class="flex justify-end gap-2 pt-2 border-t border-tonal2">
+            <button type="button" onclick="closeCommentEditor()" class="px-3 py-1.5 border border-bordercol text-ink-muted rounded text-xs font-mono">Cancel</button>
+            <button type="button" onclick="saveCommentFromEditor()" class="px-4 py-1.5 bg-fern hover:bg-fern-dark text-white rounded text-xs font-bold font-mono">Save Comment</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL: Photo Fullscreen Viewer -->
     <div id="photoViewerModal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4">
       <div class="flex items-center justify-between text-white">
@@ -8169,17 +8188,17 @@ INDEX_TEMPLATE_V2 = """
       isReviewed: false,
       showFilterPills: false,
       lastSavedLocation: {
-        building: 'Økern',
-        floor: -1,
-        cabinet: 4,
-        shelf: 2,
-        storedAs: 'Herbarium Sheet'
+        building: '',
+        floor: '',
+        cabinet: '',
+        shelf: '',
+        storedAs: ''
       },
       batchAnchor: {
-        building: 'Økern',
-        floor: -1,
-        cabinet: 4,
-        shelf: 2,
+        building: '',
+        floor: '',
+        cabinet: '',
+        shelf: '',
         storedAs: ''
       },
       batchQueue: [], // array of { oid, sciName, prevLoc }
@@ -8682,17 +8701,57 @@ INDEX_TEMPLATE_V2 = """
       const flEl = document.getElementById('detailFloorVal');
       if (flEl) flEl.textContent = fl;
 
-      // Cabinet (2-digit zero-padded, em-dash if unset)
+      // Cabinet (2-digit zero-padded, empty placeholder if unset)
       const hasCab = (obs.Cabinet !== undefined && obs.Cabinet !== null && String(obs.Cabinet).trim() !== '' && String(obs.Cabinet).trim() !== '—');
-      const cab = hasCab ? String(obs.Cabinet).trim().padStart(2, '0') : '—';
+      const cab = hasCab ? String(obs.Cabinet).trim().padStart(2, '0') : '';
       const cabEl = document.getElementById('detailCabVal');
-      if (cabEl) cabEl.textContent = cab;
+      if (cabEl) {
+        if ('value' in cabEl) cabEl.value = cab;
+        else cabEl.textContent = cab || '—';
+      }
 
-      // Shelf (2-digit zero-padded, em-dash if unset)
+      // Shelf (2-digit zero-padded, empty placeholder if unset)
       const hasShelf = (obs.Shelf !== undefined && obs.Shelf !== null && String(obs.Shelf).trim() !== '' && String(obs.Shelf).trim() !== '—');
-      const sh = hasShelf ? String(obs.Shelf).trim().padStart(2, '0') : '—';
+      const sh = hasShelf ? String(obs.Shelf).trim().padStart(2, '0') : '';
       const shEl = document.getElementById('detailShelfVal');
-      if (shEl) shEl.textContent = sh;
+      if (shEl) {
+        if ('value' in shEl) shEl.value = sh;
+        else shEl.textContent = sh || '—';
+      }
+    }
+
+    function handleDirectCoordinateInput(coord, val) {
+      if (!state.currentRecord) return;
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      const obs = state.currentRecord.observation;
+      const cleanDigits = String(val || '').replace(/[^0-9]/g, '');
+
+      if (coord === 'cab') {
+        if (!cleanDigits) {
+          obs.Cabinet = '';
+        } else {
+          const num = Math.max(1, parseInt(cleanDigits, 10));
+          obs.Cabinet = String(num).padStart(2, '0');
+        }
+        markDirty('Cabinet');
+      } else if (coord === 'shelf') {
+        if (!cleanDigits) {
+          obs.Shelf = '';
+        } else {
+          const num = Math.max(1, parseInt(cleanDigits, 10));
+          obs.Shelf = String(num).padStart(2, '0');
+        }
+        markDirty('Shelf');
+      }
+
+      renderCoordinateSteppers(obs);
+      updateDetailLocBreadcrumbs(obs);
+      triggerAutoSave();
+    }
+
+    function handleDirectCoordinateBlur(coord, input) {
+      if (!input) return;
+      handleDirectCoordinateInput(coord, input.value);
     }
 
     function adjustCoordinate(coord, delta) {
@@ -8864,12 +8923,20 @@ INDEX_TEMPLATE_V2 = """
     }
 
     function renderLoanStatus(isLoaned) {
+      const isLoanedBool = (
+        isLoaned === true ||
+        isLoaned === 1 ||
+        String(isLoaned).trim().toLowerCase() === 'true' ||
+        String(isLoaned).trim() === '1' ||
+        String(isLoaned).trim().toLowerCase() === 'yes'
+      );
+
       const btnAvail = document.getElementById('btnStatusAvailable');
       const btnLoan = document.getElementById('btnStatusLoan');
       const tag = document.getElementById('loanStateTag');
       const dot = document.getElementById('loanStatusDot');
 
-      if (isLoaned) {
+      if (isLoanedBool) {
         btnLoan.className = 'py-1.5 px-2 rounded text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-ink border border-stone-300 min-h-[36px]';
         btnAvail.className = 'py-1.5 px-2 rounded text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]';
         tag.textContent = 'Loaned Out';
@@ -8878,7 +8945,7 @@ INDEX_TEMPLATE_V2 = """
       } else {
         btnAvail.className = 'py-1.5 px-2 rounded text-xs font-mono font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-ink border border-stone-300 min-h-[36px]';
         btnLoan.className = 'py-1.5 px-2 rounded text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition-all text-muted hover:text-ink min-h-[36px]';
-        tag.textContent = 'In Repository';
+        tag.textContent = 'In Collection';
         tag.className = 'text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-fern-light text-fern border border-fern/30';
         dot.className = 'w-2 h-2 rounded-full bg-fern';
       }
@@ -9006,20 +9073,130 @@ INDEX_TEMPLATE_V2 = """
       const obs = record.observation || {};
 
       let html = '<h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans mb-2">Botanical Registration</h3>';
-      const fields = ['Genus', 'Species', 'Family', 'Author', 'Collector', 'Collection Date', 'Locality', 'County', 'Country'];
+      const fields = ['Genus', 'Species', 'Family', 'Author', 'Collector', 'Collection Date', 'Collection place', 'Box label'];
       
       html += '<div class="space-y-2 font-mono text-xs">';
       fields.forEach(f => {
-        const val = obs[f] !== undefined && obs[f] !== '' ? obs[f] : (reg[f] || '');
-        html += `
-          <div class="flex items-center justify-between py-1 border-b border-stone-100">
-            <span class="text-muted text-[11px]">${f}:</span>
-            <span class="font-semibold text-ink text-right truncate max-w-[200px]">${val || '—'}</span>
-          </div>
-        `;
+        let val = '';
+        if (f === 'Collection place') {
+          val = (obs['Collection place'] !== undefined && obs['Collection place'] !== '') ? obs['Collection place'] :
+                ((obs['Collection Place'] !== undefined && obs['Collection Place'] !== '') ? obs['Collection Place'] :
+                ((reg['Collection place'] !== undefined && reg['Collection place'] !== '') ? reg['Collection place'] :
+                ((reg['Collection Place'] !== undefined && reg['Collection Place'] !== '') ? reg['Collection Place'] : '')));
+        } else if (f === 'Box label') {
+          val = (obs['Box label'] !== undefined && obs['Box label'] !== '') ? obs['Box label'] :
+                ((obs['Box Label'] !== undefined && obs['Box Label'] !== '') ? obs['Box Label'] :
+                ((reg['Box label'] !== undefined && reg['Box label'] !== '') ? reg['Box label'] :
+                ((reg['Box Label'] !== undefined && reg['Box Label'] !== '') ? reg['Box Label'] : '')));
+        } else {
+          val = obs[f] !== undefined && obs[f] !== '' ? obs[f] : (reg[f] || '');
+        }
+
+        const isBoxLabel = (f === 'Box label');
+        const strVal = String(val || '').trim();
+        const isMultiline = isBoxLabel && strVal && (strVal.indexOf('\\n') !== -1 || strVal.indexOf('\\r') !== -1 || strVal.length > 28);
+
+        if (isMultiline) {
+          html += `
+            <div class="py-1.5 border-b border-stone-100 space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="text-muted text-[11px]">${f}:</span>
+                <span class="text-[9.5px] font-mono text-subdued">(Full label)</span>
+              </div>
+              <div class="font-semibold text-ink text-left text-xs whitespace-pre-wrap break-words bg-stone-50 border border-stone-200/60 rounded p-2 leading-relaxed">
+                ${escapeHtml(strVal)}
+              </div>
+            </div>
+          `;
+        } else {
+          html += `
+            <div class="flex items-center justify-between py-1 border-b border-stone-100">
+              <span class="text-muted text-[11px]">${f}:</span>
+              <span class="font-semibold text-ink text-right break-words max-w-[200px]">${escapeHtml(strVal) || '—'}</span>
+            </div>
+          `;
+        }
       });
       html += '</div>';
+
+      // Comment section below Botanical Registration
+      const commentRaw = (obs['Comment'] !== undefined && obs['Comment'] !== null && String(obs['Comment']).trim() !== '')
+        ? String(obs['Comment']).trim()
+        : ((reg['Comment'] !== undefined && reg['Comment'] !== null && String(reg['Comment']).trim() !== '')
+          ? String(reg['Comment']).trim()
+          : ((obs['Comments'] !== undefined && obs['Comments'] !== null && String(obs['Comments']).trim() !== '')
+            ? String(obs['Comments']).trim()
+            : ((reg['Comments'] !== undefined && reg['Comments'] !== null && String(reg['Comments']).trim() !== '')
+              ? String(reg['Comments']).trim()
+              : '')));
+      const hasComment = Boolean(commentRaw);
+
+      html += `
+        <div class="mt-4 pt-3 border-t border-bordercol/60 space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-fern" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+              </svg>
+              <h4 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Comment</h4>
+            </div>
+            <button type="button" onclick="openCommentEditor()" class="px-2.5 py-1 text-[11px] font-mono font-medium text-fern hover:text-fern-dark bg-emerald-50 hover:bg-emerald-100 border border-fern/30 rounded flex items-center gap-1 transition-colors touch-target-min">
+              <svg class="w-3 h-3 text-fern" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              <span>${hasComment ? 'Edit Comment' : 'Write Comment'}</span>
+            </button>
+          </div>
+          <div onclick="openCommentEditor()" class="min-h-[72px] p-2.5 bg-stone-50 hover:bg-stone-100/70 border border-stone-200/80 rounded cursor-pointer transition-colors" title="Tap to write or edit comment">
+            <p class="font-mono text-xs text-ink whitespace-pre-wrap break-words leading-relaxed ${hasComment ? '' : 'text-subdued italic'}">
+              ${hasComment ? escapeHtml(commentRaw) : 'No comment recorded. Tap to write a comment...'}
+            </p>
+          </div>
+        </div>
+      `;
+
       container.innerHTML = html;
+    }
+
+    function openCommentEditor() {
+      if (!state.currentRecord) return;
+      const reg = state.currentRecord.registration || {};
+      const obs = state.currentRecord.observation || {};
+      const currentComment = (obs['Comment'] !== undefined && obs['Comment'] !== null && String(obs['Comment']).trim() !== '')
+        ? String(obs['Comment']).trim()
+        : ((reg['Comment'] !== undefined && reg['Comment'] !== null && String(reg['Comment']).trim() !== '')
+          ? String(reg['Comment']).trim()
+          : ((obs['Comments'] !== undefined && obs['Comments'] !== null && String(obs['Comments']).trim() !== '')
+            ? String(obs['Comments']).trim()
+            : ((reg['Comments'] !== undefined && reg['Comments'] !== null && String(reg['Comments']).trim() !== '')
+              ? String(reg['Comments']).trim()
+              : '')));
+
+      const textarea = document.getElementById('commentEditTextarea');
+      if (textarea) textarea.value = currentComment;
+      const title = document.getElementById('commentModalTitle');
+      if (title) title.textContent = `Comment — #${state.currentRecord.id || state.currentOid}`;
+      openModal('commentEditorModal');
+      setTimeout(() => textarea?.focus(), 100);
+    }
+
+    function closeCommentEditor() {
+      closeModal('commentEditorModal');
+    }
+
+    function saveCommentFromEditor() {
+      if (!state.currentRecord) return;
+      const textarea = document.getElementById('commentEditTextarea');
+      const newVal = textarea ? textarea.value.trim() : '';
+
+      state.currentRecord.observation = state.currentRecord.observation || {};
+      state.currentRecord.registration = state.currentRecord.registration || {};
+      state.currentRecord.observation.Comment = newVal;
+      state.currentRecord.registration.Comment = newVal;
+      markDirty('Comment');
+
+      closeCommentEditor();
+      renderDynamicForm(state.activeSchema, state.currentRecord);
+      triggerAutoSave();
+      showToast(newVal ? '✓ Comment saved & synchronized' : '✓ Comment cleared');
     }
 
     function renderPhotos(images = {}) {
@@ -9447,10 +9624,14 @@ INDEX_TEMPLATE_V2 = """
         bldgChoices = ['Økern', "Lid's hus"];
       }
 
-      const currentVal = state.batchAnchor.building || select.value || 'Økern';
+      const currentVal = (state.batchAnchor.building !== undefined && state.batchAnchor.building !== null)
+        ? String(state.batchAnchor.building).trim()
+        : '';
       const allChoices = Array.from(new Set([...bldgChoices, currentVal])).filter(Boolean);
 
-      select.innerHTML = allChoices.map(b => `<option value="${b.replace(/"/g, '&quot;')}">${b}</option>`).join('');
+      let optionsHtml = '<option value="">--</option>';
+      optionsHtml += allChoices.map(b => `<option value="${b.replace(/"/g, '&quot;')}">${b}</option>`).join('');
+      select.innerHTML = optionsHtml;
       select.value = currentVal;
       state.batchAnchor.building = currentVal;
     }
@@ -9466,16 +9647,34 @@ INDEX_TEMPLATE_V2 = """
             bldgSelect.appendChild(opt);
           }
           bldgSelect.value = state.batchAnchor.building;
-        } else if (bldgSelect.value) {
-          state.batchAnchor.building = bldgSelect.value;
+        } else {
+          bldgSelect.value = '';
         }
       }
-      document.getElementById('batchFloorVal').textContent = state.batchAnchor.floor !== undefined ? state.batchAnchor.floor : '-1';
-      document.getElementById('batchCabVal').textContent = String(state.batchAnchor.cabinet || '4').padStart(2, '0');
-      document.getElementById('batchShelfVal').textContent = String(state.batchAnchor.shelf || '2').padStart(2, '0');
+
+      const hasFloor = (state.batchAnchor.floor !== undefined && state.batchAnchor.floor !== null && String(state.batchAnchor.floor).trim() !== '' && String(state.batchAnchor.floor).trim() !== '—');
+      const floorEl = document.getElementById('batchFloorVal');
+      if (floorEl) floorEl.textContent = hasFloor ? String(state.batchAnchor.floor).trim() : '—';
+
+      const hasCab = (state.batchAnchor.cabinet !== undefined && state.batchAnchor.cabinet !== null && String(state.batchAnchor.cabinet).trim() !== '' && String(state.batchAnchor.cabinet).trim() !== '—');
+      const cabVal = hasCab ? String(state.batchAnchor.cabinet).trim().padStart(2, '0') : '';
+      const cabEl = document.getElementById('batchCabVal');
+      if (cabEl) {
+        if ('value' in cabEl) cabEl.value = cabVal;
+        else cabEl.textContent = cabVal || '—';
+      }
+
+      const hasShelf = (state.batchAnchor.shelf !== undefined && state.batchAnchor.shelf !== null && String(state.batchAnchor.shelf).trim() !== '' && String(state.batchAnchor.shelf).trim() !== '—');
+      const shelfVal = hasShelf ? String(state.batchAnchor.shelf).trim().padStart(2, '0') : '';
+      const shelfEl = document.getElementById('batchShelfVal');
+      if (shelfEl) {
+        if ('value' in shelfEl) shelfEl.value = shelfVal;
+        else shelfEl.textContent = shelfVal || '—';
+      }
+
       document.getElementById('batchStoredAsLabel').textContent = state.batchAnchor.storedAs || 'Not Selected';
       
-      const nextShelf = (parseInt(state.batchAnchor.shelf, 10) || 1) + 1;
+      const nextShelf = hasShelf ? (parseInt(state.batchAnchor.shelf, 10) || 1) + 1 : 1;
       document.getElementById('btnAdvanceNextShelfText').textContent = `Advance to Shelf ${String(nextShelf).padStart(2, '0')}`;
 
       if (typeof renderBatchStoredAsPills === 'function') {
@@ -9486,17 +9685,64 @@ INDEX_TEMPLATE_V2 = """
 
     function adjustBatchCoord(coord, delta) {
       if (coord === 'floor') {
-        const parsed = parseInt(state.batchAnchor.floor, 10);
-        const cur = isNaN(parsed) ? -1 : parsed;
-        state.batchAnchor.floor = cur + delta;
+        const isUnset = (state.batchAnchor.floor === undefined || state.batchAnchor.floor === null || String(state.batchAnchor.floor).trim() === '' || String(state.batchAnchor.floor).trim() === '—');
+        let next;
+        if (isUnset) {
+          next = delta > 0 ? 1 : -1;
+        } else {
+          const parsed = parseInt(state.batchAnchor.floor, 10);
+          next = isNaN(parsed) ? (delta > 0 ? 1 : -1) : parsed + delta;
+        }
+        state.batchAnchor.floor = String(next);
       } else if (coord === 'cab') {
-        const cur = parseInt(state.batchAnchor.cabinet, 10) || 4;
-        state.batchAnchor.cabinet = Math.max(1, cur + delta);
+        const isUnset = (state.batchAnchor.cabinet === undefined || state.batchAnchor.cabinet === null || String(state.batchAnchor.cabinet).trim() === '' || String(state.batchAnchor.cabinet).trim() === '—');
+        let next;
+        if (isUnset) {
+          next = 1;
+        } else {
+          const cur = parseInt(state.batchAnchor.cabinet, 10);
+          next = Math.max(1, (isNaN(cur) ? 1 : cur) + delta);
+        }
+        state.batchAnchor.cabinet = String(next).padStart(2, '0');
       } else if (coord === 'shelf') {
-        const cur = parseInt(state.batchAnchor.shelf, 10) || 2;
-        state.batchAnchor.shelf = Math.max(1, cur + delta);
+        const isUnset = (state.batchAnchor.shelf === undefined || state.batchAnchor.shelf === null || String(state.batchAnchor.shelf).trim() === '' || String(state.batchAnchor.shelf).trim() === '—');
+        let next;
+        if (isUnset) {
+          next = 1;
+        } else {
+          const cur = parseInt(state.batchAnchor.shelf, 10);
+          next = Math.max(1, (isNaN(cur) ? 1 : cur) + delta);
+        }
+        state.batchAnchor.shelf = String(next).padStart(2, '0');
       }
       updateBatchAnchorUI();
+      saveBatchQueueToStorage();
+    }
+
+    function handleDirectBatchCoordInput(coord, val) {
+      const cleanDigits = String(val || '').replace(/[^0-9]/g, '');
+      if (coord === 'cab') {
+        if (!cleanDigits) {
+          state.batchAnchor.cabinet = '';
+        } else {
+          const num = Math.max(1, parseInt(cleanDigits, 10));
+          state.batchAnchor.cabinet = String(num).padStart(2, '0');
+        }
+      } else if (coord === 'shelf') {
+        if (!cleanDigits) {
+          state.batchAnchor.shelf = '';
+        } else {
+          const num = Math.max(1, parseInt(cleanDigits, 10));
+          state.batchAnchor.shelf = String(num).padStart(2, '0');
+        }
+      }
+      updateBatchAnchorUI();
+      saveBatchQueueToStorage();
+    }
+
+    function handleDirectBatchCoordBlur(coord, input) {
+      if (!input) return;
+      handleDirectBatchCoordInput(coord, input.value);
     }
 
     function renderBatchStoredAsPills() {
@@ -9570,8 +9816,9 @@ INDEX_TEMPLATE_V2 = """
     }
 
     function advanceToNextShelf() {
-      const cur = parseInt(state.batchAnchor.shelf, 10) || 1;
-      state.batchAnchor.shelf = cur + 1;
+      const hasShelf = (state.batchAnchor.shelf !== undefined && state.batchAnchor.shelf !== null && String(state.batchAnchor.shelf).trim() !== '' && String(state.batchAnchor.shelf).trim() !== '—');
+      const cur = hasShelf ? (parseInt(state.batchAnchor.shelf, 10) || 1) : 0;
+      state.batchAnchor.shelf = String(cur + 1).padStart(2, '0');
       updateBatchAnchorUI();
       saveBatchQueueToStorage();
       showToast(`⚡ Advanced to Shelf ${String(state.batchAnchor.shelf).padStart(2, '0')} (${state.batchQueue.length} items staged)`);
@@ -9604,11 +9851,15 @@ INDEX_TEMPLATE_V2 = """
       }
 
       // Snapshot target location at time of addition
+      const hasFloor = (state.batchAnchor.floor !== undefined && state.batchAnchor.floor !== null && String(state.batchAnchor.floor).trim() !== '' && String(state.batchAnchor.floor).trim() !== '—');
+      const hasCab = (state.batchAnchor.cabinet !== undefined && state.batchAnchor.cabinet !== null && String(state.batchAnchor.cabinet).trim() !== '' && String(state.batchAnchor.cabinet).trim() !== '—');
+      const hasShelf = (state.batchAnchor.shelf !== undefined && state.batchAnchor.shelf !== null && String(state.batchAnchor.shelf).trim() !== '' && String(state.batchAnchor.shelf).trim() !== '—');
+
       const targetLocation = {
-        Building: state.batchAnchor.building || 'Økern',
-        Floor: String(state.batchAnchor.floor !== undefined ? state.batchAnchor.floor : '-1'),
-        Cabinet: String(state.batchAnchor.cabinet || '4'),
-        Shelf: String(state.batchAnchor.shelf || '2'),
+        Building: state.batchAnchor.building || '',
+        Floor: hasFloor ? String(state.batchAnchor.floor).trim() : '',
+        Cabinet: hasCab ? String(state.batchAnchor.cabinet).trim().padStart(2, '0') : '',
+        Shelf: hasShelf ? String(state.batchAnchor.shelf).trim().padStart(2, '0') : '',
         'Stored as': currentStoredAs
       };
 
@@ -9781,10 +10032,20 @@ INDEX_TEMPLATE_V2 = """
       if (!state.currentRecord || dirtyFields.size === 0 || isSaving) return;
       isSaving = true;
 
+      const obsPayload = {};
+      const regPayload = {};
+      const fullObs = state.currentRecord.observation || {};
+      const fullReg = state.currentRecord.registration || {};
+
+      dirtyFields.forEach(f => {
+        if (f in fullObs) obsPayload[f] = fullObs[f];
+        if (f in fullReg) regPayload[f] = fullReg[f];
+      });
+
       const payload = {
         id: state.currentRecord.id,
-        observation: state.currentRecord.observation || {},
-        registration: state.currentRecord.registration || {},
+        observation: obsPayload,
+        registration: regPayload,
         reviewed: state.isReviewed,
         timestamp: new Date().toISOString()
       };
@@ -9797,9 +10058,12 @@ INDEX_TEMPLATE_V2 = """
         if (res && res.success) {
           dirtyFields.clear();
           showToast('✓ Saved & synchronized');
+        } else if (res && res.error) {
+          showToast(`⚠️ Sync failed: ${res.error}`);
         }
       } catch(err) {
         console.error('Save error:', err);
+        showToast('⚠️ Network error saving record');
       } finally {
         isSaving = false;
       }
@@ -9955,7 +10219,11 @@ INDEX_TEMPLATE_V2 = """
     }
 
     // Start App
-    window.addEventListener('DOMContentLoaded', init);
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
 </body>
 </html>
