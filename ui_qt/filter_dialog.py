@@ -315,9 +315,14 @@ class QtFilterDialog:
 
         self.filter_manager = FilterManager()
         self.dialog: QDialog = load_ui("filter_dialog.ui", parent=parent)
-
         self.rows: dict[str, QtTriStateRow] = {}
         self.location_inputs: dict[str, QLineEdit] = {}
+
+        # Ensure exact tab title parity with Tkinter ("Problems & History")
+        if hasattr(self.dialog, "tabs_filter"):
+            for i in range(self.dialog.tabs_filter.count()):
+                if "problem" in self.dialog.tabs_filter.tabText(i).lower():
+                    self.dialog.tabs_filter.setTabText(i, "Problems & History")
 
         self._init_metadata()
         self._build_rows()

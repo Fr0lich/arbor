@@ -57,9 +57,15 @@ from ui_qt.qss_tokens import (
     FONT_UI,
     HAIRLINE,
     TEXT,
+    repolish,
 )
+from ui_qt.image_viewer import QtImageViewer
+from ui_qt.location_panel import QtLocationPanel
+from ui_qt.problems_panel import QtProblemsPanel
 from ui_qt.quick_peek import QtQuickPeekDialog
 from ui_qt.recent_activity_dialog import QtRecentActivityDialog
+from ui_qt.registry_panel import QtRegistryPanel
+
 
 
 class QtMainWindow:
@@ -71,6 +77,30 @@ class QtMainWindow:
         self.filter_dialog: QtFilterDialog | None = None
         self.search_engine = SearchEngine()
         self.history_stack: list[str] = []
+
+        # Enforce string ObjectID indexing if data is already loaded in app_state
+        for df in (self.app.df_reg, self.app.df_obs, self.app.df_photo):
+            if df is not None and "ObjectID" in df.columns:
+                df["ObjectID"] = df["ObjectID"].astype(str).str.strip()
+                df.set_index("ObjectID", inplace=True)
+            elif df is not None:
+                df.index = df.index.astype(str).str.strip()
+
+        if self.app.df_reg is not None and not self.app.active_object_ids:
+            self.app.active_object_ids = [str(x).strip() for x in self.app.df_reg.index]
+
+        # Initialize dynamic Registration form cards in tab_general
+        self.registry_panel: QtRegistryPanel | None = None
+        if hasattr(self.win, "scroll_general_contents") and self.win.scroll_general_contents.layout():
+            self.registry_panel = QtRegistryPanel(self.win.scroll_general_contents.layout(), self.app.config)
+            self.registry_panel.on_problem_changed_callback = self._on_problem_toggled
+
+        # Initialize dynamic Problems checklist in tab_problems
+        self.problems_panel: QtProblemsPanel | None = None
+        if hasattr(self.win, "scroll_problems_contents") and self.win.scroll_problems_contents.layout():
+            self.problems_panel = QtProblemsPanel(self.app.config)
+            self.win.scroll_problems_contents.layout().addWidget(self.problems_panel)
+            self.problems_panel.problem_toggled.connect(self._on_problem_toggled)
 
         # Mirror Tkinter pane weights: left 0 / center 3 / right 3
         if hasattr(self.win, "splitter_main"):
@@ -91,6 +121,36 @@ class QtMainWindow:
             tree.currentItemChanged.connect(self._on_tree_selection_changed)
             tree.setContextMenuPolicy(Qt.CustomContextMenu)
             tree.customContextMenuRequested.connect(self._show_tree_context_menu)
+
+        # Initialize Middle Column Image Canvas & Toolbar
+        self.image_viewer: QtImageViewer | None = None
+        if hasattr(self.win, "image_view"):
+            self.image_viewer = QtImageViewer(
+                graphics_view=self.win.image_view,
+                lbl_images_count=getattr(self.win, "lbl_images_count", None),
+                lbl_images_missing=getattr(self.win, "lbl_images_missing", None),
+                lbl_zoom_status=getattr(self.win, "lbl_zoom_status", None),
+            )
+            self.image_viewer.wire_toolbar(
+                btn_zoom_in=getattr(self.win, "btn_zoom_in", None),
+                btn_zoom_out=getattr(self.win, "btn_zoom_out", None),
+                btn_rotate_ccw=getattr(self.win, "btn_rotate_ccw", None),
+                btn_rotate_cw=getattr(self.win, "btn_rotate_cw", None),
+                btn_reset_view=getattr(self.win, "btn_reset_view", None),
+                btn_fit_view=getattr(self.win, "btn_fit_view", None),
+            )
+
+        # Initialize Dual-Docking Location Panel (Default: Middle Column)
+        prefs = config.load_prefs() or {}
+        self.location_in_center = prefs.get("location_in_center", True)
+        loc_mode = "horizontal_2row" if prefs.get("location_2row", False) else "horizontal_1row"
+
+        self.location_panel = QtLocationPanel(
+            config_ref=self.app.config,
+            mode=loc_mode if self.location_in_center else "vertical",
+        )
+        self.location_panel.toggle_dock_requested.connect(self.toggle_location_panel_position)
+        self._mount_location_panel()
 
         # Wire all action bars, menus, and shortcuts
         self._wire_header_menus()
@@ -392,6 +452,14 @@ class QtMainWindow:
             else:
                 df_reg, df_obs, df_photo, df_log, df_unval = ExcelRepository.load_excel(path, self.app.config)
 
+            # Enforce string ObjectID indexing
+            for df in (df_reg, df_obs, df_photo):
+                if df is not None and "ObjectID" in df.columns:
+                    df["ObjectID"] = df["ObjectID"].astype(str).str.strip()
+                    df.set_index("ObjectID", inplace=True)
+                elif df is not None:
+                    df.index = df.index.astype(str).str.strip()
+
             self.app.excel_path = path
             self.app.output_path = path
             self.app.df_reg = df_reg
@@ -400,11 +468,34 @@ class QtMainWindow:
             self.app.df_log = df_log
             self.app.df_unvalidated = df_unval
             self.app.initial_df_obs = df_obs.copy() if df_obs is not None else None
-            self.app.active_object_ids = list(df_reg.index) if df_reg is not None else []
+            self.app.active_object_ids = [str(x).strip() for x in df_reg.index] if df_reg is not None else []
             self.app.dirty = False
 
             config.set_last_dir("last_db_dir", os.path.dirname(path))
             config.add_recent_file(path)
+
+            # Rebuild dynamic registration form for current database configuration
+            if hasattr(self.win, "scroll_general_contents") and self.win.scroll_general_contents.layout():
+                self.registry_panel = QtRegistryPanel(self.win.scroll_general_contents.layout(), self.app.config)
+                self.registry_panel.on_problem_changed_callback = self._on_problem_toggled
+
+            # Rebuild dynamic problems checklist for current database configuration
+            if hasattr(self.win, "scroll_problems_contents") and self.win.scroll_problems_contents.layout():
+                # Clear existing items from scroll_problems_contents layout
+                while self.win.scroll_problems_contents.layout().count():
+                    item = self.win.scroll_problems_contents.layout().takeAt(0)
+                    w = item.widget()
+                    if w:
+                        w.deleteLater()
+                self.problems_panel = QtProblemsPanel(self.app.config)
+                self.win.scroll_problems_contents.layout().addWidget(self.problems_panel)
+                self.problems_panel.problem_toggled.connect(self._on_problem_toggled)
+
+            # Rebuild dynamic location panel for current database configuration
+            if hasattr(self, "location_panel") and self.location_panel:
+                self.location_panel.config_ref = self.app.config
+                self.location_panel.build_ui()
+                self._mount_location_panel()
 
             self.refresh_object_tree()
             self._update_filter_status_display()
@@ -744,15 +835,201 @@ class QtMainWindow:
     # -------------------------------------------------------------------------
 
     def _on_tree_selection_changed(self, current: Optional[QTreeWidgetItem], previous: Optional[QTreeWidgetItem]) -> None:
-        """Handle tree item selection update."""
+        """Handle tree item selection update, updating middle column header and registration fields."""
         if current is None:
-            return
-        oid = current.text(1).strip()
-        if oid:
-            self.app.current_object_id = oid
-            if not self.history_stack or self.history_stack[-1] != oid:
-                self.history_stack.append(oid)
+            self.app.current_object_id = None
+            if hasattr(self.win, "lbl_id_badge"):
+                self.win.lbl_id_badge.setText("ID: --")
+            if hasattr(self.win, "lbl_specimen_name"):
+                self.win.lbl_specimen_name.setText("No Specimen Selected")
+            if hasattr(self.win, "lbl_status_badge"):
+                self.win.lbl_status_badge.setText("PENDING")
+                self.win.lbl_status_badge.setProperty("state", "pending")
+                repolish(self.win.lbl_status_badge)
+            if hasattr(self, "registry_panel") and self.registry_panel:
+                self.registry_panel.clear()
+            if hasattr(self, "image_viewer") and self.image_viewer:
+                self.image_viewer.show_placeholder("No Specimen Selected")
+            if hasattr(self, "location_panel") and self.location_panel:
+                self.location_panel.clear()
             self.update_status_bar()
+            return
+
+        oid = current.text(1).strip()
+        if not oid:
+            return
+
+        self.app.current_object_id = oid
+        if not self.history_stack or self.history_stack[-1] != oid:
+            self.history_stack.append(oid)
+
+        df_reg = self.app.df_reg
+        df_obs = self.app.df_obs
+
+        # 1. Update Middle Column Context Bar (with active position indicator)
+        pos = -1
+        total_active = len(self.app.active_object_ids)
+        if oid in self.app.active_object_ids:
+            pos = self.app.active_object_ids.index(oid)
+
+        if hasattr(self.win, "lbl_id_badge"):
+            pos_str = f" ({pos + 1} of {total_active})" if pos >= 0 and total_active > 0 else ""
+            self.win.lbl_id_badge.setText(f"ID: {oid}{pos_str}")
+
+        scientific_name = ""
+        if df_reg is not None and oid in df_reg.index:
+            row = df_reg.loc[oid]
+            if isinstance(row, pd.DataFrame):
+                row = row.iloc[0]
+            genus = str(row["Genus"]).strip() if "Genus" in row.index and not pd.isna(row["Genus"]) else ""
+            species = str(row["Species"]).strip() if "Species" in row.index and not pd.isna(row["Species"]) else ""
+            author = str(row["Author"]).strip() if "Author" in row.index and not pd.isna(row["Author"]) else ""
+            parts = [p for p in (genus, species, author) if p]
+            scientific_name = " ".join(parts)
+
+        if hasattr(self.win, "lbl_specimen_name"):
+            self.win.lbl_specimen_name.setText(scientific_name or "(unnamed specimen)")
+
+        # 2. Populate Problems Panel & Determine Active Problems
+        active_problems: list[str] = []
+        if hasattr(self, "problems_panel") and self.problems_panel:
+            active_problems = self.problems_panel.populate_specimen(oid, df_obs)
+        elif df_obs is not None and oid in df_obs.index:
+            obs_row = df_obs.loc[oid]
+            if isinstance(obs_row, pd.DataFrame):
+                obs_row = obs_row.iloc[0]
+            prob_cfg = self.app.config.get("ui_sections", {}).get("problems", []) if self.app.config else []
+            for p in prob_cfg:
+                p_name = p.get("name")
+                if p_name and p_name != "Images_Missing" and p_name in obs_row.index and bool(obs_row[p_name]):
+                    active_problems.append(p_name)
+
+        # Update Problems Tab title with active count
+        if hasattr(self.win, "tabs_registration"):
+            tab_text = f"Problems ({len(active_problems)})" if active_problems else "Problems"
+            self.win.tabs_registration.setTabText(1, tab_text)
+
+        # 3. Update Status Badge (Reviewed > Problems > Pending)
+        if hasattr(self.win, "lbl_status_badge"):
+            is_reviewed = False
+            if df_obs is not None and oid in df_obs.index:
+                obs_row = df_obs.loc[oid]
+                if isinstance(obs_row, pd.DataFrame):
+                    obs_row = obs_row.iloc[0]
+                if REVIEWED_COLUMN in obs_row.index:
+                    is_reviewed = bool(obs_row[REVIEWED_COLUMN])
+
+            if is_reviewed:
+                self.win.lbl_status_badge.setText("REVIEWED")
+                self.win.lbl_status_badge.setProperty("state", "reviewed")
+            elif active_problems:
+                self.win.lbl_status_badge.setText(f"{len(active_problems)} PROBLEM{'S' if len(active_problems) > 1 else ''}")
+                self.win.lbl_status_badge.setProperty("state", "problem")
+            else:
+                self.win.lbl_status_badge.setText("PENDING")
+                self.win.lbl_status_badge.setProperty("state", "pending")
+            repolish(self.win.lbl_status_badge)
+
+        # 4. Update Right Column Registration Form Cards
+        if hasattr(self, "registry_panel") and self.registry_panel:
+            self.registry_panel.populate_specimen(oid, df_reg, df_obs)
+
+        # 5. Update Middle Column Image Canvas
+        if hasattr(self, "image_viewer") and self.image_viewer:
+            self.image_viewer.load_specimen_images(
+                oid=oid,
+                df_reg=df_reg,
+                df_photo=self.app.df_photo,
+                image_dir=getattr(self.app, "image_folder", None) or config.get_last_dir("last_image_dir"),
+            )
+
+        # 6. Update Location Panel
+        if hasattr(self, "location_panel") and self.location_panel:
+            self.location_panel.populate_specimen(oid, df_obs)
+
+        self.update_status_bar()
+
+    def _on_problem_toggled(self, problem_name: str, checked: bool) -> None:
+        """Synchronize problem flag toggles across dataframes, tabs, and status badges."""
+        oid = self.app.current_object_id
+        if not oid:
+            return
+
+        df_obs = self.app.df_obs
+        if df_obs is not None and oid in df_obs.index:
+            if problem_name not in df_obs.columns:
+                df_obs[problem_name] = False
+            df_obs.at[oid, problem_name] = checked
+            self.app.dirty = True
+
+        # Synchronize problems panel
+        if hasattr(self, "problems_panel") and self.problems_panel:
+            self.problems_panel.set_problem_state(problem_name, checked)
+            active_problems = self.problems_panel.get_active_problems()
+        else:
+            active_problems = []
+
+        # Synchronize registry panel inline checkbox & field tint
+        if hasattr(self, "registry_panel") and self.registry_panel:
+            self.registry_panel.set_problem_flag(problem_name, checked)
+
+        # Update tab header
+        if hasattr(self.win, "tabs_registration"):
+            tab_text = f"Problems ({len(active_problems)})" if active_problems else "Problems"
+            self.win.tabs_registration.setTabText(1, tab_text)
+
+        # Update middle status badge
+        if hasattr(self.win, "lbl_status_badge"):
+            is_reviewed = False
+            if df_obs is not None and oid in df_obs.index and REVIEWED_COLUMN in df_obs.columns:
+                is_reviewed = bool(df_obs.loc[oid, REVIEWED_COLUMN])
+            if is_reviewed:
+                self.win.lbl_status_badge.setText("REVIEWED")
+                self.win.lbl_status_badge.setProperty("state", "reviewed")
+            elif active_problems:
+                self.win.lbl_status_badge.setText(f"{len(active_problems)} PROBLEM{'S' if len(active_problems) > 1 else ''}")
+                self.win.lbl_status_badge.setProperty("state", "problem")
+            else:
+                self.win.lbl_status_badge.setText("PENDING")
+                self.win.lbl_status_badge.setProperty("state", "pending")
+            repolish(self.win.lbl_status_badge)
+
+        self.update_status_bar()
+
+    def _mount_location_panel(self) -> None:
+        """Mount location panel into either center pane (default) or left column."""
+        if not hasattr(self, "location_panel") or not self.location_panel:
+            return
+
+        if self.location_panel.parent():
+            self.location_panel.setParent(None)
+
+        if self.location_in_center:
+            # Mount into pane_center below image_view/image_area
+            self.location_panel.set_layout_mode("horizontal_1row")
+            if hasattr(self.win, "pane_center_layout"):
+                self.win.pane_center_layout.addWidget(self.location_panel)
+            elif hasattr(self.win, "pane_center") and self.win.pane_center.layout():
+                self.win.pane_center.layout().addWidget(self.location_panel)
+            if hasattr(self.win, "location_container"):
+                self.win.location_container.setVisible(False)
+        else:
+            # Mount into location_container in left pane
+            self.location_panel.set_layout_mode("vertical")
+            if hasattr(self.win, "location_container"):
+                self.win.location_container.setVisible(True)
+                if self.win.location_container.layout():
+                    self.win.location_container.layout().addWidget(self.location_panel)
+
+    def toggle_location_panel_position(self) -> None:
+        """Toggle location panel position between Middle and Left columns."""
+        self.location_in_center = not self.location_in_center
+        self._mount_location_panel()
+        if self.app.current_object_id:
+            self.location_panel.populate_specimen(self.app.current_object_id, self.app.df_obs)
+        prefs = config.load_prefs() or {}
+        prefs["location_in_center"] = self.location_in_center
+        config.save_prefs(prefs)
 
     def navigate_to_object(self, oid: str) -> None:
         """Select an object by ID in tree_objects."""
@@ -930,17 +1207,33 @@ class QtMainWindow:
         )
         pct = int(reviewed_count / total * 100) if total > 0 else 0
 
-        prob_cols = [c for c in df_obs.columns if c.endswith("_Problem")] if df_obs is not None else []
+        prob_cols = [
+            c for c in df_obs.columns
+            if (c.endswith("_Problem") or c in ("Other_problem", "Images_Problem"))
+            and c != "Images_Missing"
+        ] if df_obs is not None else []
         prob_count = int(df_obs[prob_cols].any(axis=1).sum()) if prob_cols and df_obs is not None else 0
 
+        is_filtered = total > 0 and active_count < total
+
         if hasattr(self.win, "lbl_sb_object_count"):
-            self.win.lbl_sb_object_count.setText(f"OBJECTS: {active_count or total}")
+            if is_filtered:
+                self.win.lbl_sb_object_count.setText(f"OBJECTS: {active_count}/{total}")
+            else:
+                self.win.lbl_sb_object_count.setText(f"OBJECTS: {total}")
 
         if hasattr(self.win, "lbl_sb_reviewed"):
             self.win.lbl_sb_reviewed.setText(f"REVIEWED: {reviewed_count} ({pct}%)")
 
         if hasattr(self.win, "lbl_sb_problems"):
             self.win.lbl_sb_problems.setText(f"PROBLEMS: {prob_count}")
+
+        if hasattr(self.win, "lbl_sb_filter_badge"):
+            if is_filtered:
+                self.win.lbl_sb_filter_badge.setText(f"[FILTER: {active_count}/{total}]")
+                self.win.lbl_sb_filter_badge.setVisible(True)
+            else:
+                self.win.lbl_sb_filter_badge.setVisible(False)
 
     def refresh_object_tree(self) -> None:
         """Repopulate tree_objects from app.active_object_ids and dataframes."""
@@ -957,22 +1250,30 @@ class QtMainWindow:
         df_obs = getattr(self.app, "df_obs", None)
 
         for oid in self.app.active_object_ids:
-            if oid not in df_reg.index:
+            oid_str = str(oid).strip()
+            if oid_str not in df_reg.index:
                 continue
 
             # Column 0: Reviewed status checkmark
             is_reviewed = False
-            if df_obs is not None and oid in df_obs.index and REVIEWED_COLUMN in df_obs.columns:
-                is_reviewed = bool(df_obs.loc[oid, REVIEWED_COLUMN])
+            if df_obs is not None and oid_str in df_obs.index and REVIEWED_COLUMN in df_obs.columns:
+                val = df_obs.loc[oid_str, REVIEWED_COLUMN]
+                is_reviewed = bool(val.iloc[0] if isinstance(val, pd.Series) else val)
 
             reviewed_mark = "✓" if is_reviewed else " "
 
             # Column 1: ObjectID
-            oid_str = str(oid)
-
             # Column 2: Taxon name (Genus + Species)
-            genus = str(df_reg.loc[oid, "Genus"]) if "Genus" in df_reg.columns and not pd.isna(df_reg.loc[oid, "Genus"]) else ""
-            species = str(df_reg.loc[oid, "Species"]) if "Species" in df_reg.columns and not pd.isna(df_reg.loc[oid, "Species"]) else ""
+            genus_val = df_reg.loc[oid_str, "Genus"] if "Genus" in df_reg.columns else ""
+            genus = str(genus_val.iloc[0] if isinstance(genus_val, pd.Series) else genus_val).strip()
+            if genus in ("nan", "None", "<NA>"):
+                genus = ""
+
+            species_val = df_reg.loc[oid_str, "Species"] if "Species" in df_reg.columns else ""
+            species = str(species_val.iloc[0] if isinstance(species_val, pd.Series) else species_val).strip()
+            if species in ("nan", "None", "<NA>"):
+                species = ""
+
             taxon = f"{genus} {species}".strip() or "(unnamed)"
 
             item = QTreeWidgetItem(tree, [reviewed_mark, oid_str, taxon])

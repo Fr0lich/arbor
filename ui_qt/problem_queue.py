@@ -69,7 +69,11 @@ class QtProblemQueueDialog(QDialog):
         if self.app.df_obs is None or self.app.df_reg is None:
             return []
 
-        prob_cols = [c for c in self.app.df_obs.columns if c.endswith("_Problem") or c == "Other_problem" or c == "Images_Missing"]
+        prob_cols = [
+            c for c in self.app.df_obs.columns
+            if (c.endswith("_Problem") or c in ("Other_problem", "Images_Problem"))
+            and c != "Images_Missing"
+        ]
         if not prob_cols:
             return []
 
@@ -172,7 +176,7 @@ class QtProblemQueueDialog(QDialog):
         if self.app.df_obs is not None and oid in self.app.df_obs.index:
             row = self.app.df_obs.loc[oid]
             for col in row.index:
-                if (col.endswith("_Problem") or col in ("Other_problem", "Images_Missing")) and bool(row.get(col)):
+                if (col.endswith("_Problem") or col in ("Other_problem", "Images_Problem")) and col != "Images_Missing" and bool(row.get(col)):
                     active_prob_cols.append(col)
 
         # Primary problem display

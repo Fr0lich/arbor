@@ -86,6 +86,24 @@ class GbifBatchReconciliationWorker(QThread):
                 except Exception:
                     result_entry["status"] = "ERROR"
 
+            from backend.gbif import is_likely_family_name
+            is_inversion = is_likely_family_name(species)
+            has_rank_disc = False
+            rank_disc_str = ""
+            if is_inversion:
+                has_rank_disc = True
+                rank_disc_str = "⚠️ Species → Family"
+            elif result_entry.get("gbif_data"):
+                gb_d = result_entry["gbif_data"]
+                r = (gb_d.get("rank") or "").upper()
+                if r in ("FAMILY", "ORDER", "CLASS", "PHYLUM", "KINGDOM") or gb_d.get("matchType") == "HIGHERRANK":
+                    has_rank_disc = True
+                    rank_disc_str = f"⚠️ Rank Inversion ({r})"
+
+            result_entry["has_rank_discrepancy"] = has_rank_disc
+            result_entry["rank_discrepancy"] = rank_disc_str
+            result_entry["auto_resolve_eligible"] = not has_rank_disc
+
             chunk.append(result_entry)
             all_results.append(result_entry)
 
@@ -132,18 +150,22 @@ class QtGbifReviewDialog(QDialog):
             return
         table = self.dialog.table_review
         header = table.horizontalHeader()
+        table.setColumnCount(7)
+        table.setHorizontalHeaderItem(6, QTableWidgetItem("Rank Discrepancy"))
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
 
         table.setColumnWidth(0, 50)
         table.setColumnWidth(1, 80)
         table.setColumnWidth(2, 160)
         table.setColumnWidth(4, 110)
         table.setColumnWidth(5, 90)
+        table.setColumnWidth(6, 170)
 
     def _connect_signals(self) -> None:
         """Wire buttons and filter inputs to slots."""
@@ -249,8 +271,13 @@ class QtGbifReviewDialog(QDialog):
 
             # Column 0: Checkbox
             chk = QCheckBox()
-            # Preserve selection state or default to True if confident
-            chk.setChecked(res.get("checked", res.get("confidence", 0) >= 90 and res.get("status") == "ACCEPTED"))
+            # Preserve selection state or default to True if confident and not flagged with rank discrepancy
+            default_checked = (
+                res.get("confidence", 0) >= 90
+                and res.get("status") == "ACCEPTED"
+                and not res.get("has_rank_discrepancy")
+            )
+            chk.setChecked(res.get("checked", default_checked))
             chk.stateChanged.connect(lambda state, r_idx=res_idx: self._on_row_checked(r_idx, bool(state)))
             table.setCellWidget(row_pos, 0, chk)
 
@@ -287,6 +314,16 @@ class QtGbifReviewDialog(QDialog):
             item_conf.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             table.setItem(row_pos, 5, item_conf)
 
+            # Column 6: Rank Discrepancy
+            rank_disc = res.get("rank_discrepancy", "")
+            item_rank = QTableWidgetItem(rank_disc if rank_disc else "—")
+            item_rank.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            if res.get("has_rank_discrepancy"):
+                item_rank.setForeground(Qt.red)
+            else:
+                item_rank.setForeground(Qt.gray)
+            table.setItem(row_pos, 6, item_rank)
+
         table.setUpdatesEnabled(True)
         self._update_selection_counter()
 
@@ -305,9 +342,12 @@ class QtGbifReviewDialog(QDialog):
     # -------------------------------------------------------------------------
 
     def select_all(self) -> None:
-        """Select all visible rows."""
+        """Select all visible rows, strictly excluding items with rank discrepancies."""
         for idx in self.visible_indices:
-            self.results[idx]["checked"] = True
+            if not self.results[idx].get("has_rank_discrepancy"):
+                self.results[idx]["checked"] = True
+            else:
+                self.results[idx]["checked"] = False
         self._refresh_table()
 
     def deselect_all(self) -> None:
@@ -317,19 +357,26 @@ class QtGbifReviewDialog(QDialog):
         self._refresh_table()
 
     def select_confident(self) -> None:
-        """Select only visible rows with confidence >= 90% and ACCEPTED status."""
+        """Select only visible rows with confidence >= 90% and ACCEPTED status, strictly excluding rank discrepancies."""
         for idx in self.visible_indices:
             res = self.results[idx]
-            res["checked"] = res.get("confidence", 0) >= 90 and res.get("status") == "ACCEPTED"
+            if res.get("has_rank_discrepancy"):
+                res["checked"] = False
+            else:
+                res["checked"] = res.get("confidence", 0) >= 90 and res.get("status") == "ACCEPTED"
         self._refresh_table()
 
     def _update_selection_counter(self) -> None:
-        """Update matches label (e.g. 'Matches: 12 of 45 selected')."""
+        """Update matches label (e.g. 'Matches: 12 of 45 selected (3 rank discrepancies skipped)')."""
         if not hasattr(self.dialog, "lbl_match_count"):
             return
         selected = sum(1 for r in self.results if r.get("checked"))
         total = len(self.results)
-        self.dialog.lbl_match_count.setText(f"Matches: {selected} of {total} selected")
+        skipped = sum(1 for r in self.results if r.get("has_rank_discrepancy"))
+        txt = f"Matches: {selected} of {total} selected"
+        if skipped > 0:
+            txt += f" (⚠️ {skipped} rank discrepancies require manual review)"
+        self.dialog.lbl_match_count.setText(txt)
 
     # -------------------------------------------------------------------------
     # Vectorized Batch Commits

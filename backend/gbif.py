@@ -1,3 +1,4 @@
+import difflib
 import requests
 import concurrent.futures
 import functools
@@ -5,6 +6,21 @@ import re
 from typing import List, Dict, Optional, Any
 
 _session = requests.Session()
+
+CLASSICAL_FAMILY_NAMES = {
+    "compositae", "cruciferae", "gramineae", "guttiferae",
+    "labiatae", "leguminosae", "palmae", "umbelliferae"
+}
+
+
+def is_likely_family_name(name: Any) -> bool:
+    """Returns True if string matches botanical family patterns (-aceae, classic names)."""
+    if not name:
+        return False
+    s = str(name).strip().lower()
+    if s.endswith("aceae") or s.endswith("oideae") or s.endswith("ineae") or s.endswith("phyta"):
+        return True
+    return s in CLASSICAL_FAMILY_NAMES
 
 UNDETERMINED_SPECIES_EXACT = {
     "", "sp", "sp.", "spp", "spp.", "spec", "spec.", "species",
@@ -43,9 +59,12 @@ def check_gbif(genus: str, species: str):
     name = f"{genus} {species}".strip()
     if not name or not genus:
         return None
-    url = f"https://api.gbif.org/v1/species/match?name={name}"
+    url = "https://api.gbif.org/v1/species/match"
+    params = {"name": name}
+    if genus:
+        params["genus"] = genus
     try:
-        response = _session.get(url, timeout=5)
+        response = _session.get(url, params=params, timeout=5)
         response.raise_for_status()
         data = response.json()
 
@@ -57,16 +76,28 @@ def check_gbif(genus: str, species: str):
         if not author:
              author = scientific_name.replace(canonical_name, "").strip() if canonical_name and scientific_name.startswith(canonical_name) else ""
 
+        rank = (data.get("rank") or "").upper()
         # The gbif API sometimes returns exact matches for genus only if species is not found.
-        if data.get("rank") == "GENUS" and species:
+        if rank == "GENUS" and species:
             match_type = "HIGHERRANK"
         else:
             match_type = data.get("matchType")
 
         new_genus = data.get("genus", "")
-        new_species = data.get("species", data.get("canonicalName", ""))
-        if new_genus and new_species and new_species.startswith(new_genus + " "):
-            new_species = new_species[len(new_genus):].strip()
+
+        # Guard: Higher ranks (e.g. FAMILY Pinaceae) must NEVER be assigned as species!
+        if rank in ("FAMILY", "ORDER", "CLASS", "PHYLUM", "KINGDOM") or match_type == "HIGHERRANK":
+            new_species = ""
+        else:
+            new_species = data.get("species", "")
+            if not new_species and rank == "SPECIES":
+                new_species = canonical_name
+            if new_genus and new_species and new_species.startswith(new_genus + " "):
+                new_species = new_species[len(new_genus):].strip()
+
+        family = data.get("family", "")
+        if not family and rank == "FAMILY":
+            family = canonical_name
 
         higher_classification = " | ".join(filter(None, [
             (data.get("kingdom") or "").strip(),
@@ -83,9 +114,9 @@ def check_gbif(genus: str, species: str):
             "genus": new_genus,
             "species": new_species,
             "author": author,
-            "family": data.get("family", ""),
+            "family": family,
             "higherClassification": higher_classification,
-            "rank": data.get("rank"),
+            "rank": rank,
             "confidence": data.get("confidence", 0),
             "usageKey": data.get("usageKey"),
             "taxonKey": data.get("usageKey"),
@@ -112,9 +143,19 @@ def get_accepted_name(usage_key: int):
              author = scientific_name.replace(canonical_name, "").strip() if canonical_name and scientific_name.startswith(canonical_name) else ""
 
         new_genus = data.get("genus", "")
-        new_species = data.get("species", data.get("canonicalName", ""))
-        if new_genus and new_species and new_species.startswith(new_genus + " "):
-            new_species = new_species[len(new_genus):].strip()
+        rank = (data.get("rank") or "").upper()
+        if rank in ("FAMILY", "ORDER", "CLASS", "PHYLUM", "KINGDOM"):
+            new_species = ""
+        else:
+            new_species = data.get("species", "")
+            if not new_species and rank == "SPECIES":
+                new_species = canonical_name
+            if new_genus and new_species and new_species.startswith(new_genus + " "):
+                new_species = new_species[len(new_genus):].strip()
+
+        family = data.get("family", "")
+        if not family and rank == "FAMILY":
+            family = canonical_name
 
         higher_classification = " | ".join(filter(None, [
             (data.get("kingdom") or "").strip(),
@@ -129,9 +170,9 @@ def get_accepted_name(usage_key: int):
             "genus": new_genus,
             "species": new_species,
             "author": author,
-            "family": data.get("family", ""),
+            "family": family,
             "higherClassification": higher_classification,
-            "rank": data.get("rank"),
+            "rank": rank,
             "status": data.get("status", "ACCEPTED"),
             "usageKey": usage_key,
             "taxonKey": usage_key,
@@ -390,7 +431,8 @@ def _evaluate_item_diff(item: Dict[str, Any], gbif_data: Optional[Dict[str, Any]
                     expl = f"Standardized author from '{c_val}' to '{p_val}'."
                 changes.append({
                     "field": k, "old": c_val, "new": p_val,
-                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl
+                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl,
+                    "has_rank_discrepancy": False, "auto_resolve_eligible": True
                 })
         elif k == "Family":
             if p_val and p_val.lower() != c_val.lower():
@@ -404,36 +446,88 @@ def _evaluate_item_diff(item: Dict[str, Any], gbif_data: Optional[Dict[str, Any]
                     expl = f"Updated family classification from '{c_val}' to '{p_val}'."
                 changes.append({
                     "field": k, "old": c_val, "new": p_val,
-                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl
+                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl,
+                    "has_rank_discrepancy": False, "auto_resolve_eligible": True
                 })
         elif k == "Species":
             if not is_undet and p_val and p_val != c_val:
-                if is_synonym:
+                is_c_family = is_likely_family_name(c_val) or (c_val and family and c_val.lower() == family.lower())
+                is_p_family = is_likely_family_name(p_val) or (p_val and prop_family and p_val.lower() == prop_family.lower())
+                sim = difflib.SequenceMatcher(None, c_val.lower(), p_val.lower()).ratio() if c_val and p_val else 0.0
+
+                if is_c_family or is_p_family:
+                    r_code = "RANK_DISCREPANCY"
+                    r_lbl = "⚠️ Rank Discrepancy (Species / Family)"
+                    expl = f"Species '{c_val}' detected as a family-level rank or inversion. Replacement: '{p_val}'."
+                    has_rank_disc = True
+                    auto_res = False
+                elif is_synonym:
                     r_code = "SYNONYM_SPECIES"
                     r_lbl = "Accepted Species (Synonym)"
                     expl = f"'{species}' is an older synonym for accepted species '{p_val}'."
-                else:
+                    has_rank_disc = False
+                    auto_res = True
+                elif sim >= 0.70 or gbif_data.get("matchType") == "FUZZY":
                     r_code = "SPELLING"
                     r_lbl = "Spelling / Typo Fix"
                     expl = f"Corrected species spelling from '{c_val}' to '{p_val}'."
+                    has_rank_disc = False
+                    auto_res = True
+                else:
+                    r_code = "RECLASSIFICATION"
+                    r_lbl = "⚠️ Taxonomic Reclassification"
+                    expl = f"GBIF proposes changing species from '{c_val}' to '{p_val}' (similarity {int(sim*100)}%)."
+                    has_rank_disc = False
+                    auto_res = False
+
                 changes.append({
                     "field": k, "old": c_val, "new": p_val,
-                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl
+                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl,
+                    "has_rank_discrepancy": has_rank_disc,
+                    "auto_resolve_eligible": auto_res
                 })
         else:  # Genus
             if p_val and p_val != c_val:
-                if is_synonym:
+                is_c_family = is_likely_family_name(c_val)
+                is_p_family = is_likely_family_name(p_val)
+                sim = difflib.SequenceMatcher(None, c_val.lower(), p_val.lower()).ratio() if c_val and p_val else 0.0
+
+                if is_c_family or is_p_family:
+                    r_code = "RANK_DISCREPANCY"
+                    r_lbl = "⚠️ Rank Discrepancy (Genus / Family)"
+                    expl = f"Genus '{c_val}' detected as a family-level rank. Replacement: '{p_val}'."
+                    has_rank_disc = True
+                    auto_res = False
+                elif is_synonym:
                     r_code = "SYNONYM_GENUS"
                     r_lbl = "⚠️ Reclassified Genus (Synonym)"
                     expl = f"'{genus} {species}'.strip() is cataloged as a synonym for modern combination '{prop_genus} {prop_species}'.strip() in GBIF."
-                else:
+                    has_rank_disc = False
+                    auto_res = True
+                elif sim >= 0.70 or gbif_data.get("matchType") == "FUZZY":
                     r_code = "SPELLING"
                     r_lbl = "🔤 Spelling / Typo Fix"
                     expl = f"Corrected genus spelling from '{c_val}' to '{p_val}'."
+                    has_rank_disc = False
+                    auto_res = True
+                else:
+                    r_code = "RECLASSIFICATION"
+                    r_lbl = "⚠️ Reclassified Genus"
+                    expl = f"GBIF proposes changing genus from '{c_val}' to '{p_val}'."
+                    has_rank_disc = False
+                    auto_res = False
+
                 changes.append({
                     "field": k, "old": c_val, "new": p_val,
-                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl
+                    "reason_code": r_code, "reason_label": r_lbl, "explanation": expl,
+                    "has_rank_discrepancy": has_rank_disc,
+                    "auto_resolve_eligible": auto_res
                 })
+
+    item_has_inversion = is_likely_family_name(species) or (species and family and species.lower() == family.lower())
+    has_rank_discrepancy = any(c.get("has_rank_discrepancy") for c in changes) or item_has_inversion
+    rank_disc_str = "⚠️ Species → Family" if (item_has_inversion or any(c.get("reason_code") == "RANK_DISCREPANCY" for c in changes)) else ""
+    auto_resolve_eligible = not has_rank_discrepancy and all(c.get("auto_resolve_eligible", True) for c in changes)
 
     if changes:
         missing_family = (not bool(family)) and bool(prop_family)
@@ -451,7 +545,10 @@ def _evaluate_item_diff(item: Dict[str, Any], gbif_data: Optional[Dict[str, Any]
             "missing_family": missing_family,
             "missing_author": missing_author,
             "original_scientific_name": gbif_data.get("original_scientific_name", ""),
-            "accepted_scientific_name": gbif_data.get("accepted_scientific_name", "")
+            "accepted_scientific_name": gbif_data.get("accepted_scientific_name", ""),
+            "has_rank_discrepancy": has_rank_discrepancy,
+            "rank_discrepancy": rank_disc_str,
+            "auto_resolve_eligible": auto_resolve_eligible
         }
     return None
 

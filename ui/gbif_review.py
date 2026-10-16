@@ -300,10 +300,12 @@ class GBIFReviewDialog(tk.Toplevel):
         undetermined = [d for d in unapplied_diffs if d.get("is_undetermined")]
         synonyms = [d for d in unapplied_diffs if "synonym" in str(d.get("status", "")).strip().lower()]
         accepted = [d for d in unapplied_diffs if "synonym" not in str(d.get("status", "")).strip().lower()]
+        rank_disc = [d for d in unapplied_diffs if d.get("has_rank_discrepancy")]
         applied_cnt = sum(1 for d in self.diff_results if self._diff_has_applied_changes(d))
 
         return {
             "pending": len(unapplied_diffs),
+            "rank_discrepancy": len(rank_disc),
             "verified": len(verified),
             "accepted": len(accepted),
             "missing_metadata": len(missing_meta),
@@ -333,7 +335,10 @@ class GBIFReviewDialog(tk.Toplevel):
                 if not has_unapplied:
                     continue
 
-                if tab == "verified":
+                if tab == "rank_discrepancy":
+                    if not d.get("has_rank_discrepancy"):
+                        continue
+                elif tab == "verified":
                     if not self._diff_has_unapplied_book_matches(d):
                         continue
                 elif tab == "missing_metadata":
@@ -448,6 +453,7 @@ class GBIFReviewDialog(tk.Toplevel):
         self.tab_buttons = {}
         tab_defs = [
             ("pending", "All Pending", C["primary"]),
+            ("rank_discrepancy", "⚠️ Rank Discrepancies", C["error"]),
             ("verified", "✓ Verified in Books", C["success_text"]),
             ("accepted", "🔤 Accepted / Spelling", C["text"]),
             ("missing_metadata", "📋 Missing Family / Author", "#0284c7"),
@@ -888,7 +894,7 @@ class GBIFReviewDialog(tk.Toplevel):
             if key in self.applied_changes:
                 continue
             if mode == "all":
-                val = True
+                val = False if chg.get("has_rank_discrepancy") else True
             elif mode == "none":
                 val = False
             elif mode == "verified":
@@ -1158,10 +1164,26 @@ class GBIFReviewDialog(tk.Toplevel):
                 pady=sc(2)
             ).pack(side="left", padx=(0, sc(6)))
 
+        has_rank_disc = diff.get("has_rank_discrepancy") or any(c.get("has_rank_discrepancy") for c in changes)
+        if has_rank_disc:
+            tk.Label(
+                hdr_right_box,
+                text=diff.get("rank_discrepancy") or "⚠️ Inversion",
+                font=FONT_MONO_SM,
+                fg="#ffffff",
+                bg=C["error"],
+                padx=sc(6),
+                pady=sc(2)
+            ).pack(side="left", padx=(0, sc(6)))
+
         if is_fully_applied:
             badge_bg = C["success"]
             badge_fg = "#ffffff"
             badge_lbl_text = "[✓ ALL APPLIED]"
+        elif has_rank_disc:
+            badge_bg = C["error"]
+            badge_fg = "#ffffff"
+            badge_lbl_text = "⚠️ RANK DISCREPANCY DETECTED"
         elif is_partially_applied:
             badge_bg = C["warning"]
             badge_fg = "#000000"
@@ -2044,10 +2066,18 @@ class GBIFReviewDialog(tk.Toplevel):
     def _select_all_batch(self):
         for k in self.selection_state.keys():
             if k not in self.applied_changes:
-                self.selection_state[k] = True
+                chg = self.all_changes.get(k, {})
+                if not chg.get("has_rank_discrepancy"):
+                    self.selection_state[k] = True
+                else:
+                    self.selection_state[k] = False
         for (oid, field), var in self.page_field_vars.items():
             if (oid, field) not in self.applied_changes:
-                var.set(True)
+                chg = self.all_changes.get((oid, field), {})
+                if not chg.get("has_rank_discrepancy"):
+                    var.set(True)
+                else:
+                    var.set(False)
         for oid in self.specimen_dir_widgets.keys():
             self._update_sidebar_item(oid)
         self._update_summary()
@@ -2068,9 +2098,16 @@ class GBIFReviewDialog(tk.Toplevel):
             for chg in d.get("changes", []):
                 key = (oid, chg["field"])
                 if key not in self.applied_changes:
-                    self.selection_state[key] = True
+                    if not chg.get("has_rank_discrepancy"):
+                        self.selection_state[key] = True
+                    else:
+                        self.selection_state[key] = False
         for (oid, field), var in self.page_field_vars.items():
-            var.set(self.selection_state.get((oid, field), True))
+            chg = self.all_changes.get((oid, field), {})
+            if not chg.get("has_rank_discrepancy"):
+                var.set(self.selection_state.get((oid, field), True))
+            else:
+                var.set(False)
         for oid in self.specimen_dir_widgets.keys():
             self._update_sidebar_item(oid)
         self._update_summary()
@@ -2090,8 +2127,13 @@ class GBIFReviewDialog(tk.Toplevel):
     def _select_current_page(self):
         for (oid, field), var in self.page_field_vars.items():
             if (oid, field) not in self.applied_changes:
-                self.selection_state[(oid, field)] = True
-                var.set(True)
+                chg = self.all_changes.get((oid, field), {})
+                if not chg.get("has_rank_discrepancy"):
+                    self.selection_state[(oid, field)] = True
+                    var.set(True)
+                else:
+                    self.selection_state[(oid, field)] = False
+                    var.set(False)
         for oid in self.specimen_dir_widgets.keys():
             self._update_sidebar_item(oid)
         self._update_summary()
@@ -2105,10 +2147,17 @@ class GBIFReviewDialog(tk.Toplevel):
                 key = (oid, field)
                 if key in self.applied_changes:
                     continue
-                is_ver = bool(find_book_matches_for_gbif(self.app_state, oid, field, chg.get("new", "")))
+                if chg.get("has_rank_discrepancy"):
+                    is_ver = False
+                else:
+                    is_ver = bool(find_book_matches_for_gbif(self.app_state, oid, field, chg.get("new", "")))
                 self.selection_state[key] = is_ver
         for (oid, field), var in self.page_field_vars.items():
-            var.set(self.selection_state.get((oid, field), False))
+            chg = self.all_changes.get((oid, field), {})
+            if chg.get("has_rank_discrepancy"):
+                var.set(False)
+            else:
+                var.set(self.selection_state.get((oid, field), False))
         for oid in self.specimen_dir_widgets.keys():
             self._update_sidebar_item(oid)
         self._update_summary()
@@ -2140,6 +2189,7 @@ class GBIFReviewDialog(tk.Toplevel):
 
         tab_title = {
             "pending": "PENDING",
+            "rank_discrepancy": "RANK DISCREPANCIES",
             "verified": "VERIFIED",
             "accepted": "SPELLING/ACCEPTED",
             "synonym": "SYNONYM",
