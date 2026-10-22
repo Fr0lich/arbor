@@ -11,7 +11,7 @@ import io
 import logging
 import os
 import sys
-from typing import Optional
+from typing import Callable, Dict, List, Optional
 import urllib.request
 import webbrowser
 
@@ -29,17 +29,23 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QGraphicsItem,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsTextItem,
     QGraphicsView,
+    QHBoxLayout,
     QLabel,
     QMenu,
     QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ui_qt.qss_tokens import (
+    BLACK,
     BORDER,
     CARD,
     CONTAINER,
@@ -52,6 +58,197 @@ from ui_qt.qss_tokens import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class QtThumbnailCard(QFrame):
+    """Clickable thumbnail card widget with active state border styling matching Tkinter."""
+
+    def __init__(
+        self,
+        index: int,
+        path: str,
+        thumb_cache: dict[str, QPixmap],
+        on_click: Callable[[int], None],
+        on_double_click: Callable[[int], None],
+        parent: Optional[QWidget] = None,
+    ):
+        super().__init__(parent)
+        self.index = index
+        self.path = path
+        self.thumb_cache = thumb_cache
+        self.on_click = on_click
+        self.on_double_click = on_double_click
+        self.is_active = False
+
+        self.setFixedSize(76, 76)
+        self.setCursor(Qt.PointingHandCursor)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(0)
+
+        self.lbl_image = QLabel(self)
+        self.lbl_image.setAlignment(Qt.AlignCenter)
+        self.lbl_image.setStyleSheet("background: transparent; border: none;")
+        layout.addWidget(self.lbl_image)
+
+        self._load_thumbnail()
+        self.set_active(False)
+
+    def _load_thumbnail(self) -> None:
+        """Load and cache thumbnail pixmap."""
+        pix = self.thumb_cache.get(self.path)
+        if pix is None and os.path.isfile(self.path):
+            loaded = QPixmap(self.path)
+            if not loaded.isNull():
+                pix = loaded.scaled(
+                    70,
+                    70,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self.thumb_cache[self.path] = pix
+
+        if pix and not pix.isNull():
+            self.lbl_image.setPixmap(pix)
+        else:
+            self.lbl_image.setText(f"IMG {self.index + 1}")
+            self.lbl_image.setStyleSheet(
+                f"font-family: {FONT_MONO}; font-size: 10px; color: {SUBTEXT}; font-weight: bold; background: transparent;"
+            )
+
+    def set_active(self, active: bool) -> None:
+        """Update border styling: 2px solid black for active, 1px solid hairline for inactive."""
+        self.is_active = active
+        if active:
+            self.setStyleSheet(
+                f"QFrame {{ background-color: {CARD}; border: 2px solid {BLACK}; border-radius: 4px; }}"
+            )
+        else:
+            self.setStyleSheet(
+                f"QFrame {{ background-color: #f8f9fa; border: 1px solid {HAIRLINE}; border-radius: 4px; }}"
+                f"QFrame:hover {{ border: 1px solid {BORDER}; background-color: {CARD}; }}"
+            )
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self.on_click(self.index)
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self.on_double_click(self.index)
+        super().mouseDoubleClickEvent(event)
+
+
+class QtThumbnailStrip(QFrame):
+    """Horizontal scrollable thumbnail gallery strip below the main image canvas."""
+
+    def __init__(
+        self,
+        on_select_image: Callable[[int], None],
+        on_open_viewer: Callable[[int], None],
+        on_prev: Callable[[], None],
+        on_next: Callable[[], None],
+        thumb_cache: dict[str, QPixmap],
+        parent: Optional[QWidget] = None,
+    ):
+        super().__init__(parent)
+        self.on_select_image = on_select_image
+        self.on_open_viewer = on_open_viewer
+        self.on_prev = on_prev
+        self.on_next = on_next
+        self.thumb_cache = thumb_cache
+        self.cards: list[QtThumbnailCard] = []
+
+        self.setFixedHeight(94)
+        self.setStyleSheet(
+            f"QFrame {{ background-color: #f2f5f1; border-top: 1px solid {HAIRLINE}; border-bottom: none; }}"
+        )
+
+        strip_layout = QHBoxLayout(self)
+        strip_layout.setContentsMargins(6, 4, 6, 4)
+        strip_layout.setSpacing(6)
+
+        # Previous button
+        self.btn_prev = QPushButton("◀", self)
+        self.btn_prev.setFixedSize(28, 68)
+        self.btn_prev.setCursor(Qt.PointingHandCursor)
+        self.btn_prev.setToolTip("Previous Image (Shift+Left)")
+        self.btn_prev.setStyleSheet(
+            f"QPushButton {{ background: {CARD}; border: 1px solid {HAIRLINE}; border-radius: 3px; font-size: 11px; font-weight: bold; color: {TEXT}; }}"
+            f"QPushButton:hover {{ background: {CONTAINER}; border-color: {BORDER}; }}"
+            "QPushButton:pressed { background: #dadada; }"
+        )
+        self.btn_prev.clicked.connect(self.on_prev)
+        strip_layout.addWidget(self.btn_prev)
+
+        # Scroll Area for thumbnails
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setFixedHeight(84)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        self.container = QWidget()
+        self.container.setStyleSheet("background: transparent;")
+        self.container_layout = QHBoxLayout(self.container)
+        self.container_layout.setContentsMargins(4, 2, 4, 2)
+        self.container_layout.setSpacing(8)
+        self.container_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.scroll_area.setWidget(self.container)
+        strip_layout.addWidget(self.scroll_area, 1)
+
+        # Next button
+        self.btn_next = QPushButton("▶", self)
+        self.btn_next.setFixedSize(28, 68)
+        self.btn_next.setCursor(Qt.PointingHandCursor)
+        self.btn_next.setToolTip("Next Image (Shift+Right / Ctrl+B)")
+        self.btn_next.setStyleSheet(
+            f"QPushButton {{ background: {CARD}; border: 1px solid {HAIRLINE}; border-radius: 3px; font-size: 11px; font-weight: bold; color: {TEXT}; }}"
+            f"QPushButton:hover {{ background: {CONTAINER}; border-color: {BORDER}; }}"
+            "QPushButton:pressed { background: #dadada; }"
+        )
+        self.btn_next.clicked.connect(self.on_next)
+        strip_layout.addWidget(self.btn_next)
+
+    def set_images(self, paths: list[str], active_index: int) -> None:
+        """Rebuild thumbnail cards for the given image list."""
+        # Clear existing cards
+        while self.container_layout.count() > 0:
+            item = self.container_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        self.cards.clear()
+
+        # Build new cards
+        for idx, path in enumerate(paths):
+            card = QtThumbnailCard(
+                index=idx,
+                path=path,
+                thumb_cache=self.thumb_cache,
+                on_click=self.on_select_image,
+                on_double_click=self.on_open_viewer,
+                parent=self.container,
+            )
+            self.cards.append(card)
+            self.container_layout.addWidget(card)
+
+        # Show strip only if at least 2 images are available
+        if len(paths) > 1:
+            self.setVisible(True)
+            self.set_active_index(active_index)
+        else:
+            self.setVisible(False)
+
+    def set_active_index(self, index: int) -> None:
+        """Update active card highlight and ensure it is visible."""
+        for idx, card in enumerate(self.cards):
+            card.set_active(idx == index)
+        if 0 <= index < len(self.cards):
+            self.scroll_area.ensureWidgetVisible(self.cards[index])
 
 
 class QtImageViewer(QObject):
@@ -90,6 +287,25 @@ class QtImageViewer(QObject):
 
         self.zoom_factor: float = 1.0
         self.rotation_angle: int = 0
+
+        # Directory and thumbnail caches for performance
+        self._dir_cache: dict[str, dict[str, list[str]]] = {}
+        self._thumb_cache: dict[str, QPixmap] = {}
+
+        # Instantiate horizontal thumbnail gallery strip below the image viewport
+        self.thumb_strip: Optional[QtThumbnailStrip] = None
+        parent_widget = self.view.parentWidget()
+        if parent_widget and parent_widget.layout():
+            self.thumb_strip = QtThumbnailStrip(
+                on_select_image=self.select_image,
+                on_open_viewer=self.open_in_external_viewer,
+                on_prev=self.prev_image,
+                on_next=self.next_image,
+                thumb_cache=self._thumb_cache,
+                parent=parent_widget,
+            )
+            parent_widget.layout().addWidget(self.thumb_strip)
+            self.thumb_strip.setVisible(False)
 
         # Initial display
         self.show_placeholder("No Specimen Selected")
@@ -138,6 +354,44 @@ class QtImageViewer(QObject):
         if btn_fit_view:
             btn_fit_view.clicked.connect(self.fit_view)
 
+    def _get_local_images_for_specimen(self, image_dir: str, oid: str) -> list[str]:
+        """Look up local image files matching ObjectID prefix with single-pass directory caching."""
+        if not image_dir or not os.path.isdir(image_dir):
+            return []
+
+        if image_dir not in self._dir_cache:
+            cache: dict[str, list[str]] = {}
+            try:
+                for fname in os.listdir(image_dir):
+                    name_lower = fname.lower()
+                    if name_lower.endswith((".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp")):
+                        full_path = os.path.join(image_dir, fname)
+                        base = os.path.splitext(fname)[0].strip()
+                        cache.setdefault(base, []).append(full_path)
+                        # Also index prefix before '_' or '-'
+                        prefix = base.split("_")[0].split("-")[0].strip()
+                        if prefix != base:
+                            cache.setdefault(prefix, []).append(full_path)
+            except Exception as e:
+                logger.warning(f"Error indexing image_dir: {e}")
+            self._dir_cache[image_dir] = cache
+
+        return self._dir_cache[image_dir].get(oid, [])
+
+    def invalidate_dir_cache(self) -> None:
+        """Clear local directory index cache."""
+        self._dir_cache.clear()
+
+    def select_image(self, index: int) -> None:
+        """Switch active image to the given index."""
+        if not self.image_paths or index < 0 or index >= len(self.image_paths):
+            return
+        self.current_image_index = index
+        self._display_image(self.image_paths[self.current_image_index])
+        self._update_counter_label()
+        if self.thumb_strip:
+            self.thumb_strip.set_active_index(self.current_image_index)
+
     def load_specimen_images(
         self,
         oid: str,
@@ -152,6 +406,8 @@ class QtImageViewer(QObject):
 
         if not self.current_oid:
             self.show_placeholder("No Specimen Selected")
+            if self.thumb_strip:
+                self.thumb_strip.set_images([], 0)
             return
 
         # 1. Look up online photo URLs in df_reg
@@ -179,19 +435,12 @@ class QtImageViewer(QObject):
                         if p_val and p_val.lower() not in ("nan", "none", "<na>") and p_val not in self.image_paths:
                             self.image_paths.append(p_val)
 
-        # 3. Look up local files matching ObjectID in image_dir
-        if image_dir and os.path.isdir(image_dir):
-            try:
-                for fname in os.listdir(image_dir):
-                    name_lower = fname.lower()
-                    if name_lower.endswith((".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp")):
-                        base = os.path.splitext(fname)[0]
-                        if base == self.current_oid or base.startswith(f"{self.current_oid}_") or base.startswith(f"{self.current_oid}-"):
-                            full_path = os.path.join(image_dir, fname)
-                            if full_path not in self.image_paths:
-                                self.image_paths.append(full_path)
-            except Exception as e:
-                logger.warning(f"Error listing image_dir: {e}")
+        # 3. Look up local files matching ObjectID in image_dir (O(1) cached lookup)
+        if image_dir:
+            matched_local = self._get_local_images_for_specimen(image_dir, self.current_oid)
+            for full_path in matched_local:
+                if full_path not in self.image_paths:
+                    self.image_paths.append(full_path)
 
         # Update count & missing labels
         count = len(self.image_paths)
@@ -208,6 +457,10 @@ class QtImageViewer(QObject):
                 self.lbl_count.setText("")
             self.show_placeholder(f"No image available for specimen {self.current_oid}")
 
+        # Update horizontal thumbnail strip
+        if self.thumb_strip:
+            self.thumb_strip.set_images(self.image_paths, self.current_image_index)
+
     def next_image(self) -> None:
         """Cycle to the next image in the specimen gallery."""
         if not self.image_paths or len(self.image_paths) <= 1:
@@ -215,6 +468,8 @@ class QtImageViewer(QObject):
         self.current_image_index = (self.current_image_index + 1) % len(self.image_paths)
         self._display_image(self.image_paths[self.current_image_index])
         self._update_counter_label()
+        if self.thumb_strip:
+            self.thumb_strip.set_active_index(self.current_image_index)
 
     def prev_image(self) -> None:
         """Cycle to the previous image in the specimen gallery."""
@@ -223,6 +478,8 @@ class QtImageViewer(QObject):
         self.current_image_index = (self.current_image_index - 1) % len(self.image_paths)
         self._display_image(self.image_paths[self.current_image_index])
         self._update_counter_label()
+        if self.thumb_strip:
+            self.thumb_strip.set_active_index(self.current_image_index)
 
     def _update_counter_label(self) -> None:
         count = len(self.image_paths)
@@ -234,11 +491,12 @@ class QtImageViewer(QObject):
             else:
                 self.lbl_count.setText("")
 
-    def open_in_external_viewer(self) -> None:
-        """Launch the current image in the system default viewer (Tkinter double-click parity)."""
-        if not self.image_paths or self.current_image_index >= len(self.image_paths):
+    def open_in_external_viewer(self, index: Optional[int] = None) -> None:
+        """Launch specified (or active) image in system default viewer (Tkinter parity)."""
+        idx = index if index is not None else self.current_image_index
+        if not self.image_paths or idx < 0 or idx >= len(self.image_paths):
             return
-        source = self.image_paths[self.current_image_index]
+        source = self.image_paths[idx]
         if source.startswith(("http://", "https://")):
             webbrowser.open(source)
         elif os.path.exists(source):

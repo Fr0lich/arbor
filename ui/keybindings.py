@@ -22,6 +22,8 @@ class KeybindingManager:
         self.root.bind("<Control-j>", lambda e: self.ui.show_statistics())
         self.root.bind("<Control-s>", lambda e: self.ui.save_session("SAVE"))
         self.root.bind("<Control-g>", lambda e: self.ui.open_filter_menu())
+        self.root.bind("<Control-F>", lambda e: self.ui.open_advanced_search())
+        self.root.bind("<Control-Shift-F>", lambda e: self.ui.open_advanced_search())
         self.root.bind("<Control-z>", self.ui._smart_undo)
         self.root.bind("<Control-y>", self.ui.redo)
         self.root.bind("<Control-n>", self.ui._shortcut_new_object)

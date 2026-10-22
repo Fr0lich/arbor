@@ -9,7 +9,7 @@ import json
 import os
 from typing import Callable
 
-from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtCore import Qt, Signal, QSize, QTimer
 from PySide6.QtGui import QKeySequence, QMouseEvent, QFont, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
@@ -327,7 +327,18 @@ class QtFilterDialog:
         self._init_metadata()
         self._build_rows()
         self._wire_signals()
-        self.update_matched_count()
+
+        # Cached dictionary indexes for high-speed repeated filtering
+        self._reg_dict: dict | None = None
+        self._obs_dict: dict | None = None
+
+        # Debounce timer for matched record counts
+        self._debounce_timer = QTimer(self.dialog)
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.setInterval(180)
+        self._debounce_timer.timeout.connect(self._do_update_matched_count)
+
+        self._do_update_matched_count()
 
     def _init_metadata(self) -> None:
         """Extract problem and column maps from app_state or fallback defaults."""
@@ -745,14 +756,20 @@ class QtFilterDialog:
         return groups, mode, loc_filters, old_tax
 
     def _compute_matches(self) -> list[str]:
-        """Run FilterManager on the active AppState dataframes."""
+        """Run FilterManager on the active AppState dataframes with cached index dicts."""
         if not self.app or getattr(self.app, "df_reg", None) is None:
             return []
 
         df_reg = self.app.df_reg
-        reg_dict = df_reg.to_dict(orient="index") if df_reg is not None else {}
+        if self._reg_dict is None and df_reg is not None:
+            self._reg_dict = df_reg.to_dict(orient="index")
+
         obs_df = getattr(self.app, "df_obs", None)
-        obs_dict = obs_df.to_dict(orient="index") if obs_df is not None else {}
+        if self._obs_dict is None and obs_df is not None:
+            self._obs_dict = obs_df.to_dict(orient="index")
+
+        reg_dict = self._reg_dict or {}
+        obs_dict = self._obs_dict or {}
 
         history_set = getattr(self.app, "history_set", set())
         groups, mode, loc_filters, old_tax = self._build_filter_groups()
@@ -778,7 +795,14 @@ class QtFilterDialog:
         return matched
 
     def update_matched_count(self) -> None:
-        """Update footer matched records display."""
+        """Trigger debounced update of footer matched records display."""
+        if hasattr(self, "_debounce_timer"):
+            self._debounce_timer.start()
+        else:
+            self._do_update_matched_count()
+
+    def _do_update_matched_count(self) -> None:
+        """Execute calculation of matched records and update UI badge."""
         if not self.app or getattr(self.app, "df_reg", None) is None:
             active_count = sum(1 for r in self.rows.values() if r.state != "Ignore")
             for inp in self.location_inputs.values():

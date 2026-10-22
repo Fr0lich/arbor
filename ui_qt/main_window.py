@@ -16,7 +16,7 @@ from typing import Optional
 
 import pandas as pd
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
     QInputDialog,
@@ -78,6 +78,8 @@ class QtMainWindow:
         self.filter_dialog: QtFilterDialog | None = None
         self.search_engine = SearchEngine()
         self.history_stack: list[str] = []
+        self._active_id_indices: dict[str, int] = {}
+        self._problem_cache: dict[str, bool] = {}
 
         # Enforce string ObjectID indexing if data is already loaded in app_state
         for df in (self.app.df_reg, self.app.df_obs, self.app.df_photo):
@@ -125,6 +127,7 @@ class QtMainWindow:
             tree.setColumnWidth(0, 36)
             tree.setColumnWidth(1, 90)
             tree.setColumnWidth(2, 120)
+            tree.setUniformRowHeights(True)
             tree.currentItemChanged.connect(self._on_tree_selection_changed)
             tree.setContextMenuPolicy(Qt.CustomContextMenu)
             tree.customContextMenuRequested.connect(self._show_tree_context_menu)
@@ -336,7 +339,7 @@ class QtMainWindow:
         if hasattr(self.win, "btn_next_hist"):
             self.win.btn_next_hist.clicked.connect(self.navigate_next_hist)
         if hasattr(self.win, "btn_history"):
-            self.win.btn_history.clicked.connect(self.open_recent_activity)
+            self.win.btn_history.clicked.connect(self.open_historical_resolver_for_current)
 
         # Sorting ComboBox
         if hasattr(self.win, "combo_sort"):
@@ -877,6 +880,10 @@ class QtMainWindow:
         self.refresh_object_tree()
         self.update_status_bar()
 
+    def open_historical_resolver_for_current(self) -> None:
+        """Open the Historical Books Conflict Resolver dialog for active specimen (btn_history parity)."""
+        self.open_historical_resolver(self.app.current_object_id)
+
     def open_historical_resolver(self, oid: Optional[str] = None) -> None:
         """Open the Historical Books Conflict Resolver dialog."""
         target_oid = oid or self.app.current_object_id
@@ -960,10 +967,8 @@ class QtMainWindow:
         df_obs = self.app.df_obs
 
         # 1. Update Middle Column Context Bar (with active position indicator)
-        pos = -1
+        pos = self._active_id_indices.get(oid, -1)
         total_active = len(self.app.active_object_ids)
-        if oid in self.app.active_object_ids:
-            pos = self.app.active_object_ids.index(oid)
 
         if hasattr(self.win, "lbl_id_badge"):
             pos_str = f" ({pos + 1} of {total_active})" if pos >= 0 and total_active > 0 else ""
@@ -1096,6 +1101,13 @@ class QtMainWindow:
                 self.win.lbl_status_badge.setText("PENDING")
                 self.win.lbl_status_badge.setProperty("state", "pending")
             repolish(self.win.lbl_status_badge)
+
+        # Update problem cache & tree item visual
+        self._problem_cache[oid] = bool(active_problems)
+        if hasattr(self.win, "tree_objects"):
+            cur_item = self.win.tree_objects.currentItem()
+            if cur_item and cur_item.text(1).strip() == oid:
+                self._update_tree_item_visual(cur_item, oid)
 
         self.update_status_bar()
 
@@ -1779,12 +1791,11 @@ class QtMainWindow:
         if hasattr(self.win, "btn_mark_reviewed"):
             self.win.btn_mark_reviewed.setText("✓ MARKED AS REVIEWED" if new_val else "✓ MARK AS REVIEWED (Ctrl+Enter)")
 
-        # Update Tree item checkmark
+        # Update Tree item checkmark and styling
         if hasattr(self.win, "tree_objects"):
             cur_item = self.win.tree_objects.currentItem()
             if cur_item and cur_item.text(1).strip() == oid:
-                cur_item.setText(0, "✓" if new_val else " ")
-                cur_item.setForeground(0, Qt.darkGreen if new_val else Qt.black)
+                self._update_tree_item_visual(cur_item, oid)
 
         # Update Middle Status Badge
         active_problems = []
@@ -2089,50 +2100,139 @@ class QtMainWindow:
             else:
                 self.win.lbl_sb_filter_badge.setVisible(False)
 
+    def _recompute_problem_cache(self) -> None:
+        """Pre-compute boolean problem status for all active specimens."""
+        self._problem_cache.clear()
+        df_obs = getattr(self.app, "df_obs", None)
+        if df_obs is None or df_obs.empty:
+            return
+
+        prob_cols: list[str] = []
+        if self.app.config:
+            prob_cfg = self.app.config.get("ui_sections", {}).get("problems", [])
+            prob_cols = [p.get("name") for p in prob_cfg if p.get("name") and p.get("name") != "Images_Missing"]
+
+        if not prob_cols:
+            ignore = {REVIEWED_COLUMN, "Images_Missing", "ObjectID", "id", "ReviewedAt"}
+            prob_cols = [
+                c for c in df_obs.columns
+                if c not in ignore and ("problem" in c.lower() or c in ("Needs_Verification", "Taxonomy_Discrepancy", "Other_problem"))
+            ]
+
+        active_prob_cols = [c for c in prob_cols if c in df_obs.columns]
+        if not active_prob_cols:
+            return
+
+        # Precompute boolean mask across all active problem columns
+        bool_sub = df_obs[active_prob_cols].fillna(False).astype(bool)
+        any_prob_series = bool_sub.any(axis=1)
+        self._problem_cache = {str(k): bool(v) for k, v in any_prob_series.items()}
+
+    def _update_tree_item_visual(self, item: QTreeWidgetItem, oid: str) -> None:
+        """Update status mark and foreground color for a single tree item."""
+        is_reviewed = False
+        df_obs = getattr(self.app, "df_obs", None)
+        if df_obs is not None and oid in df_obs.index and REVIEWED_COLUMN in df_obs.columns:
+            val = df_obs.loc[oid, REVIEWED_COLUMN]
+            is_reviewed = bool(val.iloc[0] if isinstance(val, pd.Series) else val)
+
+        has_problem = self._problem_cache.get(oid, False)
+
+        if is_reviewed and has_problem:
+            status_mark = "⚠✓"
+            color = QColor("#d9a036")  # Amber (reviewed with remaining problem)
+        elif is_reviewed:
+            status_mark = "✓"
+            color = QColor("#2e7d32")  # Green (reviewed clean)
+        elif has_problem:
+            status_mark = "⚠"
+            color = QColor("#d9534f")  # Red (unreviewed with problem)
+        else:
+            status_mark = " "
+            color = None
+
+        item.setText(0, status_mark)
+        for col in (0, 1, 2):
+            if color:
+                item.setForeground(col, color)
+            else:
+                item.setData(col, Qt.ForegroundRole, None)
+
     def refresh_object_tree(self) -> None:
-        """Repopulate tree_objects from app.active_object_ids and dataframes."""
+        """Repopulate tree_objects from app.active_object_ids and dataframes (batched)."""
         if not hasattr(self.win, "tree_objects"):
             return
 
         tree = self.win.tree_objects
+        tree.blockSignals(True)
         tree.clear()
 
         if not self.app or self.app.df_reg is None:
+            tree.blockSignals(False)
             return
 
         df_reg = self.app.df_reg
         df_obs = getattr(self.app, "df_obs", None)
 
+        # Update O(1) index map
+        self._active_id_indices = {str(oid).strip(): i for i, oid in enumerate(self.app.active_object_ids)}
+
+        # Precompute problem cache across active specimens
+        self._recompute_problem_cache()
+
+        # Vectorized / dict lookups for fast iteration
+        genus_dict = df_reg["Genus"].to_dict() if "Genus" in df_reg.columns else {}
+        species_dict = df_reg["Species"].to_dict() if "Species" in df_reg.columns else {}
+        reviewed_dict = {}
+        if df_obs is not None and REVIEWED_COLUMN in df_obs.columns:
+            reviewed_dict = df_obs[REVIEWED_COLUMN].to_dict()
+
+        items: list[QTreeWidgetItem] = []
         for oid in self.app.active_object_ids:
             oid_str = str(oid).strip()
             if oid_str not in df_reg.index:
                 continue
 
-            # Column 0: Reviewed status checkmark
-            is_reviewed = False
-            if df_obs is not None and oid_str in df_obs.index and REVIEWED_COLUMN in df_obs.columns:
-                val = df_obs.loc[oid_str, REVIEWED_COLUMN]
-                is_reviewed = bool(val.iloc[0] if isinstance(val, pd.Series) else val)
+            # Reviewed & problem status
+            raw_rev = reviewed_dict.get(oid_str, False)
+            is_reviewed = bool(raw_rev.iloc[0] if isinstance(raw_rev, pd.Series) else raw_rev)
+            has_problem = self._problem_cache.get(oid_str, False)
 
-            reviewed_mark = "✓" if is_reviewed else " "
+            if is_reviewed and has_problem:
+                status_mark = "⚠✓"
+                color = QColor("#d9a036")  # Amber
+            elif is_reviewed:
+                status_mark = "✓"
+                color = QColor("#2e7d32")  # Green
+            elif has_problem:
+                status_mark = "⚠"
+                color = QColor("#d9534f")  # Red
+            else:
+                status_mark = " "
+                color = None
 
-            # Column 1: ObjectID
-            # Column 2: Taxon name (Genus + Species)
-            genus_val = df_reg.loc[oid_str, "Genus"] if "Genus" in df_reg.columns else ""
-            genus = str(genus_val.iloc[0] if isinstance(genus_val, pd.Series) else genus_val).strip()
+            # Taxon name (Genus + Species)
+            genus_raw = genus_dict.get(oid_str, "")
+            genus = str(genus_raw.iloc[0] if isinstance(genus_raw, pd.Series) else genus_raw).strip()
             if genus in ("nan", "None", "<NA>"):
                 genus = ""
 
-            species_val = df_reg.loc[oid_str, "Species"] if "Species" in df_reg.columns else ""
-            species = str(species_val.iloc[0] if isinstance(species_val, pd.Series) else species_val).strip()
+            species_raw = species_dict.get(oid_str, "")
+            species = str(species_raw.iloc[0] if isinstance(species_raw, pd.Series) else species_raw).strip()
             if species in ("nan", "None", "<NA>"):
                 species = ""
 
             taxon = f"{genus} {species}".strip() or "(unnamed)"
 
-            item = QTreeWidgetItem(tree, [reviewed_mark, oid_str, taxon])
-            if is_reviewed:
-                item.setForeground(0, Qt.darkGreen)
+            item = QTreeWidgetItem([status_mark, oid_str, taxon])
+            if color:
+                item.setForeground(0, color)
+                item.setForeground(1, color)
+                item.setForeground(2, color)
+            items.append(item)
+
+        tree.addTopLevelItems(items)
+        tree.blockSignals(False)
 
         if tree.topLevelItemCount() > 0:
             tree.setCurrentItem(tree.topLevelItem(0))

@@ -110,6 +110,19 @@ class FilterPanel:
         app._inline_search_entry.insert(0, app._inline_search_placeholder)
         app._inline_search_entry.config(foreground="gray")
 
+        # Flat integrated advanced search button
+        app.toolbar_buttons['ADV_SEARCH'] = tk.Button(
+            search_container,
+            text="⚙",
+            font=("Segoe UI", sc(9.5)),
+            bg="#ffffff", fg="gray",
+            activebackground="#ffffff", activeforeground="#000000",
+            relief="flat", bd=0, cursor="hand2",
+            command=lambda: app.open_advanced_search() if hasattr(app, "open_advanced_search") else None
+        )
+        app.toolbar_buttons['ADV_SEARCH'].pack(side="right", padx=(0, sc(6)), pady=sc(4))
+        app.add_tooltip(app.toolbar_buttons['ADV_SEARCH'], "Advanced Historical Search (Ctrl+Shift+F)")
+
         # Flat integrated clear button
         app.toolbar_buttons['X'] = tk.Button(
             search_container,

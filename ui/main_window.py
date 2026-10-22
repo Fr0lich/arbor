@@ -2304,6 +2304,8 @@ class ObjectProgramUI(
         popup.add_separator()
         popup.add_command(label="Process Objects with Problems...", command=self.open_problem_queue_dialog)
         popup.add_separator()
+        popup.add_command(label="Advanced Historical Search...", command=self.open_advanced_search)
+        popup.add_separator()
         popup.add_command(label="🌿 Run GBIF Taxonomy Check...", command=self.batch_gbif_update_action)
         popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
@@ -2325,6 +2327,50 @@ class ObjectProgramUI(
 
         from ui.object_problem_resolver import ProblemQueueDialog
         ProblemQueueDialog(self.root, self)
+
+    def open_advanced_search(self):
+        """Opens modal Advanced Historical Search dialog."""
+        if self.app.df_reg is None or self.app.df_reg.empty:
+            messagebox.showinfo("No Database", "Please load a database before executing advanced search.")
+            return
+
+        if hasattr(self, "advanced_search_window") and self.advanced_search_window and self.advanced_search_window.winfo_exists():
+            self.advanced_search_window.lift()
+            self.advanced_search_window.focus_force()
+            return
+
+        from ui.advanced_search import AdvancedSearchDialog
+        self.advanced_search_window = AdvancedSearchDialog(
+            parent=self.root,
+            app_state=self.app,
+            on_applied=self.on_advanced_search_applied,
+        )
+
+    def on_advanced_search_applied(self, matched: list[str]):
+        """Handler called when advanced historical search returns results."""
+        self.app.active_object_ids = matched
+        self._list_dirty = True
+        self.refresh_list()
+        self.update_filter_button_text()
+
+        total = len(self.app.df_reg) if self.app and self.app.df_reg is not None else 0
+        shown = len(matched)
+        if hasattr(self, "filter_status_label"):
+            if shown < total:
+                self.filter_status_label.config(
+                    text=f"Search active: {shown} of {total} objects"
+                )
+            else:
+                self.filter_status_label.config(text="")
+
+        if self.app.active_object_ids and hasattr(self, "object_list"):
+            try:
+                self.object_list.selection_clear(0, tk.END)
+                self.object_list.selection_set(0)
+                self.object_list.see(0)
+                self.object_list.event_generate("<<ListboxSelect>>")
+            except Exception:
+                pass
 
     def open_historical_resolver_for_current(self):
         """Opens Historical Conflict Resolver for the active specimen."""
