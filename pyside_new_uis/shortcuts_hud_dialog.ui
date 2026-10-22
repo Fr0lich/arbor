@@ -1,0 +1,687 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ShortcutsHUDDialog</class>
+ <widget class="QDialog" name="ShortcutsHUDDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>840</width>
+    <height>680</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>680</width>
+    <height>520</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Keyboard Shortcuts HUD</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#ShortcutsHUDDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+}
+QLabel#lbl_hud_title {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 13pt;
+    font-weight: bold;
+}
+QLabel#lbl_hud_subtitle {
+    color: #757d77;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+}
+QFrame#search_card {
+    background-color: #f2f5f1;
+    border: 1px solid #dadada;
+    border-radius: 3px;
+}
+QLineEdit#entry_search {
+    background-color: transparent;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    border: none;
+}
+QScrollArea#scroll_area {
+    background-color: #fbfaf8;
+    border: none;
+}
+QWidget#scroll_contents {
+    background-color: #fbfaf8;
+}
+QLabel.category-header {
+    color: #3a7d44;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 10pt;
+    font-weight: bold;
+    padding-top: 8px;
+    padding-bottom: 2px;
+}
+QFrame.shortcut-row {
+    background-color: #ffffff;
+    border: 1px solid #dadada;
+    border-radius: 2px;
+}
+QLabel.key-badge {
+    background-color: #f2f5f1;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    border: 1px solid #dadada;
+    border-radius: 2px;
+    padding: 3px 8px;
+}
+QLabel.shortcut-desc {
+    color: #444748;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+}
+QFrame#footer_frame {
+    background-color: #fbfaf8;
+    border-top: 1px solid #dadada;
+}
+QLabel#lbl_footer_hint {
+    color: #757d77;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 8.5pt;
+    font-style: italic;
+}
+QPushButton#btn_close {
+    background-color: #2c302e;
+    color: #ffffff;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 2px;
+    padding: 6px 18px;
+}
+QPushButton#btn_close:hover {
+    background-color: #181c19;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="title_frame">
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="title_vlayout">
+      <property name="spacing">
+       <number>2</number>
+      </property>
+      <property name="leftMargin">
+       <number>24</number>
+      </property>
+      <property name="topMargin">
+       <number>16</number>
+      </property>
+      <property name="rightMargin">
+       <number>24</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_hud_title">
+        <property name="text">
+         <string>KEYBOARD SHORTCUTS</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_hud_subtitle">
+        <property name="text">
+         <string>Comprehensive navigation, focus, and curation shortcut cheat sheet.</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="search_container" native="true">
+     <layout class="QHBoxLayout" name="search_hlayout">
+      <property name="leftMargin">
+       <number>24</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>24</number>
+      </property>
+      <property name="bottomMargin">
+       <number>12</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="search_card">
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <layout class="QHBoxLayout" name="search_card_layout">
+         <property name="leftMargin">
+          <number>10</number>
+         </property>
+         <property name="topMargin">
+          <number>6</number>
+         </property>
+         <property name="rightMargin">
+          <number>10</number>
+         </property>
+         <property name="bottomMargin">
+          <number>6</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_search_icon">
+           <property name="text">
+            <string>🔍</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="entry_search">
+           <property name="placeholderText">
+            <string>Type to search shortcuts...</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scroll_area">
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scroll_contents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>840</width>
+        <height>510</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="scroll_layout">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+       <property name="leftMargin">
+        <number>24</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>24</number>
+       </property>
+       <property name="bottomMargin">
+        <number>12</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="cat_nav_header">
+         <property name="text">
+          <string>NAVIGATION &amp; VIEW</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>category-header</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="row_nav_prevnext">
+         <property name="class" stdset="0">
+          <string>shortcut-row</string>
+         </property>
+         <layout class="QHBoxLayout" name="layout_nav_1">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>8</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="key_prevnext">
+            <property name="text">
+             <string>Left / Right</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>key-badge</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="desc_prevnext">
+            <property name="text">
+             <string>Navigate to previous / next specimen</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>shortcut-desc</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_nav_1">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="row_nav_history">
+         <property name="class" stdset="0">
+          <string>shortcut-row</string>
+         </property>
+         <layout class="QHBoxLayout" name="layout_nav_2">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>8</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="key_history">
+            <property name="text">
+             <string>Alt+Left / Alt+Right</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>key-badge</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="desc_history">
+            <property name="text">
+             <string>Go backward / forward in navigation history</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>shortcut-desc</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_nav_2">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="cat_focus_header">
+         <property name="text">
+          <string>FOCUS &amp; WORKSPACE</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>category-header</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="row_focus_search">
+         <property name="class" stdset="0">
+          <string>shortcut-row</string>
+         </property>
+         <layout class="QHBoxLayout" name="layout_focus_1">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>8</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="key_focus_search">
+            <property name="text">
+             <string>Ctrl+F</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>key-badge</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="desc_focus_search">
+            <property name="text">
+             <string>Jump to quick specimen search</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>shortcut-desc</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_focus_1">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="row_focus_mode">
+         <property name="class" stdset="0">
+          <string>shortcut-row</string>
+         </property>
+         <layout class="QHBoxLayout" name="layout_focus_2">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>8</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="key_focus_mode">
+            <property name="text">
+             <string>Ctrl+Q</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>key-badge</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="desc_focus_mode">
+            <property name="text">
+             <string>Toggle Focus Mode (dim non-essential UI)</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>shortcut-desc</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_focus_2">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="cat_edit_header">
+         <property name="text">
+          <string>EDITING &amp; CURATION</string>
+         </property>
+         <property name="class" stdset="0">
+          <string>category-header</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="row_edit_save">
+         <property name="class" stdset="0">
+          <string>shortcut-row</string>
+         </property>
+         <layout class="QHBoxLayout" name="layout_edit_1">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>8</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="key_edit_save">
+            <property name="text">
+             <string>Ctrl+S</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>key-badge</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="desc_edit_save">
+            <property name="text">
+             <string>Save session database manually</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>shortcut-desc</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_edit_1">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="row_edit_reviewed">
+         <property name="class" stdset="0">
+          <string>shortcut-row</string>
+         </property>
+         <layout class="QHBoxLayout" name="layout_edit_2">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>8</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="key_edit_reviewed">
+            <property name="text">
+             <string>Ctrl+R</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>key-badge</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="desc_edit_reviewed">
+            <property name="text">
+             <string>Toggle Reviewed status</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>shortcut-desc</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_edit_2">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="scroll_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footer_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footer_hlayout">
+      <property name="leftMargin">
+       <number>24</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>24</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_footer_hint">
+        <property name="text">
+         <string>Press Escape to close.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="footer_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_close">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Close</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

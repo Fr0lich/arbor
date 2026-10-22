@@ -1,0 +1,1461 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MobileCompanionDialog</class>
+ <widget class="QDialog" name="MobileCompanionDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>540</width>
+    <height>730</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>500</width>
+    <height>690</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Arbor Mobile Companion</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+    QDialog#MobileCompanionDialog {
+      background-color: #ffffff;
+    }
+   </string>
+  </property>
+  <layout class="QVBoxLayout" name="main_layout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>16</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>16</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="frame_header">
+     <property name="styleSheet">
+      <string notr="true">background-color: #ffffff; border: none;</string>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="header_layout">
+      <property name="spacing">
+       <number>3</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_header_title">
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>15</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: #1b4332;</string>
+        </property>
+        <property name="text">
+         <string>📱 Arbor Mobile Companion</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_header_subtitle">
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>9</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: #5a655e;</string>
+        </property>
+        <property name="text">
+         <string>Scan the QR code to inspect &amp; edit records on your phone.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_db_info">
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>8</pointsize>
+          <italic>true</italic>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: #5a655e;</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QStackedWidget" name="stacked_pages">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <!-- PAGE 0: SETUP SCREEN -->
+     <widget class="QWidget" name="page_setup">
+      <layout class="QVBoxLayout" name="setup_layout">
+       <property name="spacing">
+        <number>12</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="frame_setup_status">
+         <property name="styleSheet">
+          <string notr="true">
+           QFrame#frame_setup_status {
+             background-color: #e8f5e9;
+             border: 1px solid #c8e6c9;
+             border-radius: 6px;
+           }
+          </string>
+         </property>
+         <layout class="QHBoxLayout" name="setup_status_layout">
+          <property name="leftMargin">
+           <number>10</number>
+          </property>
+          <property name="topMargin">
+           <number>6</number>
+          </property>
+          <property name="rightMargin">
+           <number>10</number>
+          </property>
+          <property name="bottomMargin">
+           <number>6</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_setup_status_dot">
+            <property name="font">
+             <font>
+              <family>Segoe UI</family>
+              <pointsize>12</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2e7d32; border: none;</string>
+            </property>
+            <property name="text">
+             <string>●</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_setup_status_text">
+            <property name="font">
+             <font>
+              <family>Segoe UI</family>
+              <pointsize>9</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #1b4332; border: none;</string>
+            </property>
+            <property name="text">
+             <string>⚙️ Setup — Configure Mobile Connection</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_setup_status">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="frame_setup_card">
+         <property name="styleSheet">
+          <string notr="true">
+           QFrame#frame_setup_card {
+             background-color: #fbfbf9;
+             border: 1px solid #dadada;
+             border-radius: 6px;
+           }
+          </string>
+         </property>
+         <layout class="QVBoxLayout" name="setup_card_layout">
+          <property name="spacing">
+           <number>12</number>
+          </property>
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <!-- Network Mode Section -->
+          <item>
+           <layout class="QVBoxLayout" name="layout_net_section">
+            <property name="spacing">
+             <number>4</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="lbl_network_title">
+              <property name="font">
+               <font>
+                <family>Segoe UI</family>
+                <pointsize>9</pointsize>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">color: #1b4332; border: none;</string>
+              </property>
+              <property name="text">
+               <string>Network Mode:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lbl_network_desc">
+              <property name="font">
+               <font>
+                <family>Segoe UI</family>
+                <pointsize>8</pointsize>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">color: #5a655e; border: none;</string>
+              </property>
+              <property name="text">
+               <string>Choose how you want to connect to your mobile device.</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="layout_net_btns">
+              <property name="spacing">
+               <number>6</number>
+              </property>
+              <item>
+               <widget class="QPushButton" name="btn_net_public">
+                <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="font">
+                 <font>
+                  <family>Segoe UI</family>
+                  <pointsize>9</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">
+                  QPushButton {
+                    background-color: #1b4332;
+                    color: #ffffff;
+                    border: 1px solid #1b4332;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                  }
+                  QPushButton:hover {
+                    background-color: #265e47;
+                  }
+                  QPushButton:checked {
+                    background-color: #1b4332;
+                    color: #ffffff;
+                  }
+                 </string>
+                </property>
+                <property name="text">
+                 <string>🌐 Public (Internet)</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_net_local">
+                <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="font">
+                 <font>
+                  <family>Segoe UI</family>
+                  <pointsize>9</pointsize>
+                 </font>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">
+                  QPushButton {
+                    background-color: #e0e3df;
+                    color: #333333;
+                    border: 1px solid #dadada;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                  }
+                  QPushButton:hover {
+                    background-color: #d2d6d0;
+                  }
+                  QPushButton:checked {
+                    background-color: #1b4332;
+                    color: #ffffff;
+                    border-color: #1b4332;
+                  }
+                 </string>
+                </property>
+                <property name="text">
+                 <string>📶 LAN only</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+          <!-- Tunnel Provider Section -->
+          <item>
+           <widget class="QFrame" name="frame_provider">
+            <property name="styleSheet">
+             <string notr="true">background: transparent; border: none;</string>
+            </property>
+            <layout class="QVBoxLayout" name="layout_prov_section">
+             <property name="spacing">
+              <number>4</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>4</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_prov_title">
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>9</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #1b4332; border: none;</string>
+               </property>
+               <property name="text">
+                <string>Tunnel Provider:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_prov_desc">
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>8</pointsize>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #5a655e; border: none;</string>
+               </property>
+               <property name="text">
+                <string>Cloudflare is recommended to bypass firewalls.</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="layout_prov_btns">
+               <property name="spacing">
+                <number>6</number>
+               </property>
+               <item>
+                <widget class="QPushButton" name="btn_prov_cf">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>9</pointsize>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   QPushButton {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                     border: 1px solid #1b4332;
+                     border-radius: 4px;
+                     padding: 6px 12px;
+                   }
+                   QPushButton:hover {
+                     background-color: #265e47;
+                   }
+                   QPushButton:checked {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                   }
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>☁️ Cloudflare</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btn_prov_pinggy">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>9</pointsize>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   QPushButton {
+                     background-color: #e0e3df;
+                     color: #333333;
+                     border: 1px solid #dadada;
+                     border-radius: 4px;
+                     padding: 6px 12px;
+                   }
+                   QPushButton:hover {
+                     background-color: #d2d6d0;
+                   }
+                   QPushButton:checked {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                     border-color: #1b4332;
+                   }
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>🏓 Pinggy / SSH</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <!-- Interface Version Section -->
+          <item>
+           <widget class="QFrame" name="frame_version">
+            <property name="styleSheet">
+             <string notr="true">background: transparent; border: none;</string>
+            </property>
+            <layout class="QVBoxLayout" name="layout_ver_section">
+             <property name="spacing">
+              <number>4</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>4</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_ver_title">
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>9</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #1b4332; border: none;</string>
+               </property>
+               <property name="text">
+                <string>Interface Version:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_ver_desc">
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>8</pointsize>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #5a655e; border: none;</string>
+               </property>
+               <property name="text">
+                <string>V2 Tabbed optimizes physical location and discrepancy resolution.</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="layout_ver_btns">
+               <property name="spacing">
+                <number>6</number>
+               </property>
+               <item>
+                <widget class="QPushButton" name="btn_ver_v2">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>9</pointsize>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   QPushButton {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                     border: 1px solid #1b4332;
+                     border-radius: 4px;
+                     padding: 6px 12px;
+                   }
+                   QPushButton:hover {
+                     background-color: #265e47;
+                   }
+                   QPushButton:checked {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                   }
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>📑 V2 Tabbed (New)</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btn_ver_v1">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>9</pointsize>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   QPushButton {
+                     background-color: #e0e3df;
+                     color: #333333;
+                     border: 1px solid #dadada;
+                     border-radius: 4px;
+                     padding: 6px 12px;
+                   }
+                   QPushButton:hover {
+                     background-color: #d2d6d0;
+                   }
+                   QPushButton:checked {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                     border-color: #1b4332;
+                   }
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>📄 V1 Classic</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="spacer_setup_bottom">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_start_session">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>38</height>
+          </size>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="font">
+          <font>
+           <family>Segoe UI</family>
+           <pointsize>10</pointsize>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+           QPushButton {
+             background-color: #1b4332;
+             color: #ffffff;
+             border: 1px solid #1b4332;
+             border-radius: 4px;
+             padding: 8px 16px;
+           }
+           QPushButton:hover {
+             background-color: #265e47;
+           }
+          </string>
+         </property>
+         <property name="text">
+          <string>▶ Start Mobile Session</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <!-- PAGE 1: ACTIVE SESSION SCREEN -->
+     <widget class="QWidget" name="page_active">
+      <layout class="QVBoxLayout" name="active_layout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <!-- Active Status Bar -->
+       <item>
+        <widget class="QFrame" name="frame_status_bar">
+         <property name="styleSheet">
+          <string notr="true">
+           QFrame#frame_status_bar {
+             background-color: #e8f5e9;
+             border: 1px solid #c8e6c9;
+             border-radius: 6px;
+           }
+          </string>
+         </property>
+         <layout class="QHBoxLayout" name="status_bar_layout">
+          <property name="leftMargin">
+           <number>10</number>
+          </property>
+          <property name="topMargin">
+           <number>6</number>
+          </property>
+          <property name="rightMargin">
+           <number>10</number>
+          </property>
+          <property name="bottomMargin">
+           <number>6</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_status_dot">
+            <property name="font">
+             <font>
+              <family>Segoe UI</family>
+              <pointsize>12</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2e7d32; border: none;</string>
+            </property>
+            <property name="text">
+             <string>●</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_status_text">
+            <property name="font">
+             <font>
+              <family>Segoe UI</family>
+              <pointsize>9</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #1b4332; border: none;</string>
+            </property>
+            <property name="text">
+             <string>🟢 Local Server Ready — Connecting public tunnel...</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_active_status">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_client_badge">
+            <property name="font">
+             <font>
+              <family>Segoe UI</family>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #5a655e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>📱 Offline</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <!-- Middle Card: QR Code & Connection Info -->
+       <item>
+        <widget class="QFrame" name="frame_mid_card">
+         <property name="styleSheet">
+          <string notr="true">
+           QFrame#frame_mid_card {
+             background-color: #fbfbf9;
+             border: 1px solid #dadada;
+             border-radius: 6px;
+           }
+          </string>
+         </property>
+         <layout class="QHBoxLayout" name="mid_card_layout">
+          <property name="spacing">
+           <number>14</number>
+          </property>
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <!-- QR Box -->
+          <item>
+           <widget class="QFrame" name="frame_qr_box">
+            <property name="styleSheet">
+             <string notr="true">
+              QFrame#frame_qr_box {
+                background-color: #ffffff;
+                border: 1px solid #dadada;
+                border-radius: 4px;
+              }
+             </string>
+            </property>
+            <layout class="QVBoxLayout" name="qr_box_layout">
+             <property name="spacing">
+              <number>4</number>
+             </property>
+             <property name="leftMargin">
+              <number>6</number>
+             </property>
+             <property name="topMargin">
+              <number>6</number>
+             </property>
+             <property name="rightMargin">
+              <number>6</number>
+             </property>
+             <property name="bottomMargin">
+              <number>6</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_qr_image">
+               <property name="minimumSize">
+                <size>
+                 <width>160</width>
+                 <height>160</height>
+                </size>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">background-color: #ffffff; border: none;</string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="layout_qr_mode_btns">
+               <property name="spacing">
+                <number>4</number>
+               </property>
+               <item>
+                <widget class="QPushButton" name="btn_qr_public">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>7</pointsize>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   QPushButton {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                     border: 1px solid #1b4332;
+                     border-radius: 3px;
+                     padding: 3px 6px;
+                   }
+                   QPushButton:hover {
+                     background-color: #265e47;
+                   }
+                   QPushButton:checked {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                   }
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>🌐 Public (Internet)</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btn_qr_local">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>7</pointsize>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   QPushButton {
+                     background-color: #e0e3df;
+                     color: #333333;
+                     border: 1px solid #dadada;
+                     border-radius: 3px;
+                     padding: 3px 6px;
+                   }
+                   QPushButton:hover {
+                     background-color: #d2d6d0;
+                   }
+                   QPushButton:checked {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                     border-color: #1b4332;
+                   }
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>📶 LAN only</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <!-- Connection Info Box -->
+          <item>
+           <widget class="QFrame" name="frame_info">
+            <property name="styleSheet">
+             <string notr="true">background: transparent; border: none;</string>
+            </property>
+            <layout class="QVBoxLayout" name="info_layout">
+             <property name="spacing">
+              <number>3</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_step1">
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>9</pointsize>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #1b4332; border: none;</string>
+               </property>
+               <property name="text">
+                <string>1. Scan QR with phone camera</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_step2">
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>8</pointsize>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #5a655e; border: none;</string>
+               </property>
+               <property name="text">
+                <string>Or open this link on your phone:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="edit_url">
+               <property name="font">
+                <font>
+                 <family>Consolas</family>
+                 <pointsize>8</pointsize>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">
+                 QLineEdit {
+                   background-color: #f2f5f1;
+                   border: 1px solid #dadada;
+                   border-radius: 3px;
+                   padding: 3px 6px;
+                   color: #2c302e;
+                 }
+                </string>
+               </property>
+               <property name="text">
+                <string>Initializing...</string>
+               </property>
+               <property name="readOnly">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="layout_pin_row">
+               <property name="spacing">
+                <number>6</number>
+               </property>
+               <property name="topMargin">
+                <number>3</number>
+               </property>
+               <property name="bottomMargin">
+                <number>3</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="lbl_pin_title">
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>9</pointsize>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">color: #1b4332; border: none;</string>
+                 </property>
+                 <property name="text">
+                  <string>PIN:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_pin_badge">
+                 <property name="font">
+                  <font>
+                   <family>Consolas</family>
+                   <pointsize>11</pointsize>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   background-color: #1b4332;
+                   color: #ffffff;
+                   border-radius: 3px;
+                   padding: 2px 8px;
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>----</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="spacer_pin">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_tunnel_status">
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>8</pointsize>
+                 <italic>true</italic>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #d97706; border: none;</string>
+               </property>
+               <property name="text">
+                <string>Tunnel: Establishing...</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="layout_active_ver">
+               <property name="spacing">
+                <number>4</number>
+               </property>
+               <property name="topMargin">
+                <number>3</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="lbl_active_ver_title">
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>8</pointsize>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">color: #1b4332; border: none;</string>
+                 </property>
+                 <property name="text">
+                  <string>UI Version:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btn_active_ver_v2">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>7</pointsize>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   QPushButton {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                     border: 1px solid #1b4332;
+                     border-radius: 3px;
+                     padding: 2px 6px;
+                   }
+                   QPushButton:hover {
+                     background-color: #265e47;
+                   }
+                   QPushButton:checked {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                   }
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>V2 Tabbed</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btn_active_ver_v1">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="font">
+                  <font>
+                   <family>Segoe UI</family>
+                   <pointsize>7</pointsize>
+                  </font>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">
+                   QPushButton {
+                     background-color: #e0e3df;
+                     color: #333333;
+                     border: 1px solid #dadada;
+                     border-radius: 3px;
+                     padding: 2px 6px;
+                   }
+                   QPushButton:hover {
+                     background-color: #d2d6d0;
+                   }
+                   QPushButton:checked {
+                     background-color: #1b4332;
+                     color: #ffffff;
+                     border-color: #1b4332;
+                   }
+                  </string>
+                 </property>
+                 <property name="text">
+                  <string>V1 Classic</string>
+                 </property>
+                 <property name="checkable">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="spacer_active_ver">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="chk_simultaneous_edit">
+               <property name="cursor">
+                <cursorShape>PointingHandCursor</cursorShape>
+               </property>
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>8</pointsize>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #2c302e; border: none; margin-top: 4px;</string>
+               </property>
+               <property name="text">
+                <string>Enable simultaneous edit</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <!-- Session Notice Box -->
+       <item>
+        <widget class="QFrame" name="frame_notice">
+         <property name="styleSheet">
+          <string notr="true">
+           QFrame#frame_notice {
+             background-color: #fffbeb;
+             border: 1px solid #fde68a;
+             border-radius: 6px;
+           }
+          </string>
+         </property>
+         <layout class="QHBoxLayout" name="notice_layout">
+          <property name="leftMargin">
+           <number>10</number>
+          </property>
+          <property name="topMargin">
+           <number>6</number>
+          </property>
+          <property name="rightMargin">
+           <number>10</number>
+          </property>
+          <property name="bottomMargin">
+           <number>6</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_notice_text">
+            <property name="font">
+             <font>
+              <family>Segoe UI</family>
+              <pointsize>8</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #92400e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>📱 Mobile session active. All edits from your phone are synced into memory.
+Save your database before closing this window to persist changes.</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <!-- Activity Feed Group -->
+       <item>
+        <widget class="QGroupBox" name="group_recent_activity">
+         <property name="font">
+          <font>
+           <family>Segoe UI</family>
+           <pointsize>9</pointsize>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+           QGroupBox {
+             background-color: #ffffff;
+             border: 1px solid #dadada;
+             border-radius: 6px;
+             margin-top: 10px;
+             padding-top: 10px;
+             color: #1b4332;
+           }
+           QGroupBox::title {
+             subcontrol-origin: margin;
+             left: 10px;
+             padding: 0 4px;
+           }
+          </string>
+         </property>
+         <property name="title">
+          <string>Recent Mobile Activity</string>
+         </property>
+         <layout class="QVBoxLayout" name="feed_layout">
+          <property name="leftMargin">
+           <number>8</number>
+          </property>
+          <property name="topMargin">
+           <number>6</number>
+          </property>
+          <property name="rightMargin">
+           <number>8</number>
+          </property>
+          <property name="bottomMargin">
+           <number>6</number>
+          </property>
+          <item>
+           <widget class="QListWidget" name="list_feed">
+            <property name="font">
+             <font>
+              <family>Segoe UI</family>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QListWidget {
+                background-color: #fbfbf9;
+                border: 1px solid #dadada;
+                border-radius: 4px;
+                padding: 4px;
+                color: #2c302e;
+              }
+              QListWidget::item {
+                padding: 3px 6px;
+              }
+             </string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <!-- End Session Button -->
+       <item>
+        <widget class="QPushButton" name="btn_end_session">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>38</height>
+          </size>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="font">
+          <font>
+           <family>Segoe UI</family>
+           <pointsize>9</pointsize>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+           QPushButton {
+             background-color: #fef2f2;
+             color: #c93a40;
+             border: 1px solid #fecaca;
+             border-radius: 4px;
+             padding: 8px 16px;
+           }
+           QPushButton:hover {
+             background-color: #fee2e2;
+           }
+          </string>
+         </property>
+         <property name="text">
+          <string>🔴 End Mobile Session</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

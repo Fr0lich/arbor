@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LoadingWindow</class>
+ <widget class="QDialog" name="LoadingWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>460</width>
+    <height>190</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>460</width>
+    <height>190</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>460</width>
+    <height>190</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>arbor — Loading Database</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#LoadingWindow {
+    background-color: #fbfaf8;
+}
+QFrame#card_frame {
+    background-color: #fbfaf8;
+    border: 1px solid #dadada;
+    border-radius: 2px;
+}
+QLabel#lbl_title {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 13pt;
+    font-weight: bold;
+}
+QLabel#lbl_status {
+    color: #444748;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 9pt;
+}
+QProgressBar#progress_bar {
+    border: 1px solid #dadada;
+    border-radius: 2px;
+    background-color: #e9ece5;
+    max-height: 6px;
+    min-height: 6px;
+}
+QProgressBar#progress_bar::chunk {
+    background-color: #3a7d44;
+    border-radius: 1px;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_layout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>10</number>
+   </property>
+   <property name="topMargin">
+    <number>10</number>
+   </property>
+   <property name="rightMargin">
+    <number>10</number>
+   </property>
+   <property name="bottomMargin">
+    <number>10</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="card_frame">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Plain</enum>
+     </property>
+     <layout class="QVBoxLayout" name="card_layout">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <property name="leftMargin">
+       <number>20</number>
+      </property>
+      <property name="topMargin">
+       <number>24</number>
+      </property>
+      <property name="rightMargin">
+       <number>20</number>
+      </property>
+      <property name="bottomMargin">
+       <number>24</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_title">
+        <property name="text">
+         <string>Initializing Application</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_status">
+        <property name="text">
+         <string>Loading Excel database...</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QProgressBar" name="progress_bar">
+        <property name="minimum">
+         <number>0</number>
+        </property>
+        <property name="maximum">
+         <number>0</number>
+        </property>
+        <property name="value">
+         <number>-1</number>
+        </property>
+        <property name="textVisible">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

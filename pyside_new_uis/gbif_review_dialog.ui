@@ -1,0 +1,1189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>GBIFReviewDialog</class>
+ <widget class="QDialog" name="GBIFReviewDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1080</width>
+    <height>720</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>920</width>
+    <height>600</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>GBIF Taxonomic Review &amp; Reconciliation</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+    QDialog#GBIFReviewDialog {
+      background-color: #fbfaf8;
+      color: #2c302e;
+    }
+   </string>
+  </property>
+  <layout class="QVBoxLayout" name="root_layout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <!-- 1. Header Bar -->
+   <item>
+    <widget class="QFrame" name="frame_header">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>46</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">
+       QFrame#frame_header {
+         background-color: #ffffff;
+         border-bottom: 1px solid #d1d1d1;
+       }
+      </string>
+     </property>
+     <layout class="QHBoxLayout" name="header_layout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_header_title">
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>11</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: #2c302e; border: none;</string>
+        </property>
+        <property name="text">
+         <string>GBIF_TAXONOMIC_RECONCILIATION</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_fullscreen">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="font">
+         <font>
+          <family>Consolas</family>
+          <pointsize>8</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #e9ece5;
+            color: #2c302e;
+            border: 1px solid #d1d1d1;
+            border-radius: 3px;
+            padding: 3px 8px;
+          }
+          QPushButton:hover {
+            background-color: #dde1d8;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>⛶ Maximize</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="spacer_header">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_search">
+        <property name="font">
+         <font>
+          <family>Consolas</family>
+          <pointsize>8</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: #444748; border: none;</string>
+        </property>
+        <property name="text">
+         <string>SEARCH:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="edit_search">
+        <property name="minimumSize">
+         <size>
+          <width>220</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>9</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QLineEdit {
+            background-color: #e9ece5;
+            color: #2c302e;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 2px 8px;
+          }
+          QLineEdit:focus {
+            border: 1px solid #2c302e;
+            background-color: #ffffff;
+          }
+         </string>
+        </property>
+        <property name="placeholderText">
+         <string>Filter specimens or taxon...</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <!-- 2. Workflow Stage Tabs Bar -->
+   <item>
+    <widget class="QFrame" name="frame_tabs">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>42</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">
+       QFrame#frame_tabs {
+         background-color: #e9ece5;
+         border-bottom: 1px solid #d1d1d1;
+       }
+      </string>
+     </property>
+     <layout class="QHBoxLayout" name="tabs_layout">
+      <property name="spacing">
+       <number>4</number>
+      </property>
+      <property name="leftMargin">
+       <number>10</number>
+      </property>
+      <property name="topMargin">
+       <number>4</number>
+      </property>
+      <property name="rightMargin">
+       <number>10</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_tabs_title">
+        <property name="font">
+         <font>
+          <family>Consolas</family>
+          <pointsize>8</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: #444748; border: none;</string>
+        </property>
+        <property name="text">
+         <string>WORKFLOW STAGES:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_tab_pending">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #2c302e;
+            color: #ffffff;
+            border: 1px solid #2c302e;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-weight: bold;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>All Pending (0)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_tab_rank_discrepancy">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #c93a40;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 4px 10px;
+          }
+          QPushButton:hover {
+            background-color: #fef2f2;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>⚠️ Rank Discrepancies (0)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_tab_verified">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #2b8a3e;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 4px 10px;
+          }
+          QPushButton:hover {
+            background-color: #f0fdf4;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>✓ Verified in Books (0)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_tab_accepted">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #2c302e;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 4px 10px;
+          }
+          QPushButton:hover {
+            background-color: #f4f6f3;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>🔤 Accepted / Spelling (0)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_tab_missing_metadata">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #0284c7;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 4px 10px;
+          }
+          QPushButton:hover {
+            background-color: #f0f9ff;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>📋 Missing Family / Author (0)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_tab_undetermined">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #757d77;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 4px 10px;
+          }
+          QPushButton:hover {
+            background-color: #f4f6f3;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>🔬 Genus-Level (sp.) (0)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_tab_synonym">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #d97706;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 4px 10px;
+          }
+          QPushButton:hover {
+            background-color: #fffbeb;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>⚠️ Synonyms (0)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_tab_applied">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #2b8a3e;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 4px 10px;
+          }
+          QPushButton:hover {
+            background-color: #f0fdf4;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>✓ Applied (0)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="spacer_tabs">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <!-- 3. Guidance Banner -->
+   <item>
+    <widget class="QFrame" name="frame_tip">
+     <property name="styleSheet">
+      <string notr="true">
+       QFrame#frame_tip {
+         background-color: #f5f7f3;
+         border-bottom: 1px solid #d1d1d1;
+         padding: 4px 16px;
+       }
+      </string>
+     </property>
+     <layout class="QHBoxLayout" name="tip_layout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>4</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_tip">
+        <property name="font">
+         <font>
+          <family>Consolas</family>
+          <pointsize>8</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: #444748; border: none;</string>
+        </property>
+        <property name="text">
+         <string>💡 GUIDED TRIAGE: 1. Start with "✓ Verified in Books" (100% Safe)  →  2. Review "Accepted / Spelling"  →  3. Evaluate "⚠️ Synonyms" one-by-one.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="spacer_tip">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <!-- 4. Main Splitter: Directory on Left, Diff Cards on Right -->
+   <item>
+    <widget class="QSplitter" name="splitter_main">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="childrenCollapsible">
+      <bool>false</bool>
+     </property>
+     <!-- Left Sidebar (Directory) -->
+     <widget class="QFrame" name="frame_sidebar">
+      <property name="minimumSize">
+       <size>
+        <width>280</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>380</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">
+        QFrame#frame_sidebar {
+          background-color: #e9ece5;
+          border-right: 1px solid #d1d1d1;
+        }
+       </string>
+      </property>
+      <layout class="QVBoxLayout" name="sidebar_layout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="frame_dir_header">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>36</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+           QFrame#frame_dir_header {
+             background-color: #e9ece5;
+             border-bottom: 1px solid #d1d1d1;
+           }
+          </string>
+         </property>
+         <layout class="QHBoxLayout" name="dir_hdr_layout">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_dir_title">
+            <property name="font">
+             <font>
+              <family>Consolas</family>
+              <pointsize>8</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #444748; border: none;</string>
+            </property>
+            <property name="text">
+             <string>PAGE SPECIMENS</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QScrollArea" name="scroll_dir">
+         <property name="styleSheet">
+          <string notr="true">
+           QScrollArea#scroll_dir {
+             background-color: #e9ece5;
+             border: none;
+           }
+          </string>
+         </property>
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scroll_dir_content">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>258</width>
+            <height>500</height>
+           </rect>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">background-color: #e9ece5;</string>
+          </property>
+          <layout class="QVBoxLayout" name="dir_list_layout">
+           <property name="spacing">
+            <number>2</number>
+           </property>
+           <property name="leftMargin">
+            <number>4</number>
+           </property>
+           <property name="topMargin">
+            <number>4</number>
+           </property>
+           <property name="rightMargin">
+            <number>4</number>
+           </property>
+           <property name="bottomMargin">
+            <number>4</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <!-- Right Content (Diff Cards & Pagination) -->
+     <widget class="QFrame" name="frame_right">
+      <property name="styleSheet">
+       <string notr="true">background-color: #fbfaf8;</string>
+      </property>
+      <layout class="QVBoxLayout" name="right_layout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <!-- Pagination Header -->
+       <item>
+        <widget class="QFrame" name="frame_pagination">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>46</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+           QFrame#frame_pagination {
+             background-color: #ffffff;
+             border-bottom: 1px solid #d1d1d1;
+           }
+          </string>
+         </property>
+         <layout class="QHBoxLayout" name="pagination_layout">
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>6</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>6</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_page_info">
+            <property name="font">
+             <font>
+              <family>Consolas</family>
+              <pointsize>9</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #2c302e; border: none;</string>
+            </property>
+            <property name="text">
+             <string>Showing 0-0 of 0 items</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="spacer_page_nav">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_first">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QPushButton {
+                background-color: #e9ece5;
+                color: #2c302e;
+                border: 1px solid #d1d1d1;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-weight: bold;
+              }
+             </string>
+            </property>
+            <property name="text">
+             <string>⏮</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_prev">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QPushButton {
+                background-color: #e9ece5;
+                color: #2c302e;
+                border: 1px solid #d1d1d1;
+                border-radius: 3px;
+                padding: 4px 10px;
+                font-weight: bold;
+              }
+             </string>
+            </property>
+            <property name="text">
+             <string>◀ Prev</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_page_num">
+            <property name="font">
+             <font>
+              <family>Consolas</family>
+              <pointsize>9</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #444748; border: none; padding: 0 4px;</string>
+            </property>
+            <property name="text">
+             <string>Page 1 of 1</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_next">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QPushButton {
+                background-color: #e9ece5;
+                color: #2c302e;
+                border: 1px solid #d1d1d1;
+                border-radius: 3px;
+                padding: 4px 10px;
+                font-weight: bold;
+              }
+             </string>
+            </property>
+            <property name="text">
+             <string>Next ▶</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_last">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QPushButton {
+                background-color: #e9ece5;
+                color: #2c302e;
+                border: 1px solid #d1d1d1;
+                border-radius: 3px;
+                padding: 4px 8px;
+                font-weight: bold;
+              }
+             </string>
+            </property>
+            <property name="text">
+             <string>⏭</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_per_page">
+            <property name="font">
+             <font>
+              <family>Consolas</family>
+              <pointsize>8</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #444748; border: none; margin-left: 10px;</string>
+            </property>
+            <property name="text">
+             <string>Per page:</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="combo_page_size">
+            <property name="font">
+             <font>
+              <family>Consolas</family>
+              <pointsize>8</pointsize>
+             </font>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QComboBox {
+                background-color: #e9ece5;
+                color: #2c302e;
+                border: 1px solid #d1d1d1;
+                border-radius: 3px;
+                padding: 2px 6px;
+              }
+             </string>
+            </property>
+            <item>
+             <property name="text">
+              <string>25</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>50</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>100</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <!-- Scrollable Cards -->
+       <item>
+        <widget class="QScrollArea" name="scroll_cards">
+         <property name="styleSheet">
+          <string notr="true">
+           QScrollArea#scroll_cards {
+             background-color: #fbfaf8;
+             border: none;
+           }
+          </string>
+         </property>
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scroll_cards_content">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>800</width>
+            <height>500</height>
+           </rect>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">background-color: #fbfaf8;</string>
+          </property>
+          <layout class="QVBoxLayout" name="cards_layout">
+           <property name="spacing">
+            <number>12</number>
+           </property>
+           <property name="leftMargin">
+            <number>16</number>
+           </property>
+           <property name="topMargin">
+            <number>14</number>
+           </property>
+           <property name="rightMargin">
+            <number>16</number>
+           </property>
+           <property name="bottomMargin">
+            <number>14</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <!-- 5. Bottom Action Bar -->
+   <item>
+    <widget class="QFrame" name="frame_bottom">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>60</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">
+       QFrame#frame_bottom {
+         background-color: #e9ece5;
+         border-top: 1px solid #d1d1d1;
+       }
+      </string>
+     </property>
+     <layout class="QHBoxLayout" name="bottom_layout">
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>10</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="btn_select_all">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>9</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #2c302e;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 6px 12px;
+          }
+          QPushButton:hover {
+            background-color: #f4f6f3;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>Select All</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_deselect_all">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>9</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #2c302e;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 6px 12px;
+          }
+          QPushButton:hover {
+            background-color: #f4f6f3;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>Deselect All</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_select_page">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>9</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #2c302e;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 6px 12px;
+          }
+          QPushButton:hover {
+            background-color: #f4f6f3;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>Select Page</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_select_verified">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>9</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #2b8a3e;
+            border: 1px solid #3a7d44;
+            border-radius: 4px;
+            padding: 6px 12px;
+          }
+          QPushButton:hover {
+            background-color: #f0fdf4;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>🌟 Select Verified Only</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_summary">
+        <property name="font">
+         <font>
+          <family>Consolas</family>
+          <pointsize>9</pointsize>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: #444748; border: none; margin-left: 12px;</string>
+        </property>
+        <property name="text">
+         <string>0 of 0 changes selected</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="spacer_bottom">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_close">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>9</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #ffffff;
+            color: #2c302e;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            padding: 6px 16px;
+          }
+          QPushButton:hover {
+            background-color: #f4f6f3;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>CLOSE &amp; FINISH</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_apply">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI</family>
+          <pointsize>9</pointsize>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">
+          QPushButton {
+            background-color: #3a7d44;
+            color: #ffffff;
+            border: 1px solid #3a7d44;
+            border-radius: 4px;
+            padding: 6px 18px;
+          }
+          QPushButton:hover {
+            background-color: #2e6336;
+          }
+         </string>
+        </property>
+        <property name="text">
+         <string>APPLY SELECTED UPDATES (CTRL+A)</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

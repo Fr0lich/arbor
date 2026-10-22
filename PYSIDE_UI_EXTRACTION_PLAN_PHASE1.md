@@ -2,7 +2,7 @@
 **Document Version:** 1.0.0  
 **Phase:** 1 (Strict 1:1 Visual and Structural UI Extraction)  
 **Target Output Directory:** `pyside_new_uis/`  
-**Status:** Pending User Approval  
+**Status:** Completed (100% Extracted & Verified - All 32 UI Files)  
 
 ---
 
@@ -90,7 +90,7 @@ flowchart TD
       - Online globe indicator `QLabel` (`lbl_globe`, text="🌐")
       - Photo count label `QLabel` (`lbl_photo_count`, text="📷 0")
     - **Row 3 (`QHBoxLayout`):**
-      - Location summary `QLabel` (`lbl_location`, text="", wordWrap=true)
+      - Physical storage location `QLabel` (`lbl_location`, text="Lid's hus • Floor 4 • Mounted on wooded platform / Cab 21.0, Shelf 3.0", wordWrap=false, indicating museum building, floor, cabinet, and shelf coordinates rather than collection provenance)
 
 ### 3.2 Standard Frame Cards (Static Groupings)
 Embedded directly into their parent `.ui` files (e.g. `main_window.ui`, `historical_resolver.ui`).
@@ -141,82 +141,82 @@ Below is the complete inventory of all 32 UI surfaces extracted from the `ui/` c
 
 ---
 
-## 5. Execution Strategy: Phased Batch Delivery
+## 5. Execution Strategy: Phased Batch Delivery (Prioritized for Parallel Handover)
 
-The extraction will proceed sequentially across 7 focused batches. Each batch will be verified before proceeding to the next.
+The extraction is structured sequentially across 7 focused batches. **Batches 4 and 5 are deliberately re-ordered to prioritize Standalone Windows and Leaf Nodes first.** Standalone dialogs communicate via simple callbacks or EventBus signals with zero tight coupling to other unfinished controllers, allowing them to be handed off immediately to parallel agents for Phase 2 logic wiring without dependency conflicts.
 
 ```mermaid
-flowchart LR
-    Batch1["Batch 1: Templates & Startup<br/>(Card Template, Startup, Loading)"] --> Batch2["Batch 2: Main Workspace<br/>(MainWindow, QuickPeek, Popups)"]
-    Batch2 --> Batch3["Batch 3: Discrepancy & Resolvers<br/>(Historical, Problems, Bulk Edit, Mobile Sync)"]
-    Batch3 --> Batch4["Batch 4: Wizards & Creation<br/>(New DB Wizard, Add Objects)"]
-    Batch4 --> Batch5["Batch 5: Taxonomic & Mobile<br/>(GBIF Review, GBIF Batch, Mobile Host)"]
-    Batch5 --> Batch6["Batch 6: Settings & Schema<br/>(Unified Settings, Groups, Ignored Words)"]
-    Batch6 --> Batch7["Batch 7: Analytics & Utilities<br/>(Filter, Dashboard, Recent Activity, HUD)"]
+flowchart TD
+    subgraph Completed["✅ Completed Batches"]
+        Batch1["Batch 1: Templates & Startup<br/>(Card Template, Startup, Loading)"] --> Batch2["Batch 2: Main Workspace<br/>(MainWindow, QuickPeek, Popups)"]
+        Batch2 --> Batch3["Batch 3: Discrepancy & Resolvers<br/>(Historical, Problems, Bulk Edit, Mobile Sync)"]
+    end
+    
+    subgraph Prioritized["🚀 Parallelization Priority: Leaf Nodes First"]
+        Batch3 --> Batch4["Batch 4: Standalone Utilities & Leaf Reference<br/>(Ignored Words, Shortcuts HUD, Help Center, Crash Log, Autosave)"]
+        Batch4 --> Batch5["Batch 5: Standalone Query, Config & Diagnostics<br/>(Filter Dialog, Recent Activity, Dashboard, Image Settings, GBIF Quick Update)"]
+    end
+    
+    subgraph Heavywork["⚙️ Sub-Dialogs & Heavy Wizards"]
+        Batch5 --> Batch6["Batch 6: Sub-Dialogs & Schema/Settings Panels<br/>(Batch Add Fields, Move Field, Group Editor, Settings Windows)"]
+        Batch6 --> Batch7["Batch 7: Complex Workflows & Multi-Step Wizards<br/>(Mobile Host, GBIF Review Workspace, Add Objects, New DB Wizard)"]
+    end
 ```
 
 ---
 
 ### Batch 1: Foundational Templates & Startup Workflow
 *Target: Establish the single card visual building block and project startup experience.*
-- [ ] **1.1** `object_list_card_template.ui` (Virtual Card layout with accent strip, 3-row layout, status chips)
-- [ ] **1.2** `startup_dialog.ui` (Project Setup dialog: DB picker, image mode segmented bar, historical books, recent projects list, launch button)
-- [ ] **1.3** `loading_window.ui` (Splash progress modal with status indicator)
+- [x] **1.1** `object_list_card_template.ui` (Virtual Card layout with accent strip, 3-row layout, status chips)
+- [x] **1.2** `startup_dialog.ui` (Project Setup dialog: DB picker, image mode segmented bar, historical books, recent projects list, launch button)
+- [x] **1.3** `loading_window.ui` (Splash progress modal with status indicator)
 
 ### Batch 2: Main Application Workspace & Immediate Drawers
 *Target: The primary curation and visual review environment.*
-- [ ] **2.1** `main_window.ui` (Complete 3-pane workspace):
-  - Top Navigation Bar (Logo, File/Navigate/Images/Create/History/Settings menus, connection status, unsaved badge)
-  - Inline notification banner (expandable)
-  - Left Panel (Live search, sort/filter controls, view toggle, list container, collapsible Location panel)
-  - Center Panel (Specimen header bar, Image toolbar with zoom/pan/rotate, main image canvas, action rail)
-  - Right Panel (Specimen audit card containers: Taxonomy 🧬, Collection 📦, Notes 📝, Problem flags checklist, sticky "Mark Reviewed" button)
-  - Bottom Status Bar (Database status, filter summary, record counts, progress percentage)
-- [ ] **2.2** `quick_peek_dialog.ui` (Non-modal specimen inspection card)
-- [ ] **2.3** `location_editor_dialog.ui` (Location coordinates & attributes popup)
-- [ ] **2.4** `problem_flags_dialog.ui` (Problem flags checklist editor popup)
+- [x] **2.1** `main_window.ui` (Complete 3-pane workspace: Top nav bar, Left list panel with vertical ActionRail [📌/🔍/⚡], Center specimen context bar and ImagePanel with toolbar and canvas viewport, Right registration data panel with History/Focus header, 3 thematic audit cards, and bottom reviewed action bar with Clear Problems/Auto-next)
+- [x] **2.2** `quick_peek_dialog.ui` (Non-modal specimen inspection card)
+- [x] **2.3** `location_editor_dialog.ui` (Location coordinates & attributes popup)
+- [x] **2.4** `problem_flags_dialog.ui` (Problem flags checklist editor popup)
 
 ### Batch 3: Discrepancy, Problem & Conflict Resolvers
 *Target: The high-stakes data auditing and resolution interfaces.*
-- [ ] **3.1** `historical_resolver.ui` (Golden Standard layout: Left sidebar field directory with discrepancy tags, right scroll area with comparison cards, suggestion buttons, manual entry)
-- [ ] **3.2** `object_problem_resolver.ui` (Specimen problem resolver with queue navigation and category comparison)
-- [ ] **3.3** `problem_queue_dialog.ui` (Queue filter and batch launcher dialog)
-- [ ] **3.4** `bulk_edit_dialog.ui` (Multi-record batch editor with find/replace, before/after preview)
-- [ ] **3.5** `mobile_conflict_resolver.ui` (Dual-column diff resolver for mobile companion edits)
+- [x] **3.1** `historical_resolver.ui` (Golden Standard layout: Left sidebar field directory with discrepancy tags, right scroll area with comparison cards, suggestion buttons, manual entry)
+- [x] **3.2** `object_problem_resolver.ui` (Specimen problem resolver with queue navigation and category comparison)
+- [x] **3.3** `problem_queue_dialog.ui` (Queue filter and batch launcher dialog)
+- [x] **3.4** `bulk_edit_dialog.ui` (Multi-record batch editor with find/replace, before/after preview)
+- [x] **3.5** `mobile_conflict_resolver.ui` (Dual-column diff resolver for mobile companion edits)
 
-### Batch 4: Wizards & Creation Workflows
-*Target: Multi-step database creation and object ingestion.*
-- [ ] **4.1** `new_database_wizard.ui` (Multi-step database setup wizard: Name/Path, Schema template, Categories & Field configuration, Import seeding, Summary)
-- [ ] **4.2** `batch_add_fields_dialog.ui` (Sub-dialog for bulk-adding fields to custom schemas)
-- [ ] **4.3** `add_objects_wizard.ui` (Specimen addition wizard: ID generator, metadata inheritance, image association)
+### Batch 4: Standalone Utilities & Leaf Reference Dialogs (Pure Leaf Nodes)
+*Target: Self-contained utility and reference dialogs that can be immediately handed off for logic wiring.*
+- [x] **4.1** `ignored_words_dialog.ui` (Botanical spellcheck & discrepancy dictionary editor; self-contained file/config read & write)
+- [x] **4.2** `shortcuts_hud_dialog.ui` (Keyboard shortcuts cheat-sheet overlay; pure display & close)
+- [x] **4.3** `help_center_dialog.ui` (Documentation and guide viewer; markdown browser)
+- [x] **4.4** `error_traceback_dialog.ui` (Formatted error/crash log viewer with copy/save actions)
+- [x] **4.5** `autosave_manager_dialog.ui` (Autosave backup snapshot browser and restore tool)
 
-### Batch 5: Taxonomic & External Integrations
-*Target: GBIF reconciliation and Mobile Companion server controls.*
-- [ ] **5.1** `gbif_review_dialog.ui` (GBIF Taxonomic review workspace: Local vs GBIF comparison, hierarchy tree, synonym picker)
-- [ ] **5.2** `gbif_update_dialog.ui` (Single specimen quick GBIF lookup)
-- [ ] **5.3** `gbif_batch_config_dialog.ui` (Batch GBIF analysis configuration and throttling)
-- [ ] **5.4** `mobile_companion_dialog.ui` (Mobile Companion server control, QR pairing code canvas, client list, sync toggles)
+### Batch 5: Standalone Query, Config & Diagnostics (Callback / EventBus Leaf Nodes)
+*Target: Independent data views and configuration dialogs communicating cleanly via callbacks or EventBus.*
+- [x] **5.1** `filter_dialog.ui` (Advanced filter builder with rule rows, AND/OR logic, presets; emits callback/app_bus)
+- [x] **5.2** `recent_activity_dialog.ui` (Audit log timeline, filter by action, revert controls; communicates via state/history)
+- [x] **5.3** `dashboard_dialog.ui` (Database statistics, distribution charts, progress metrics)
+- [x] **5.4** `image_settings_dialog.ui` (Image source and local folder configuration)
+- [x] **5.5** `gbif_update_dialog.ui` (Single specimen quick GBIF lookup popup)
+- [x] **5.6** `gbif_batch_config_dialog.ui` (Batch GBIF analysis configuration and rate throttling)
 
-### Batch 6: Settings, Customization & Schema Editors
-*Target: Application preferences and data model customization.*
-- [ ] **6.1** `unified_settings_window.ui` (Tabbed settings window: General, Layout/Panels, Keybindings, Database Schema, Performance/Logs)
-- [ ] **6.2** `advanced_settings_window.ui` (Advanced engine flags and dev options)
-- [ ] **6.3** `group_editor_window.ui` (Registration tabs and field groups editor)
-- [ ] **6.4** `move_field_dialog.ui` (Field reordering sub-dialog)
-- [ ] **6.5** `ignored_words_dialog.ui` (Botanical spellcheck and discrepancy ignore dictionary editor)
+### Batch 6: Sub-Dialogs & Modular Schema/Settings Panels
+*Target: Secondary editors and settings windows.*
+- [x] **6.1** `batch_add_fields_dialog.ui` (Leaf dialog for bulk-adding fields into custom database schemas)
+- [x] **6.2** `move_field_dialog.ui` (Leaf sub-dialog for reordering fields across groups)
+- [x] **6.3** `group_editor_window.ui` (Registration tabs and field groups manager)
+- [x] **6.4** `advanced_settings_window.ui` (Advanced engine flags and developer options)
+- [x] **6.5** `unified_settings_window.ui` (Tabbed settings window: General, Layout/Panels, Keybindings, Database Schema, Performance/Logs)
 
-### Batch 7: Analytics, Search, Utilities & Help
-*Target: Filtering, search, audit logging, reporting, and documentation.*
-- [ ] **7.1** `filter_dialog.ui` (Advanced filter builder with rule rows, AND/OR logic, presets)
-- [ ] **7.2** `advanced_search_dialog.ui` (Historical multi-field search dialog)
-- [ ] **7.3** `dashboard_dialog.ui` (Database statistics, distribution charts, progress metrics)
-- [ ] **7.4** `recent_activity_dialog.ui` (Audit log timeline, filter by action, revert controls)
-- [ ] **7.5** `autosave_manager_dialog.ui` (Autosave backup snapshot browser and restore tool)
-- [ ] **7.6** `shortcuts_hud_dialog.ui` (Keyboard shortcuts reference HUD)
-- [ ] **7.7** `help_center_dialog.ui` (Arbor User Guide and documentation browser)
-- [ ] **7.8** `image_settings_dialog.ui` (Image source and local folder configuration)
-- [ ] **7.9** `error_traceback_dialog.ui` (Formatted error log and crash traceback viewer)
-- [ ] **7.10** `loading_window.ui` (Full verification & polish)
+### Batch 7: High-Complexity Workflows & Multi-Step Wizards
+*Target: Multi-step database creation, object ingestion, taxonomic reconciliation, and companion server host.*
+- [x] **7.1** `mobile_companion_dialog.ui` (Mobile Companion server control, QR pairing code canvas, client list, sync toggles)
+- [x] **7.2** `gbif_review_dialog.ui` (GBIF Taxonomic review workspace: Local vs GBIF comparison, hierarchy tree, synonym picker)
+- [x] **7.3** `add_objects_wizard.ui` (Specimen addition wizard: ID generator, metadata inheritance, image association)
+- [x] **7.4** `new_database_wizard.ui` (Multi-step database setup wizard: Name/Path, Schema template, Categories & Field configuration, Import seeding, Summary)
 
 ---
 
@@ -236,6 +236,8 @@ For every `.ui` file generated or updated:
    - Ensure the command returns exit code `0` with the verified object name and class.
 3. **Visual Parity Inspection:**
    - Verify layout alignment, margins, font specifications, and color token compliance against Tkinter source.
+4. **Integration Pipeline Registration:**
+   - Immediately update `PYSIDE_UI_INTEGRATION_PIPELINE.md`: mark the component as `READY FOR WIRING` and document its exact widget object names and constructor contract for parallel Phase 2 agents.
 
 ---
 

@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AutosaveManagerDialog</class>
+ <widget class="QDialog" name="AutosaveManagerDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>540</width>
+    <height>420</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>480</width>
+    <height>360</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Autosave Archive Manager</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#AutosaveManagerDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+}
+QLabel#lbl_title {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 11pt;
+    font-weight: bold;
+}
+QLabel#lbl_subtitle {
+    color: #757d77;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+}
+QListWidget#list_archives {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 9pt;
+    border: 1px solid #dadada;
+    border-radius: 2px;
+    padding: 4px;
+}
+QListWidget#list_archives::item {
+    padding: 6px;
+    border-bottom: 1px solid #f2f5f1;
+}
+QListWidget#list_archives::item:selected {
+    background-color: #e9ece5;
+    color: #2c302e;
+}
+QPushButton#btn_restore {
+    background-color: #3a7d44;
+    color: #ffffff;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 2px;
+    padding: 6px 14px;
+}
+QPushButton#btn_restore:hover {
+    background-color: #2e6536;
+}
+QPushButton#btn_delete, QPushButton#btn_delete_all {
+    background-color: #ffffff;
+    color: #c93a40;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    border: 1px solid #dadada;
+    border-radius: 2px;
+    padding: 6px 12px;
+}
+QPushButton#btn_delete:hover, QPushButton#btn_delete_all:hover {
+    background-color: #faeaeb;
+    border-color: #c93a40;
+}
+QPushButton#btn_close {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    border: 1px solid #dadada;
+    border-radius: 2px;
+    padding: 6px 16px;
+}
+QPushButton#btn_close:hover {
+    background-color: #e9ece5;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>16</number>
+   </property>
+   <property name="topMargin">
+    <number>14</number>
+   </property>
+   <property name="rightMargin">
+    <number>16</number>
+   </property>
+   <property name="bottomMargin">
+    <number>14</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="lbl_title">
+     <property name="text">
+      <string>Archived Autosaves</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="lbl_subtitle">
+     <property name="text">
+      <string>Select a file to restore or delete it.</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QListWidget" name="list_archives">
+     <property name="selectionMode">
+      <enum>QAbstractItemView::SingleSelection</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="btn_layout">
+     <property name="spacing">
+      <number>8</number>
+     </property>
+     <item>
+      <widget class="QPushButton" name="btn_restore">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Restore selected</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_delete">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Delete selected</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_delete_all">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Delete all</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="btn_spacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_close">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Close</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

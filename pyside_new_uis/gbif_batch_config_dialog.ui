@@ -1,0 +1,476 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>GBIFBatchConfigDialog</class>
+ <widget class="QDialog" name="GBIFBatchConfigDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>720</width>
+    <height>680</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>640</width>
+    <height>560</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Batch GBIF Taxonomy Analysis</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#GBIFBatchConfigDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+}
+QFrame#header_frame {
+    background-color: #ffffff;
+    border-bottom: 1px solid #d1d1d1;
+}
+QLabel#lbl_title {
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 11pt;
+    font-weight: bold;
+}
+QFrame#safety_card {
+    background-color: #f0fdf4;
+    border: 1px solid #3a7d44;
+    border-radius: 4px;
+}
+QLabel#lbl_safety_title {
+    color: #3a7d44;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 10pt;
+    font-weight: bold;
+}
+QLabel#lbl_safety_desc {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+}
+QFrame.config-card {
+    background-color: #ffffff;
+    border: 1px solid #d1d1d1;
+    border-radius: 4px;
+}
+QLabel.config-card-title {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 10pt;
+    font-weight: bold;
+}
+QRadioButton, QCheckBox {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    padding: 2px 0px;
+}
+QProgressBar#prog_bar {
+    border: 1px solid #d1d1d1;
+    border-radius: 2px;
+    background-color: #e9ece5;
+    min-height: 8px;
+    max-height: 8px;
+    text-align: center;
+}
+QProgressBar#prog_bar::chunk {
+    background-color: #3a7d44;
+    border-radius: 1px;
+}
+QFrame#footer_frame {
+    background-color: #e9ece5;
+    border-top: 1px solid #d1d1d1;
+}
+QLabel#lbl_summary {
+    color: #444748;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9pt;
+}
+QPushButton#btn_cancel {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: 1px solid #d1d1d1;
+    border-radius: 3px;
+    padding: 6px 16px;
+}
+QPushButton#btn_cancel:hover {
+    background-color: #f0f0f0;
+}
+QPushButton#btn_start {
+    background-color: #3a7d44;
+    color: #ffffff;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 3px;
+    padding: 6px 20px;
+}
+QPushButton#btn_start:hover {
+    background-color: #2e6536;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="header_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>48</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>48</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="header_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>10</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_title">
+        <property name="text">
+         <string>BATCH_GBIF_TAXONOMY_ANALYSIS</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="content_area" native="true">
+     <layout class="QVBoxLayout" name="content_vlayout">
+      <property name="spacing">
+       <number>14</number>
+      </property>
+      <property name="leftMargin">
+       <number>20</number>
+      </property>
+      <property name="topMargin">
+       <number>16</number>
+      </property>
+      <property name="rightMargin">
+       <number>20</number>
+      </property>
+      <property name="bottomMargin">
+       <number>16</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="safety_card">
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <layout class="QVBoxLayout" name="safety_card_layout">
+         <property name="spacing">
+          <number>4</number>
+         </property>
+         <property name="leftMargin">
+          <number>16</number>
+         </property>
+         <property name="topMargin">
+          <number>12</number>
+         </property>
+         <property name="rightMargin">
+          <number>16</number>
+         </property>
+         <property name="bottomMargin">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_safety_title">
+           <property name="text">
+            <string>🛡️ Safe Read-Only Scan</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="lbl_safety_desc">
+           <property name="text">
+            <string>This operation queries the GBIF Backbone API in the background. It will never overwrite your existing database records directly; all suggested improvements are staged in a review queue for your manual approval.</string>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="scope_card">
+        <property name="class" stdset="0">
+         <string>config-card</string>
+        </property>
+        <layout class="QVBoxLayout" name="scope_card_layout">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <property name="leftMargin">
+          <number>16</number>
+         </property>
+         <property name="topMargin">
+          <number>14</number>
+         </property>
+         <property name="rightMargin">
+          <number>16</number>
+         </property>
+         <property name="bottomMargin">
+          <number>14</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="title_scope">
+           <property name="text">
+            <string>ANALYSIS SCOPE</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>config-card-title</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="rb_scope_filtered">
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="text">
+            <string>All currently filtered objects in view</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="rb_scope_selected">
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="text">
+            <string>Selected objects only</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="rb_scope_all">
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="text">
+            <string>Entire database (all objects)</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="options_card">
+        <property name="class" stdset="0">
+         <string>config-card</string>
+        </property>
+        <layout class="QVBoxLayout" name="options_card_layout">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <property name="leftMargin">
+          <number>16</number>
+         </property>
+         <property name="topMargin">
+          <number>14</number>
+         </property>
+         <property name="rightMargin">
+          <number>16</number>
+         </property>
+         <property name="bottomMargin">
+          <number>14</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="title_options">
+           <property name="text">
+            <string>ANALYSIS CRITERIA &amp; OPTIONS</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>config-card-title</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="chk_fuzzy_matching">
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="text">
+            <string>Allow fuzzy phonetic genus &amp; species matching</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="chk_author_reconcile">
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="text">
+            <string>Reconcile botanical author citations and standard abbreviations</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="chk_higher_rank">
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="text">
+            <string>Validate higher taxonomic ranks (Family, Order, Kingdom)</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QProgressBar" name="prog_bar">
+        <property name="value">
+         <number>0</number>
+        </property>
+        <property name="textVisible">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="content_spacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footer_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footer_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_summary">
+        <property name="text">
+         <string>Ready to analyze records.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="footer_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_cancel">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Cancel</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_start">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>START BATCH ANALYSIS</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

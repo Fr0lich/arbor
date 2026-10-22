@@ -1,0 +1,754 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AdvancedSettingsWindow</class>
+ <widget class="QDialog" name="AdvancedSettingsWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>720</width>
+    <height>540</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>640</width>
+    <height>460</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Advanced Settings</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#AdvancedSettingsWindow {
+    background-color: #f9f9f9;
+    color: #1a1c1c;
+}
+QFrame#header_frame {
+    background-color: #f3f3f3;
+    border-bottom: 1px solid #747878;
+}
+QLabel#lbl_header_title {
+    color: #000000;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 13pt;
+    font-weight: bold;
+}
+QTabWidget::pane {
+    background-color: #f9f9f9;
+    border: none;
+}
+QTabBar::tab {
+    background-color: #e2e2e2;
+    color: #444748;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+    padding: 8px 16px;
+    border: 1px solid #c4c7c7;
+    border-bottom: none;
+}
+QTabBar::tab:selected {
+    background-color: #f9f9f9;
+    color: #000000;
+    border-top: 2px solid #000000;
+    border-bottom: 1px solid #f9f9f9;
+}
+QFrame.setting-card {
+    background-color: #ffffff;
+    border: 1px solid #c4c7c7;
+    border-radius: 3px;
+    padding: 10px;
+}
+QLabel.setting-title {
+    color: #1a1c1c;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 10pt;
+    font-weight: bold;
+}
+QLabel.setting-desc {
+    color: #444748;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 8.5pt;
+}
+QFrame#footer_frame {
+    background-color: #f3f3f3;
+    border-top: 1px solid #747878;
+}
+QPushButton#btn_reset_defaults {
+    background-color: transparent;
+    color: #ba1a1a;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    border: none;
+    padding: 6px 12px;
+}
+QPushButton#btn_reset_defaults:hover {
+    background-color: #faeaeb;
+}
+QPushButton#btn_cancel {
+    background-color: #ffffff;
+    color: #1a1c1c;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    border: 1px solid #747878;
+    border-radius: 2px;
+    padding: 6px 14px;
+}
+QPushButton#btn_cancel:hover {
+    background-color: #e9ece5;
+}
+QPushButton#btn_save {
+    background-color: #000000;
+    color: #ffffff;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 2px;
+    padding: 6px 16px;
+}
+QPushButton#btn_save:hover {
+    background-color: #2c302e;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="header_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="header_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_header_title">
+        <property name="text">
+         <string>Advanced Settings &amp; Features</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tab_widget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tab_system">
+      <attribute name="title">
+       <string>System &amp; Backups</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="system_vlayout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="card_excel_backup">
+         <property name="class" stdset="0">
+          <string>setting-card</string>
+         </property>
+         <layout class="QHBoxLayout" name="excel_backup_layout">
+          <item>
+           <layout class="QVBoxLayout" name="excel_text_layout">
+            <item>
+             <widget class="QLabel" name="title_excel_backup">
+              <property name="text">
+               <string>Enable Backup on Excel Import</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-title</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="desc_excel_backup">
+              <property name="text">
+               <string>Creates a timestamped backup copy inside a 'backups' folder whenever importing an Excel file.</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-desc</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_excel_backup">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="card_archive_limit">
+         <property name="class" stdset="0">
+          <string>setting-card</string>
+         </property>
+         <layout class="QHBoxLayout" name="archive_limit_layout">
+          <item>
+           <layout class="QVBoxLayout" name="archive_text_layout">
+            <item>
+             <widget class="QLabel" name="title_archive_limit">
+              <property name="text">
+               <string>Autosave Archive Warning Limit</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-title</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="desc_archive_limit">
+              <property name="text">
+               <string>Number of archived autosaves kept before prompting the user to clean them up.</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-desc</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QComboBox" name="combo_archive_limit">
+            <item>
+             <property name="text">
+              <string>5</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>10</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>20</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>50</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="card_log_verbosity">
+         <property name="class" stdset="0">
+          <string>setting-card</string>
+         </property>
+         <layout class="QHBoxLayout" name="log_verbosity_layout">
+          <item>
+           <layout class="QVBoxLayout" name="log_text_layout">
+            <item>
+             <widget class="QLabel" name="title_log_verbosity">
+              <property name="text">
+               <string>System Logging Verbosity</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-title</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="desc_log_verbosity">
+              <property name="text">
+               <string>Set level of diagnostic logging stored in session log files.</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-desc</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QComboBox" name="combo_log_verbosity">
+            <item>
+             <property name="text">
+              <string>ERROR</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>WARNING</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>INFO</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>DEBUG</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="system_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_graphics">
+      <attribute name="title">
+       <string>Graphics &amp; Images</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="graphics_vlayout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="card_resampling">
+         <property name="class" stdset="0">
+          <string>setting-card</string>
+         </property>
+         <layout class="QHBoxLayout" name="resampling_layout">
+          <item>
+           <layout class="QVBoxLayout" name="resampling_text_layout">
+            <item>
+             <widget class="QLabel" name="title_resampling">
+              <property name="text">
+               <string>Image Resampling Algorithm</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-title</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="desc_resampling">
+              <property name="text">
+               <string>Choose filter quality for image zoom. Lanczos is high-quality but slower.</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-desc</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QComboBox" name="combo_resampling">
+            <item>
+             <property name="text">
+              <string>LANCZOS (High Quality)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>BILINEAR (Balanced)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>NEAREST (Fast draft)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="card_url_override">
+         <property name="class" stdset="0">
+          <string>setting-card</string>
+         </property>
+         <layout class="QVBoxLayout" name="url_override_layout">
+          <item>
+           <widget class="QLabel" name="title_url_override">
+            <property name="text">
+               <string>Image URL Pattern Override</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>setting-title</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="desc_url_override">
+            <property name="text">
+             <string>Override database image URL pattern. Supports {id}, {num}, {suffix}.</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>setting-desc</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="entry_url_override">
+            <property name="placeholderText">
+             <string>https://example.org/images/{id}.jpg</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="graphics_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_ux">
+      <attribute name="title">
+       <string>UX &amp; Themes</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="ux_vlayout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="card_bulk_editor">
+         <property name="class" stdset="0">
+          <string>setting-card</string>
+         </property>
+         <layout class="QHBoxLayout" name="bulk_editor_layout">
+          <item>
+           <layout class="QVBoxLayout" name="bulk_text_layout">
+            <item>
+             <widget class="QLabel" name="title_bulk_editor">
+              <property name="text">
+               <string>Enable Bulk Editor</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-title</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="desc_bulk_editor">
+              <property name="text">
+               <string>Allows mass updates to selected rows in view.</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-desc</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_bulk_editor">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="card_focus_toggle">
+         <property name="class" stdset="0">
+          <string>setting-card</string>
+         </property>
+         <layout class="QHBoxLayout" name="focus_toggle_layout">
+          <item>
+           <layout class="QVBoxLayout" name="focus_text_layout">
+            <item>
+             <widget class="QLabel" name="title_focus_toggle">
+              <property name="text">
+               <string>Show Focus Mode Toggle</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-title</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="desc_focus_toggle">
+              <property name="text">
+               <string>Shows the Focus Mode switch in the top-right header.</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>setting-desc</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_focus_toggle">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="ux_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_tools">
+      <attribute name="title">
+       <string>Tools &amp; Actions</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tools_vlayout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QPushButton" name="btn_mark_reviewed">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>Mark All Filtered Objects as Reviewed</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_unmark_reviewed">
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+         <property name="text">
+          <string>Unmark All Filtered Objects as Reviewed</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="tools_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footer_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footer_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="btn_reset_defaults">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Reset Defaults</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="footer_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_cancel">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Cancel</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_save">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Save Changes</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

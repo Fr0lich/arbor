@@ -1,0 +1,497 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>GBIFUpdateDialog</class>
+ <widget class="QDialog" name="GBIFUpdateDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>640</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>580</width>
+    <height>440</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>GBIF Updates Available</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#GBIFUpdateDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+}
+QFrame#header_frame {
+    background-color: #ffffff;
+    border-bottom: 1px solid #d1d1d1;
+}
+QLabel#lbl_title {
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 11pt;
+    font-weight: bold;
+}
+QFrame#ctx_header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #d1d1d1;
+}
+QLabel#lbl_review_count {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 13pt;
+    font-weight: bold;
+}
+QLabel#lbl_review_desc {
+    color: #444748;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+}
+QPushButton#btn_select_all, QPushButton#btn_deselect_all {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 8.5pt;
+    font-weight: bold;
+    border: 1px solid #d1d1d1;
+    border-radius: 2px;
+    padding: 3px 10px;
+}
+QPushButton#btn_select_all:hover, QPushButton#btn_deselect_all:hover {
+    background-color: #e9ece5;
+}
+QScrollArea#scroll_area {
+    background-color: #fbfaf8;
+    border: none;
+}
+QWidget#scroll_contents {
+    background-color: #fbfaf8;
+}
+QFrame.update-card {
+    background-color: #ffffff;
+    border: 1px solid #d1d1d1;
+    border-radius: 3px;
+}
+QLabel.val-title {
+    color: #444748;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 8pt;
+    font-weight: bold;
+}
+QLabel.val-current {
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+}
+QLabel.val-gbif {
+    color: #3a7d44;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+}
+QFrame#footer_frame {
+    background-color: #e9ece5;
+    border-top: 1px solid #d1d1d1;
+}
+QPushButton#btn_reject_all {
+    background-color: transparent;
+    color: #c93a40;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: none;
+    padding: 6px 14px;
+}
+QPushButton#btn_reject_all:hover {
+    background-color: #faeaeb;
+}
+QPushButton#btn_cancel {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: 1px solid #d1d1d1;
+    border-radius: 3px;
+    padding: 6px 16px;
+}
+QPushButton#btn_cancel:hover {
+    background-color: #f0f0f0;
+}
+QPushButton#btn_apply {
+    background-color: #3a7d44;
+    color: #ffffff;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 3px;
+    padding: 6px 18px;
+}
+QPushButton#btn_apply:hover {
+    background-color: #2e6536;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="header_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>48</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>48</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="header_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>10</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_title">
+        <property name="text">
+         <string>GBIF_TAXONOMIC_RECONCILIATION</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="ctx_header">
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QVBoxLayout" name="ctx_vlayout">
+      <property name="spacing">
+       <number>4</number>
+      </property>
+      <property name="leftMargin">
+       <number>20</number>
+      </property>
+      <property name="topMargin">
+       <number>12</number>
+      </property>
+      <property name="rightMargin">
+       <number>20</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_review_count">
+        <property name="text">
+         <string>RECORD REVIEW: 1 PROPOSED UPDATE</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_review_desc">
+        <property name="text">
+         <string>Review GBIF taxonomic backbone suggestions below. Select the changes you wish to apply.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="quick_actions_layout">
+        <property name="topMargin">
+         <number>4</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_select_all">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Select All</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_deselect_all">
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Deselect All</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="quick_actions_spacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scroll_area">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <widget class="QWidget" name="scroll_contents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>640</width>
+        <height>300</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="scroll_layout">
+       <property name="spacing">
+        <number>12</number>
+       </property>
+       <property name="leftMargin">
+        <number>20</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>20</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="sample_update_card">
+         <property name="class" stdset="0">
+          <string>update-card</string>
+         </property>
+         <layout class="QVBoxLayout" name="card_vlayout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>10</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>10</number>
+          </property>
+          <item>
+           <widget class="QCheckBox" name="card_chk_apply">
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Field: Taxonomy (Spelling)</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QGridLayout" name="diff_grid">
+            <property name="horizontalSpacing">
+             <number>12</number>
+            </property>
+            <property name="verticalSpacing">
+             <number>4</number>
+            </property>
+            <property name="leftMargin">
+             <number>24</number>
+            </property>
+            <item row="0" column="0">
+             <widget class="QLabel" name="lbl_title_current">
+              <property name="text">
+               <string>CURRENT VALUE:</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>val-title</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLabel" name="lbl_val_current">
+              <property name="text">
+               <string>Quercus rubra</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>val-current</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="lbl_title_gbif">
+              <property name="text">
+               <string>PROPOSED GBIF:</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>val-title</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLabel" name="lbl_val_gbif">
+              <property name="text">
+               <string>Quercus robur L.</string>
+              </property>
+              <property name="class" stdset="0">
+               <string>val-gbif</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="scroll_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footer_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>50</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footer_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="btn_reject_all">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>REJECT ALL</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="footer_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_cancel">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>CANCEL</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_apply">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>APPLY SELECTED (Ctrl+A)</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

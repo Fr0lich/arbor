@@ -6,6 +6,7 @@ Welcome, Agent. This file is your master router. Before you begin any task, you 
 
 * **Working on PySide6 / Qt Designer UI Migration or `ui_qt/`?**
   * 👉 Read **`documentation/agent/PYSIDE6_MIGRATION_GUIDE.md`** (CRITICAL). This contains the parallel migration architecture, `.ui` file catalog, and controller wiring contracts.
+  * 👉 Read **PYSIDE_UI_INTEGRATION_PIPELINE.md** (CRITICAL for Phase 2 Logic Wiring). Tracks UI components ready for wiring, widget object catalogs, and status.
 
 * **Working on the Mobile Companion App or Backend Server (`mobile_server.py`)?**
   * 👉 Read **`documentation/agent/MOBILE_COMPANION_GUIDE.md`** (CRITICAL). This contains strict rules for frontend implementation, logic syncing, and performance.

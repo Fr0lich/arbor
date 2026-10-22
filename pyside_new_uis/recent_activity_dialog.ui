@@ -1,0 +1,606 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>RecentActivityDialog</class>
+ <widget class="QDialog" name="RecentActivityDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>840</width>
+    <height>540</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>720</width>
+    <height>460</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Recent Activity</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#RecentActivityDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+}
+QFrame#header_frame {
+    background-color: #f2f5f1;
+    border-bottom: 1px solid #cfc4c5;
+}
+QLabel#lbl_title {
+    color: #000000;
+    font-family: &quot;Lora&quot;, &quot;Segoe UI&quot;, serif;
+    font-size: 14pt;
+    font-weight: bold;
+}
+QPushButton#btn_refresh {
+    background-color: #f2f5f1;
+    color: #000000;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    border: 1px solid #7e7576;
+    border-radius: 2px;
+    padding: 3px 10px;
+}
+QPushButton#btn_refresh:hover {
+    background-color: #e9ece5;
+}
+QLabel#lbl_desc {
+    color: #4c4546;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+}
+QFrame#toolbar_frame {
+    background-color: #e9ece5;
+}
+QFrame#search_frame {
+    background-color: #ffffff;
+    border: 1px solid #7e7576;
+    border-radius: 2px;
+}
+QLineEdit#entry_search {
+    background-color: transparent;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    border: none;
+}
+QPushButton#btn_clear {
+    background-color: transparent;
+    color: #7e7576;
+    border: none;
+    font-weight: bold;
+}
+QPushButton.chip-btn {
+    background-color: #f2f5f1;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 8.5pt;
+    border: 1px solid #7e7576;
+    border-radius: 2px;
+    padding: 2px 8px;
+}
+QPushButton.chip-btn:hover {
+    background-color: #ffffff;
+}
+QTabWidget::pane {
+    background-color: #fbfaf8;
+    border: none;
+}
+QTabBar::tab {
+    background-color: #e9ece5;
+    color: #4c4546;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+    padding: 8px 18px;
+    border: 1px solid #cfc4c5;
+    border-bottom: none;
+}
+QTabBar::tab:selected {
+    background-color: #fbfaf8;
+    color: #000000;
+    border-top: 2px solid #000000;
+    border-bottom: 1px solid #fbfaf8;
+}
+QTableWidget, QTreeWidget {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    border: 1px solid #cfc4c5;
+    gridline-color: #f2f5f1;
+}
+QHeaderView::section {
+    background-color: #f2f5f1;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    padding: 6px;
+    border: 1px solid #cfc4c5;
+}
+QFrame#footer_frame {
+    background-color: #f2f5f1;
+    border-top: 1px solid #cfc4c5;
+}
+QPushButton#btn_open_selected {
+    background-color: #3a7d44;
+    color: #ffffff;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 2px;
+    padding: 6px 16px;
+}
+QPushButton#btn_open_selected:hover {
+    background-color: #2e6536;
+}
+QPushButton#btn_revert {
+    background-color: #ffffff;
+    color: #c93a40;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    border: 1px solid #cfc4c5;
+    border-radius: 2px;
+    padding: 6px 14px;
+}
+QPushButton#btn_revert:hover {
+    background-color: #faeaeb;
+    border-color: #c93a40;
+}
+QPushButton#btn_close {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    border: 1px solid #7e7576;
+    border-radius: 2px;
+    padding: 6px 16px;
+}
+QPushButton#btn_close:hover {
+    background-color: #e9ece5;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="header_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="header_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_title">
+        <property name="text">
+         <string>Recent Activity</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_refresh">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>↻ Refresh</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="header_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_desc">
+        <property name="text">
+         <string>Track recently visited objects &amp; audit edits</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="toolbar_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>48</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>48</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="toolbar_hlayout">
+      <property name="leftMargin">
+       <number>12</number>
+      </property>
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="search_frame">
+        <property name="minimumSize">
+         <size>
+          <width>240</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <layout class="QHBoxLayout" name="search_inner_layout">
+         <property name="leftMargin">
+          <number>8</number>
+         </property>
+         <property name="topMargin">
+          <number>2</number>
+         </property>
+         <property name="rightMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>2</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_search_icon">
+           <property name="text">
+            <string>🔍</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="entry_search">
+           <property name="placeholderText">
+            <string>Search history &amp; edits...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_clear">
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="text">
+            <string>✕</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="toolbar_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_filter_label">
+        <property name="styleSheet">
+         <string notr="true">font-family: &quot;JetBrains Mono&quot;; font-weight: bold; font-size: 8.5pt;</string>
+        </property>
+        <property name="text">
+         <string>Filter Action:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_chip_all">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>All</string>
+        </property>
+        <property name="class" stdset="0">
+         <string>chip-btn</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_chip_manual">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Manual Edit</string>
+        </property>
+        <property name="class" stdset="0">
+         <string>chip-btn</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_chip_mobile">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Mobile Edit</string>
+        </property>
+        <property name="class" stdset="0">
+         <string>chip-btn</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_chip_conflict">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Conflict Resolver</string>
+        </property>
+        <property name="class" stdset="0">
+         <string>chip-btn</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_chip_gbif">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>GBIF Update</string>
+        </property>
+        <property name="class" stdset="0">
+         <string>chip-btn</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tab_widget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tab_visited">
+      <attribute name="title">
+       <string>VISITED OBJECTS</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="visited_layout">
+       <property name="leftMargin">
+        <number>12</number>
+       </property>
+       <property name="topMargin">
+        <number>8</number>
+       </property>
+       <property name="rightMargin">
+        <number>12</number>
+       </property>
+       <property name="bottomMargin">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QTreeWidget" name="tree_visited">
+         <property name="rootIsDecorated">
+          <bool>false</bool>
+         </property>
+         <property name="itemsExpandable">
+          <bool>false</bool>
+         </property>
+         <property name="sortingEnabled">
+          <bool>true</bool>
+         </property>
+         <column>
+          <property name="text">
+           <string>OBJECT ID ⇅</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>SPECIMEN ⇅</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_edits">
+      <attribute name="title">
+       <string>RECENT EDITS LOG</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="edits_layout">
+       <property name="leftMargin">
+        <number>12</number>
+       </property>
+       <property name="topMargin">
+        <number>8</number>
+       </property>
+       <property name="rightMargin">
+        <number>12</number>
+       </property>
+       <property name="bottomMargin">
+        <number>8</number>
+       </property>
+       <item>
+        <widget class="QTreeWidget" name="tree_edits">
+         <property name="rootIsDecorated">
+          <bool>false</bool>
+         </property>
+         <property name="itemsExpandable">
+          <bool>false</bool>
+         </property>
+         <property name="sortingEnabled">
+          <bool>true</bool>
+         </property>
+         <column>
+          <property name="text">
+           <string>OBJECT ID ⇅</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>TIME ⇅</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>ACTION ⇅</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>CHANGES ⇅</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footer_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>52</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footer_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="btn_open_selected">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Open Selected Object</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_revert">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Revert Selected Edit</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="footer_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_close">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Close</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

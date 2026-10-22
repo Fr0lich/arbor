@@ -1,0 +1,697 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>QuickPeekDialog</class>
+ <widget class="QDialog" name="QuickPeekDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1000</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>700</width>
+    <height>500</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Quick Peek</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#QuickPeekDialog {
+    background-color: #fbfaf8;
+}
+QFrame#header_frame, QFrame#footer_frame {
+    background-color: #f2f5f1;
+    border: 1px solid #c4c7c7;
+}
+QLabel#lbl_title {
+    color: #000000;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 14pt;
+    font-weight: bold;
+}
+QCheckBox#chk_show_image {
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 10pt;
+    font-weight: bold;
+}
+QPushButton#btn_popout {
+    background-color: #e2e2e2;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 2px;
+    padding: 4px 10px;
+}
+QPushButton#btn_popout:hover {
+    background-color: #dadada;
+}
+QFrame#search_container {
+    background-color: #fbfaf8;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+}
+QLineEdit#input_search {
+    background-color: #fbfaf8;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 10pt;
+    border: none;
+    padding: 4px 8px;
+}
+QListWidget#list_results {
+    background-color: #dadada;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 10pt;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+}
+QListWidget#list_results::item {
+    padding: 6px 8px;
+}
+QListWidget#list_results::item:hover {
+    background-color: #e9ece5;
+}
+QListWidget#list_results::item:selected {
+    background-color: #3a7d44;
+    color: #ffffff;
+}
+QScrollArea#scroll_data_area {
+    background-color: #dadada;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+}
+QWidget#data_contents {
+    background-color: #dadada;
+}
+QFrame#frame_image_preview {
+    background-color: #f2f5f1;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+}
+QPushButton#btn_go_to_object {
+    background-color: #3a7d44;
+    color: #ffffff;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 10pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 2px;
+    padding: 8px 18px;
+}
+QPushButton#btn_go_to_object:hover {
+    background-color: #2d6236;
+}
+QPushButton#btn_go_to_object:disabled {
+    background-color: #dadada;
+    color: #8b948d;
+}
+QLabel.meta-label {
+    color: #444748;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+}
+QLabel.meta-val {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    background-color: #fbfaf8;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+    padding: 4px 6px;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_layout">
+   <property name="spacing">
+    <number>8</number>
+   </property>
+   <property name="leftMargin">
+    <number>8</number>
+   </property>
+   <property name="topMargin">
+    <number>8</number>
+   </property>
+   <property name="rightMargin">
+    <number>8</number>
+   </property>
+   <property name="bottomMargin">
+    <number>8</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="header_frame">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <layout class="QHBoxLayout" name="header_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>10</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_title">
+        <property name="text">
+         <string>🔍 Quick Peek</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="header_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="chk_show_image">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Show Image</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_popout">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>⇱ Pop-out</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QSplitter" name="main_splitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="childrenCollapsible">
+      <bool>false</bool>
+     </property>
+     <widget class="QWidget" name="left_pane" native="true">
+      <property name="minimumSize">
+       <size>
+        <width>260</width>
+        <height>0</height>
+       </size>
+      </property>
+      <layout class="QVBoxLayout" name="left_pane_layout">
+       <property name="spacing">
+        <number>8</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="search_container">
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <layout class="QHBoxLayout" name="search_layout">
+          <property name="spacing">
+           <number>4</number>
+          </property>
+          <property name="leftMargin">
+           <number>6</number>
+          </property>
+          <property name="topMargin">
+           <number>4</number>
+          </property>
+          <property name="rightMargin">
+           <number>6</number>
+          </property>
+          <property name="bottomMargin">
+           <number>4</number>
+          </property>
+          <item>
+           <widget class="QLineEdit" name="input_search">
+            <property name="placeholderText">
+             <string>Search ID, Genus, Species...</string>
+            </property>
+            <property name="clearButtonEnabled">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="frame_advanced_filters">
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <layout class="QVBoxLayout" name="adv_filters_layout">
+          <property name="spacing">
+           <number>6</number>
+          </property>
+          <property name="leftMargin">
+           <number>8</number>
+          </property>
+          <property name="topMargin">
+           <number>6</number>
+          </property>
+          <property name="rightMargin">
+           <number>8</number>
+          </property>
+          <property name="bottomMargin">
+           <number>6</number>
+          </property>
+          <item>
+           <widget class="QWidget" name="filter_row_genus" native="true">
+            <layout class="QHBoxLayout" name="row_genus_layout">
+             <property name="spacing">
+              <number>6</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_filter_genus">
+               <property name="minimumSize">
+                <size>
+                 <width>60</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>Genus:</string>
+               </property>
+               <property name="class" stdset="0">
+                <string>meta-label</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="input_filter_genus"/>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="filter_row_species" native="true">
+            <layout class="QHBoxLayout" name="row_species_layout">
+             <property name="spacing">
+              <number>6</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_filter_species">
+               <property name="minimumSize">
+                <size>
+                 <width>60</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>Species:</string>
+               </property>
+               <property name="class" stdset="0">
+                <string>meta-label</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="input_filter_species"/>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="filter_row_collection" native="true">
+            <layout class="QHBoxLayout" name="row_col_layout">
+             <property name="spacing">
+              <number>6</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_filter_collection">
+               <property name="minimumSize">
+                <size>
+                 <width>60</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>Collection:</string>
+               </property>
+               <property name="class" stdset="0">
+                <string>meta-label</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="input_filter_collection"/>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QListWidget" name="list_results"/>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QSplitter" name="content_splitter">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <property name="childrenCollapsible">
+       <bool>false</bool>
+      </property>
+      <widget class="QScrollArea" name="scroll_data_area">
+       <property name="widgetResizable">
+        <bool>true</bool>
+       </property>
+       <widget class="QWidget" name="data_contents">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>690</width>
+          <height>350</height>
+         </rect>
+        </property>
+        <layout class="QGridLayout" name="data_grid">
+         <property name="horizontalSpacing">
+          <number>12</number>
+         </property>
+         <property name="verticalSpacing">
+          <number>8</number>
+         </property>
+         <property name="leftMargin">
+          <number>12</number>
+         </property>
+         <property name="topMargin">
+          <number>12</number>
+         </property>
+         <property name="rightMargin">
+          <number>12</number>
+         </property>
+         <property name="bottomMargin">
+          <number>12</number>
+         </property>
+         <item row="0" column="0">
+          <widget class="QLabel" name="lbl_f_id">
+           <property name="text">
+            <string>ID:</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-label</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLabel" name="val_id">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-val</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QLabel" name="lbl_f_reviewed">
+           <property name="text">
+            <string>Reviewed:</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-label</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QLabel" name="val_reviewed">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-val</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="lbl_f_sciname">
+           <property name="text">
+            <string>Scientific Name:</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-label</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1" colspan="3">
+          <widget class="QLabel" name="val_sciname">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-val</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="lbl_f_family">
+           <property name="text">
+            <string>Family:</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-label</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="val_family">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-val</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QLabel" name="lbl_f_collector">
+           <property name="text">
+            <string>Collector:</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-label</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QLabel" name="val_collector">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-val</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="lbl_f_location">
+           <property name="text">
+            <string>Physical Location:</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-label</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1" colspan="3">
+          <widget class="QLabel" name="val_location">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-val</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="lbl_f_provenance">
+           <property name="text">
+            <string>Locality / Provenance:</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-label</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1" colspan="3">
+          <widget class="QLabel" name="val_provenance">
+           <property name="text">
+            <string>-</string>
+           </property>
+           <property name="class" stdset="0">
+            <string>meta-val</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+      <widget class="QFrame" name="frame_image_preview">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>160</height>
+        </size>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::StyledPanel</enum>
+       </property>
+       <layout class="QVBoxLayout" name="image_preview_layout">
+        <property name="leftMargin">
+         <number>8</number>
+        </property>
+        <property name="topMargin">
+         <number>8</number>
+        </property>
+        <property name="rightMargin">
+         <number>8</number>
+        </property>
+        <property name="bottomMargin">
+         <number>8</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_image_preview">
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="text">
+           <string>No image selected</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footer_frame">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footer_layout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <spacer name="footer_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_go_to_object">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Go to Object ➔</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

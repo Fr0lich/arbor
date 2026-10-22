@@ -1,0 +1,1009 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FilterDialog</class>
+ <widget class="QDialog" name="FilterDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>820</width>
+    <height>650</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>720</width>
+    <height>550</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Filter objects</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#FilterDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+}
+QFrame#header_frame {
+    background-color: #f2f5f1;
+    border-bottom: 1px solid #747878;
+}
+QLabel#lbl_title {
+    color: #000000;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 14pt;
+    font-weight: bold;
+}
+QFrame#search_frame {
+    background-color: #ffffff;
+    border: 1px solid #d9480f;
+    border-radius: 2px;
+}
+QLineEdit#entry_search {
+    background-color: transparent;
+    color: #d9480f;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 10pt;
+    border: none;
+}
+QPushButton#btn_load_preset, QPushButton#btn_save_preset {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: 1px solid #747878;
+    border-radius: 2px;
+    padding: 4px 12px;
+}
+QPushButton#btn_load_preset:hover, QPushButton#btn_save_preset:hover {
+    background-color: #e9ece5;
+}
+QTabWidget::pane {
+    background-color: #fbfaf8;
+    border: none;
+}
+QTabBar::tab {
+    background-color: #e2e2e2;
+    color: #444748;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+    padding: 8px 18px;
+    border: 1px solid #c4c7c7;
+    border-bottom: none;
+}
+QTabBar::tab:selected {
+    background-color: #fbfaf8;
+    color: #000000;
+    border-top: 2px solid #000000;
+    border-bottom: 1px solid #fbfaf8;
+}
+QFrame.filter-group {
+    background-color: #ffffff;
+    border: 1px solid #c4c7c7;
+    border-radius: 2px;
+}
+QLabel.filter-group-title {
+    color: #444748;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    padding-bottom: 4px;
+}
+QFrame#footer_frame {
+    background-color: #f2f5f1;
+    border-top: 1px solid #747878;
+}
+QPushButton#btn_reset_all {
+    background-color: transparent;
+    color: #c93a40;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: none;
+    padding: 6px 14px;
+}
+QPushButton#btn_reset_all:hover {
+    background-color: #faeaeb;
+}
+QPushButton#btn_cancel {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: 1px solid #747878;
+    border-radius: 2px;
+    padding: 6px 16px;
+}
+QPushButton#btn_cancel:hover {
+    background-color: #e9ece5;
+}
+QPushButton#btn_apply {
+    background-color: #3e7b3e;
+    color: #ffffff;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 2px;
+    padding: 6px 18px;
+}
+QPushButton#btn_apply:hover {
+    background-color: #2e6536;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="header_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="header_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_title">
+        <property name="text">
+         <string>Filter objects</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="search_frame">
+        <property name="minimumSize">
+         <size>
+          <width>220</width>
+          <height>32</height>
+         </size>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <layout class="QHBoxLayout" name="search_frame_layout">
+         <property name="leftMargin">
+          <number>8</number>
+         </property>
+         <property name="topMargin">
+          <number>2</number>
+         </property>
+         <property name="rightMargin">
+          <number>8</number>
+         </property>
+         <property name="bottomMargin">
+          <number>2</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_search_icon">
+           <property name="styleSheet">
+            <string notr="true">color: #d9480f; font-size: 12pt;</string>
+           </property>
+           <property name="text">
+            <string>⌕</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="entry_search">
+           <property name="placeholderText">
+            <string>Search filters...</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="header_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_load_preset">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Load Preset...</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_save_preset">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Save Preset...</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tab_widget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tab_status">
+      <attribute name="title">
+       <string>Status &amp; General</string>
+      </attribute>
+      <layout class="QHBoxLayout" name="status_hlayout">
+       <property name="spacing">
+        <number>16</number>
+       </property>
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="group_proc_status">
+         <property name="class" stdset="0">
+          <string>filter-group</string>
+         </property>
+         <layout class="QVBoxLayout" name="proc_vlayout">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="title_proc_status">
+            <property name="text">
+             <string>PROCESSING STATUS</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>filter-group-title</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_reviewed">
+            <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Reviewed</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_has_history">
+            <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Has Suggestions from Books</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_has_unvalidated">
+            <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Has Unvalidated Source</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="proc_spacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="group_meta_pres">
+         <property name="class" stdset="0">
+          <string>filter-group</string>
+         </property>
+         <layout class="QVBoxLayout" name="meta_vlayout">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="title_meta_pres">
+            <property name="text">
+             <string>METADATA PRESENCE</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>filter-group-title</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_has_comment">
+            <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Has Comment</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_has_location_comment">
+            <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Has Location Comment</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_search_old_taxonomy">
+            <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Search Old Taxonomy</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="entry_old_taxonomy">
+            <property name="placeholderText">
+             <string>Old taxonomy search string...</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="meta_spacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_problems">
+      <attribute name="title">
+       <string>Problems &amp; History</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="probs_vlayout">
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="scroll_probs">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::NoFrame</enum>
+         </property>
+         <widget class="QWidget" name="scroll_probs_contents">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>788</width>
+            <height>500</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="probs_inner_layout">
+           <property name="spacing">
+            <number>12</number>
+           </property>
+           <item>
+            <widget class="QFrame" name="group_tax_problems">
+             <property name="class" stdset="0">
+              <string>filter-group</string>
+             </property>
+             <layout class="QVBoxLayout" name="tax_probs_layout">
+              <property name="leftMargin">
+               <number>12</number>
+              </property>
+              <property name="topMargin">
+               <number>12</number>
+              </property>
+              <property name="rightMargin">
+               <number>12</number>
+              </property>
+              <property name="bottomMargin">
+               <number>12</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="title_tax_problems">
+                <property name="text">
+                 <string>🧬 TAXONOMY &amp; SCIENTIFIC IDENTITY</string>
+                </property>
+                <property name="class" stdset="0">
+                 <string>filter-group-title</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_prob_species">
+                <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="text">
+                 <string>Species problem</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_prob_genus">
+                <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="text">
+                 <string>Genus problem</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_prob_family">
+                <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="text">
+                 <string>Family problem</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="group_col_problems">
+             <property name="class" stdset="0">
+              <string>filter-group</string>
+             </property>
+             <layout class="QVBoxLayout" name="col_probs_layout">
+              <property name="leftMargin">
+               <number>12</number>
+              </property>
+              <property name="topMargin">
+               <number>12</number>
+              </property>
+              <property name="rightMargin">
+               <number>12</number>
+              </property>
+              <property name="bottomMargin">
+               <number>12</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="title_col_problems">
+                <property name="text">
+                 <string>📦 COLLECTION EVENT &amp; PROVENANCE</string>
+                </property>
+                <property name="class" stdset="0">
+                 <string>filter-group-title</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_prob_collector">
+                <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="text">
+                 <string>Collector problem</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_prob_country">
+                <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="text">
+                 <string>Country problem</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QFrame" name="group_global_probs">
+             <property name="class" stdset="0">
+              <string>filter-group</string>
+             </property>
+             <layout class="QVBoxLayout" name="glob_probs_layout">
+              <property name="leftMargin">
+               <number>12</number>
+              </property>
+              <property name="topMargin">
+               <number>12</number>
+              </property>
+              <property name="rightMargin">
+               <number>12</number>
+              </property>
+              <property name="bottomMargin">
+               <number>12</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="title_global_probs">
+                <property name="text">
+                 <string>GLOBAL AGGREGATES &amp; ARCHIVAL GAPS</string>
+                </property>
+                <property name="class" stdset="0">
+                 <string>filter-group-title</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_any_problem">
+                <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="text">
+                 <string>Any problem (all error flags)</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="chk_historical_data">
+                <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+                 <cursorShape>PointingHandCursor</cursorShape>
+                </property>
+                <property name="text">
+                 <string>Historical Data (Has / No History)</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_images">
+      <attribute name="title">
+       <string>Images</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="imgs_vlayout">
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="group_img_checklist">
+         <property name="class" stdset="0">
+          <string>filter-group</string>
+         </property>
+         <layout class="QVBoxLayout" name="img_checklist_layout">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="title_img_checklist">
+            <property name="text">
+             <string>IMAGES CHECKLIST</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>filter-group-title</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_has_images">
+            <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Has Images</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chk_prob_image">
+            <property name="tristate">
+            <bool>true</bool>
+           </property>
+           <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Image Problem</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="img_spacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_location">
+      <attribute name="title">
+       <string>Location</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="loc_vlayout">
+       <property name="leftMargin">
+        <number>16</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>16</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="group_location_fields">
+         <property name="class" stdset="0">
+          <string>filter-group</string>
+         </property>
+         <layout class="QGridLayout" name="loc_grid_layout">
+          <property name="horizontalSpacing">
+           <number>12</number>
+          </property>
+          <property name="verticalSpacing">
+           <number>8</number>
+          </property>
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item row="0" column="0" colspan="2">
+           <widget class="QLabel" name="title_loc_fields">
+            <property name="text">
+             <string>LOCATION FIELDS</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>filter-group-title</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="lbl_loc_stored_as">
+            <property name="text">
+             <string>Stored as:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="combo_loc_stored_as">
+            <item>
+             <property name="text">
+              <string/>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Mounted on wooden platform</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Petridish</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>in plastic box</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>in paper box</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Free standing</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="lbl_loc_building">
+            <property name="text">
+             <string>Building:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="entry_loc_building"/>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="lbl_loc_room">
+            <property name="text">
+             <string>Room:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="entry_loc_room"/>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="lbl_loc_cabinet">
+            <property name="text">
+             <string>Cabinet:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QLineEdit" name="entry_loc_cabinet"/>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="loc_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footer_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footer_hlayout">
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="btn_reset_all">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Reset All</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="footer_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_cancel">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Cancel</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_apply">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>Apply Filter  |  Ctrl+Enter</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ImageSettingsDialog</class>
+ <widget class="QDialog" name="ImageSettingsDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>380</width>
+    <height>320</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>340</width>
+    <height>280</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Image Source Settings</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#ImageSettingsDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+}
+QLabel#lbl_header {
+    color: #000000;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 11pt;
+    font-weight: bold;
+}
+QFrame#status_card {
+    background-color: #f2f5f1;
+    border: 1px solid #d1d1d1;
+    border-radius: 3px;
+}
+QLabel#lbl_active_mode_label {
+    color: #444748;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+}
+QLabel#lbl_active_mode_badge {
+    color: #3a7d44;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    font-weight: bold;
+}
+QPushButton.image-action-btn {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    border: 1px solid #d1d1d1;
+    border-radius: 3px;
+    padding: 6px 12px;
+    text-align: left;
+}
+QPushButton.image-action-btn:hover {
+    background-color: #e9ece5;
+    border-color: #000000;
+}
+QPushButton#btn_close {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    border: 1px solid #d1d1d1;
+    border-radius: 3px;
+    padding: 6px 16px;
+}
+QPushButton#btn_close:hover {
+    background-color: #e9ece5;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>16</number>
+   </property>
+   <property name="topMargin">
+    <number>16</number>
+   </property>
+   <property name="rightMargin">
+    <number>16</number>
+   </property>
+   <property name="bottomMargin">
+    <number>16</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="lbl_header">
+     <property name="text">
+      <string>IMAGE SOURCE SETTINGS</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="status_card">
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="status_card_layout">
+      <property name="leftMargin">
+       <number>10</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>10</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_active_mode_label">
+        <property name="text">
+         <string>Active Mode: </string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbl_active_mode_badge">
+        <property name="text">
+         <string>Local Directory</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="status_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btn_select_folder">
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
+     </property>
+     <property name="text">
+      <string>Select Local Image Folder...</string>
+     </property>
+     <property name="class" stdset="0">
+      <string>image-action-btn</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btn_add_folder">
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
+     </property>
+     <property name="text">
+      <string>Load Additional Image Folder...</string>
+     </property>
+     <property name="class" stdset="0">
+      <string>image-action-btn</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btn_online_repo">
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
+     </property>
+     <property name="text">
+      <string>Load from Online Repository</string>
+     </property>
+     <property name="class" stdset="0">
+      <string>image-action-btn</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="btn_disable_images">
+     <property name="cursor">
+      <cursorShape>PointingHandCursor</cursorShape>
+     </property>
+     <property name="text">
+      <string>Disable Images (Offline Mode)</string>
+     </property>
+     <property name="class" stdset="0">
+      <string>image-action-btn</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="vertical_spacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>10</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="footer_layout">
+     <item>
+      <spacer name="footer_spacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_close">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Close</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

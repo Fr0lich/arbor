@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>HelpCenterDialog</class>
+ <widget class="QDialog" name="HelpCenterDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>440</width>
+    <height>460</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>400</width>
+    <height>420</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Help Center</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#HelpCenterDialog {
+    background-color: #f2f5f1;
+    color: #2c302e;
+}
+QLabel#lbl_header {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 12pt;
+    font-weight: bold;
+}
+QFrame#sep_line {
+    background-color: #dadada;
+}
+QPushButton.help-action-btn {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9pt;
+    font-weight: bold;
+    border: 1px solid #dadada;
+    border-radius: 3px;
+    padding: 6px 10px;
+    text-align: left;
+}
+QPushButton.help-action-btn:hover {
+    background-color: #e9ece5;
+    border-color: #2c302e;
+}
+QLabel.help-action-desc {
+    color: #444748;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 8.5pt;
+}
+QPushButton#btn_close {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    border: 1px solid #dadada;
+    border-radius: 3px;
+    padding: 6px 20px;
+}
+QPushButton#btn_close:hover {
+    background-color: #e9ece5;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>20</number>
+   </property>
+   <property name="topMargin">
+    <number>18</number>
+   </property>
+   <property name="rightMargin">
+    <number>20</number>
+   </property>
+   <property name="bottomMargin">
+    <number>18</number>
+   </property>
+   <item>
+    <widget class="QLabel" name="lbl_header">
+     <property name="text">
+      <string>HELP CENTER</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="sep_line">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>1</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>1</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::HLine</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="actions_container" native="true">
+     <layout class="QVBoxLayout" name="actions_vlayout">
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>4</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+      <item>
+       <layout class="QHBoxLayout" name="row_tut_review">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_tut_review">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Tutorial: Reviewing</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-btn</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="desc_tut_review">
+          <property name="text">
+           <string>Interactive walkthrough: inspecting and verifying objects.</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-desc</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="row_tut_conflicts">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_tut_conflicts">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Tutorial: Conflicts</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-btn</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="desc_tut_conflicts">
+          <property name="text">
+           <string>Interactive walkthrough: historical &amp; GBIF discrepancies.</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-desc</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="row_tut_databases">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_tut_databases">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Tutorial: Databases</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-btn</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="desc_tut_databases">
+          <property name="text">
+           <string>Interactive walkthrough: creating databases &amp; new objects.</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-desc</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="row_user_guide">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_user_guide">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>User Guide</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-btn</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="desc_user_guide">
+          <property name="text">
+           <string>Complete guide and detailed documentation.</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-desc</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="row_shortcuts">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_shortcuts">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Keyboard Shortcuts</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-btn</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="desc_shortcuts">
+          <property name="text">
+           <string>HUD cheat sheet for all keys and navigation.</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-desc</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="row_quick_start">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_quick_start">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>Quick Start</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-btn</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="desc_quick_start">
+          <property name="text">
+           <string>Basic shortcuts and workflow summary.</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-desc</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="row_about">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <item>
+         <widget class="QPushButton" name="btn_about">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="cursor">
+           <cursorShape>PointingHandCursor</cursorShape>
+          </property>
+          <property name="text">
+           <string>About</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-btn</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="desc_about">
+          <property name="text">
+           <string>Application version and build details.</string>
+          </property>
+          <property name="class" stdset="0">
+           <string>help-action-desc</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="vertical_spacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>20</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="footer_layout">
+     <item>
+      <spacer name="footer_spacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btn_close">
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+       <property name="text">
+        <string>Close</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

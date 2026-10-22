@@ -7587,13 +7587,13 @@ INDEX_TEMPLATE_V2 = """
       <nav class="flex-none bg-alabaster border-b border-bordercol px-3 pt-2 pb-1.5 z-20">
         <div class="relative bg-stone-200/90 p-1 rounded-[4px] flex items-center justify-between text-xs font-medium text-muted shadow-inner">
           <div class="tab-slider absolute top-1 bottom-1 w-[calc((100%-8px)/3)] bg-surface rounded shadow-sm border border-stone-300 pointer-events-none translate-x-0" id="tabIndicator" style="transform: translateX(0%);"></div>
-          <button id="tabBtnLocation" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[36px] flex items-center justify-center gap-1.5 font-semibold text-ink tap-highlight-transparent" data-tab-index="0" onclick="switchDetailTab('location')">
-            <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
-            <span>Location</span>
-          </button>
-          <button id="tabBtnDetails" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[36px] flex items-center justify-center gap-1.5 text-muted tap-highlight-transparent" data-tab-index="1" onclick="switchDetailTab('details')">
+          <button id="tabBtnDetails" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[36px] flex items-center justify-center gap-1.5 font-semibold text-ink tap-highlight-transparent" data-tab-index="0" onclick="switchDetailTab('details')">
             <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             <span>Details</span>
+          </button>
+          <button id="tabBtnLocation" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[36px] flex items-center justify-center gap-1.5 text-muted tap-highlight-transparent" data-tab-index="1" onclick="switchDetailTab('location')">
+            <svg class="w-3.5 h-3.5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
+            <span>Location</span>
           </button>
           <button id="tabBtnProblems" class="tab-btn relative z-10 flex-1 py-1.5 min-h-[36px] flex items-center justify-center gap-1.5 text-muted tap-highlight-transparent" data-tab-index="2" onclick="switchDetailTab('problems')">
             <svg class="w-3.5 h-3.5 text-brick stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
@@ -7607,7 +7607,33 @@ INDEX_TEMPLATE_V2 = """
       <div class="flex-1 overflow-hidden relative" id="swipeArea">
         <div class="h-full flex w-[300%]" id="tabTrack" style="transform: translateX(0%);">
 
-          <!-- ================= TAB 0: LOCATION ================= -->
+          <!-- ================= TAB 0: DETAILS & ARCHIVAL SCANS ================= -->
+          <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentDetails">
+            <!-- Image Viewer Container -->
+            <div class="bg-surface border border-bordercol rounded p-3 shadow-2xs space-y-2">
+              <div class="flex items-center justify-between">
+                <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Archival Photo Folio</h3>
+                <span class="text-[10px] font-mono text-muted" id="photoCountDisplay">0 Photos</span>
+              </div>
+              <div class="relative w-full h-48 bg-stone-100 rounded border border-bordercol overflow-hidden flex items-center justify-center cursor-pointer" onclick="openPhotoViewerModal()">
+                <img id="specimenImg" src="" alt="Specimen Scan" class="w-full h-full object-contain hidden" onload="onPhotoLoaded()" onerror="onPhotoError()"/>
+                <div id="photoPlaceholder" class="flex flex-col items-center justify-center text-stone-400">
+                  <span class="text-3xl">📷</span>
+                  <span class="text-xs mt-1">Tap to Inspect Photo</span>
+                </div>
+              </div>
+              <div id="photoThumbnailsRow" class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
+                <!-- Thumbnails injected dynamically -->
+              </div>
+            </div>
+
+            <!-- Registration & Observation Metadata Form Fields -->
+            <div class="bg-surface border border-bordercol rounded p-3.5 shadow-2xs space-y-3" id="dynamicFormContainer">
+              <!-- Form fields injected dynamically from schema -->
+            </div>
+          </div>
+
+          <!-- ================= TAB 1: LOCATION ================= -->
           <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentLocation">
             <!-- 1. Copy from Previous Bar -->
             <div class="bg-surface border border-bordercol rounded p-2.5 shadow-2xs">
@@ -7730,32 +7756,6 @@ INDEX_TEMPLATE_V2 = """
                   <span>Loaned Out</span>
                 </button>
               </div>
-            </div>
-          </div>
-
-          <!-- ================= TAB 1: DETAILS & ARCHIVAL SCANS ================= -->
-          <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentDetails">
-            <!-- Image Viewer Container -->
-            <div class="bg-surface border border-bordercol rounded p-3 shadow-2xs space-y-2">
-              <div class="flex items-center justify-between">
-                <h3 class="text-xs font-bold text-ink uppercase tracking-wider font-sans">Archival Photo Folio</h3>
-                <span class="text-[10px] font-mono text-muted" id="photoCountDisplay">0 Photos</span>
-              </div>
-              <div class="relative w-full h-48 bg-stone-100 rounded border border-bordercol overflow-hidden flex items-center justify-center cursor-pointer" onclick="openPhotoViewerModal()">
-                <img id="specimenImg" src="" alt="Specimen Scan" class="w-full h-full object-contain hidden" onload="onPhotoLoaded()" onerror="onPhotoError()"/>
-                <div id="photoPlaceholder" class="flex flex-col items-center justify-center text-stone-400">
-                  <span class="text-3xl">📷</span>
-                  <span class="text-xs mt-1">Tap to Inspect Photo</span>
-                </div>
-              </div>
-              <div id="photoThumbnailsRow" class="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
-                <!-- Thumbnails injected dynamically -->
-              </div>
-            </div>
-
-            <!-- Registration & Observation Metadata Form Fields -->
-            <div class="bg-surface border border-bordercol rounded p-3.5 shadow-2xs space-y-3" id="dynamicFormContainer">
-              <!-- Form fields injected dynamically from schema -->
             </div>
           </div>
 
@@ -9040,7 +9040,8 @@ INDEX_TEMPLATE_V2 = """
     function switchDetailTab(tab) {
       let idx = 0;
       if (typeof tab === 'number') idx = tab;
-      else if (tab === 'details') idx = 1;
+      else if (tab === 'details') idx = 0;
+      else if (tab === 'location') idx = 1;
       else if (tab === 'problems') idx = 2;
       switchTab(idx);
     }

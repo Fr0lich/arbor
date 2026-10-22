@@ -1193,6 +1193,18 @@ def test_v2_route_rendering_and_cache_headers(mock_app_state):
     assert 'resolveFieldDiscrepancy' in html
     assert 'renderProblemsAndDiscrepancies' in html
     assert 'toggleProblemFlag' in html
+
+    # Verify tab order: Details first, Location second, Problems third
+    btn_det_idx = html.index('id="tabBtnDetails"')
+    btn_loc_idx = html.index('id="tabBtnLocation"')
+    btn_prob_idx = html.index('id="tabBtnProblems"')
+    assert btn_det_idx < btn_loc_idx < btn_prob_idx
+
+    track_det_idx = html.index('id="tabContentDetails"')
+    track_loc_idx = html.index('id="tabContentLocation"')
+    track_prob_idx = html.index('id="tabContentProblems"')
+    assert track_det_idx < track_loc_idx < track_prob_idx
+
     assert res.headers.get("Cache-Control") == "no-cache, no-store, must-revalidate, max-age=0"
     assert res.headers.get("Pragma") == "no-cache"
 

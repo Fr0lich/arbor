@@ -1,0 +1,635 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DashboardDialog</class>
+ <widget class="QDialog" name="DashboardDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>650</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>580</width>
+    <height>600</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Database Statistics</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog#DashboardDialog {
+    background-color: #fbfaf8;
+    color: #2c302e;
+}
+QFrame#header_frame {
+    background-color: #ffffff;
+    border-bottom: 1px solid #d1d1d1;
+}
+QLabel#lbl_title {
+    color: #000000;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 12pt;
+    font-weight: bold;
+}
+QScrollArea#scroll_area {
+    background-color: #fbfaf8;
+    border: none;
+}
+QWidget#scroll_contents {
+    background-color: #fbfaf8;
+}
+QFrame.stat-card {
+    background-color: #ffffff;
+    border: 1px solid #d1d1d1;
+    border-radius: 4px;
+}
+QFrame.stat-card-header {
+    background-color: #e9ece5;
+    border-bottom: 1px solid #d1d1d1;
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+}
+QLabel.stat-card-title {
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 10pt;
+    font-weight: bold;
+}
+QLabel.stat-row-label {
+    color: #444748;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 10pt;
+}
+QLabel.stat-row-value {
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 10pt;
+    font-weight: bold;
+}
+QProgressBar#prog_reviewed {
+    border: 1px solid #d1d1d1;
+    border-radius: 2px;
+    background-color: #e9ece5;
+    min-height: 12px;
+    max-height: 12px;
+    text-align: center;
+}
+QProgressBar#prog_reviewed::chunk {
+    background-color: #3a7d44;
+    border-radius: 1px;
+}
+QFrame#footer_frame {
+    background-color: #e9ece5;
+    border-top: 1px solid #d1d1d1;
+}
+QPushButton#btn_close {
+    background-color: #ffffff;
+    color: #2c302e;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 10pt;
+    font-weight: bold;
+    border: 1px solid #d1d1d1;
+    border-radius: 3px;
+    padding: 8px 16px;
+}
+QPushButton#btn_close:hover {
+    background-color: #f0f0f0;
+}
+QPushButton#btn_save_stats {
+    background-color: #000000;
+    color: #ffffff;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 10pt;
+    font-weight: bold;
+    border: none;
+    border-radius: 3px;
+    padding: 8px 16px;
+}
+QPushButton#btn_save_stats:hover {
+    background-color: #2c302e;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="root_vlayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="header_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="header_hlayout">
+      <property name="leftMargin">
+       <number>24</number>
+      </property>
+      <property name="topMargin">
+       <number>12</number>
+      </property>
+      <property name="rightMargin">
+       <number>24</number>
+      </property>
+      <property name="bottomMargin">
+       <number>12</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbl_title">
+        <property name="text">
+         <string>DATABASE STATISTICS</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scroll_area">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <widget class="QWidget" name="scroll_contents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>650</width>
+        <height>684</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="scroll_layout">
+       <property name="spacing">
+        <number>16</number>
+       </property>
+       <property name="leftMargin">
+        <number>24</number>
+       </property>
+       <property name="topMargin">
+        <number>20</number>
+       </property>
+       <property name="rightMargin">
+        <number>24</number>
+       </property>
+       <property name="bottomMargin">
+        <number>20</number>
+       </property>
+       <item>
+        <widget class="QFrame" name="card_overall">
+         <property name="class" stdset="0">
+          <string>stat-card</string>
+         </property>
+         <layout class="QVBoxLayout" name="overall_layout">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <item>
+           <widget class="QFrame" name="hdr_overall">
+            <property name="class" stdset="0">
+             <string>stat-card-header</string>
+            </property>
+            <layout class="QHBoxLayout" name="hdr_overall_layout">
+             <property name="leftMargin">
+              <number>16</number>
+             </property>
+             <property name="topMargin">
+              <number>10</number>
+             </property>
+             <property name="rightMargin">
+              <number>16</number>
+             </property>
+             <property name="bottomMargin">
+              <number>10</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="title_overall">
+               <property name="text">
+                <string>OVERALL STATISTICS</string>
+               </property>
+               <property name="class" stdset="0">
+                <string>stat-card-title</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="content_overall" native="true">
+            <layout class="QVBoxLayout" name="content_overall_layout">
+             <property name="spacing">
+              <number>8</number>
+             </property>
+             <property name="leftMargin">
+              <number>16</number>
+             </property>
+             <property name="topMargin">
+              <number>14</number>
+             </property>
+             <property name="rightMargin">
+              <number>16</number>
+             </property>
+             <property name="bottomMargin">
+              <number>14</number>
+             </property>
+             <item>
+              <layout class="QHBoxLayout" name="row_total">
+               <item>
+                <widget class="QLabel" name="lbl_total_label">
+                 <property name="text">
+                  <string>Total objects</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-label</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_total_val">
+                 <property name="text">
+                  <string>0</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-value</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="row_reviewed">
+               <item>
+                <widget class="QLabel" name="lbl_reviewed_label">
+                 <property name="text">
+                  <string>Reviewed</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-label</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_reviewed_val">
+                 <property name="styleSheet">
+                  <string notr="true">color: #3a7d44;</string>
+                 </property>
+                 <property name="text">
+                  <string>0 (0%)</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-value</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="row_not_reviewed">
+               <item>
+                <widget class="QLabel" name="lbl_not_reviewed_label">
+                 <property name="text">
+                  <string>Not reviewed</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-label</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_not_reviewed_val">
+                 <property name="text">
+                  <string>0 (0%)</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-value</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="row_probs">
+               <item>
+                <widget class="QLabel" name="lbl_probs_label">
+                 <property name="text">
+                  <string>Objects with problems</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-label</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_probs_val">
+                 <property name="styleSheet">
+                  <string notr="true">color: #c93a40;</string>
+                 </property>
+                 <property name="text">
+                  <string>0 (0%)</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-value</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QFrame" name="divider_prog">
+               <property name="styleSheet">
+                <string notr="true">background-color: #d1d1d1;</string>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>1</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>16777215</width>
+                 <height>1</height>
+                </size>
+               </property>
+               <property name="frameShape">
+                <enum>QFrame::HLine</enum>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_prog_title">
+               <property name="styleSheet">
+                <string notr="true">font-family: &quot;JetBrains Mono&quot;; font-size: 8pt; color: #444748; font-weight: bold;</string>
+               </property>
+               <property name="text">
+                <string>REVIEW PROGRESS</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QProgressBar" name="prog_reviewed">
+               <property name="value">
+                <number>0</number>
+               </property>
+               <property name="textVisible">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="card_session">
+         <property name="class" stdset="0">
+          <string>stat-card</string>
+         </property>
+         <layout class="QVBoxLayout" name="session_layout">
+          <property name="spacing">
+           <number>0</number>
+          </property>
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <item>
+           <widget class="QFrame" name="hdr_session">
+            <property name="class" stdset="0">
+             <string>stat-card-header</string>
+            </property>
+            <layout class="QHBoxLayout" name="hdr_session_layout">
+             <property name="leftMargin">
+              <number>16</number>
+             </property>
+             <property name="topMargin">
+              <number>10</number>
+             </property>
+             <property name="rightMargin">
+              <number>16</number>
+             </property>
+             <property name="bottomMargin">
+              <number>10</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="title_session">
+               <property name="text">
+                <string>SESSION STATISTICS</string>
+               </property>
+               <property name="class" stdset="0">
+                <string>stat-card-title</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="content_session" native="true">
+            <layout class="QVBoxLayout" name="content_session_layout">
+             <property name="spacing">
+              <number>8</number>
+             </property>
+             <property name="leftMargin">
+              <number>16</number>
+             </property>
+             <property name="topMargin">
+              <number>14</number>
+             </property>
+             <property name="rightMargin">
+              <number>16</number>
+             </property>
+             <property name="bottomMargin">
+              <number>14</number>
+             </property>
+             <item>
+              <layout class="QHBoxLayout" name="row_sess_reviewed">
+               <item>
+                <widget class="QLabel" name="lbl_sess_reviewed_label">
+                 <property name="text">
+                  <string>Newly reviewed today</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-label</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_sess_reviewed_val">
+                 <property name="text">
+                  <string>0</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-value</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="row_sess_solved">
+               <item>
+                <widget class="QLabel" name="lbl_sess_solved_label">
+                 <property name="text">
+                  <string>Total problems solved</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-label</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_sess_solved_val">
+                 <property name="text">
+                  <string>0</string>
+                 </property>
+                 <property name="class" stdset="0">
+                  <string>stat-row-value</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="scroll_spacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footer_frame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>56</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <layout class="QHBoxLayout" name="footer_hlayout">
+      <property name="leftMargin">
+       <number>24</number>
+      </property>
+      <property name="topMargin">
+       <number>8</number>
+      </property>
+      <property name="rightMargin">
+       <number>24</number>
+      </property>
+      <property name="bottomMargin">
+       <number>8</number>
+      </property>
+      <item>
+       <spacer name="footer_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_save_stats">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>SAVE SESSION STATS</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btn_close">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="text">
+         <string>CLOSE</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
