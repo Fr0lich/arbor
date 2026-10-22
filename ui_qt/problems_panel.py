@@ -253,3 +253,19 @@ class QtProblemsPanel(QWidget):
             cb.setChecked(False)
             cb.blockSignals(False)
         self._render_summary([])
+
+    def focus_first_checkbox(self) -> bool:
+        """Focus the first problem checkbox in the grid."""
+        if self.problem_cbs:
+            cb = next(iter(self.problem_cbs.values()))
+            cb.setFocus()
+            return True
+        return False
+
+    def toggle_focused_checkbox(self) -> bool:
+        """Toggle the currently focused problem checkbox."""
+        for cb in self.problem_cbs.values():
+            if cb.hasFocus():
+                cb.toggle()
+                return True
+        return False

@@ -424,3 +424,20 @@ class QtLocationPanel(QFrame):
                 vals[fn] = w.currentText().strip()
         vals["Loaned out"] = str(self.loan_card.is_on_loan)
         return vals
+
+    def focus_first_field(self) -> bool:
+        """Focus the first editable field (Building or Stored as)."""
+        for fn in ("Building", "Stored as", "Floor", "Cabinet"):
+            if fn in self.entries:
+                w = self.entries[fn]
+                w.setFocus()
+                if isinstance(w, QLineEdit):
+                    w.selectAll()
+                return True
+        if self.entries:
+            w = next(iter(self.entries.values()))
+            w.setFocus()
+            if isinstance(w, QLineEdit):
+                w.selectAll()
+            return True
+        return False

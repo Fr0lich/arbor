@@ -37,6 +37,7 @@ from repository import (
 )
 from ui_qt.add_objects import QtAddObjectsDialog
 from ui_qt.bulk_edit import QtBulkEditDialog
+from ui_qt.advanced_search import QtAdvancedSearchDialog
 from ui_qt.dashboard import QtDatabaseStatisticsDialog
 from ui_qt.filter_dialog import QtFilterDialog
 from ui_qt.gbif_dialog import QtGbifUpdateDialog
@@ -104,8 +105,13 @@ class QtMainWindow:
             self.problems_panel.problem_toggled.connect(self._on_problem_toggled)
 
         # Mirror Tkinter pane weights: left 0 / center 3 / right 3
+        prefs = config.load_prefs() or {}
         if hasattr(self.win, "splitter_main"):
-            self.win.splitter_main.setSizes([380, 640, 420])
+            saved_sizes = prefs.get("splitter_sizes")
+            if saved_sizes and len(saved_sizes) == 3 and all(s > 0 for s in saved_sizes):
+                self.win.splitter_main.setSizes(saved_sizes)
+            else:
+                self.win.splitter_main.setSizes([380, 640, 420])
             self.win.splitter_main.setStretchFactor(0, 0)
             self.win.splitter_main.setStretchFactor(1, 3)
             self.win.splitter_main.setStretchFactor(2, 3)
@@ -231,6 +237,7 @@ class QtMainWindow:
         self.menu_data.addAction("Historical Books Conflict Resolver...", self.open_historical_resolver)
         self.menu_data.addSeparator()
         self.menu_data.addAction("Filter Objects...", self.open_filter_dialog)
+        self.menu_data.addAction("Advanced Historical Search...", self.open_advanced_search)
         self.menu_data.addAction("📊 Database Statistics Dashboard...", self.open_database_statistics)
         self.menu_data.addAction("🕒 Recent Activity & Audit Log...", lambda: self.open_recent_activity(default_tab=0))
         self.menu_data.addSeparator()
@@ -347,18 +354,68 @@ class QtMainWindow:
             self.win.btn_sb_settings.clicked.connect(lambda: self.open_unified_settings())
 
     def _wire_shortcuts(self) -> None:
-        """Bind standard Arbor keyboard shortcuts."""
+        """Bind standard Arbor keyboard shortcuts with full Tkinter parity."""
+        # Session & File Operations
         QShortcut(QKeySequence("Ctrl+S"), self.win).activated.connect(lambda: self.save_session())
-        QShortcut(QKeySequence("Ctrl+O"), self.win).activated.connect(self.open_excel)
-        QShortcut(QKeySequence("Ctrl+P"), self.win).activated.connect(self.open_quick_peek)
-        QShortcut(QKeySequence("Ctrl+N"), self.win).activated.connect(self.create_new_object)
-        QShortcut(QKeySequence("Ctrl+Shift+N"), self.win).activated.connect(self.create_new_database)
-        QShortcut(QKeySequence("Ctrl+F"), self.win).activated.connect(self.open_filter_dialog)
-        QShortcut(QKeySequence("Ctrl+G"), self.win).activated.connect(lambda: self.validate_current_specimen_gbif())
-        QShortcut(QKeySequence("Ctrl+E"), self.win).activated.connect(self.open_problem_queue)
-        QShortcut(QKeySequence("Ctrl+Z"), self.win).activated.connect(self.undo)
+        QShortcut(QKeySequence("Ctrl+O"), self.win).activated.connect(self.focus_object_tree)
+
+        # Focus & Panel Navigation (Tkinter Parity)
+        QShortcut(QKeySequence("Ctrl+F"), self.win).activated.connect(self.focus_search_bar)
+        QShortcut(QKeySequence("Ctrl+E"), self.win).activated.connect(self.focus_first_reg_field)
+        QShortcut(QKeySequence("Ctrl+I"), self.win).activated.connect(self.focus_first_reg_field)
+        QShortcut(QKeySequence("Shift+E"), self.win).activated.connect(self.focus_first_empty_reg_field)
+        QShortcut(QKeySequence("Ctrl+L"), self.win).activated.connect(self.focus_first_location_field)
+        QShortcut(QKeySequence("F4"), self.win).activated.connect(self.focus_first_location_field)
+        QShortcut(QKeySequence("Ctrl+Shift+L"), self.win).activated.connect(self.focus_first_location_field)
+        QShortcut(QKeySequence("Ctrl+P"), self.win).activated.connect(self.focus_first_problem_checkbox)
+        QShortcut(QKeySequence("F3"), self.win).activated.connect(self.focus_first_problem_checkbox)
+        QShortcut(QKeySequence("Ctrl+Shift+P"), self.win).activated.connect(self.focus_first_problem_checkbox)
+        QShortcut(QKeySequence("Ctrl+Page_Up"), self.win).activated.connect(lambda: self.switch_registration_tab(-1))
+        QShortcut(QKeySequence("Ctrl+Page_Down"), self.win).activated.connect(lambda: self.switch_registration_tab(1))
+        QShortcut(QKeySequence("Space"), self.win).activated.connect(self.toggle_focused_problem_checkbox)
+
+        # Review & Editing
         QShortcut(QKeySequence("Ctrl+R"), self.win).activated.connect(self.toggle_reviewed)
         QShortcut(QKeySequence("Ctrl+Return"), self.win).activated.connect(self.toggle_reviewed)
+        QShortcut(QKeySequence("Ctrl+Enter"), self.win).activated.connect(self.toggle_reviewed)
+        QShortcut(QKeySequence("Ctrl+Z"), self.win).activated.connect(self.undo)
+        QShortcut(QKeySequence("Ctrl+Y"), self.win).activated.connect(self.redo)
+        QShortcut(QKeySequence("Ctrl+Shift+Z"), self.win).activated.connect(self.redo)
+
+        # Dialog Openers & Tools
+        QShortcut(QKeySequence("Ctrl+G"), self.win).activated.connect(self.open_filter_dialog)
+        QShortcut(QKeySequence("Ctrl+Shift+F"), self.win).activated.connect(self.open_advanced_search)
+        QShortcut(QKeySequence("Ctrl+B"), self.win).activated.connect(self.open_bulk_edit)
+        QShortcut(QKeySequence("Ctrl+J"), self.win).activated.connect(self.open_database_statistics)
+        QShortcut(QKeySequence("Ctrl+H"), self.win).activated.connect(self.open_historical_resolver)
+        QShortcut(QKeySequence("Ctrl+K"), self.win).activated.connect(lambda: self.apply_preset("Default View"))
+        QShortcut(QKeySequence("F1"), self.win).activated.connect(self.open_help_dialog)
+
+        # Object Management
+        QShortcut(QKeySequence("Ctrl+N"), self.win).activated.connect(self.create_new_object)
+        QShortcut(QKeySequence("Ctrl+Shift+N"), self.win).activated.connect(self.quick_create_new_object)
+        QShortcut(QKeySequence("Ctrl+Shift+D"), self.win).activated.connect(self.duplicate_current_specimen)
+        QShortcut(QKeySequence("Ctrl+Delete"), self.win).activated.connect(self.delete_current_specimen)
+
+        # Specimen Navigation
+        QShortcut(QKeySequence("Left"), self.win).activated.connect(self.navigate_prev)
+        QShortcut(QKeySequence("Right"), self.win).activated.connect(self.navigate_next)
+        QShortcut(QKeySequence("Alt+Left"), self.win).activated.connect(self.navigate_last)
+
+        # Layout Toggles (Laptop Views)
+        QShortcut(QKeySequence("F6"), self.win).activated.connect(self.toggle_left_panel)
+        QShortcut(QKeySequence("F7"), self.win).activated.connect(self.toggle_registration_panel)
+        QShortcut(QKeySequence("F8"), self.win).activated.connect(self.toggle_image_panel)
+
+        # Image Gallery Shortcuts
+        if hasattr(self, "image_viewer") and self.image_viewer:
+            QShortcut(QKeySequence("Shift+Left"), self.win).activated.connect(self.image_viewer.prev_image)
+            QShortcut(QKeySequence("Shift+Right"), self.win).activated.connect(self.image_viewer.next_image)
+            QShortcut(QKeySequence("Alt+R"), self.win).activated.connect(self.image_viewer.rotate_cw)
+            QShortcut(QKeySequence("Ctrl+0"), self.win).activated.connect(self.image_viewer.reset_view)
+            QShortcut(QKeySequence("Ctrl+="), self.win).activated.connect(self.image_viewer.zoom_in)
+            QShortcut(QKeySequence("Ctrl++"), self.win).activated.connect(self.image_viewer.zoom_in)
+            QShortcut(QKeySequence("Ctrl+-"), self.win).activated.connect(self.image_viewer.zoom_out)
 
     # -------------------------------------------------------------------------
     # Dialog Openers
@@ -1248,6 +1305,7 @@ class QtMainWindow:
         stack.append(state)
         if len(stack) > 50:
             stack.pop(0)
+        self.app.redo_stacks.setdefault(oid, []).clear()
 
     def undo(self) -> None:
         """Revert the most recent edit on the current specimen."""
@@ -1255,8 +1313,13 @@ class QtMainWindow:
         if not oid or oid not in self.app.undo_stacks or not self.app.undo_stacks[oid]:
             return
 
-        state = self.app.undo_stacks[oid].pop()
         with self.app.df_lock:
+            cur_state = {
+                "reg": self.app.df_reg.loc[oid].copy(),
+                "obs": self.app.df_obs.loc[oid].copy(),
+            }
+            self.app.redo_stacks.setdefault(oid, []).append(cur_state)
+            state = self.app.undo_stacks[oid].pop()
             self.app.df_reg.loc[oid] = state["reg"]
             self.app.df_obs.loc[oid] = state["obs"]
 
@@ -1292,6 +1355,300 @@ class QtMainWindow:
         self.update_save_status()
         self.update_status_bar()
         self.log_action("UNDO", ["Object"], [f"Reverted state for #{oid}"], oid=oid)
+
+    def redo(self) -> None:
+        """Redo the last reverted edit on the current specimen."""
+        oid = self.app.current_object_id
+        if not oid or oid not in self.app.redo_stacks or not self.app.redo_stacks[oid]:
+            return
+
+        with self.app.df_lock:
+            cur_state = {
+                "reg": self.app.df_reg.loc[oid].copy(),
+                "obs": self.app.df_obs.loc[oid].copy(),
+            }
+            self.app.undo_stacks.setdefault(oid, []).append(cur_state)
+            state = self.app.redo_stacks[oid].pop()
+            self.app.df_reg.loc[oid] = state["reg"]
+            self.app.df_obs.loc[oid] = state["obs"]
+
+        # Repopulate detail panels
+        df_reg = self.app.df_reg
+        df_obs = self.app.df_obs
+        if hasattr(self, "registry_panel") and self.registry_panel:
+            self.registry_panel.populate_specimen(oid, df_reg, df_obs)
+        if hasattr(self, "location_panel") and self.location_panel:
+            self.location_panel.populate_specimen(oid, df_obs)
+        if hasattr(self, "problems_panel") and self.problems_panel:
+            self.problems_panel.populate_specimen(oid, df_obs)
+
+        # Update nomenclature and tree taxon
+        row = df_reg.loc[oid]
+        if isinstance(row, pd.DataFrame):
+            row = row.iloc[0]
+        genus = str(row["Genus"]).strip() if "Genus" in row.index and not pd.isna(row["Genus"]) else ""
+        species = str(row["Species"]).strip() if "Species" in row.index and not pd.isna(row["Species"]) else ""
+        author = str(row["Author"]).strip() if "Author" in row.index and not pd.isna(row["Author"]) else ""
+        parts = [p for p in (genus, species, author) if p]
+        scientific_name = " ".join(parts) or "(unnamed specimen)"
+
+        if hasattr(self.win, "lbl_specimen_name"):
+            self.win.lbl_specimen_name.setText(scientific_name)
+
+        if hasattr(self.win, "tree_objects"):
+            cur_item = self.win.tree_objects.currentItem()
+            if cur_item and cur_item.text(1).strip() == oid:
+                cur_item.setText(2, f"{genus} {species}".strip() or "(unnamed)")
+
+        self.app.dirty = True
+        self.update_save_status()
+        self.update_status_bar()
+        self.log_action("REDO", ["Object"], [f"Re-applied state for #{oid}"], oid=oid)
+
+    # -------------------------------------------------------------------------
+    # Panel Focus Jumping & Laptop View Toggles (Tkinter Parity)
+    # -------------------------------------------------------------------------
+
+    def focus_search_bar(self) -> None:
+        """Jump focus to inline search entry (Ctrl+F)."""
+        if hasattr(self.win, "edit_search"):
+            self.win.edit_search.setFocus()
+            self.win.edit_search.selectAll()
+
+    def focus_object_tree(self) -> None:
+        """Jump focus to object treeview (Ctrl+O)."""
+        if hasattr(self.win, "tree_objects"):
+            tree = self.win.tree_objects
+            tree.setFocus()
+            if not tree.selectedItems() and tree.topLevelItemCount() > 0:
+                item = tree.topLevelItem(0)
+                tree.setCurrentItem(item)
+
+    def focus_first_reg_field(self) -> None:
+        """Jump to first editable field in registration form (Ctrl+E / Ctrl+I)."""
+        if hasattr(self.win, "tabs_registration"):
+            self.win.tabs_registration.setCurrentIndex(0)
+        if hasattr(self, "registry_panel") and self.registry_panel:
+            self.registry_panel.focus_first_field()
+
+    def focus_first_empty_reg_field(self) -> None:
+        """Jump to first empty field in registration form (Shift+E)."""
+        if hasattr(self.win, "tabs_registration"):
+            self.win.tabs_registration.setCurrentIndex(0)
+        if hasattr(self, "registry_panel") and self.registry_panel:
+            self.registry_panel.focus_first_empty_field()
+
+    def focus_first_location_field(self) -> None:
+        """Jump to first editable field in location panel (Ctrl+L / F4)."""
+        if hasattr(self, "location_panel") and self.location_panel:
+            self.location_panel.focus_first_field()
+
+    def focus_first_problem_checkbox(self) -> None:
+        """Jump to first checkbox in problems tab (Ctrl+P / F3)."""
+        if hasattr(self.win, "tabs_registration"):
+            self.win.tabs_registration.setCurrentIndex(1)
+        if hasattr(self, "problems_panel") and self.problems_panel:
+            self.problems_panel.focus_first_checkbox()
+
+    def switch_registration_tab(self, delta: int = 1) -> None:
+        """Switch active tab in registration panel (Ctrl+PageUp / Ctrl+PageDown)."""
+        if hasattr(self.win, "tabs_registration"):
+            count = self.win.tabs_registration.count()
+            if count > 0:
+                cur = self.win.tabs_registration.currentIndex()
+                new_idx = (cur + delta) % count
+                self.win.tabs_registration.setCurrentIndex(new_idx)
+
+    def toggle_focused_problem_checkbox(self) -> None:
+        """Toggle the focused problem checkbox (Space)."""
+        if hasattr(self, "problems_panel") and self.problems_panel:
+            self.problems_panel.toggle_focused_checkbox()
+
+    def toggle_left_panel(self) -> None:
+        """Toggle Left Column / Object List visibility (F6)."""
+        if hasattr(self.win, "pane_left"):
+            self.win.pane_left.setVisible(not self.win.pane_left.isVisible())
+
+    def toggle_registration_panel(self) -> None:
+        """Toggle Right Column / Registration panel visibility (F7)."""
+        if hasattr(self.win, "pane_right"):
+            self.win.pane_right.setVisible(not self.win.pane_right.isVisible())
+
+    def toggle_image_panel(self) -> None:
+        """Toggle Middle Column / Image panel visibility (F8)."""
+        if hasattr(self.win, "pane_center"):
+            self.win.pane_center.setVisible(not self.win.pane_center.isVisible())
+
+    # -------------------------------------------------------------------------
+    # Specimen Lifecycle Actions (Creation, Duplication, Deletion)
+    # -------------------------------------------------------------------------
+
+    def quick_create_new_object(self) -> None:
+        """Quickly create next sequential object with blank template (Ctrl+Shift+N)."""
+        if self.app.df_reg is None or self.app.df_obs is None:
+            return
+
+        import uuid
+        existing_ids = [int(x) for x in self.app.df_reg.index if str(x).isdigit()]
+        new_oid = str(max(existing_ids) + 1 if existing_ids else 1)
+
+        new_reg_row = {col: "" for col in self.app.df_reg.columns}
+        new_reg_row["ObjectID"] = new_oid
+        if "UID" in self.app.df_reg.columns:
+            new_reg_row["UID"] = uuid.uuid4().hex[:8]
+
+        new_obs_row = {col: "" for col in self.app.df_obs.columns}
+        new_obs_row["ObjectID"] = new_oid
+        if REVIEWED_COLUMN in self.app.df_obs.columns:
+            new_obs_row[REVIEWED_COLUMN] = False
+
+        self.push_undo_state(new_oid)
+
+        with self.app.df_lock:
+            self.app.df_reg.loc[new_oid] = new_reg_row
+            self.app.df_obs.loc[new_oid] = new_obs_row
+            if self.app.df_photo is not None and not self.app.df_photo.empty:
+                new_photo_row = {col: "" for col in self.app.df_photo.columns}
+                new_photo_row["ObjectID"] = new_oid
+                self.app.df_photo.loc[new_oid] = new_photo_row
+
+            if new_oid not in self.app.active_object_ids:
+                self.app.active_object_ids.append(new_oid)
+
+        self.app.dirty = True
+        self.refresh_object_tree()
+        self.navigate_to_object(new_oid)
+        self.log_action("CREATE_OBJECT_FAST", ["ObjectID"], [f"Created {new_oid}"], oid=new_oid)
+
+    def duplicate_current_specimen(self) -> None:
+        """Duplicate currently selected specimen under new sequential ID (Ctrl+Shift+D)."""
+        oid = self.app.current_object_id
+        if not oid or self.app.df_reg is None or self.app.df_obs is None or oid not in self.app.df_reg.index:
+            return
+
+        import uuid
+        existing_ids = [int(x) for x in self.app.df_reg.index if str(x).isdigit()]
+        new_oid = str(max(existing_ids) + 1 if existing_ids else 1)
+
+        self.push_undo_state(new_oid)
+
+        with self.app.df_lock:
+            new_reg = self.app.df_reg.loc[[oid]].copy()
+            new_reg.index = [new_oid]
+            new_reg["ObjectID"] = new_oid
+            if "UID" in new_reg.columns:
+                new_reg["UID"] = uuid.uuid4().hex[:8]
+            self.app.df_reg = pd.concat([self.app.df_reg, new_reg])
+
+            new_obs = self.app.df_obs.loc[[oid]].copy()
+            new_obs.index = [new_oid]
+            new_obs["ObjectID"] = new_oid
+            if "ProblemDescription" in new_obs.columns:
+                new_obs["ProblemDescription"] = ""
+            if REVIEWED_COLUMN in new_obs.columns:
+                new_obs[REVIEWED_COLUMN] = False
+            self.app.df_obs = pd.concat([self.app.df_obs, new_obs])
+
+            if self.app.df_photo is not None and oid in self.app.df_photo.index:
+                new_photo = self.app.df_photo.loc[[oid]].copy()
+                new_photo.index = [new_oid]
+                new_photo["ObjectID"] = new_oid
+                self.app.df_photo = pd.concat([self.app.df_photo, new_photo])
+
+            if new_oid not in self.app.active_object_ids:
+                self.app.active_object_ids.append(new_oid)
+
+        self.app.dirty = True
+        self.refresh_object_tree()
+        self.navigate_to_object(new_oid)
+        self.log_action("DUPLICATE_OBJECT", ["ObjectID"], [f"Cloned {oid} -> {new_oid}"], oid=new_oid)
+
+    def delete_current_specimen(self) -> None:
+        """Delete currently selected specimen with confirmation prompt (Ctrl+Delete)."""
+        oid = self.app.current_object_id
+        if not oid or self.app.df_reg is None or oid not in self.app.df_reg.index:
+            return
+
+        reply = QMessageBox.question(
+            self.win,
+            "Confirm Delete",
+            f"Are you sure you want to delete specimen #{oid}?\nThis action can be undone with Ctrl+Z.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        self.push_undo_state(oid)
+
+        with self.app.df_lock:
+            if oid in self.app.df_reg.index:
+                self.app.df_reg = self.app.df_reg.drop(index=oid)
+            if self.app.df_obs is not None and oid in self.app.df_obs.index:
+                self.app.df_obs = self.app.df_obs.drop(index=oid)
+            if self.app.df_photo is not None and oid in self.app.df_photo.index:
+                self.app.df_photo = self.app.df_photo.drop(index=oid)
+
+            if oid in self.app.active_object_ids:
+                self.app.active_object_ids.remove(oid)
+
+        self.app.dirty = True
+        self.refresh_object_tree()
+
+        # Select next or first object
+        if self.app.active_object_ids:
+            next_oid = self.app.active_object_ids[0]
+            self.navigate_to_object(next_oid)
+        else:
+            self.app.current_object_id = None
+            if hasattr(self, "registry_panel") and self.registry_panel:
+                self.registry_panel.clear()
+            if hasattr(self, "location_panel") and self.location_panel:
+                self.location_panel.clear()
+            if hasattr(self, "problems_panel") and self.problems_panel:
+                self.problems_panel.clear()
+            if hasattr(self, "image_viewer") and self.image_viewer:
+                self.image_viewer.show_placeholder("No Specimen Selected")
+
+        self.update_save_status()
+        self.update_status_bar()
+        self.log_action("DELETE_OBJECT", ["ObjectID"], [f"Deleted {oid}"], oid=oid)
+
+    def set_reviewed_for_selection(self, value: bool) -> None:
+        """Set reviewed flag for all selected tree items."""
+        if not hasattr(self.win, "tree_objects") or self.app.df_obs is None:
+            return
+
+        selected_items = self.win.tree_objects.selectedItems()
+        if not selected_items and self.app.current_object_id:
+            oids = [self.app.current_object_id]
+        else:
+            oids = [it.text(1).strip() for it in selected_items if it.text(1).strip()]
+
+        from datetime import datetime
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+        with self.app.df_lock:
+            for oid in oids:
+                if oid in self.app.df_obs.index:
+                    self.push_undo_state(oid)
+                    self.app.df_obs.at[oid, REVIEWED_COLUMN] = value
+                    if "ReviewedAt" in self.app.df_obs.columns:
+                        self.app.df_obs.at[oid, "ReviewedAt"] = now_str
+
+        self.app.dirty = True
+        self.refresh_object_tree()
+        if self.app.current_object_id:
+            self.navigate_to_object(self.app.current_object_id)
+        self.update_save_status()
+        self.update_status_bar()
+
+    def copy_current_accession_id(self) -> None:
+        """Copy active specimen ObjectID to clipboard."""
+        oid = self.app.current_object_id
+        if oid:
+            from PySide6.QtWidgets import QApplication
+            QApplication.clipboard().setText(oid)
 
     def log_action(
         self,
@@ -1488,9 +1845,22 @@ class QtMainWindow:
 
         self.update_status_bar()
 
+    def _save_window_preferences(self) -> None:
+        """Persist splitter geometry, maximized state, and layout preferences."""
+        try:
+            prefs = config.load_prefs() or {}
+            if hasattr(self.win, "splitter_main"):
+                prefs["splitter_sizes"] = self.win.splitter_main.sizes()
+            prefs["win_maximized"] = self.win.isMaximized()
+            prefs["location_in_center"] = getattr(self, "location_in_center", True)
+            config.save_prefs(prefs)
+        except Exception as e:
+            logger.warning(f"Could not persist window preferences on exit: {e}")
+
     def _on_close_event(self, event) -> None:
-        """Prompt to save unsaved modifications on window exit."""
+        """Prompt to save unsaved modifications and persist preferences on window exit."""
         if not getattr(self.app, "dirty", False):
+            self._save_window_preferences()
             event.accept()
             return
 
@@ -1504,8 +1874,10 @@ class QtMainWindow:
 
         if reply == QMessageBox.Save:
             self.save_session()
+            self._save_window_preferences()
             event.accept()
         elif reply == QMessageBox.Discard:
+            self._save_window_preferences()
             event.accept()
         else:
             event.ignore()
@@ -1525,8 +1897,11 @@ class QtMainWindow:
         if hasattr(self.win, "btn_clear_search"):
             self.win.btn_clear_search.clicked.connect(self.clear_filter)
 
+        if hasattr(self.win, "btn_advanced_search"):
+            self.win.btn_advanced_search.clicked.connect(self.open_advanced_search)
+
     def _show_tree_context_menu(self, pos: QPoint) -> None:
-        """Display right-click context menu for specimen list."""
+        """Display right-click context menu for specimen list with full Tkinter parity."""
         if not hasattr(self.win, "tree_objects"):
             return
         item = self.win.tree_objects.itemAt(pos)
@@ -1535,13 +1910,26 @@ class QtMainWindow:
 
         oid = item.text(1).strip()
         menu = self._create_menu()
-        menu.addAction("🔍 Validate Current Specimen (GBIF)", lambda: self.validate_current_specimen_gbif(oid))
-        menu.addAction("🔍 Quick Peek", lambda: self.open_quick_peek())
-        menu.addAction("📖 Historical Books Resolver...", lambda: self.open_historical_resolver(oid))
+
+        menu.addAction("✓ Mark Selected as Reviewed", lambda: self.set_reviewed_for_selection(True))
+        menu.addAction("✗ Mark Selected as Not Reviewed", lambda: self.set_reviewed_for_selection(False))
         menu.addSeparator()
+
+        menu.addAction("📋 Copy Accession ID", self.copy_current_accession_id)
+        menu.addAction("👥 Manage Specimen Groups...", self.open_group_editor)
+        menu.addSeparator()
+
+        menu.addAction("📄 Duplicate Specimen", self.duplicate_current_specimen)
+        menu.addAction("🗑️ Delete Specimen", self.delete_current_specimen)
+        menu.addSeparator()
+
+        menu.addAction("🔍 Validate Current Specimen (GBIF)", lambda: self.validate_current_specimen_gbif(oid))
+        menu.addAction("👁️ Quick Peek", lambda: self.open_quick_peek())
+        menu.addAction("📖 Historical Books Resolver...", lambda: self.open_historical_resolver(oid))
+        menu.addAction("✏️ Bulk Edit Records...", self.open_bulk_edit)
         menu.addAction("⚠️ Problem Queue...", self.open_problem_queue)
         menu.addAction("Filter Objects...", self.open_filter_dialog)
-        menu.addAction("✏️ Bulk Edit Records...", self.open_bulk_edit)
+
         menu.exec(self.win.tree_objects.mapToGlobal(pos))
 
     def _on_search_query_changed(self, text: str) -> None:
@@ -1569,6 +1957,33 @@ class QtMainWindow:
         self._update_filter_status_display()
         if hasattr(self.win, "lbl_search_count"):
             self.win.lbl_search_count.setText(f"{len(matched)} found")
+
+    def open_advanced_search(self) -> None:
+        """Open modal Advanced Historical Search dialog."""
+        dialog = QtAdvancedSearchDialog(
+            parent=self.win,
+            app_state=self.app,
+            on_applied=self.on_advanced_search_applied,
+        )
+        dialog.exec()
+
+    def on_advanced_search_applied(self, matched: list[str]) -> None:
+        """Handler called when advanced historical search criteria are applied."""
+        if self.app:
+            self.app.active_object_ids = matched
+
+        self._update_filter_status_display()
+        self.refresh_object_tree()
+        self.update_status_bar()
+
+        total = len(self.app.df_reg) if self.app and self.app.df_reg is not None else 0
+        active_count = len(matched)
+        if total > 0 and hasattr(self.win, "lbl_filter_status"):
+            self.win.lbl_filter_status.setText(f"Search active: {active_count} of {total} objects")
+            self.win.lbl_filter_status.setStyleSheet("color: #d95c14; font-weight: bold;")
+        if total > 0 and hasattr(self.win, "lbl_sb_filter_badge"):
+            self.win.lbl_sb_filter_badge.setText(f"SEARCH: {active_count}/{total}")
+            self.win.lbl_sb_filter_badge.setVisible(True)
 
     def open_filter_dialog(self) -> None:
         """Open modal Filter Objects dialog."""

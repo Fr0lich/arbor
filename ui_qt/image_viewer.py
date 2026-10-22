@@ -1,7 +1,8 @@
 """Image Viewer Controller for PySide6 QGraphicsView.
 
 Manages image canvas rendering, zooming, panning, rotation,
-multi-photo indexing, and placeholder handling.
+multi-photo indexing, placeholder handling, wheel zoom,
+double-click external viewer launch, and canvas context menu.
 """
 
 from __future__ import annotations
@@ -9,11 +10,13 @@ from __future__ import annotations
 import io
 import logging
 import os
+import sys
 from typing import Optional
 import urllib.request
+import webbrowser
 
 import pandas as pd
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -25,21 +28,33 @@ from PySide6.QtGui import (
     QTransform,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QGraphicsItem,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsTextItem,
     QGraphicsView,
     QLabel,
+    QMenu,
     QPushButton,
 )
 
-from ui_qt.qss_tokens import FONT_MONO, FONT_UI, HAIRLINE, SUBTEXT, SURFACE, TEXT
+from ui_qt.qss_tokens import (
+    BORDER,
+    CARD,
+    CONTAINER,
+    FONT_MONO,
+    FONT_UI,
+    HAIRLINE,
+    SUBTEXT,
+    SURFACE,
+    TEXT,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class QtImageViewer:
+class QtImageViewer(QObject):
     """Controller for Arbor's Middle Column QGraphicsView image canvas."""
 
     def __init__(
@@ -49,6 +64,7 @@ class QtImageViewer:
         lbl_images_missing: Optional[QLabel] = None,
         lbl_zoom_status: Optional[QLabel] = None,
     ):
+        super().__init__(graphics_view)
         self.view = graphics_view
         self.lbl_count = lbl_images_count
         self.lbl_missing = lbl_images_missing
@@ -61,6 +77,10 @@ class QtImageViewer:
             | QPainter.SmoothPixmapTransform
             | QPainter.TextAntialiasing
         )
+        self.view.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.view.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.view.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.view.viewport().installEventFilter(self)
 
         self.pixmap_item: Optional[QGraphicsPixmapItem] = None
         self.current_pixmap: Optional[QPixmap] = None
@@ -74,6 +94,26 @@ class QtImageViewer:
         # Initial display
         self.show_placeholder("No Specimen Selected")
         self.update_zoom_label()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        """Handle mouse wheel zoom, double-click launch, and context menu on viewport."""
+        if watched == self.view.viewport():
+            if event.type() == QEvent.Wheel:
+                # Zoom centered around cursor
+                delta = event.angleDelta().y()
+                if delta > 0:
+                    self.zoom_in()
+                elif delta < 0:
+                    self.zoom_out()
+                return True
+            elif event.type() == QEvent.MouseButtonDblClick:
+                if event.button() == Qt.LeftButton:
+                    self.open_in_external_viewer()
+                    return True
+            elif event.type() == QEvent.ContextMenu:
+                self.show_context_menu(event.globalPos())
+                return True
+        return super().eventFilter(watched, event)
 
     def wire_toolbar(
         self,
@@ -155,18 +195,117 @@ class QtImageViewer:
 
         # Update count & missing labels
         count = len(self.image_paths)
-        if self.lbl_count:
-            self.lbl_count.setText(f"{count} image{'s' if count != 1 else ''}" if count > 0 else "")
-
         if count > 0:
             if self.lbl_missing:
                 self.lbl_missing.setVisible(False)
             self._display_image(self.image_paths[0])
+            self._update_counter_label()
         else:
             if self.lbl_missing:
                 self.lbl_missing.setText("No images available")
                 self.lbl_missing.setVisible(True)
+            if self.lbl_count:
+                self.lbl_count.setText("")
             self.show_placeholder(f"No image available for specimen {self.current_oid}")
+
+    def next_image(self) -> None:
+        """Cycle to the next image in the specimen gallery."""
+        if not self.image_paths or len(self.image_paths) <= 1:
+            return
+        self.current_image_index = (self.current_image_index + 1) % len(self.image_paths)
+        self._display_image(self.image_paths[self.current_image_index])
+        self._update_counter_label()
+
+    def prev_image(self) -> None:
+        """Cycle to the previous image in the specimen gallery."""
+        if not self.image_paths or len(self.image_paths) <= 1:
+            return
+        self.current_image_index = (self.current_image_index - 1) % len(self.image_paths)
+        self._display_image(self.image_paths[self.current_image_index])
+        self._update_counter_label()
+
+    def _update_counter_label(self) -> None:
+        count = len(self.image_paths)
+        if self.lbl_count:
+            if count > 1:
+                self.lbl_count.setText(f"{self.current_image_index + 1} / {count} images")
+            elif count == 1:
+                self.lbl_count.setText("1 image")
+            else:
+                self.lbl_count.setText("")
+
+    def open_in_external_viewer(self) -> None:
+        """Launch the current image in the system default viewer (Tkinter double-click parity)."""
+        if not self.image_paths or self.current_image_index >= len(self.image_paths):
+            return
+        source = self.image_paths[self.current_image_index]
+        if source.startswith(("http://", "https://")):
+            webbrowser.open(source)
+        elif os.path.exists(source):
+            try:
+                if sys.platform == "win32":
+                    os.startfile(source)
+                elif sys.platform == "darwin":
+                    import subprocess
+                    subprocess.Popen(["open", source])
+                else:
+                    import subprocess
+                    subprocess.Popen(["xdg-open", source])
+            except Exception as e:
+                logger.warning(f"Could not launch external viewer: {e}")
+
+    def copy_to_clipboard(self) -> None:
+        """Copy the current pixmap to the system clipboard."""
+        if self.current_pixmap and not self.current_pixmap.isNull():
+            QApplication.clipboard().setPixmap(self.current_pixmap)
+
+    def show_context_menu(self, global_pos) -> None:
+        """Display right-click context menu on image canvas."""
+        menu = QMenu(self.view)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {CARD};
+                color: {TEXT};
+                border: 1px solid {BORDER};
+                padding: 4px;
+                font-family: {FONT_UI};
+                font-size: 12px;
+            }}
+            QMenu::item {{
+                padding: 6px 20px 6px 14px;
+                background-color: transparent;
+            }}
+            QMenu::item:selected {{
+                background-color: {CONTAINER};
+            }}
+            QMenu::separator {{
+                height: 1px;
+                background-color: {HAIRLINE};
+                margin: 4px 6px;
+            }}
+        """)
+        has_image = self.current_pixmap is not None and not self.current_pixmap.isNull()
+
+        act_ext = menu.addAction("🔍 Open in External Viewer", self.open_in_external_viewer)
+        act_ext.setEnabled(has_image)
+
+        act_copy = menu.addAction("📋 Copy Image to Clipboard", self.copy_to_clipboard)
+        act_copy.setEnabled(has_image)
+
+        if len(self.image_paths) > 1:
+            menu.addSeparator()
+            menu.addAction("➡️ Next Image (Shift+Right / Ctrl+B)", self.next_image)
+            menu.addAction("⬅️ Previous Image (Shift+Left)", self.prev_image)
+
+        menu.addSeparator()
+        act_fit = menu.addAction("Fit to Viewport", self.fit_view)
+        act_fit.setEnabled(has_image)
+        act_reset = menu.addAction("Actual Size (100%)", self.reset_view)
+        act_reset.setEnabled(has_image)
+        act_rotate = menu.addAction("Rotate 90° Clockwise", self.rotate_cw)
+        act_rotate.setEnabled(has_image)
+
+        menu.exec(global_pos)
 
     def _display_image(self, source: str) -> None:
         """Render a local image path or remote URL onto the QGraphicsScene."""
@@ -259,7 +398,6 @@ class QtImageViewer:
         rect = self.scene.itemsBoundingRect()
         if not rect.isEmpty():
             self.view.fitInView(rect, Qt.KeepAspectRatio)
-            # Estimate zoom factor from transform
             t = self.view.transform()
             self.zoom_factor = max(t.m11(), t.m22())
             self.update_zoom_label()

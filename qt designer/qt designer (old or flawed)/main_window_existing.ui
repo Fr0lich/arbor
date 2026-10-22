@@ -136,6 +136,10 @@ QPushButton#btn_clear_search {
     background: transparent; border: none; color: #747878; font-weight: bold; padding: 2px 6px;
 }
 QPushButton#btn_clear_search:hover { color: #c93a40; }
+QPushButton#btn_advanced_search {
+    background: transparent; border: none; color: #747878; font-size: 13px; padding: 2px 5px;
+}
+QPushButton#btn_advanced_search:hover { color: #000000; }
 
 QTreeWidget#tree_objects {
     background-color: #ffffff; alternate-background-color: #ffffff;
@@ -1016,6 +1020,19 @@ QPushButton#btn_sb_db_status:hover, QPushButton#btn_sb_log_viewer:hover { color:
                     </property>
                     <property name="toolTip">
                      <string>Clear Search (resets filter)</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="btn_advanced_search">
+                    <property name="text">
+                     <string>⚙</string>
+                    </property>
+                    <property name="cursor">
+                     <cursorShape>PointingHandCursor</cursorShape>
+                    </property>
+                    <property name="toolTip">
+                     <string>Advanced Historical Search (Ctrl+Shift+F)</string>
                     </property>
                    </widget>
                   </item>

@@ -561,3 +561,37 @@ class QtRegistryPanel:
             elif isinstance(w, QPlainTextEdit):
                 values[fn] = w.toPlainText().strip()
         return values
+
+    def focus_first_field(self) -> bool:
+        """Focus the first editable registration field (e.g. Genus) and select text."""
+        for fn in ("Genus", "ScientificName", "Family"):
+            if fn in self.reg_entries:
+                w = self.reg_entries[fn]
+                w.setFocus()
+                if isinstance(w, QLineEdit):
+                    w.selectAll()
+                return True
+        if self.reg_entries:
+            w = next(iter(self.reg_entries.values()))
+            w.setFocus()
+            if isinstance(w, QLineEdit):
+                w.selectAll()
+            return True
+        return False
+
+    def focus_first_empty_field(self) -> bool:
+        """Jump to the first empty registration field."""
+        for fn, w in self.reg_entries.items():
+            val = ""
+            if isinstance(w, QLineEdit):
+                val = w.text().strip()
+            elif isinstance(w, QComboBox):
+                val = w.currentText().strip()
+            elif isinstance(w, QPlainTextEdit):
+                val = w.toPlainText().strip()
+            if not val:
+                w.setFocus()
+                if isinstance(w, QLineEdit):
+                    w.selectAll()
+                return True
+        return False

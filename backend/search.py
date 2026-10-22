@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Callable, Any
 import pandas as pd
 
 class SearchEngine:
@@ -148,3 +151,209 @@ class SearchEngine:
         p1.extend(p4)
         p1.extend(p5)
         return p1
+
+
+def execute_advanced_historical_search(
+    df_reg: pd.DataFrame | None,
+    historical_dbs: list[dict] | None = None,
+    field_criteria: dict[str, str] | None = None,
+    scope: str = "both",
+    match_all: bool = True,
+    is_cancelled: callable | None = None,
+    progress_callback: callable | None = None,
+) -> list[str]:
+    """Execute multi-field search across primary registry and attached historical books.
+
+    Args:
+        df_reg: Active primary specimen DataFrame (typically indexed by ObjectID).
+        historical_dbs: List of loaded historical database dicts (e.g. from app_state.historical_dbs).
+        field_criteria: Mapping of field names to query strings, e.g. {"Genus": "Quercus", "Locality": "Oakland"}.
+        scope: "current" (df_reg only), "suggestions_only" (historical discrepancies only), or "both".
+        match_all: If True, combine field criteria with AND (all must match); if False, combine with OR.
+        is_cancelled: Optional callable returning True if search should abort.
+        progress_callback: Optional callable receiving progress percentage (0..100).
+
+    Returns:
+        Deduplicated list of matching ObjectID strings.
+    """
+    if df_reg is None or df_reg.empty:
+        return []
+
+    # Clean criteria
+    active_criteria = {
+        str(k).strip(): str(v).strip()
+        for k, v in (field_criteria or {}).items()
+        if str(v).strip()
+    }
+
+    # Normalize df_reg index to string
+    df_indexed = df_reg
+    if "ObjectID" in df_indexed.columns and df_indexed.index.name != "ObjectID":
+        try:
+            df_indexed = df_indexed.set_index("ObjectID")
+        except Exception:
+            pass
+
+    reg_index_str = [str(x).strip() for x in df_indexed.index]
+
+    if not active_criteria:
+        if progress_callback:
+            progress_callback(100)
+        return reg_index_str
+
+    scope = scope.lower().strip()
+    if scope not in ("current", "suggestions_only", "both"):
+        scope = "both"
+
+    # Pre-extract normalized DataFrames for historical databases
+    parsed_hist_dbs: list[tuple[str, pd.DataFrame | None, dict]] = []
+    if historical_dbs and scope in ("suggestions_only", "both"):
+        for db in historical_dbs:
+            db_name = db.get("name", "Historical Book")
+            hdf = None
+            for key in ("reg_by_id", "df_reg"):
+                candidate = db.get(key)
+                if candidate is not None and isinstance(candidate, pd.DataFrame) and not candidate.empty:
+                    if "ObjectID" in candidate.columns and candidate.index.name != "ObjectID":
+                        try:
+                            hdf = candidate.set_index("ObjectID")
+                        except Exception:
+                            hdf = candidate
+                    else:
+                        hdf = candidate
+                    break
+            dict_cache = db.get("dict_cache") if isinstance(db.get("dict_cache"), dict) else {}
+            parsed_hist_dbs.append((db_name, hdf, dict_cache))
+
+    criteria_matches: list[set[str]] = []
+    total_fields = len(active_criteria)
+
+    for field_idx, (field_name, query_text) in enumerate(active_criteria.items()):
+        if is_cancelled and is_cancelled():
+            return []
+
+        # Find matching column in df_indexed (case-insensitive)
+        curr_col = None
+        for col in df_indexed.columns:
+            if str(col).lower() == field_name.lower():
+                curr_col = col
+                break
+
+        # 1. Current matches in df_indexed
+        matching_current_oids: set[str] = set()
+        if curr_col is not None and scope in ("current", "both"):
+            s = df_indexed[curr_col].astype(str)
+            mask = s.str.contains(query_text, case=False, na=False, regex=False) & df_indexed[curr_col].notna()
+            matching_current_oids = {str(x).strip() for x in df_indexed.index[mask]}
+
+        # 2. Historical matches
+        matching_hist_any_oids: set[str] = set()
+        matching_hist_discrepancy_oids: set[str] = set()
+
+        if scope in ("suggestions_only", "both") and parsed_hist_dbs:
+            for _db_name, hdf, dict_cache in parsed_hist_dbs:
+                if is_cancelled and is_cancelled():
+                    return []
+
+                # A. Vectorized search on hdf if available
+                if hdf is not None:
+                    h_col = None
+                    for c in hdf.columns:
+                        if str(c).lower() == field_name.lower():
+                            h_col = c
+                            break
+
+                    if h_col is not None:
+                        h_s = hdf[h_col].astype(str)
+                        h_mask = h_s.str.contains(query_text, case=False, na=False, regex=False) & hdf[h_col].notna()
+                        matched_rows = hdf[h_mask]
+
+                        for h_idx, h_val in zip(matched_rows.index, matched_rows[h_col]):
+                            oid_str = str(h_idx).strip()
+                            hist_str = str(h_val).strip()
+                            if not hist_str or hist_str.lower() in ("nan", "none"):
+                                continue
+
+                            matching_hist_any_oids.add(oid_str)
+
+                            # Check discrepancy: hist_val != current_val
+                            curr_val = None
+                            if oid_str in df_indexed.index:
+                                row_match = df_indexed.loc[oid_str]
+                                if isinstance(row_match, pd.DataFrame):
+                                    row_match = row_match.iloc[0]
+                                if curr_col is not None and curr_col in row_match:
+                                    curr_val = row_match[curr_col]
+                            elif oid_str.isdigit() and int(oid_str) in df_indexed.index:
+                                row_match = df_indexed.loc[int(oid_str)]
+                                if isinstance(row_match, pd.DataFrame):
+                                    row_match = row_match.iloc[0]
+                                if curr_col is not None and curr_col in row_match:
+                                    curr_val = row_match[curr_col]
+
+                            curr_str = str(curr_val).strip() if curr_val is not None and not pd.isna(curr_val) else ""
+                            if curr_str.lower() in ("nan", "none"):
+                                curr_str = ""
+
+                            if hist_str.lower() != curr_str.lower():
+                                matching_hist_discrepancy_oids.add(oid_str)
+
+                # B. Cache lookup fallback
+                elif dict_cache:
+                    for oid_key, field_map in dict_cache.items():
+                        if not isinstance(field_map, dict):
+                            continue
+                        for f_k, f_v in field_map.items():
+                            if str(f_k).lower() == field_name.lower():
+                                vals = f_v if isinstance(f_v, (list, tuple)) else [f_v]
+                                for item in vals:
+                                    item_str = str(item).strip()
+                                    if query_text.lower() in item_str.lower():
+                                        oid_str = str(oid_key).strip()
+                                        matching_hist_any_oids.add(oid_str)
+
+                                        curr_val = None
+                                        if oid_str in df_indexed.index:
+                                            row_match = df_indexed.loc[oid_str]
+                                            if isinstance(row_match, pd.DataFrame):
+                                                row_match = row_match.iloc[0]
+                                            if curr_col is not None and curr_col in row_match:
+                                                curr_val = row_match[curr_col]
+                                        curr_str = str(curr_val).strip() if curr_val is not None and not pd.isna(curr_val) else ""
+                                        if curr_str.lower() in ("nan", "none"):
+                                            curr_str = ""
+                                        if item_str.lower() != curr_str.lower():
+                                            matching_hist_discrepancy_oids.add(oid_str)
+
+        # Determine matching set for this field based on scope
+        if scope == "current":
+            field_matched_set = matching_current_oids
+        elif scope == "suggestions_only":
+            field_matched_set = matching_hist_discrepancy_oids
+        else:  # "both"
+            field_matched_set = matching_current_oids | matching_hist_any_oids
+
+        criteria_matches.append(field_matched_set)
+
+        if progress_callback:
+            progress_callback(int((field_idx + 1) / total_fields * 90))
+
+    if not criteria_matches:
+        final_matched_set: set[str] = set()
+    elif match_all:
+        final_matched_set = set.intersection(*criteria_matches)
+    else:
+        final_matched_set = set.union(*criteria_matches)
+
+    # Preserve primary registry index ordering
+    results = [oid for oid in reg_index_str if oid in final_matched_set]
+
+    # Include any matching OIDs that exist in historical books but not in primary registry index (if any)
+    remaining_matched = final_matched_set - set(reg_index_str)
+    if remaining_matched:
+        results.extend(sorted(list(remaining_matched)))
+
+    if progress_callback:
+        progress_callback(100)
+
+    return results

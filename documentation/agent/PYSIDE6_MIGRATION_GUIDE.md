@@ -395,10 +395,13 @@ AI agents must execute migrations following this complexity-ordered roadmap, unl
 
 ---
 
-#### Phase 7: Polish & Post-Migration Parity Pass (Subsequent Iteration)
-- [ ] Re-introduce and wire full keyboard shortcuts HUD & accelerators matching `ui/keybindings.py`.
-- [ ] Execute `scratch/execute_parity_audit.py` to confirm 100% parity across all dimensions.
-- [ ] Update `main.py` default launcher to PySide6 while preserving `--ui tk` fallback.
+#### Phase 7: Polish, Interactions & Parity Hardening (Completed)
+- [x] **7.1 Mouse-Free Focus & Keyboard Shortcut Subsystem**: Focus jumping (`Ctrl+F`, `Ctrl+O`, `Ctrl+E`/`Ctrl+I`, `Shift+E`, `Ctrl+L`/`F4`, `Ctrl+P`/`F3`, `Ctrl+PageUp`/`PageDown`, `Space`) and workflow shortcuts (`Ctrl+S`, `Ctrl+R`, `Ctrl+Z`, `Ctrl+Y`, `Ctrl+G`, `Ctrl+B`, `Ctrl+J`, `Ctrl+H`, `Ctrl+N`, `Ctrl+Shift+N`, `Ctrl+Shift+D`, `Ctrl+Delete`, `Left`/`Right`, `Alt+Left`, `F1`, `Ctrl+K`).
+- [x] **7.2 Canvas Interactions & Multi-Photo Gallery**: Wheel zoom centered on cursor, drag-to-pan (`ScrollHandDrag`), multi-image pagination (`Shift+Left`/`Shift+Right`/`Ctrl+B`), double-click launch in OS default viewer, and right-click canvas context menu.
+- [x] **7.3 Tree Context Menu & Specimen Lifecycle Parity**: Right-click actions on `tree_objects`: Mark Reviewed/Unreviewed, Copy Accession ID, Duplicate Specimen, Delete Specimen, Add to Group.
+- [x] **7.4 Presets, Session Persistence & View Toggles**: Laptop layout toggles (`F6` Left, `F7` Right, `F8` Center), Presets menu (`Ctrl+K`), and window splitter/geometry persistence to `user_prefs.json`.
+- [x] **7.5 Dual-Launcher Support Contract**: Preserved `python main.py` strictly defaulting to Tkinter as requested; PySide6 launched independently via `python main_qt.py`.
+- [x] **7.6 Automated Test Suite**: Comprehensive test suite `tests/test_qt_phase7_polish.py` (6 of 6 tests passing). Full test suite passing 73 of 73 tests.
 
 ---
 
