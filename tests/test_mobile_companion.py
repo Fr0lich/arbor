@@ -78,7 +78,7 @@ def test_mobile_server_api_flow(mock_app_state):
     auth_res = client.post('/api/auth', json={"pin": server.pin})
     assert auth_res.status_code == 200
     token = auth_res.json["token"]
-    assert token == server.session_token
+    # Removed assertion checking token against server.session_token, as they are intentionally unique now.
 
     headers = {"X-Session-Token": token}
 
@@ -911,8 +911,13 @@ def test_index_route_rendering_and_cache_headers(mock_app_state):
     server = MobileServer(mock_app_state, port=5099)
     client = server.flask_app.test_client()
 
-    # Hit GET / with token param
-    res = client.get(f'/?token={server.session_token}')
+    # Hit GET / with token param (this now redirects to issue a unique session)
+    res_redirect = client.get(f'/?token={server.session_token}')
+    assert res_redirect.status_code == 302
+
+    new_url = res_redirect.headers['Location']
+    res = client.get(new_url)
+
     assert res.status_code == 200
     assert "text/html" in res.content_type
     assert "Arbor Companion" in res.get_data(as_text=True)
@@ -1176,7 +1181,12 @@ def test_v2_route_rendering_and_cache_headers(mock_app_state):
     client = server.flask_app.test_client()
 
     # 1. Hit GET /v2 with valid token param
-    res = client.get(f'/v2?token={server.session_token}')
+    res_redirect = client.get(f'/v2?token={server.session_token}')
+    assert res_redirect.status_code == 302
+
+    new_url = res_redirect.headers['Location']
+    res = client.get(new_url)
+
     assert res.status_code == 200
     assert "text/html" in res.content_type
     html = res.get_data(as_text=True)
