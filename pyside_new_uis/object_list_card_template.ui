@@ -50,7 +50,7 @@ QLabel#lbl_checkbox {
     font-weight: bold;
 }
 QLabel#lbl_taxon_name {
-    color: #3a7d44;
+    color: #2c302e;
     font-family: &quot;Georgia&quot;, &quot;Lora&quot;;
     font-size: 9pt;
     font-style: italic;
@@ -67,7 +67,7 @@ QLabel#lbl_separator {
     font-size: 8pt;
 }
 QLabel#lbl_specimen_id {
-    color: #3a7d44;
+    color: #2c302e;
     font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
     font-size: 8pt;
 }
@@ -85,7 +85,7 @@ QLabel#lbl_location {
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 8pt;
 }
-QLabel.badge {
+QLabel[class=&quot;badge&quot;] {
     border-radius: 2px;
     padding: 1px 4px;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;

@@ -33,7 +33,7 @@ QLabel#lbl_brand_tag {
     font-weight: bold;
     color: #000000;
 }
-QPushButton.nav-menu-btn {
+QPushButton[class=&quot;nav-menu-btn&quot;] {
     background-color: transparent;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -43,7 +43,7 @@ QPushButton.nav-menu-btn {
     padding: 6px 10px;
     border-radius: 2px;
 }
-QPushButton.nav-menu-btn:hover {
+QPushButton[class=&quot;nav-menu-btn&quot;]:hover {
     background-color: #e9ece5;
 }
 QLabel#badge_unsaved {
@@ -62,7 +62,7 @@ QLabel#badge_sync_status {
     font-weight: bold;
     padding: 2px 6px;
 }
-QPushButton.nav-action-btn {
+QPushButton[class=&quot;nav-action-btn&quot;] {
     background-color: #f2f5f1;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -72,7 +72,7 @@ QPushButton.nav-action-btn {
     border-radius: 2px;
     padding: 4px 10px;
 }
-QPushButton.nav-action-btn:hover {
+QPushButton[class=&quot;nav-action-btn&quot;]:hover {
     background-color: #e9ece5;
 }
 QFrame#inline_banner_frame {
@@ -148,7 +148,7 @@ QLabel#lbl_specimen_id {
     font-weight: bold;
     color: #2c302e;
 }
-QLabel.specimen-tag {
+QLabel[class=&quot;specimen-tag&quot;] {
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 8pt;
     font-weight: bold;
@@ -171,7 +171,7 @@ QFrame#image_toolbar {
     background-color: #f2f5f1;
     border-bottom: 1px solid #c4c7c7;
 }
-QPushButton.tool-btn {
+QPushButton[class=&quot;tool-btn&quot;] {
     background-color: #ffffff;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -181,7 +181,7 @@ QPushButton.tool-btn {
     border-radius: 2px;
     padding: 3px 8px;
 }
-QPushButton.tool-btn:hover {
+QPushButton[class=&quot;tool-btn&quot;]:hover {
     background-color: #e9ece5;
 }
 QFrame#image_viewport_container {
@@ -203,24 +203,24 @@ QScrollArea#scroll_audit_cards {
 QWidget#audit_cards_contents {
     background-color: #fbfaf8;
 }
-QFrame.audit-card {
+QFrame[class=&quot;audit-card&quot;] {
     background-color: #ffffff;
     border: 1px solid #c4c7c7;
     border-radius: 2px;
 }
-QLabel.card-header-lbl {
+QLabel[class=&quot;card-header-lbl&quot;] {
     font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
     font-size: 9pt;
     font-weight: bold;
     color: #444748;
 }
-QLabel.audit-field-label {
+QLabel[class=&quot;audit-field-label&quot;] {
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 8.5pt;
     font-weight: bold;
     color: #2c302e;
 }
-QLineEdit.audit-input, QComboBox.audit-input {
+QLineEdit[class=&quot;audit-input&quot;], QComboBox[class=&quot;audit-input&quot;] {
     background-color: #fbfaf8;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -229,7 +229,7 @@ QLineEdit.audit-input, QComboBox.audit-input {
     border-radius: 2px;
     padding: 3px 5px;
 }
-QLineEdit.audit-input:focus, QComboBox.audit-input:focus {
+QLineEdit[class=&quot;audit-input&quot;]:focus, QComboBox[class=&quot;audit-input&quot;]:focus {
     background-color: #ffffff;
     border: 1px solid #000000;
 }
@@ -254,7 +254,7 @@ QFrame#status_bar_frame {
     background-color: #f2f5f1;
     border-top: 1px solid #c4c7c7;
 }
-QLabel.status-info-lbl {
+QLabel[class=&quot;status-info-lbl&quot;] {
     font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
     font-size: 8.5pt;
     color: #444748;
@@ -613,13 +613,13 @@ QProgressBar#progress_reviewed_status::chunk {
     background-color: #fbfaf8;
     border-right: 1px solid #d1d1d1;
 }
-QPushButton.rail-btn {
+QPushButton[class=&quot;rail-btn&quot;] {
     background-color: transparent;
     border: none;
     font-size: 11pt;
     padding: 6px 2px;
 }
-QPushButton.rail-btn:hover {
+QPushButton[class=&quot;rail-btn&quot;]:hover {
     background-color: #e9ece5;
 }</string>
           </property>
@@ -1743,7 +1743,7 @@ QPushButton.rail-btn:hover {
               <cursorShape>PointingHandCursor</cursorShape>
              </property>
              <property name="text">
-              <string>MARK REVIEWED (Ctrl+R)</string>
+              <string>✓ MARK AS REVIEWED (Ctrl+Enter)</string>
              </property>
             </widget>
            </item>
@@ -1786,6 +1786,19 @@ QPushButton.rail-btn:hover {
                 </widget>
                </item>
                <item>
+                <widget class="QCheckBox" name="chk_auto_next_history">
+                 <property name="cursor">
+                  <cursorShape>PointingHandCursor</cursorShape>
+                 </property>
+                 <property name="toolTip">
+                  <string>Automatically advance to the next unreviewed item with historical suggestions</string>
+                 </property>
+                 <property name="text">
+                  <string>Auto+Hist</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
                 <spacer name="footer_row2_spacer">
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
@@ -1797,6 +1810,32 @@ QPushButton.rail-btn:hover {
                   </size>
                  </property>
                 </spacer>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_reviewed_time">
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">color: #757d77; font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 8pt;</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_data_status">
+                 <property name="text">
+                  <string/>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">color: #757d77; font-family: &quot;JetBrains Mono&quot;, monospace; font-size: 8pt;</string>
+                 </property>
+                </widget>
                </item>
               </layout>
              </widget>

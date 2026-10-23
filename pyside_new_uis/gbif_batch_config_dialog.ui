@@ -50,12 +50,12 @@ QLabel#lbl_safety_desc {
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 9pt;
 }
-QFrame.config-card {
+QFrame[class="config-card"] {
     background-color: #ffffff;
     border: 1px solid #d1d1d1;
     border-radius: 4px;
 }
-QLabel.config-card-title {
+QLabel[class="config-card-title"] {
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 10pt;
@@ -66,6 +66,23 @@ QRadioButton, QCheckBox {
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 9.5pt;
     padding: 2px 0px;
+}
+QLabel#lbl_progress_status {
+    color: #3a7d44;
+    font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
+    font-size: 9.5pt;
+    font-weight: bold;
+}
+QLabel#lbl_progress_pct {
+    color: #2c302e;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 9.5pt;
+    font-weight: bold;
+}
+QLabel#lbl_progress_detail {
+    color: #444748;
+    font-family: &quot;JetBrains Mono&quot;, monospace;
+    font-size: 8.5pt;
 }
 QProgressBar#prog_bar {
     border: 1px solid #d1d1d1;
@@ -297,7 +314,64 @@ QPushButton#btn_start:hover {
         </layout>
        </widget>
       </item>
-      <item>
+             <item>
+        <widget class="QFrame" name="mode_card">
+         <property name="class" stdset="0">
+          <string>config-card</string>
+         </property>
+         <layout class="QVBoxLayout" name="mode_card_layout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>14</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>14</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="title_mode">
+            <property name="text">
+             <string>TAXONOMIC ANALYSIS MODE</string>
+            </property>
+            <property name="class" stdset="0">
+             <string>config-card-title</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="rb_undet_safe">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Analyze All Specimens (Adaptive Mode) — Recommended</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="rb_undet_exclude">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>Complete Species Only (Skip 'sp.' / Undetermined)</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+<item>
        <widget class="QFrame" name="options_card">
         <property name="class" stdset="0">
          <string>config-card</string>
@@ -370,16 +444,68 @@ QPushButton#btn_start:hover {
         </layout>
        </widget>
       </item>
-      <item>
-       <widget class="QProgressBar" name="prog_bar">
-        <property name="value">
-         <number>0</number>
-        </property>
-        <property name="textVisible">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
+       <item>
+        <widget class="QFrame" name="progress_frame">
+         <property name="class" stdset="0">
+          <string>config-card</string>
+         </property>
+         <layout class="QVBoxLayout" name="progress_frame_layout">
+          <property name="spacing">
+           <number>6</number>
+          </property>
+          <property name="leftMargin">
+           <number>16</number>
+          </property>
+          <property name="topMargin">
+           <number>12</number>
+          </property>
+          <property name="rightMargin">
+           <number>16</number>
+          </property>
+          <property name="bottomMargin">
+           <number>12</number>
+          </property>
+          <item>
+           <layout class="QHBoxLayout" name="progress_hdr_layout">
+            <item>
+             <widget class="QLabel" name="lbl_progress_status">
+              <property name="text">
+               <string>Ready</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lbl_progress_pct">
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+              </property>
+              <property name="text">
+               <string>0%</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QProgressBar" name="prog_bar">
+            <property name="value">
+             <number>0</number>
+            </property>
+            <property name="textVisible">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_progress_detail">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
       <item>
        <spacer name="content_spacer">
         <property name="orientation">

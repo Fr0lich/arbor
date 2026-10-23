@@ -34,18 +34,18 @@ QLabel#lbl_header_title {
     font-size: 12pt;
     font-weight: bold;
 }
-QFrame.group-card {
+QFrame[class="group-card"] {
     background-color: #ffffff;
     border: 1px solid #d1d1d1;
     border-radius: 3px;
 }
-QFrame.group-card-header {
+QFrame[class="group-card-header"] {
     background-color: #f2f5f1;
     border-bottom: 1px solid #d1d1d1;
     border-top-left-radius: 2px;
     border-top-right-radius: 2px;
 }
-QLabel.group-card-title {
+QLabel[class="group-card-title"] {
     color: #000000;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 10pt;
@@ -70,7 +70,7 @@ QListWidget::item:selected {
     background-color: #2c302e;
     color: #ffffff;
 }
-QPushButton.tool-btn {
+QPushButton[class="tool-btn"] {
     background-color: #ffffff;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -79,10 +79,10 @@ QPushButton.tool-btn {
     border-radius: 2px;
     padding: 3px 8px;
 }
-QPushButton.tool-btn:hover {
+QPushButton[class="tool-btn"]:hover {
     background-color: #e9ece5;
 }
-QPushButton.tool-btn-primary {
+QPushButton[class="tool-btn-primary"] {
     background-color: #ffffff;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -92,10 +92,10 @@ QPushButton.tool-btn-primary {
     border-radius: 2px;
     padding: 3px 8px;
 }
-QPushButton.tool-btn-primary:hover {
+QPushButton[class="tool-btn-primary"]:hover {
     background-color: #e9ece5;
 }
-QPushButton.tool-btn-danger {
+QPushButton[class="tool-btn-danger"] {
     background-color: #ffffff;
     color: #c93a40;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -104,7 +104,7 @@ QPushButton.tool-btn-danger {
     border-radius: 2px;
     padding: 3px 8px;
 }
-QPushButton.tool-btn-danger:hover {
+QPushButton[class="tool-btn-danger"]:hover {
     background-color: #faeaeb;
     border-color: #c93a40;
 }
@@ -265,7 +265,11 @@ QPushButton#btn_save:hover {
            </widget>
           </item>
           <item>
-           <widget class="QListWidget" name="tabs_listbox"/>
+           <widget class="QListWidget" name="tabs_listbox">
+  <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
+ </widget>
           </item>
           <item>
            <widget class="QFrame" name="tab_btn_bar">
@@ -381,7 +385,11 @@ QPushButton#btn_save:hover {
            </widget>
           </item>
           <item>
-           <widget class="QListWidget" name="fields_listbox"/>
+           <widget class="QListWidget" name="fields_listbox">
+  <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
+ </widget>
           </item>
           <item>
            <widget class="QFrame" name="field_tool_bar">

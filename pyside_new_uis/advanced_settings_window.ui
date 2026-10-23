@@ -54,19 +54,19 @@ QTabBar::tab:selected {
     border-top: 2px solid #000000;
     border-bottom: 1px solid #f9f9f9;
 }
-QFrame.setting-card {
+QFrame[class="setting-card"] {
     background-color: #ffffff;
     border: 1px solid #c4c7c7;
     border-radius: 3px;
     padding: 10px;
 }
-QLabel.setting-title {
+QLabel[class="setting-title"] {
     color: #1a1c1c;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 10pt;
     font-weight: bold;
 }
-QLabel.setting-desc {
+QLabel[class="setting-desc"] {
     color: #444748;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 8.5pt;
@@ -273,7 +273,10 @@ QPushButton#btn_save:hover {
           </item>
           <item>
            <widget class="QComboBox" name="combo_archive_limit">
-            <item>
+              <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
+<item>
              <property name="text">
               <string>5</string>
              </property>
@@ -330,7 +333,10 @@ QPushButton#btn_save:hover {
           </item>
           <item>
            <widget class="QComboBox" name="combo_log_verbosity">
-            <item>
+              <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
+<item>
              <property name="text">
               <string>ERROR</string>
              </property>
@@ -422,7 +428,10 @@ QPushButton#btn_save:hover {
           </item>
           <item>
            <widget class="QComboBox" name="combo_resampling">
-            <item>
+              <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
+<item>
              <property name="text">
               <string>LANCZOS (High Quality)</string>
              </property>

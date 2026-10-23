@@ -43,7 +43,7 @@ QFrame#sidebar_frame {
     background-color: #ebebeb;
     border-right: 1px solid #c4c7c7;
 }
-QPushButton.nav-tab-btn {
+QPushButton[class="nav-tab-btn"] {
     background-color: transparent;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -54,10 +54,10 @@ QPushButton.nav-tab-btn {
     padding: 8px 14px;
     text-align: left;
 }
-QPushButton.nav-tab-btn:hover {
+QPushButton[class="nav-tab-btn"]:hover {
     background-color: #e0e0e0;
 }
-QPushButton.nav-tab-btn:checked {
+QPushButton[class="nav-tab-btn"]:checked {
     background-color: #ffffff;
     color: #000000;
     border-left: 3px solid #000000;
@@ -69,30 +69,30 @@ QScrollArea#scroll_area {
 QWidget#scroll_contents {
     background-color: #fbfaf8;
 }
-QFrame.setting-card {
+QFrame[class="setting-card"] {
     background-color: #ffffff;
     border: 1px solid #c4c7c7;
     border-radius: 4px;
 }
-QFrame.setting-card-header {
+QFrame[class="setting-card-header"] {
     background-color: #f2f5f1;
     border-bottom: 1px solid #c4c7c7;
     border-top-left-radius: 3px;
     border-top-right-radius: 3px;
 }
-QLabel.setting-card-title {
+QLabel[class="setting-card-title"] {
     color: #000000;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 10pt;
     font-weight: bold;
 }
-QLabel.setting-title {
+QLabel[class="setting-title"] {
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 9.5pt;
     font-weight: bold;
 }
-QLabel.setting-desc {
+QLabel[class="setting-desc"] {
     color: #4c4546;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 8.5pt;

@@ -136,7 +136,10 @@ Date Collected</string>
      </item>
      <item>
       <widget class="QComboBox" name="combo_default_type">
-       <item>
+        <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
+<item>
         <property name="text">
          <string>text</string>
         </property>

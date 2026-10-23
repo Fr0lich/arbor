@@ -54,7 +54,7 @@ QScrollArea#scroll_area {
 QWidget#scroll_contents {
     background-color: #fbfaf8;
 }
-QLabel.category-header {
+QLabel[class="category-header"] {
     color: #3a7d44;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 10pt;
@@ -62,12 +62,12 @@ QLabel.category-header {
     padding-top: 8px;
     padding-bottom: 2px;
 }
-QFrame.shortcut-row {
+QFrame[class="shortcut-row"] {
     background-color: #ffffff;
     border: 1px solid #dadada;
     border-radius: 2px;
 }
-QLabel.key-badge {
+QLabel[class="key-badge"] {
     background-color: #f2f5f1;
     color: #2c302e;
     font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
@@ -77,7 +77,7 @@ QLabel.key-badge {
     border-radius: 2px;
     padding: 3px 8px;
 }
-QLabel.shortcut-desc {
+QLabel[class="shortcut-desc"] {
     color: #444748;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 9pt;

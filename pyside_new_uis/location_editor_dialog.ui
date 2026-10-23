@@ -38,7 +38,7 @@ QFrame#header_divider {
     background-color: #c4c7c7;
     max-height: 1px;
 }
-QLabel.field-label {
+QLabel[class=&quot;field-label&quot;] {
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 9pt;

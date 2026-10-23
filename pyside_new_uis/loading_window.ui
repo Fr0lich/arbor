@@ -49,8 +49,8 @@ QProgressBar#progress_bar {
     border: 1px solid #dadada;
     border-radius: 2px;
     background-color: #e9ece5;
-    max-height: 6px;
-    min-height: 6px;
+    max-height: 8px;
+    min-height: 8px;
 }
 QProgressBar#progress_bar::chunk {
     background-color: #3a7d44;
@@ -86,16 +86,16 @@ QProgressBar#progress_bar::chunk {
        <number>10</number>
       </property>
       <property name="leftMargin">
-       <number>20</number>
+       <number>28</number>
       </property>
       <property name="topMargin">
-       <number>24</number>
-      </property>
-      <property name="rightMargin">
        <number>20</number>
       </property>
+      <property name="rightMargin">
+       <number>28</number>
+      </property>
       <property name="bottomMargin">
-       <number>24</number>
+       <number>20</number>
       </property>
       <item>
        <widget class="QLabel" name="lbl_title">

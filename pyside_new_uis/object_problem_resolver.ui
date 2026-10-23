@@ -37,7 +37,7 @@ QFrame#queue_nav_bar {
     background-color: #f2f5f1;
     border-bottom: 1px solid #c4c7c7;
 }
-QPushButton.queue-nav-btn {
+QPushButton[class="queue-nav-btn"] {
     background-color: #fbfaf8;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -47,10 +47,10 @@ QPushButton.queue-nav-btn {
     border-radius: 2px;
     padding: 3px 10px;
 }
-QPushButton.queue-nav-btn:hover {
+QPushButton[class="queue-nav-btn"]:hover {
     background-color: #e9ece5;
 }
-QPushButton.queue-nav-btn:disabled {
+QPushButton[class="queue-nav-btn"]:disabled {
     background-color: #dadada;
     color: #8b948d;
 }
@@ -92,7 +92,7 @@ QFrame#sidebar_bottom_frame {
     background-color: #c4c7c7;
     border-top: 1px solid #c4c7c7;
 }
-QCheckBox.sidebar-chk {
+QCheckBox[class="sidebar-chk"] {
     background-color: #fbfaf8;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -123,49 +123,55 @@ QScrollArea#scroll_cards_area {
 QWidget#cards_container {
     background-color: #fbfaf8;
 }
-QFrame.problem-card {
+QFrame[class="problem-card"] {
     background-color: #ffffff;
     border: 1px solid #c4c7c7;
     border-radius: 2px;
 }
-QFrame.card-title-bar-err {
+QFrame[class="card-title-bar-err"] {
     background-color: #c93a40;
 }
-QLabel.card-title-text {
+QFrame[class="card-title-bar-ukn"] {
+    background-color: #d9a036;
+}
+QFrame[class="card-title-bar-cfct"] {
+    background-color: #4a7b9d;
+}
+QLabel[class="card-title-text"] {
     color: #ffffff;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 9.5pt;
     font-weight: bold;
 }
-QLabel.card-code-text {
+QLabel[class="card-code-text"] {
     color: #ffffff;
     font-family: &quot;JetBrains Mono&quot;, monospace;
     font-size: 8.5pt;
     font-weight: bold;
 }
-QLabel.section-tag {
+QLabel[class="section-tag"] {
     color: #757d77;
     font-family: &quot;JetBrains Mono&quot;, monospace;
     font-size: 8pt;
     font-weight: bold;
 }
-QFrame.value-display-box {
+QFrame[class="value-display-box"] {
     background-color: #ffffff;
     border: 1px solid #c4c7c7;
     border-radius: 2px;
 }
-QLabel.value-text {
+QLabel[class="value-text"] {
     font-family: &quot;JetBrains Mono&quot;, monospace;
     font-size: 9.5pt;
     color: #2c302e;
     padding: 6px 10px;
 }
-QFrame.gbif-box {
+QFrame[class="gbif-box"] {
     background-color: #ebfbee;
     border: 1px solid #b2f2bb;
     border-radius: 2px;
 }
-QPushButton.gbif-chip-btn {
+QPushButton[class="gbif-chip-btn"] {
     background-color: transparent;
     color: #2b8a3e;
     font-family: &quot;JetBrains Mono&quot;, monospace;
@@ -175,7 +181,7 @@ QPushButton.gbif-chip-btn {
     text-align: left;
     padding: 6px 10px;
 }
-QPushButton.chip-btn {
+QPushButton[class="chip-btn"] {
     background-color: #fbfaf8;
     color: #2c302e;
     font-family: &quot;JetBrains Mono&quot;, monospace;
@@ -185,11 +191,11 @@ QPushButton.chip-btn {
     padding: 8px 12px;
     text-align: left;
 }
-QPushButton.chip-btn:hover {
+QPushButton[class="chip-btn"]:hover {
     background-color: #e9ece5;
     border-color: #000000;
 }
-QLineEdit.manual-entry {
+QLineEdit[class="manual-entry"] {
     background-color: #ffffff;
     color: #2c302e;
     font-family: &quot;JetBrains Mono&quot;, monospace;
@@ -467,7 +473,11 @@ QPushButton#btn_apply_all:hover {
         </widget>
        </item>
        <item>
-        <widget class="QListWidget" name="list_field_directory"/>
+        <widget class="QListWidget" name="list_field_directory">
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+       </widget>
        </item>
        <item>
         <widget class="QFrame" name="sidebar_bottom_frame">

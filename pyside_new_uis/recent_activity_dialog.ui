@@ -72,7 +72,7 @@ QPushButton#btn_clear {
     border: none;
     font-weight: bold;
 }
-QPushButton.chip-btn {
+QPushButton[class="chip-btn"] {
     background-color: #f2f5f1;
     color: #2c302e;
     font-family: &quot;JetBrains Mono&quot;, monospace;
@@ -81,7 +81,7 @@ QPushButton.chip-btn {
     border-radius: 2px;
     padding: 2px 8px;
 }
-QPushButton.chip-btn:hover {
+QPushButton[class="chip-btn"]:hover {
     background-color: #ffffff;
 }
 QTabWidget::pane {

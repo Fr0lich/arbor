@@ -150,24 +150,25 @@ When an AI agent is assigned to wire a UI component:
 
 ### 3.4 Location Editor Dialog
 * **Status**: `🟡 READY FOR WIRING`
-* **Original Tkinter**: `ui/location_panel.py` (`LocationEditor`)
+* **Original Tkinter**: `ui/location_panel.py` (`LocationEditor`), `ui/main_window.py` (`open_location_window`)
 * **UI File**: `pyside_new_uis/location_editor_dialog.ui`
 * **Target Controller**: `ui_qt/location_editor_dialog.py` (`QtLocationEditorDialog`)
 * **Wiring Contract**:
   - **Constructor**: `__init__(self, parent=None, initial_location: dict = None, save_callback = None)`
-  - **Inputs**: Coordinates, room, cabinet, shelf, box, container type.
+  - **Inputs**: Coordinates, room, cabinet, shelf, extra, stored_as container type.
   - **Outputs**: Emits or calls `save_callback(updated_location_dict)` on save.
 * **Widget Object Catalog**:
   - `LocationEditorDialog` (`QDialog` root)
-  - `header_frame`, `lbl_title`
-  - Coordinate & hierarchy input fields: `combo_stored_as`, `entry_building`, `entry_floor`, `entry_room`, `entry_cabinet`, `entry_shelf`, `entry_box`
-  - `footer_frame`, `btn_cancel`, `btn_save`
+  - `card_frame`, `header_container`, `lbl_header_title`
+  - `form_grid_container`, `form_grid`
+    - Input fields: `input_building`, `input_floor`, `input_room`, `input_cabinet`, `input_shelf`, `combo_stored_as`, `input_extra`
+  - `footer_container`, `btn_cancel`, `btn_done`
 
 ---
 
 ### 3.5 Problem Flags Dialog
 * **Status**: `🟡 READY FOR WIRING`
-* **Original Tkinter**: `ui/registry_panel.py`
+* **Original Tkinter**: `ui/registry_panel.py`, `ui/main_window.py` (`open_problems_window`)
 * **UI File**: `pyside_new_uis/problem_flags_dialog.ui`
 * **Target Controller**: `ui_qt/problem_flags_dialog.py` (`QtProblemFlagsDialog`)
 * **Wiring Contract**:
@@ -175,8 +176,11 @@ When an AI agent is assigned to wire a UI component:
   - **Outputs**: Returns list of checked flag tokens on confirmation.
 * **Widget Object Catalog**:
   - `ProblemFlagsDialog` (`QDialog` root)
-  - `chk_missing_data`, `chk_taxonomy_conflict`, `chk_location_uncertain`, `chk_image_poor`, `chk_damaged_specimen`, `chk_manual_review`
-  - `btn_cancel`, `btn_apply`
+  - `card_frame`, `header_container`, `lbl_header_title`, `header_divider`
+  - `grid_container`, `problems_grid`:
+    - Checklist items: `chk_genus_problem`, `chk_species_problem`, `chk_subspecies_problem`, `chk_author_problem`, `chk_family_problem`, `chk_collector_problem`, `chk_date_problem`, `chk_location_problem`, `chk_coordinates_problem`, `chk_elevation_problem`, `chk_duplicate_problem`, `chk_other_problem`
+  - `footer_divider`, `lbl_missing_warning`
+  - `footer_container`, `btn_cancel`, `btn_done`
 
 ---
 
@@ -190,7 +194,10 @@ When an AI agent is assigned to wire a UI component:
   - Non-modal inspector card displaying full specimen metadata and thumbnails.
 * **Widget Object Catalog**:
   - `QuickPeekDialog` (`QDialog` root)
-  - `lbl_peek_title`, `lbl_peek_id`, `table_attributes`, `img_preview_box`, `btn_close`
+  - `header_frame`, `lbl_title` (title), `chk_show_image`, `btn_popout`
+  - `main_splitter`, `left_pane`, `search_container`, `input_search`, `frame_advanced_filters`, `input_filter_genus`, `input_filter_species`, `input_filter_collection`, `list_results` (`QListWidget`)
+  - `content_splitter`, `scroll_data_area`, `data_contents`, `data_grid` (`val_id`, `val_reviewed`, `val_sciname`, `val_family`, `val_collector`, `val_location`, `val_provenance`), `frame_image_preview`, `lbl_image_preview`
+  - `footer_frame`, `btn_go_to_object` (`QPushButton`)
 
 ---
 
@@ -200,11 +207,19 @@ When an AI agent is assigned to wire a UI component:
 * **UI File**: `pyside_new_uis/bulk_edit_dialog.ui`
 * **Target Controller**: `ui_qt/bulk_edit_dialog.py` (`QtBulkEditDialog`)
 * **Wiring Contract**:
-  - Multi-record batch editor. Reads selected or filtered records, enables find/replace and direct column value assignment, presents preview table, and applies changes via `app_bus`.
+  - Multi-record batch editor.
+  - Layout toggle (`btn_toggle_layout` switches between 1-column vertical and 2-column horizontal orientations).
+  - Target list management: adds specimen IDs via `input_search_id` + `btn_add_object` into `list_targets`; double-click removes with Ctrl+Z undo stack.
+  - Field selection: activates field updates via `chk_en_*` checkboxes, provides values via `input_bulk_*` or `combo_bulk_*`.
+  - Actions: `btn_apply_targets` (applies changes to explicit target list), `btn_destructive` (guarded by `chk_understand` confirmation, applies to all active filtered objects).
 * **Widget Object Catalog**:
   - `BulkEditDialog` (`QDialog` root)
-  - `content_splitter`, `card_scope`, `rb_filtered`, `rb_selected`, `card_edit`, `scroll_edit_area`, `edit_contents`, `edit_grid`
-  - `btn_preview`, `btn_apply`, `btn_cancel`
+  - `header_frame`, `lbl_title`, `btn_toggle_layout` (`QPushButton`)
+  - `content_splitter` (`QSplitter`)
+  - Target Card: `card_targets`, `hdr_targets`, `lbl_hdr_targets`, `targets_body`, `lbl_add_id`, `input_search_id` (`QLineEdit`), `btn_add_object` (`QPushButton`), `list_targets` (`QListWidget`), `lbl_hint`
+  - Edit Card: `card_edit`, `hdr_edit`, `lbl_hdr_edit`, `scroll_edit_area` (`QScrollArea`), `edit_contents` (`QWidget`), `edit_grid` (`QGridLayout`)
+    - Field widgets: `chk_en_sciname`, `input_bulk_sciname`, `chk_en_genus`, `input_bulk_genus`, `chk_en_species`, `input_bulk_species`, `chk_en_family`, `input_bulk_family`, `chk_en_building`, `input_bulk_building`, `chk_en_floor`, `input_bulk_floor`, `chk_en_cabinet`, `input_bulk_cabinet`, `chk_en_reviewed`, `combo_bulk_reviewed`, `chk_en_genus_prob`, `combo_bulk_genus_prob`
+  - Action Container: `action_container`, `target_actions_row`, `btn_apply_targets` (`QPushButton`), `sep_destructive`, `destructive_row`, `chk_understand` (`QCheckBox`), `btn_destructive` (`QPushButton`)
 
 ---
 
@@ -214,11 +229,18 @@ When an AI agent is assigned to wire a UI component:
 * **UI File**: `pyside_new_uis/historical_resolver.ui`
 * **Target Controller**: `ui_qt/historical_resolver.py` (`QtHistoricalConflictResolver`)
 * **Wiring Contract**:
-  - Dual-pane layout. Left list of discrepancy fields (`list_fields`); right scroll area with comparison cards (`cards_layout`), suggestion chips, manual override field, and confirmation buttons.
+  - Dual-pane layout. Left list of discrepancy fields (`list_field_directory`); right scroll area with comparison cards (`cards_container`, `cards_vlayout`), suggestion chips, manual override entry, and confirmation buttons.
+  - Toggles: `chk_show_all` (reloads suggestions including non-conflicting fields), `chk_sort_alpha` (toggles alphabetical vs. column-order field sorting).
+  - Actions: `btn_apply_all` (applies all resolved suggestions or manual overrides, triggers undo push and dataframe updates), `btn_close`.
 * **Widget Object Catalog**:
   - `HistoricalConflictResolver` (`QDialog` root)
-  - `main_splitter`, `sidebar_frame`, `field_tree_or_list`, `cards_scroll_area`, `cards_content`
-  - `btn_accept_all`, `btn_apply_selections`, `btn_close`
+  - `header_frame`, `lbl_main_title`
+  - `main_splitter`
+  - `sidebar_frame`, `dir_header_frame`, `lbl_dir_title`, `list_field_directory` (`QListWidget`), `sidebar_bottom_frame`, `chk_show_all` (`QCheckBox`), `chk_sort_alpha` (`QCheckBox`)
+  - `right_area`, `context_header_frame`, `lbl_issue_count`, `lbl_issue_subtitle`
+  - `scroll_cards_area` (`QScrollArea`), `cards_container` (`QWidget`), `cards_vlayout` (`QVBoxLayout`)
+  - Card Item Template: `sample_card_genus`, `genus_header_bar`, `lbl_genus_card_title`, `lbl_genus_code`, `box_cur_val`, `lbl_val_genus`, `btn_sug_genus_1`, `input_manual_genus`, `btn_apply_single`
+  - `footer_frame`, `lbl_stats`, `btn_close` (`QPushButton`), `btn_apply_all` (`QPushButton`)
 
 ---
 
@@ -228,11 +250,22 @@ When an AI agent is assigned to wire a UI component:
 * **UI File**: `pyside_new_uis/object_problem_resolver.ui`
 * **Target Controller**: `ui_qt/object_problem_resolver.py` (`QtObjectProblemResolver`)
 * **Wiring Contract**:
-  - Queue navigation (`btn_prev`, `btn_next`), progress indicator, problem category tabs, resolution actions, and auto-advance.
+  - Dual-mode resolver (Single object or multi-object queue).
+  - Queue Navigation (when in queue mode): `queue_nav_bar`, `btn_queue_prev`, `lbl_queue_info`, `btn_queue_next`, `btn_skip_object`.
+  - Left Sidebar: `list_field_directory` (`QListWidget`), `chk_show_all`, `chk_sort_alpha`.
+  - Right Cards Area: `scroll_cards_area`, `cards_container`, `cards_vlayout`.
+  - Dynamic Card Schema: `sample_problem_card`, `prob_header_bar`, `lbl_prob_card_title`, `lbl_prob_code`, `box_cur_val`, `lbl_val_species`, `box_gbif_match`, `btn_gbif_match`, `lbl_gbif_tag`, `input_manual_species`, `btn_apply_single`.
+  - Footer Actions: `lbl_stats`, `btn_skip_object`, `btn_close`, `btn_apply_all`.
 * **Widget Object Catalog**:
   - `ObjectProblemResolver` (`QDialog` root)
-  - `nav_bar`, `btn_prev`, `btn_next`, `lbl_counter`, `category_tabs`, `problem_details_panel`
-  - `btn_resolve`, `btn_dismiss`, `btn_save_queue`
+  - `header_frame`, `lbl_main_title`
+  - `queue_nav_bar`, `btn_queue_prev` (`QPushButton`), `lbl_queue_info` (`QLabel`), `btn_queue_next` (`QPushButton`)
+  - `main_splitter`
+  - `sidebar_frame`, `dir_header_frame`, `lbl_dir_title`, `list_field_directory` (`QListWidget`), `sidebar_bottom_frame`, `chk_show_all` (`QCheckBox`), `chk_sort_alpha` (`QCheckBox`)
+  - `right_area`, `context_header_frame`, `lbl_issue_count`, `lbl_issue_subtitle`
+  - `scroll_cards_area` (`QScrollArea`), `cards_container` (`QWidget`), `cards_vlayout` (`QVBoxLayout`)
+  - Problem Card Template: `sample_problem_card`, `prob_header_bar`, `lbl_prob_card_title`, `lbl_prob_code`, `box_cur_val`, `lbl_val_species`, `box_gbif_match`, `btn_gbif_match`, `lbl_gbif_tag`, `input_manual_species`, `btn_apply_single`
+  - `footer_frame`, `lbl_stats`, `btn_skip_object` (`QPushButton`), `btn_close` (`QPushButton`), `btn_apply_all` (`QPushButton`)
 
 ---
 
@@ -391,7 +424,7 @@ When an AI agent is assigned to wire a UI component:
   - `DashboardDialog` (`QDialog` root)
   - `header_frame`, `lbl_title`
   - `scroll_area`, `card_overall`, `card_session`
-  - Metric labels: `lbl_total_val`, `lbl_reviewed_val`, `lbl_not_reviewed_val`, `lbl_probs_val`, `lbl_sess_reviewed_val`, `lbl_sess_solved_val`
+  - Metric labels: `lbl_total_val`, `lbl_reviewed_val`, `lbl_not_reviewed_val`, `lbl_probs_val`, `lbl_actionable_val`, `lbl_image_probs_val`, `lbl_unknown_val`, `lbl_filtered_val`, `lbl_sess_reviewed_val`, `lbl_sess_solved_val`, `lbl_sess_observed_val`
   - `prog_reviewed` (`QProgressBar`)
   - `footer_frame`, `btn_save_stats`, `btn_close`
 
@@ -430,7 +463,7 @@ When an AI agent is assigned to wire a UI component:
   - `header_frame`, `lbl_title`
   - `ctx_header`, `lbl_review_count`, `lbl_review_desc`, `btn_select_all`, `btn_deselect_all`
   - `scroll_area`, `scroll_contents`, `scroll_layout`, `sample_update_card`, `card_chk_apply`, `lbl_val_current`, `lbl_val_gbif`
-  - `footer_frame`, `btn_reject_all`, `btn_cancel`, `btn_apply`
+  - `footer_frame`, `lbl_stats`, `btn_reject_all`, `btn_cancel`, `btn_apply`
 
 ---
 
@@ -442,6 +475,7 @@ When an AI agent is assigned to wire a UI component:
 * **Wiring Contract**:
   - **Constructor**: `__init__(self, parent=None, main_app=None, on_start_batch=None)`
   - Scope selection: `rb_scope_filtered`, `rb_scope_selected`, `rb_scope_all`.
+  - Mode selection: `rb_undet_safe`, `rb_undet_exclude`.
   - Configuration flags: `chk_fuzzy_matching`, `chk_author_reconcile`, `chk_higher_rank`.
   - `btn_start`: Emits/invokes `on_start_batch(scope, options_dict)`.
 * **Widget Object Catalog**:
@@ -449,8 +483,10 @@ When an AI agent is assigned to wire a UI component:
   - `header_frame`, `lbl_title`
   - `safety_card`, `lbl_safety_title`, `lbl_safety_desc`
   - `scope_card`, `rb_scope_filtered`, `rb_scope_selected`, `rb_scope_all`
+  - `mode_card`, `rb_undet_safe`, `rb_undet_exclude`
   - `options_card`, `chk_fuzzy_matching`, `chk_author_reconcile`, `chk_higher_rank`
-  - `prog_bar`, `footer_frame`, `lbl_summary`, `btn_cancel`, `btn_start`
+  - `progress_frame`, `lbl_progress_status`, `lbl_progress_pct`, `prog_bar`, `lbl_progress_detail`
+  - `footer_frame`, `lbl_summary`, `btn_cancel`, `btn_start`
 
 ---
 

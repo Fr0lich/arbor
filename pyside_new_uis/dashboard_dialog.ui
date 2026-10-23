@@ -41,29 +41,29 @@ QScrollArea#scroll_area {
 QWidget#scroll_contents {
     background-color: #fbfaf8;
 }
-QFrame.stat-card {
+QFrame[class="stat-card"] {
     background-color: #ffffff;
     border: 1px solid #d1d1d1;
     border-radius: 4px;
 }
-QFrame.stat-card-header {
+QFrame[class="stat-card-header"] {
     background-color: #e9ece5;
     border-bottom: 1px solid #d1d1d1;
     border-top-left-radius: 3px;
     border-top-right-radius: 3px;
 }
-QLabel.stat-card-title {
+QLabel[class="stat-card-title"] {
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 10pt;
     font-weight: bold;
 }
-QLabel.stat-row-label {
+QLabel[class="stat-row-label"] {
     color: #444748;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 10pt;
 }
-QLabel.stat-row-value {
+QLabel[class="stat-row-value"] {
     color: #2c302e;
     font-family: &quot;JetBrains Mono&quot;, monospace;
     font-size: 10pt;
@@ -373,6 +373,111 @@ QPushButton#btn_save_stats:hover {
                </item>
               </layout>
              </item>
+              <item>
+               <layout class="QHBoxLayout" name="row_actionable">
+                <item>
+                 <widget class="QLabel" name="lbl_actionable_label">
+                  <property name="text">
+                   <string>Actionable problems</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-label</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_actionable_val">
+                  <property name="styleSheet">
+                   <string notr="true">color: #c93a40;</string>
+                  </property>
+                  <property name="text">
+                   <string>0 (0%)</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-value</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="row_image_probs">
+                <item>
+                 <widget class="QLabel" name="lbl_image_probs_label">
+                  <property name="text">
+                   <string>Image Problems</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-label</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_image_probs_val">
+                  <property name="styleSheet">
+                   <string notr="true">color: #f59e0b;</string>
+                  </property>
+                  <property name="text">
+                   <string>0 (0%)</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-value</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="row_unknown">
+                <item>
+                 <widget class="QLabel" name="lbl_unknown_label">
+                  <property name="text">
+                   <string>Issues (marked &quot;unknown&quot;)</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-label</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_unknown_val">
+                  <property name="styleSheet">
+                   <string notr="true">color: #f59e0b;</string>
+                  </property>
+                  <property name="text">
+                   <string>0 (0%)</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-value</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="row_filtered">
+                <item>
+                 <widget class="QLabel" name="lbl_filtered_label">
+                  <property name="text">
+                   <string>Currently filtered</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-label</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_filtered_val">
+                  <property name="text">
+                   <string>0 of 0</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-value</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
              <item>
               <widget class="QFrame" name="divider_prog">
                <property name="styleSheet">
@@ -539,7 +644,31 @@ QPushButton#btn_save_stats:hover {
                </item>
               </layout>
              </item>
-            </layout>
+                          <item>
+               <layout class="QHBoxLayout" name="row_sess_observed">
+                <item>
+                 <widget class="QLabel" name="lbl_sess_observed_label">
+                  <property name="text">
+                   <string>Problems Observed Today</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-label</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="lbl_sess_observed_val">
+                  <property name="text">
+                   <string>0</string>
+                  </property>
+                  <property name="class" stdset="0">
+                   <string>stat-row-value</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
            </widget>
           </item>
          </layout>

@@ -69,7 +69,7 @@ QListWidget#list_fields {
     border: none;
     padding: 4px;
 }
-QPushButton.tool-btn {
+QPushButton[class="tool-btn"] {
     background-color: #ffffff;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -78,7 +78,7 @@ QPushButton.tool-btn {
     border-radius: 2px;
     padding: 3px 8px;
 }
-QPushButton.tool-btn:hover {
+QPushButton[class="tool-btn"]:hover {
     background-color: #e9ece5;
 }
 QPushButton#btn_cancel {
@@ -140,7 +140,11 @@ QPushButton#btn_confirm:hover {
       </widget>
      </item>
      <item>
-      <widget class="QComboBox" name="combo_destination"/>
+      <widget class="QComboBox" name="combo_destination">
+  <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
+ </widget>
      </item>
      <item>
       <spacer name="dest_spacer">
@@ -207,7 +211,11 @@ QPushButton#btn_confirm:hover {
        </widget>
       </item>
       <item>
-       <widget class="QListWidget" name="list_fields"/>
+       <widget class="QListWidget" name="list_fields">
+  <property name="cursor">
+   <cursorShape>PointingHandCursor</cursorShape>
+  </property>
+ </widget>
       </item>
       <item>
        <widget class="QFrame" name="tool_bar">

@@ -33,13 +33,13 @@ QLabel#lbl_header_title {
     font-size: 11pt;
     font-weight: bold;
 }
-QLabel.section-tag {
+QLabel[class="section-tag"] {
     color: #757d77;
     font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
     font-size: 8.5pt;
     font-weight: bold;
 }
-QFrame.group-box {
+QFrame[class="group-box"] {
     background-color: #ffffff;
     border: 1px solid #c4c7c7;
     border-radius: 2px;

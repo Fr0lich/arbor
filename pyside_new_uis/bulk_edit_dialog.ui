@@ -44,16 +44,16 @@ QPushButton#btn_toggle_layout {
 QPushButton#btn_toggle_layout:hover {
     background-color: #e9ece5;
 }
-QFrame.card-outer {
+QFrame[class="card-outer"] {
     background-color: #ffffff;
     border: 1px solid #c4c7c7;
     border-radius: 2px;
 }
-QFrame.card-header-bar {
+QFrame[class="card-header-bar"] {
     background-color: #f2f5f1;
     border-bottom: 1px solid #c4c7c7;
 }
-QLabel.card-title {
+QLabel[class="card-title"] {
     font-family: &quot;JetBrains Mono&quot;, &quot;Consolas&quot;, monospace;
     font-size: 9.5pt;
     font-weight: bold;
@@ -105,13 +105,13 @@ QScrollArea#scroll_edit_area {
 QWidget#edit_contents {
     background-color: #ffffff;
 }
-QLabel.cat-header {
+QLabel[class="cat-header"] {
     color: #000000;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 9.5pt;
     font-weight: bold;
 }
-QCheckBox.field-chk {
+QCheckBox[class="field-chk"] {
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 9pt;
@@ -345,7 +345,11 @@ QCheckBox#chk_understand {
            </widget>
           </item>
           <item>
-           <widget class="QListWidget" name="list_targets"/>
+           <widget class="QListWidget" name="list_targets">
+             <property name="cursor">
+              <cursorShape>PointingHandCursor</cursorShape>
+             </property>
+            </widget>
           </item>
           <item>
            <widget class="QLabel" name="lbl_hint">

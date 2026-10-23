@@ -62,13 +62,13 @@ QScrollArea#body_scroll_area {
 QWidget#scrollAreaWidgetContents {
     background-color: #ffffff;
 }
-QLabel.section-label {
+QLabel[class=&quot;section-label&quot;] {
     font-family: &quot;JetBrains Mono&quot;, &quot;Courier New&quot;, monospace;
     font-size: 9pt;
     font-weight: bold;
     color: #444748;
 }
-QLabel.badge {
+QLabel[class=&quot;badge&quot;] {
     border-radius: 2px;
     padding: 1px 4px;
     font-family: &quot;JetBrains Mono&quot;, &quot;Courier New&quot;, monospace;
@@ -139,7 +139,7 @@ QFrame#frame_image_modes {
     border: 1px solid #747878;
     border-radius: 2px;
 }
-QPushButton.segment-btn {
+QPushButton[class=&quot;segment-btn&quot;] {
     background-color: #ffffff;
     color: #444748;
     font-family: &quot;JetBrains Mono&quot;, &quot;Courier New&quot;, monospace;
@@ -148,46 +148,51 @@ QPushButton.segment-btn {
     border: none;
     padding: 6px 12px;
 }
-QPushButton.segment-btn:hover {
+QPushButton[class=&quot;segment-btn&quot;]:hover {
     background-color: #e9ece5;
 }
-QPushButton.segment-btn:checked {
+QPushButton[class=&quot;segment-btn&quot;]:checked {
     background-color: #000000;
     color: #ffffff;
 }
-QFrame.segment-divider {
+QFrame[class=&quot;segment-divider&quot;] {
     background-color: #747878;
     max-width: 1px;
     min-width: 1px;
 }
-QTableWidget#table_recent_projects {
+QFrame#frame_recent_table {
     background-color: #ffffff;
     border: 1px solid #747878;
     border-radius: 2px;
-    gridline-color: #c4c7c7;
-    font-family: &quot;JetBrains Mono&quot;, &quot;Courier New&quot;, monospace;
-    font-size: 9pt;
 }
-QTableWidget#table_recent_projects::item {
-    padding: 4px 8px;
-    color: #2c302e;
-}
-QTableWidget#table_recent_projects::item:hover {
-    background-color: #e9ece5;
-}
-QTableWidget#table_recent_projects::item:selected {
-    background-color: #e9ece5;
-    color: #000000;
-}
-QHeaderView::section {
+QFrame#frame_recent_header {
     background-color: #f2f5f1;
-    color: #444748;
+    border-bottom: 1px solid #747878;
+}
+QLabel#lbl_hdr_filepath {
     font-family: &quot;JetBrains Mono&quot;, &quot;Courier New&quot;, monospace;
     font-size: 9pt;
     font-weight: bold;
+    color: #444748;
+}
+QListWidget#list_recent_projects {
+    background-color: #ffffff;
     border: none;
-    border-bottom: 1px solid #747878;
-    padding: 4px 8px;
+    font-family: &quot;JetBrains Mono&quot;, &quot;Courier New&quot;, monospace;
+    font-size: 9pt;
+    color: #2c302e;
+}
+QListWidget#list_recent_projects::item {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f2f5f1;
+}
+QListWidget#list_recent_projects::item:hover {
+    background-color: #e9ece5;
+    color: #000000;
+}
+QListWidget#list_recent_projects::item:selected {
+    background-color: #e9ece5;
+    color: #000000;
 }
 QPushButton#btn_help {
     background-color: #ffffff;
@@ -214,6 +219,10 @@ QPushButton#btn_mobile {
 }
 QPushButton#btn_mobile:hover {
     background-color: #388463;
+}
+QPushButton#btn_mobile:disabled {
+    background-color: #dadada;
+    color: #757d77;
 }
 QPushButton#btn_launch {
     background-color: #000000;
@@ -923,33 +932,77 @@ QLabel#lbl_status {
               </widget>
              </item>
              <item>
-              <widget class="QTableWidget" name="table_recent_projects">
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>120</height>
-                </size>
+              <widget class="QFrame" name="frame_recent_table">
+               <property name="frameShape">
+                <enum>QFrame::StyledPanel</enum>
                </property>
-               <property name="editTriggers">
-                <set>QAbstractItemView::NoEditTriggers</set>
-               </property>
-               <property name="selectionMode">
-                <enum>QAbstractItemView::SingleSelection</enum>
-               </property>
-               <property name="selectionBehavior">
-                <enum>QAbstractItemView::SelectRows</enum>
-               </property>
-               <property name="showGrid">
-                <bool>false</bool>
-               </property>
-               <property name="columnCount">
-                <number>1</number>
-               </property>
-               <column>
-                <property name="text">
-                 <string>FILE PATH</string>
+               <layout class="QVBoxLayout" name="layout_recent_inner">
+                <property name="spacing">
+                 <number>0</number>
                 </property>
-               </column>
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QFrame" name="frame_recent_header">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>26</height>
+                   </size>
+                  </property>
+                  <property name="frameShape">
+                   <enum>QFrame::NoFrame</enum>
+                  </property>
+                  <layout class="QHBoxLayout" name="layout_hdr_row">
+                   <property name="spacing">
+                    <number>0</number>
+                   </property>
+                   <property name="leftMargin">
+                    <number>8</number>
+                   </property>
+                   <property name="topMargin">
+                    <number>2</number>
+                   </property>
+                   <property name="rightMargin">
+                    <number>8</number>
+                   </property>
+                   <property name="bottomMargin">
+                    <number>2</number>
+                   </property>
+                   <item>
+                    <widget class="QLabel" name="lbl_hdr_filepath">
+                     <property name="text">
+                      <string>FILE PATH</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QListWidget" name="list_recent_projects">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>90</height>
+                   </size>
+                  </property>
+                  <property name="cursor">
+                   <cursorShape>PointingHandCursor</cursorShape>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
               </widget>
              </item>
             </layout>
@@ -1090,6 +1143,9 @@ QLabel#lbl_status {
             </item>
             <item>
              <widget class="QPushButton" name="btn_mobile">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
               <property name="cursor">
                <cursorShape>PointingHandCursor</cursorShape>
               </property>

@@ -33,7 +33,7 @@ QLabel#lbl_header {
 QFrame#sep_line {
     background-color: #dadada;
 }
-QPushButton.help-action-btn {
+QPushButton[class="help-action-btn"] {
     background-color: #ffffff;
     color: #2c302e;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
@@ -44,11 +44,11 @@ QPushButton.help-action-btn {
     padding: 6px 10px;
     text-align: left;
 }
-QPushButton.help-action-btn:hover {
+QPushButton[class="help-action-btn"]:hover {
     background-color: #e9ece5;
     border-color: #2c302e;
 }
-QLabel.help-action-desc {
+QLabel[class="help-action-desc"] {
     color: #444748;
     font-family: &quot;Segoe UI&quot;, &quot;Inter&quot;;
     font-size: 8.5pt;
