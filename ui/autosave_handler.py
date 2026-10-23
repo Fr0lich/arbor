@@ -234,12 +234,9 @@ class AutosaveMixin:
             self.app._log_records = df_log.to_dict(orient="records") if df_log is not None and not df_log.empty else []
             self.app.df_unvalidated = df_unvalidated if df_unvalidated is not None else pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
 
-            if "ObjectID" in self.app.df_reg.columns:
-                self.app.df_reg.set_index("ObjectID", inplace=True)
-            if "ObjectID" in self.app.df_obs.columns:
-                self.app.df_obs.set_index("ObjectID", inplace=True)
-            if "ObjectID" in self.app.df_photo.columns:
-                self.app.df_photo.set_index("ObjectID", inplace=True)
+            for df in (self.app.df_reg, self.app.df_obs, self.app.df_photo):
+                if "ObjectID" in df.columns:
+                    df.set_index("ObjectID", inplace=True)
 
             self.app.initial_df_obs = self.app.df_obs.copy()
             self.reg_by_id = self.app.df_reg
