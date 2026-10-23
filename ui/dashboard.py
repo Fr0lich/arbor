@@ -154,6 +154,10 @@ class DashboardMixin:
         image_problems = int(mask_image.sum())
         issues_unknown = int(mask_unknown.sum())
 
+        missing_images_count = 0
+        if getattr(self.app, "image_mode", None) == "folder" and "Images_Missing" in self.app.df_obs.columns:
+            missing_images_count = int(self.app.df_obs["Images_Missing"].fillna(False).astype(bool).sum())
+
         def _get_prob_series(prob_col, subset_idx=None, include_unknowns=False):
             # Keep this helper strictly for Card 3 and 4 total problem breakdown
             idx = self.app.df_reg.index if subset_idx is None else subset_idx
@@ -207,6 +211,8 @@ class DashboardMixin:
         add_row(c_overall, "Objects with problems", f"{objects_with_problems}  ({pct(objects_with_problems)})", bold=objects_with_problems > 0, value_color=COLORS["error"] if objects_with_problems > 0 else COLORS["text"])
         add_row(c_overall, 'Actionable problems (excluding "unknown" and Image Problems)', f"{actionable_problems}  ({pct(actionable_problems)})", bold=actionable_problems > 0, value_color=COLORS["error"] if actionable_problems > 0 else COLORS["text"])
         add_row(c_overall, "Image Problems", f"{image_problems}  ({pct(image_problems)})", bold=image_problems > 0, value_color=COLORS["warning"] if image_problems > 0 else COLORS["text"])
+        if getattr(self.app, "image_mode", None) == "folder":
+            add_row(c_overall, "  └ Missing images", f"{missing_images_count}  ({pct(missing_images_count)})", value_color=COLORS["warning"] if missing_images_count > 0 else COLORS["text_muted"])
         add_row(c_overall, 'Issues (marked "unknown")', f"{issues_unknown}  ({pct(issues_unknown)})", bold=issues_unknown > 0, value_color=COLORS["warning"] if issues_unknown > 0 else COLORS["text"])
 
         active_count = len(self.app.active_object_ids) if hasattr(self.app, "active_object_ids") else 0
