@@ -1,8 +1,10 @@
-# PySide6 UI Logic Wiring & Integration Pipeline
+﻿# PySide6 UI Logic Wiring & Integration Pipeline (Phase 2 Blueprint)
 
-This document is the **Master Handover & Tracking Registry** for Phase 2 (Logic Wiring & Controller Integration). As UI components are extracted and verified into PySide6 `.ui` files in Phase 1, they are registered here as **READY FOR WIRING**.
+> ⚠️ **PROJECT STATUS UPDATE**:
+> * **Phase 1 Extraction is 100% Complete**: All 32 UI components have been extracted and verified in `pyside_new_uis/` (testable via `python scripts/verify_all_uis.py`).
+> * **Phase 2 Logic Wiring is PAUSED / ARCHIVED as a Blueprint**: Production Arbor runs natively on Tkinter (`ui/` + `main.py`). This document serves as the complete, authoritative widget catalog and wiring blueprint for any future developer or AI assistant continuing the PySide6 implementation.
 
-Parallel AI agents working on logic wiring must refer to this document for their target specifications, widget catalogs, and status tracking.
+This document is the **Master Handover & Tracking Registry** for Phase 2 (Logic Wiring & Controller Integration). Every component extracted in Phase 1 is documented below with its exact Widget Object Names, constructor signatures, input/output data shapes, and signals.
 
 ---
 

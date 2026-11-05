@@ -11,7 +11,7 @@ class BackgroundWorker:
     def start(self, root):
         """Starts the main-thread polling loop using root.after()"""
         with self._lock:
-            if self._polling:
+            if self._polling and self.root == root:
                 return
             self.root = root
             self._polling = True

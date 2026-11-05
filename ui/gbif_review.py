@@ -88,6 +88,7 @@ class GBIFReviewDialog(tk.Toplevel):
             "success_text": "#a6e3a1" if is_dark else "#2b8a3e",
             "warning": "#f59e0b",
             "warning_bg": "#332200" if is_dark else "#fffbeb",
+            "error": "#e06c75" if is_dark else "#c93a40",
             "error_bg": "#2e1518" if is_dark else "#fef2f2",
             "error_border": "#802024" if is_dark else "#c93a40",
             "error_text": "#e06c75" if is_dark else "#c93a40",

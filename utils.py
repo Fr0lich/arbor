@@ -339,3 +339,62 @@ def debug_log(level: str, context: str, extra: str = "") -> None:
         _log_queue.append(msg)
 
     _ensure_flush_thread()
+
+
+# ── Fast Fuzzy Matching (rapidfuzz with difflib fallback) ─────────────────────
+try:
+    from rapidfuzz import fuzz, process
+    _HAS_RAPIDFUZZ = True
+except ImportError:
+    import difflib
+    _HAS_RAPIDFUZZ = False
+
+
+def fuzzy_score(query: str, target: str) -> float:
+    """Calculate fuzzy similarity score (0.0 to 100.0) between query and target.
+
+    Uses rapidfuzz.fuzz.WRatio when installed, with a zero-dependency
+    fallback to difflib.SequenceMatcher.
+    """
+    if not query or not target:
+        return 0.0
+    q = query.strip().lower()
+    t = target.strip().lower()
+    if q == t:
+        return 100.0
+    if q in t:
+        # Boost direct substring matches
+        return 90.0 + (len(q) / max(len(t), 1)) * 10.0
+
+    if _HAS_RAPIDFUZZ:
+        return float(fuzz.WRatio(q, t))
+    else:
+        matcher = difflib.SequenceMatcher(None, q, t)
+        return matcher.ratio() * 100.0
+
+
+def fuzzy_extract(query: str, choices: list[str], limit: int = 10, score_cutoff: float = 55.0) -> list[tuple[str, float]]:
+    """Extract top fuzzy matching choices for a query, sorted by score descending."""
+    if not query or not choices:
+        return []
+
+    q = query.strip().lower()
+
+    if _HAS_RAPIDFUZZ:
+        results = process.extract(
+            q,
+            choices,
+            scorer=fuzz.WRatio,
+            limit=limit,
+            score_cutoff=score_cutoff
+        )
+        return [(match, float(score)) for match, score, _ in results]
+    else:
+        scored = []
+        for choice in choices:
+            score = fuzzy_score(q, choice)
+            if score >= score_cutoff:
+                scored.append((choice, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[:limit]
+

@@ -115,7 +115,7 @@ Arbor is structured to cleanly separate concerns between the UI, data repository
 Arbor's settings and user preferences are managed via JSON and Python config files:
 
 - **`config.py`:** Contains global application configuration definitions.
-- **`arbor_preferences.json` / `user_prefs.json`:** Stores persistent user settings and window geometries.
+- **`user_prefs.json`:** Stores persistent user settings, database profiles, and window geometries.
 
 ---
 

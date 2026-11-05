@@ -1,20 +1,24 @@
 # Master PySide6 / Qt Designer Migration Guide for Arbor
 
-## Executive Summary & Mission
-Arbor is undergoing a systematic UI modernization from **Tkinter** to **PySide6 (Qt 6)** using **Qt Designer (`.ui` files)**. 
-
-### Core Visual Directive: Exact Tkinter Parity
-> **CRITICAL DESIGN GOAL**: The `.ui` files must look as **accurate to the original Tkinter designs as possible**.
-> The Tkinter interface is the **gold standard** for visual layout, styling, and ergonomics:
-> * Every `.ui` file must replicate the exact colors, paddings, margins, card outlines, and typography of its corresponding Tkinter window in `ui/`.
-> * Do not introduce arbitrary new UI styles, round bubble buttons, or mismatched colors.
-> * Maintain the distinct Arbor aesthetic: flat, high-contrast, clean 1px borders, monospace technical data fields, and card-encapsulated sections.
-
-To ensure stability, continuity, and zero regression for existing users and production workflows, this migration is strictly executed as a **Parallel Process**.
+> ⚠️ **PROJECT STATUS UPDATE (Current Direction)**:
+> * **Production Application is Tkinter (`ui/` + `main.py`)**: Arbor remains in production on its native, battle-tested Tkinter engine. It has zero external Qt dependencies, starts instantly, and handles all curatorial workflows reliably.
+> * **Phase 1 (Visual/Structural Extraction) is 100% Complete**: All **32 UI components** have been extracted into clean Qt Designer `.ui` files in `pyside_new_uis/`, verified via `python scripts/verify_all_uis.py`, and mapped in `PYSIDE_UI_INTEGRATION_PIPELINE.md`.
+> * **Phase 2 (Logic Wiring) is PAUSED / ARCHIVED as a Blueprint**: Rather than leaving a rushed, half-migrated Qt codebase, Phase 1 is preserved as a complete, self-documenting asset. Future developers wishing to build a Qt interface can pick up Phase 2 immediately without reverse-engineering Tkinter.
 
 ---
 
-## 1. The Parallel Process Architecture
+## Folder Status & Directory Roles
+
+| Directory | Role | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **`ui/`** | **Production Tkinter UI** | **ACTIVE PRODUCTION** | Primary UI launched by `main.py`. All active development, bug fixes, and user features live here. |
+| **`pyside_new_uis/`** | **Phase 1 Extracted `.ui` Files (32 total)** | **COMPLETED ASSET** | Clean 1:1 Qt Designer XML replicas of all 32 Tkinter windows. Verified by `scripts/verify_all_uis.py`. |
+| **`ui_qt/`** | **Early Prototype Qt Controllers** | **OPTIONAL / PROTOTYPE** | Early exploratory controllers pointing to old `qt designer/` files. Kept as optional reference. |
+| **`qt designer/`** | **Legacy / Early Prototype `.ui` Files** | **DEPRECATED / SUPERSEDED** | Early drafts created prior to Phase 1. Superseded 100% by `pyside_new_uis/`. Do not use for new work. |
+
+---
+
+## 1. Context & Architecture Overview
 
 ### 1.1 Dual-Stack Coexistence Rules
 1. **Tkinter Remains Primary & Stable**:

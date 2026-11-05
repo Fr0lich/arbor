@@ -10,35 +10,17 @@ class StatusBarPanel:
     def __init__(self, parent_frame, ui):
         self.frame = parent_frame
         self.ui = ui
+        self.labels = {}
 
         from config import sc
 
         statusbar_bg = "#1c1b1b"
         statusbar_fg = "#e2e2e2"
-
-        # Row 1: Buttons
-        self.sb_top = tk.Frame(self.frame, bg=statusbar_bg, height=32)
-        self.sb_top.pack(side="top", fill="x")
-        self.sb_top.pack_propagate(False)
-
-        # Row 2: Stats
-        self.sb_bottom = tk.Frame(self.frame, bg=statusbar_bg, height=24)
-        self.sb_bottom.pack(side="top", fill="x")
-        self.sb_bottom.pack_propagate(False)
-
-        self.labels = {}
-
-        # Buttons (Row 1) matching left column
-        self.sb_buttons_frame = tk.Frame(self.sb_top, bg=statusbar_bg, height=32)
-        self.sb_buttons_frame.pack(side="left", fill="y")
-        self.sb_buttons_frame.grid_propagate(False)
-        self.sb_buttons_frame.rowconfigure(0, weight=1)
-        self.sb_buttons_frame.columnconfigure(0, weight=1)
-        self.sb_buttons_frame.columnconfigure(1, weight=0)
-        self.sb_buttons_frame.columnconfigure(2, weight=1)
-        self.sb_buttons_frame.columnconfigure(3, weight=0)
-        self.sb_buttons_frame.columnconfigure(4, weight=1)
-
+        # Single-row streamlined status bar: 26px height
+        # Settings & Help are now hosted on the Top Navigation Bar.
+        # sb_top and buttons are retained as un-packed attributes for backward compatibility.
+        self.sb_top = tk.Frame(self.frame, bg=statusbar_bg, height=0)
+        self.sb_buttons_frame = tk.Frame(self.sb_top, bg=statusbar_bg)
         self.sb_settings_btn = ttk.Button(
             self.sb_buttons_frame,
             text="SETTINGS",
@@ -46,15 +28,6 @@ class StatusBarPanel:
             command=self.ui._open_unified,
             cursor="hand2"
         )
-        if hasattr(self.ui, "toolbar_buttons"):
-            self.ui.toolbar_buttons['SETTINGS'] = self.sb_settings_btn
-        if hasattr(self.ui, "add_tooltip"):
-            self.ui.add_tooltip(self.sb_settings_btn, "Open Application Settings")
-        self.sb_settings_btn.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=3)
-
-        sep2 = ttk.Separator(self.sb_buttons_frame, orient="vertical")
-        sep2.grid(row=0, column=3, sticky="ns", pady=3)
-
         self.sb_help_btn = ttk.Button(
             self.sb_buttons_frame,
             text="HELP",
@@ -62,11 +35,9 @@ class StatusBarPanel:
             command=self.ui.open_help_window,
             cursor="hand2"
         )
-        if hasattr(self.ui, "toolbar_buttons"):
-            self.ui.toolbar_buttons['HELP'] = self.sb_help_btn
-        if hasattr(self.ui, "add_tooltip"):
-            self.ui.add_tooltip(self.sb_help_btn, "Open Help Window")
-        self.sb_help_btn.grid(row=0, column=4, sticky="nsew", padx=(2, 6), pady=3)
+
+        # Ensure sb_bottom references the single status bar frame
+        self.sb_bottom = self.frame
 
         # Left stats group
         sb_left = tk.Frame(self.sb_bottom, bg=statusbar_bg)

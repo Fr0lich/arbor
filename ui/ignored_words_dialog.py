@@ -77,7 +77,10 @@ def save_ignored_words(file_path, words, variations):
 
 
 def open_ignored_words_editor(ui):
-    """Open the Ignored Words configuration dialog."""
+    """Open the Ignored Words configuration dialog or redirect to Unified Settings."""
+    if hasattr(ui, "_open_unified"):
+        ui._open_unified("tools")
+        return
     from config import sc
     import utils
 

@@ -1,5 +1,6 @@
 import json
 import os
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 import config
@@ -7,14 +8,16 @@ from utils import debug_error
 
 
 class FilterDialogController:
-    """Controller and UI builder for the Filter Objects dialog and presets."""
+    """Controller and UI builder for the Filter Objects dialog, presets, and integrated historical search."""
 
     @staticmethod
-    def open_filter_menu(ui):
+    def open_filter_menu(ui, initial_tab: str = "status"):
         """Open or lift the main Filter Objects modal dialog."""
         if hasattr(ui, "filter_window") and ui.filter_window and ui.filter_window.winfo_exists():
             ui.filter_window.lift()
             ui.filter_window.focus_force()
+            if hasattr(ui, "filter_show_tab"):
+                ui.filter_show_tab(initial_tab)
             return
 
         from config import sc
@@ -42,14 +45,29 @@ class FilterDialogController:
         FONT_LABEL = ("JetBrains Mono", sc(10), "bold")
         FONT_DATA = ("JetBrains Mono", sc(11))
 
+        # Ensure historical criteria variables exist on ui
+        if not hasattr(ui, "filter_historical_vars"):
+            ui.filter_historical_vars = {
+                "Genus": tk.StringVar(value=""),
+                "Species": tk.StringVar(value=""),
+                "Author": tk.StringVar(value=""),
+                "Family": tk.StringVar(value=""),
+                "Collector": tk.StringVar(value=""),
+                "Locality": tk.StringVar(value=""),
+                "Year": tk.StringVar(value=""),
+                "scope": tk.StringVar(value="both"),
+                "match_all": tk.BooleanVar(value=True),
+            }
+
         win = tk.Toplevel(ui.root)
         ui.filter_window = win
         win.title("Filter objects")
-        win.geometry(f"{sc(820)}x{sc(650)}")
+        win.geometry(f"{sc(860)}x{sc(680)}")
+        win.minsize(sc(800), sc(600))
         win.configure(bg=COLORS["surface"])
         win.bind("<Destroy>", lambda e: setattr(ui, "filter_window", None) if e.widget == win else None)
         win.bind("<Escape>", lambda e: win.destroy())
-        win.bind("<Control-Return>", lambda e: ui.apply_filter(win))
+        win.bind("<Control-Return>", lambda e: FilterDialogController.apply_filter_with_history(ui, win))
 
         main_container = tk.Frame(win, bg=COLORS["surface"], bd=0, highlightthickness=0)
         main_container.pack(fill="both", expand=True)
@@ -96,7 +114,8 @@ class FilterDialogController:
         def show_tab(tab_name):
             for name, frame in ui.filter_tabs.items():
                 frame.pack_forget()
-            ui.filter_tabs[tab_name].pack(fill="both", expand=True)
+            if tab_name in ui.filter_tabs:
+                ui.filter_tabs[tab_name].pack(fill="both", expand=True)
 
             for name, btn_tuple in ui.filter_tab_buttons.items():
                 btn, border = btn_tuple
@@ -106,6 +125,8 @@ class FilterDialogController:
                 else:
                     btn.config(fg=COLORS["on_surface_variant"], bg=COLORS["surface_container_highest"])
                     border.config(bg=COLORS["outline"])
+
+        ui.filter_show_tab = show_tab
 
         def create_tab_btn(name, label):
             btn_frame = tk.Frame(tab_nav, bg=COLORS["surface_container_highest"])
@@ -120,7 +141,8 @@ class FilterDialogController:
             ui.filter_tab_buttons[name] = (btn, bottom_border)
 
         create_tab_btn("status", "Status & General")
-        create_tab_btn("problems", "Problems & History")
+        create_tab_btn("problems", "Problems")
+        create_tab_btn("historical", "Historical & Books")
         create_tab_btn("images", "Images")
         create_tab_btn("location", "Location")
 
@@ -230,7 +252,7 @@ class FilterDialogController:
                 ent_old_tax.pack(fill="x", pady=(sc(4), 0))
                 all_widgets.append(("old taxonomy", ent_old_tax, COLORS["surface"]))
 
-        # TAB 2: PROBLEMS & HISTORY
+        # TAB 2: PROBLEMS
         tab_probs = tk.Frame(tab_content_area, bg=COLORS["surface"])
         ui.filter_tabs["problems"] = tab_probs
 
@@ -310,7 +332,168 @@ class FilterDialogController:
                     clean_name = col.replace("_Unknown", " Unknown").replace("_", " ")
                     make_tristate_row(u_list, clean_name, ui.filter_vars[col], color_bar="#d9a036")
 
-        # TAB 3: IMAGES
+        # TAB 3: HISTORICAL & BOOKS
+        tab_hist = tk.Frame(tab_content_area, bg=COLORS["surface"])
+        ui.filter_tabs["historical"] = tab_hist
+
+        hist_canvas = tk.Canvas(tab_hist, bg=COLORS["surface"], highlightthickness=0, bd=0)
+        hist_scrollbar = tk.Scrollbar(tab_hist, orient="vertical", command=hist_canvas.yview)
+        hist_inner = tk.Frame(hist_canvas, bg=COLORS["surface"])
+
+        hist_inner.bind("<Configure>", lambda e: hist_canvas.configure(scrollregion=hist_canvas.bbox("all")))
+        hist_canvas_window = hist_canvas.create_window((0, 0), window=hist_inner, anchor="nw")
+        hist_canvas.bind("<Configure>", lambda e: hist_canvas.itemconfig(hist_canvas_window, width=e.width) if getattr(hist_canvas, "_last_width", None) != e.width and not setattr(hist_canvas, "_last_width", e.width) else None)
+        hist_canvas.configure(yscrollcommand=hist_scrollbar.set)
+
+        hist_canvas.pack(side="left", fill="both", expand=True, padx=(sc(16), 0), pady=sc(16))
+        hist_scrollbar.pack(side="right", fill="y", pady=sc(16))
+
+        def _on_hist_scroll(event):
+            hist_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        if hasattr(ui, "_bind_canvas_mousewheel"):
+            ui.root.after(100, lambda: ui._bind_canvas_mousewheel(hist_canvas, _on_hist_scroll))
+
+        tk.Label(
+            hist_inner,
+            text="Query active registry records and attached archival historical ledger books.",
+            font=("Segoe UI", sc(9.5)),
+            fg=COLORS["on_surface_variant"],
+            bg=COLORS["surface"],
+            anchor="w"
+        ).pack(fill="x", pady=(0, sc(12)))
+
+        c_group = create_group(hist_inner, "Historical & Ledger Search Criteria")
+        fields = [
+            ("Genus", "e.g. Quercus, Pinus"),
+            ("Species", "e.g. alba, sylvestris"),
+            ("Author", "e.g. L., Michx."),
+            ("Family", "e.g. Fagaceae, Pinaceae"),
+            ("Collector", "e.g. Dahl, Ove or Smith, John"),
+            ("Locality", "e.g. Finmarken, Alta, Ridge"),
+            ("Year", "e.g. 1895, 1924"),
+        ]
+
+        first_hist_entry = None
+        for fld_name, placeholder in fields:
+            f_row = tk.Frame(c_group, bg=COLORS["surface"])
+            f_row.pack(fill="x", pady=sc(3))
+            tk.Label(
+                f_row,
+                text=f"{fld_name}:",
+                font=FONT_LABEL,
+                fg=COLORS["on_surface"],
+                bg=COLORS["surface"],
+                width=12,
+                anchor="w"
+            ).pack(side="left", padx=sc(8))
+
+            ent_frame = tk.Frame(f_row, bg=COLORS["surface"], highlightbackground=COLORS["outline_variant"], highlightthickness=1)
+            ent_frame.pack(side="left", fill="x", expand=True, padx=(0, sc(8)))
+
+            ent = tk.Entry(
+                ent_frame,
+                textvariable=ui.filter_historical_vars[fld_name],
+                font=FONT_DATA,
+                bg=COLORS["surface"],
+                fg=COLORS["on_surface"],
+                bd=0,
+                insertbackground=COLORS["primary"]
+            )
+            ent.pack(fill="x", expand=True, padx=sc(6), pady=sc(3))
+            ent.bind("<Return>", lambda e: FilterDialogController.apply_filter_with_history(ui, win))
+            if first_hist_entry is None:
+                first_hist_entry = ent
+            all_widgets.append((fld_name.lower(), f_row, COLORS["surface"]))
+
+        ui.filter_first_hist_entry = first_hist_entry
+
+        opt_group = create_group(hist_inner, "Query Scope & Matching Logic")
+        opt_row = tk.Frame(opt_group, bg=COLORS["surface"])
+        opt_row.pack(fill="x", pady=sc(4))
+
+        # Scope
+        scope_col = tk.Frame(opt_row, bg=COLORS["surface"])
+        scope_col.pack(side="left", fill="both", expand=True, padx=(0, sc(12)))
+
+        tk.Label(scope_col, text="SEARCH SCOPE", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, sc(4)))
+        tk.Radiobutton(scope_col, text="Both (Current & Books)", variable=ui.filter_historical_vars["scope"], value="both", font=FONT_DATA, bg=COLORS["surface"], fg=COLORS["on_surface"], activebackground=COLORS["surface"], highlightthickness=0, cursor="hand2", command=ui.update_filter_button_text).pack(anchor="w", pady=sc(1))
+        tk.Radiobutton(scope_col, text="Historical Books Only", variable=ui.filter_historical_vars["scope"], value="suggestions_only", font=FONT_DATA, bg=COLORS["surface"], fg=COLORS["on_surface"], activebackground=COLORS["surface"], highlightthickness=0, cursor="hand2", command=ui.update_filter_button_text).pack(anchor="w", pady=sc(1))
+        tk.Radiobutton(scope_col, text="Current Values Only", variable=ui.filter_historical_vars["scope"], value="current", font=FONT_DATA, bg=COLORS["surface"], fg=COLORS["on_surface"], activebackground=COLORS["surface"], highlightthickness=0, cursor="hand2", command=ui.update_filter_button_text).pack(anchor="w", pady=sc(1))
+
+        tk.Frame(opt_row, bg=COLORS["outline_variant"], width=1).pack(side="left", fill="y", padx=sc(8))
+
+        # Logic
+        logic_col = tk.Frame(opt_row, bg=COLORS["surface"])
+        logic_col.pack(side="left", fill="both", expand=True, padx=(sc(12), 0))
+
+        tk.Label(logic_col, text="MATCH LOGIC", font=FONT_LABEL, fg=COLORS["on_surface_variant"], bg=COLORS["surface"]).pack(anchor="w", pady=(0, sc(4)))
+        tk.Radiobutton(logic_col, text="Match ALL fields (AND)", variable=ui.filter_historical_vars["match_all"], value=True, font=FONT_DATA, bg=COLORS["surface"], fg=COLORS["on_surface"], activebackground=COLORS["surface"], highlightthickness=0, cursor="hand2").pack(anchor="w", pady=sc(1))
+        tk.Radiobutton(logic_col, text="Match ANY field (OR)", variable=ui.filter_historical_vars["match_all"], value=False, font=FONT_DATA, bg=COLORS["surface"], fg=COLORS["on_surface"], activebackground=COLORS["surface"], highlightthickness=0, cursor="hand2").pack(anchor="w", pady=sc(1))
+
+        act_group = create_group(hist_inner, "Execution & Preview")
+        act_box = tk.Frame(act_group, bg=COLORS["surface"])
+        act_box.pack(fill="x", pady=sc(4))
+
+        hist_status_lbl = tk.Label(
+            act_box,
+            text="Enter search criteria above and click 'Apply Filter' (Ctrl+Enter) to query and filter.",
+            font=("Segoe UI", sc(9)),
+            fg=COLORS["on_surface_variant"],
+            bg=COLORS["surface"],
+            anchor="w"
+        )
+        hist_status_lbl.pack(side="left", fill="x", expand=True)
+
+        hist_preview_btn = tk.Button(
+            act_box,
+            text="Run Ledger Search Only",
+            font=FONT_LABEL,
+            fg=COLORS["on_surface"],
+            bg=COLORS["surface_container_highest"],
+            bd=1,
+            relief="solid",
+            padx=sc(10),
+            pady=sc(3),
+            cursor="hand2"
+        )
+        hist_preview_btn.pack(side="right", padx=(sc(8), 0))
+
+        def _do_preview_search():
+            crit = {fld: ui.filter_historical_vars[fld].get().strip() for fld, _ in fields if ui.filter_historical_vars[fld].get().strip()}
+            if not crit:
+                hist_status_lbl.config(text="Please enter at least one search term (e.g. Genus, Collector).", fg=COLORS["error"])
+                return
+            hist_status_lbl.config(text="Querying records and attached historical ledger books...", fg=COLORS["primary"])
+            hist_preview_btn.config(state="disabled")
+
+            def _th():
+                from backend.search import execute_advanced_historical_search
+                try:
+                    res = execute_advanced_historical_search(
+                        df_reg=ui.app.df_reg,
+                        historical_dbs=getattr(ui.app, "historical_dbs", None),
+                        field_criteria=crit,
+                        scope=ui.filter_historical_vars["scope"].get(),
+                        match_all=bool(ui.filter_historical_vars["match_all"].get())
+                    )
+                    count = len(res)
+                    def _update_ui():
+                        if win.winfo_exists():
+                            hist_status_lbl.config(text=f"Found {count} matching specimen(s). Click 'Apply Filter' to isolate.", fg=COLORS["secondary"])
+                            hist_preview_btn.config(state="normal")
+                    win.after(0, _update_ui)
+                except Exception as ex:
+                    def _err():
+                        if win.winfo_exists():
+                            hist_status_lbl.config(text=f"Error: {ex}", fg=COLORS["error"])
+                            hist_preview_btn.config(state="normal")
+                    win.after(0, _err)
+
+            threading.Thread(target=_th, daemon=True).start()
+
+        hist_preview_btn.config(command=_do_preview_search)
+
+        # TAB 4: IMAGES
         tab_imgs = tk.Frame(tab_content_area, bg=COLORS["surface"])
         ui.filter_tabs["images"] = tab_imgs
 
@@ -326,7 +509,7 @@ class FilterDialogController:
                 bar_color = COLORS["error"] if "Missing" in col or "Problem" in col else COLORS["botanical_green"]
                 make_tristate_row(i_list, clean_name, ui.filter_vars[col], bar_color)
 
-        # TAB 4: LOCATION
+        # TAB 5: LOCATION
         tab_loc = tk.Frame(tab_content_area, bg=COLORS["surface"])
         ui.filter_tabs["location"] = tab_loc
 
@@ -401,7 +584,10 @@ class FilterDialogController:
 
         search_var.trace("w", on_search)
 
-        show_tab("status")
+        # Show requested tab
+        show_tab(initial_tab)
+        if initial_tab == "historical" and first_hist_entry:
+            win.after(100, lambda: first_hist_entry.focus_set())
 
         # FOOTER ACTION BAR
         footer = tk.Frame(main_container, bg=COLORS["surface_container_low"], height=sc(56))
@@ -416,7 +602,7 @@ class FilterDialogController:
 
         tk.Button(right_footer, text="Cancel", font=FONT_LABEL, fg=COLORS["on_surface"], bg=COLORS["surface"], bd=1, relief="solid", padx=sc(16), pady=sc(4), cursor="hand2", command=win.destroy).pack(side="left", padx=sc(8), pady=sc(12))
 
-        apply_btn = tk.Button(right_footer, text="Apply Filter  |  Ctrl+Enter", font=FONT_LABEL, fg=COLORS["on_primary"], bg=COLORS["botanical_green"], bd=0, relief="flat", padx=sc(16), pady=sc(4), cursor="hand2", command=lambda: ui.apply_filter(win))
+        apply_btn = tk.Button(right_footer, text="Apply Filter  |  Ctrl+Enter", font=FONT_LABEL, fg=COLORS["on_primary"], bg=COLORS["botanical_green"], bd=0, relief="flat", padx=sc(16), pady=sc(4), cursor="hand2", command=lambda: FilterDialogController.apply_filter_with_history(ui, win))
         apply_btn.pack(side="left", pady=sc(12))
 
         all_inputs = []
@@ -431,7 +617,43 @@ class FilterDialogController:
         ui._filter_widgets = all_inputs
         ui._filter_index = 0
 
-        utils.center_and_fit_toplevel(win, sc(800), sc(600))
+        utils.center_and_fit_toplevel(win, sc(860), sc(680))
+
+    @staticmethod
+    def apply_filter_with_history(ui, win):
+        """Execute historical search if criteria populated, then apply standard filters with intersection."""
+        criteria = {}
+        if hasattr(ui, "filter_historical_vars"):
+            for fld in ["Genus", "Species", "Author", "Family", "Collector", "Locality", "Year"]:
+                if fld in ui.filter_historical_vars:
+                    txt = ui.filter_historical_vars[fld].get().strip()
+                    if txt:
+                        criteria[fld] = txt
+
+        if not criteria:
+            ui._filter_history_matched_oids = None
+            ui.apply_filter(win)
+            return
+
+        from backend.search import execute_advanced_historical_search
+        scope = ui.filter_historical_vars.get("scope", tk.StringVar(value="both")).get()
+        match_all = bool(ui.filter_historical_vars.get("match_all", tk.BooleanVar(value=True)).get())
+        hist_dbs = getattr(ui.app, "historical_dbs", None)
+
+        try:
+            matched_oids = execute_advanced_historical_search(
+                df_reg=ui.app.df_reg,
+                historical_dbs=hist_dbs,
+                field_criteria=criteria,
+                scope=scope,
+                match_all=match_all,
+            )
+            ui._filter_history_matched_oids = set(str(x) for x in matched_oids)
+        except Exception as exc:
+            messagebox.showerror("Historical Search Error", f"An error occurred during historical search:\n{exc}", parent=win)
+            return
+
+        ui.apply_filter(win)
 
     @staticmethod
     def save_filter_preset(ui):
@@ -448,9 +670,24 @@ class FilterDialogController:
                 elif isinstance(v, tk.BooleanVar) and v.get():
                     vars_to_save[k] = True
 
+            hist_to_save = {}
+            if hasattr(ui, "filter_historical_vars"):
+                for k in ["Genus", "Species", "Author", "Family", "Collector", "Locality", "Year"]:
+                    if k in ui.filter_historical_vars:
+                        val = ui.filter_historical_vars[k].get().strip()
+                        if val:
+                            hist_to_save[k] = val
+                scope_val = ui.filter_historical_vars.get("scope")
+                if scope_val and scope_val.get() != "both":
+                    hist_to_save["scope"] = scope_val.get()
+                match_val = ui.filter_historical_vars.get("match_all")
+                if match_val and not match_val.get():
+                    hist_to_save["match_all"] = False
+
             preset = {
                 "vars": vars_to_save,
                 "locs": {k: v.get() for k, v in ui.filter_location_vars.items() if v.get()},
+                "historical": hist_to_save,
                 "mode": "AND"
             }
             prefs_dir = os.path.dirname(getattr(config, "_PREFS_PATH", "user_prefs.json"))
@@ -573,12 +810,9 @@ class FilterDialogController:
             FilterDialogController.clear_filter(ui, getattr(ui, "filter_window", None), destroy_win=False)
 
             for k, v in preset.get("vars", {}).items():
-                # Map old preset keys to the new consolidated tri-state ones.
                 mapped_k = k
                 if k == "Images_Missing":
                     mapped_k = "Has_Images"
-                    # For Images_Missing=True, Has_Images is NOT
-                    # The value below will be inverted if old preset used 'true' or '1'
                     if str(v).lower() in ("has", "true", "1"):
                         v = "Not"
                     elif str(v).lower() in ("not", "false", "-1"):
@@ -622,6 +856,16 @@ class FilterDialogController:
                 if k in ui.filter_location_vars:
                     ui.filter_location_vars[k].set(v)
 
+            hist_preset = preset.get("historical", {})
+            if hasattr(ui, "filter_historical_vars"):
+                for k in ["Genus", "Species", "Author", "Family", "Collector", "Locality", "Year"]:
+                    if k in ui.filter_historical_vars:
+                        ui.filter_historical_vars[k].set(hist_preset.get(k, ""))
+                if "scope" in ui.filter_historical_vars:
+                    ui.filter_historical_vars["scope"].set(hist_preset.get("scope", "both"))
+                if "match_all" in ui.filter_historical_vars:
+                    ui.filter_historical_vars["match_all"].set(hist_preset.get("match_all", True))
+
             if hasattr(ui, "filter_mode"):
                 ui.filter_mode.set("AND")
 
@@ -631,7 +875,6 @@ class FilterDialogController:
         lb.bind("<Double-Button-1>", lambda e: on_load())
         lb.bind("<Return>", lambda e: on_load())
 
-        # Footer Actions
         footer = tk.Frame(frame, bg=bg_color)
         footer.pack(fill="x", side="bottom")
 
@@ -695,13 +938,12 @@ class FilterDialogController:
 
     @staticmethod
     def clear_filter(ui, win, destroy_win=True):
-        """Reset all filter checkboxes and location filters, updating list and status."""
+        """Reset all filter checkboxes, location filters, and historical criteria."""
         for v in ui.filter_vars.values():
             if isinstance(v, tk.StringVar):
                 v.set("Ignore")
             else:
                 v.set(False)
-
 
         if hasattr(ui, "filter_mode"):
             ui.filter_mode.set("AND")
@@ -709,6 +951,16 @@ class FilterDialogController:
         for v in ui.filter_location_vars.values():
             v.set("")
 
+        if hasattr(ui, "filter_historical_vars"):
+            for k in ["Genus", "Species", "Author", "Family", "Collector", "Locality", "Year"]:
+                if k in ui.filter_historical_vars:
+                    ui.filter_historical_vars[k].set("")
+            if "scope" in ui.filter_historical_vars:
+                ui.filter_historical_vars["scope"].set("both")
+            if "match_all" in ui.filter_historical_vars:
+                ui.filter_historical_vars["match_all"].set(True)
+
+        ui._filter_history_matched_oids = None
         ui.app.active_object_ids = list(ui.app.df_reg.index) if ui.app.df_reg is not None else []
         ui._list_dirty = True
         ui.refresh_list()

@@ -57,34 +57,39 @@ class NavigationBar:
             app.toolbar_buttons[label] = btn
             app.toolbar_vars[label] = tk.BooleanVar(value=True)
             return btn
+        # FILE — database & session operations
+        btn_file = _nav_btn(nav_links_frame, "FILE ▾", app.show_file_dropdown)
+        app.add_tooltip(btn_file, "Database file options, export & backups")
 
-        # FILE — opens the file/open dialog
-        btn_file = _nav_btn(nav_links_frame, "FILE ▾",     app.show_file_dropdown)
-        app.add_tooltip(btn_file, "Database file options")
+        # SPECIMEN — specimen records & verification
+        btn_spec = _nav_btn(nav_links_frame, "SPECIMEN ▾", app.show_specimen_dropdown)
+        app.add_tooltip(btn_spec, "Specimen accession options (New, Duplicate, Delete, Review)")
+        app.toolbar_buttons["CREATE"] = btn_spec
 
-        # DATA — opens data menu
-        btn_dat = _nav_btn(nav_links_frame, "DATA",   app.open_load_data_menu)
-        app.add_tooltip(btn_dat, "Load historical databases")
+        # AUDIT & TOOLS — GBIF, Problem Queue, Historical Books, Statistics, Bulk Edit
+        btn_tools = _nav_btn(nav_links_frame, "🌿 AUDIT & TOOLS ▾", app.show_audit_tools_dropdown)
+        app.add_tooltip(btn_tools, "Taxonomy validation, problem queue & historical tools")
+        app.toolbar_buttons["DATA"] = btn_tools
+        app.toolbar_buttons["🌿 GBIF ▾"] = btn_tools
 
-        # IMAGES — jump to next problem
-        btn_img = _nav_btn(nav_links_frame, "IMAGES ▾", app.show_images_dropdown)
-        app.add_tooltip(btn_img, "Image source and view options")
-
-        # CREATE — add new object or database
-        btn_create = _nav_btn(nav_links_frame, "CREATE",   app.show_create_dropdown)
-        app.add_tooltip(btn_create, "Create a new object or database")
-
-        # HISTORY — recent objects popup
-        btn_hist = _nav_btn(nav_links_frame, "RECENT",  app.open_recent_popup)
-        app.add_tooltip(btn_hist, "View recently visited objects")
-
-        # GBIF — batch update & revert taxonomy
-        btn_gbif = _nav_btn(nav_links_frame, "🌿 GBIF ▾", app.show_gbif_dropdown)
-        app.add_tooltip(btn_gbif, "GBIF batch taxonomy validation & rollback")
+        # VIEW — Image display, rotation & panel visibility (Focus mode omitted)
+        btn_view = _nav_btn(nav_links_frame, "VIEW ▾", app.show_view_dropdown)
+        app.add_tooltip(btn_view, "Image viewport, rotation & workspace panels")
+        app.toolbar_buttons["IMAGES ▾"] = btn_view
 
         # MOBILE — opens mobile companion dialog
         btn_mob = _nav_btn(nav_links_frame, "📱 MOBILE", app.open_mobile_dialog)
         app.add_tooltip(btn_mob, "Connect your phone to review & edit records remotely")
+
+        # SETTINGS — opens unified settings
+        btn_settings = _nav_btn(nav_links_frame, "⚙ SETTINGS", lambda: app._open_unified("general"))
+        app.add_tooltip(btn_settings, "Application preferences & database profiles")
+        app.toolbar_buttons["SETTINGS"] = btn_settings
+
+        # HELP — documentation & tutorials
+        btn_help = _nav_btn(nav_links_frame, "❓ HELP ▾", app.show_help_dropdown)
+        app.add_tooltip(btn_help, "User guide, shortcuts HUD, and interactive tutorials")
+        app.toolbar_buttons["HELP"] = btn_help
 
         # 1px separator before secondary controls
         tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)

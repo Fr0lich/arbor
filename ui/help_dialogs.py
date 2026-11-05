@@ -189,31 +189,105 @@ def show_main_help(root_or_ui):
     close_btn.pack(side="right")
 
 
-def show_quick_help():
-    """Display the quick start shortcuts cheat sheet messagebox."""
-    message = (
-        "ARBOR KEYBOARD SHORTCUTS CHEAT SHEET\n\n"
-        "Ctrl + S : Save session\n"
-        "Ctrl + Q : Toggle Focus Mode\n"
-        "Ctrl + G : Open Filter Menu\n"
-        "Ctrl + H : Open Historical suggestions\n"
-        "Ctrl + N : Create new blank Object\n"
-        "Ctrl + Shift + N : Quick create new Object\n"
-        "Ctrl + D : Duplicate current object\n"
-        "Ctrl + Shift + P / F3 : Open editable Problem Flags window\n"
-        "Ctrl + Shift + L / F4 : Open editable Location window\n"
-        "Right Arrow / Left Arrow : Navigate Next / Prev object\n"
-        "Down Arrow / Up Arrow : Navigate list rows"
-    )
-    messagebox.showinfo("Quick Start", message)
+def show_quick_help(ui=None):
+    """Display the Keyboard Shortcuts HUD or an overview of essential shortcuts."""
+    if ui is not None and hasattr(ui, "root"):
+        show_shortcuts(ui)
+    else:
+        messagebox.showinfo(
+            "Quick Start",
+            "Arbor Essential Shortcuts:\n\n"
+            "• F1: Open Keyboard Shortcuts HUD (Cheat Sheet)\n"
+            "• Ctrl+K / Ctrl+P: Open Command Palette & Quick Search\n"
+            "• Ctrl+S: Save active session\n"
+            "• Ctrl+Enter: Mark specimen as reviewed\n"
+            "• Left / Right Arrow: Navigate between specimens"
+        )
 
 
-def show_about():
-    """Display the About dialog."""
-    messagebox.showinfo(
-        "About arbor",
-        "Arbor Botanical Database Management System\nVersion 1.2"
-    )
+def show_about(ui=None):
+    """Display the modern About Arbor dialog with application details and environment info."""
+    import platform
+    from config import sc
+    import utils
+
+    root = getattr(ui, "root", None) if ui else None
+    win = tk.Toplevel(root) if root else tk.Toplevel()
+    win.title("About Arbor")
+    win.resizable(False, False)
+    if root:
+        win.transient(root)
+    utils.center_and_fit_toplevel(win, sc(500), sc(390))
+
+    is_dark = getattr(ui, "dark_mode_active", False) if ui else False
+    bg_color = "#181c19" if is_dark else "#f8faf9"
+    card_bg = "#212623" if is_dark else "#ffffff"
+    fg_title = "#e8ebe9" if is_dark else "#2c302e"
+    fg_text = "#c6cac7" if is_dark else "#444748"
+    fg_sub = "#a2aba5" if is_dark else "#636d65"
+    border_col = "#2c302e" if is_dark else "#e0e4e1"
+    accent_col = "#389e63" if is_dark else "#2d7a4c"
+
+    win.configure(background=bg_color)
+    win.bind("<Escape>", lambda e: win.destroy())
+
+    container = tk.Frame(win, bg=bg_color, padx=sc(20), pady=sc(16))
+    container.pack(fill="both", expand=True)
+
+    tk.Label(
+        container,
+        text="ARBOR",
+        font=("Segoe UI", sc(16), "bold"),
+        fg=accent_col,
+        bg=bg_color
+    ).pack(anchor="w")
+
+    tk.Label(
+        container,
+        text="Herbarium & Museum Collection Curation System",
+        font=("Segoe UI", sc(9.5), "bold"),
+        fg=fg_title,
+        bg=bg_color
+    ).pack(anchor="w", pady=(0, sc(10)))
+
+    card = tk.Frame(container, bg=card_bg, highlightbackground=border_col, highlightthickness=1, padx=sc(14), pady=sc(12))
+    card.pack(fill="x", pady=(0, sc(12)))
+
+    db_name = "None loaded"
+    rec_count = 0
+    if ui and getattr(ui, "app", None):
+        if getattr(ui.app, "current_excel_path", None):
+            import os
+            db_name = os.path.basename(ui.app.current_excel_path)
+        if getattr(ui.app, "df_reg", None) is not None:
+            rec_count = len(ui.app.df_reg)
+
+    info_rows = [
+        ("Version", "1.2.0 (Production Tkinter)"),
+        ("Python Runtime", f"{platform.python_version()} ({platform.system()} {platform.machine()})"),
+        ("Active Database", f"{db_name} ({rec_count} records)" if rec_count else db_name),
+        ("Storage Formats", "Excel (.xlsx), SQLite (.db), CSV"),
+        ("Scope", "Local Collection Documentation & Curation"),
+    ]
+
+    for label, val in info_rows:
+        row_frame = tk.Frame(card, bg=card_bg)
+        row_frame.pack(fill="x", pady=sc(2))
+        tk.Label(row_frame, text=label, font=("Segoe UI", sc(8.5), "bold"), fg=fg_sub, bg=card_bg, width=17, anchor="w").pack(side="left")
+        tk.Label(row_frame, text=val, font=("Segoe UI", sc(8.5)), fg=fg_text, bg=card_bg, anchor="w").pack(side="left", fill="x", expand=True)
+
+    tk.Label(
+        container,
+        text="Designed for local specimen documentation, rapid inspection,\nand multi-dataset discrepancy reconciliation.",
+        font=("Segoe UI", sc(8)),
+        fg=fg_sub,
+        bg=bg_color,
+        justify="left"
+    ).pack(anchor="w", pady=(0, sc(12)))
+
+    btn_frame = tk.Frame(container, bg=bg_color)
+    btn_frame.pack(fill="x")
+    ttk.Button(btn_frame, text="Close", command=win.destroy, style="Tool.TButton", width=10).pack(side="right")
 
 
 def open_help_window(ui):
@@ -276,9 +350,8 @@ def open_help_window(ui):
         ("Tutorial: Conflicts", "Interactive walkthrough: historical & GBIF discrepancies.", start_discrepancy_tut),
         ("Tutorial: Databases", "Interactive walkthrough: creating databases & new objects.", start_database_tut),
         ("User Guide", "Complete guide and detailed documentation.", lambda: show_main_help(ui.root)),
-        ("Keyboard Shortcuts", "HUD cheat sheet for all keys and navigation.", lambda: show_shortcuts(ui)),
-        ("Quick Start", "Basic shortcuts and workflow summary.", show_quick_help),
-        ("About", "Application version and build details.", show_about)
+        ("Keyboard Shortcuts", "HUD cheat sheet for all keys and navigation (F1).", lambda: show_shortcuts(ui)),
+        ("About Arbor", "Application version, environment, and system details.", lambda: show_about(ui))
     ]
 
     for name, desc, cmd in options:
@@ -410,47 +483,48 @@ def show_shortcuts(ui):
 
     shortcuts = [
         ("NAVIGATION", "Left / Right", "Previous / Next object"),
-        ("NAVIGATION", "Enter", "Load typed ObjectID in search popup"),
-        ("NAVIGATION", "Down", "Move to search results"),
-        ("NAVIGATION", "Escape", "Close search popup"),
         ("NAVIGATION", "Alt+Left", "Go back in navigation history"),
         ("NAVIGATION", "Alt+Right", "Go forward in navigation history"),
-        ("FOCUS", "Ctrl+F", "Jump to Search"),
-        ("FOCUS", "Ctrl+O", "Jump to Object list"),
+        ("FOCUS", "Ctrl+K", "Open Universal Command Palette & Omni-Search"),
+        ("FOCUS", "Ctrl+F", "Jump to instant search bar"),
+        ("FOCUS", "Ctrl+O", "Toggle Left Sidebar Drawer (expand/collapse)"),
+        ("FOCUS", "Ctrl+P", "Quick Peek active specimen overview"),
         ("FOCUS", "Ctrl+J", "Open Database Statistics"),
         ("FOCUS", "Ctrl+E / Ctrl+I", "Jump to first Registration field"),
-        ("FOCUS", "Ctrl+L", "Jump to first Location field"),
-        ("FOCUS", "Ctrl+P", "Jump to first Problem checkbox"),
+        ("FOCUS", "Ctrl+L / F4", "Jump to first Location field"),
+        ("FOCUS", "Ctrl+Shift+P / F3", "Jump to first Problem checkbox"),
+        ("FOCUS", "Ctrl+Prior / Ctrl+Next", "Previous / Next taxonomy tab"),
         ("FOCUS", "Ctrl+Q", "Toggle Focus Mode"),
-        ("FOCUS", "Shift+E", "Jump to first empty registration field"),
-        ("LAPTOP LAYOUT", "F6", "Toggle Object List (Left Sidebar)"),
-        ("LAPTOP LAYOUT", "F7", "Toggle Registration & Taxonomy (Center Panel)"),
-        ("LAPTOP LAYOUT", "F8", "Toggle Images & Tools (Right Panel)"),
-        ("CHECKBOXES", "Shift+Down", "Next problem checkbox"),
-        ("CHECKBOXES", "Shift+Up", "Previous problem checkbox"),
+        ("LAPTOP LAYOUT", "F6", "Toggle Object Directory (Left Sidebar)"),
+        ("LAPTOP LAYOUT", "F7", "Toggle Registration & Taxonomy (Right Panel)"),
+        ("LAPTOP LAYOUT", "F8", "Toggle Images & Tools (Middle Panel)"),
         ("CHECKBOXES", "Space", "Toggle focused problem checkbox"),
-        ("CHECKBOXES", "Return", "Toggle focused problem checkbox (in list)"),
+        ("CHECKBOXES", "Shift+Up / Shift+Down", "Navigate between problem checkboxes"),
+        ("CHECKBOXES", "Return", "Toggle focused problem checkbox"),
         ("EDITING", "Ctrl+Z", "Undo last field or problem change"),
         ("EDITING", "Ctrl+Y", "Redo last change"),
         ("EDITING", "Ctrl+S", "Save session manually"),
-        ("EDITING", "Ctrl+R", "Toggle 'Reviewed' status"),
+        ("EDITING", "Ctrl+R / Ctrl+Enter", "Mark current specimen as Reviewed"),
         ("EDITING", "Ctrl+Shift+C", "Copy focused field value"),
         ("EDITING", "Ctrl+Shift+V", "Paste copied value to focused field"),
-        ("OBJECT MANAGEMENT", "Ctrl+N", "New object popup"),
-        ("OBJECT MANAGEMENT", "Ctrl+Shift+N", "Quick create new object"),
-        ("OBJECT MANAGEMENT", "Ctrl+Shift+D", "Duplicate current object"),
-        ("OBJECT MANAGEMENT", "Ctrl+Delete", "Delete current object"),
-        ("HISTORY & TOOLS", "Ctrl+H", "Open historical suggestions resolver"),
-        ("HISTORY & TOOLS", "Ctrl+G", "Open location/problem filter menu"),
-        ("HISTORY & RESOLVER", "Ctrl+A", "Apply resolved changes (resolver window only)"),
+        ("OBJECT MANAGEMENT", "Ctrl+N", "New specimen object wizard"),
+        ("OBJECT MANAGEMENT", "Ctrl+Shift+N", "Quick create next sequential accession"),
+        ("OBJECT MANAGEMENT", "Ctrl+Shift+D", "Duplicate current specimen"),
+        ("OBJECT MANAGEMENT", "Ctrl+Delete", "Delete current specimen"),
+        ("AUDIT & TOOLS", "Ctrl+H", "Open Historical & GBIF conflict resolver"),
+        ("AUDIT & TOOLS", "Ctrl+G", "Open multi-criteria filter dialog"),
+        ("AUDIT & TOOLS", "Ctrl+Shift+F", "Open filter dialog on Historical & Books tab"),
+        ("AUDIT & TOOLS", "Ctrl+Alt+K", "Apply default data preset"),
         ("ICEDIG & MISSING DATA", "Ctrl+Shift+M / ?m", "Set field to unknown:missing (Blank on label)"),
         ("ICEDIG & MISSING DATA", "Ctrl+Shift+I / ?i", "Set field to unknown:indecipherable (Illegible)"),
         ("ICEDIG & MISSING DATA", "Ctrl+Shift+U / ?u", "Set field to unknown:undigitized (Skipped)"),
         ("ICEDIG & MISSING DATA", "Ctrl+Shift+W / ?w", "Set field to withheld (Restricted)"),
         ("ICEDIG & MISSING DATA", "Ctrl+Shift+Backspace", "Clear field value"),
-        ("IMAGE NAVIGATION", "Shift+Left / Shift+Right", "Previous / Next image in gallery"),
-        ("IMAGE NAVIGATION", "Double-click", "Open current image in external browser"),
-        ("IMAGE NAVIGATION", "Mouse wheel", "Scroll image gallery"),
+        ("IMAGE TOOLS", "Alt+R", "Rotate specimen image 90° CW"),
+        ("IMAGE TOOLS", "Ctrl+Plus / Ctrl+Minus", "Zoom specimen image in / out"),
+        ("IMAGE TOOLS", "Ctrl+0", "Reset image viewport"),
+        ("IMAGE TOOLS", "Shift+Left / Shift+Right", "Previous / Next image in gallery"),
+        ("IMAGE TOOLS", "Double-click", "Open image in external browser"),
     ]
 
     def draw_shortcuts(filter_text=""):

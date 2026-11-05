@@ -316,12 +316,8 @@ class LayoutSettingsMixin:
             sw.pack(side="right")
 
         behavior_content = create_section("Behavior", scrollable_frame, "behavior")
-        create_toggle_row(behavior_content, "Focus Mode by default", self.draft_layout_focus_mode_var, command=on_switch_toggle, ui_ref=self)
         create_toggle_row(behavior_content, "Snap lock when focusing problems", self.draft_snap_lock_var, command=on_switch_toggle, ui_ref=self)
         create_toggle_row(behavior_content, "View images as stack by default", self.draft_image_stack_var, command=on_switch_toggle, ui_ref=self)
-
-        appearance_content = create_section("Appearance", scrollable_frame, "appearance")
-        create_toggle_row(appearance_content, "Large Mark as Reviewed Button", self.draft_large_reviewed_button_var, command=on_switch_toggle, ui_ref=self)
 
         return scroll_container
 

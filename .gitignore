@@ -2,12 +2,14 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 .venv/
 venv/
 ENV/
 build/
 dist/
 *.spec
+!main.spec
 error.log
 error_test.log
 user_prefs.json
@@ -16,5 +18,8 @@ user_prefs.json
 .idea/
 .vscode/
 logs/
-
+*.log
+*.prof
+scratch/
+scratch_*.png
 node_modules/

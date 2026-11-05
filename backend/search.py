@@ -150,7 +150,26 @@ class SearchEngine:
         p1.extend(p3)
         p1.extend(p4)
         p1.extend(p5)
-        return p1
+
+        # If exact substring search found results, return them immediately
+        if p1 or len(query) < 3:
+            return p1
+
+        # Fallback: fuzzy matching for queries with typographical errors (e.g. "Quercus rober" -> "Quercus robur")
+        try:
+            from utils import fuzzy_score
+            fuzzy_matches = []
+            for oid, tokens_dict in index.items():
+                target = tokens_dict.get("genus_species") or tokens_dict.get("all", "")
+                if not target:
+                    continue
+                score = fuzzy_score(query, target)
+                if score >= 65.0:
+                    fuzzy_matches.append((oid, score))
+            fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
+            return [oid for oid, _ in fuzzy_matches[:50]]
+        except Exception:
+            return p1
 
 
 def execute_advanced_historical_search(

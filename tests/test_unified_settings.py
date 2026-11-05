@@ -575,3 +575,37 @@ def test_unified_settings_all_10_target_info_buttons(tk_root):
 
 
 
+
+
+def test_ignored_words_embedded_in_tools_tab(tk_root):
+    """Verify that ignored words dictionary is embedded in Unified Settings Tools tab."""
+    class MockAppForIgnored:
+        def __init__(self):
+            self.ignored_words = ["cf.", "aff."]
+            self.ignored_words_variations = tk.BooleanVar(value=True)
+            self.saved = False
+
+        def save_ignored_words(self):
+            self.saved = True
+
+    app = MockAppForIgnored()
+    win = UnifiedSettingsWindow(tk_root, app_ref=app, initial_tab="tools")
+
+    assert hasattr(win, "text_ignored_words")
+    assert win.text_ignored_words.winfo_exists()
+    current_text = win.text_ignored_words.get("1.0", "end").strip()
+    assert "cf." in current_text
+    assert "aff." in current_text
+
+    # Edit words in text area
+    win.text_ignored_words.delete("1.0", "end")
+    win.text_ignored_words.insert("1.0", "var.\nsubsp.\nforma")
+    win.var_ignored_variations.set(False)
+
+    win.save_settings()
+
+    assert app.saved is True
+    assert app.ignored_words == ["var.", "subsp.", "forma"]
+    assert app.ignored_words_variations.get() is False
+
+    win.win.destroy()

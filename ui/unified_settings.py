@@ -396,12 +396,30 @@ class UnifiedSettingsWindow:
                 if k not in ("Problems", "Location"):
                     self.draft_focus_visibility_vars[k] = tk.BooleanVar(value=bool(v))
 
+        # Ignored words dictionary draft state
+        self.draft_ignored_words = []
+        self.var_ignored_variations = tk.BooleanVar(value=True)
+        if app and hasattr(app, "ignored_words") and isinstance(app.ignored_words, list):
+            self.draft_ignored_words = list(app.ignored_words)
+            if hasattr(app, "ignored_words_variations") and isinstance(app.ignored_words_variations, tk.Variable):
+                self.var_ignored_variations.set(bool(app.ignored_words_variations.get()))
+        else:
+            try:
+                from ui.ignored_words_dialog import load_ignored_words
+                from utils import get_resource_path
+                ipath = get_resource_path("ignored_words.json")
+                words, variations = load_ignored_words(ipath)
+                self.draft_ignored_words = list(words)
+                self.var_ignored_variations.set(bool(variations))
+            except Exception:
+                self.draft_ignored_words = []
+                self.var_ignored_variations.set(True)
+
     def _build_sidebar_nav(self):
         nav_items = [
             ("general",    "⚙️  General"),
             ("appearance", "🎨  Appearance"),
             ("layout",     "📐  Layout"),
-            ("focus",      "🎯  Focus Mode"),
             ("presets",    "📁  Presets"),
             ("advanced",   "⚡  Advanced"),
             ("tools",      "🛠️  Tools"),
@@ -628,9 +646,6 @@ class UnifiedSettingsWindow:
 
         # Card 3: Visual Controls
         card3 = self._create_card(c, "Visual Controls")
-        create_toggle_row(card3, "Large 'Mark Reviewed' Button", self.var_large_reviewed_btn,
-                          command=lambda: self._notify_live("large_reviewed_btn", self.var_large_reviewed_btn.get()),
-                          ui_ref=self.app or self)
         create_toggle_row(card3, "Snap Window Layout Grid", self.var_snap_lock,
                           command=lambda: self._notify_live("snap_lock", self.var_snap_lock.get()),
                           ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["snap_lock"])
@@ -722,6 +737,18 @@ class UnifiedSettingsWindow:
             card4 = self._create_card(c, "Toolbar Button Visibility")
             tk.Label(card4,
                      text="Toolbar customization is available when a database session is active.",
+                     font=self.FONT_SUBTITLE, fg=self.COLORS["on_surface_variant"],
+                     bg=self.COLORS["card_bg"]).pack(anchor="w")
+
+        # Card 5: Registration Field Visibility
+        if self.draft_focus_visibility_vars:
+            card5 = self._create_card(c, "Registration Field Visibility")
+            for field_name, var in sorted(self.draft_focus_visibility_vars.items()):
+                create_toggle_row(card5, field_name, var)
+        elif self.app is not None:
+            card5 = self._create_card(c, "Registration Field Visibility")
+            tk.Label(card5,
+                     text="Load a database first to configure per-field visibility.",
                      font=self.FONT_SUBTITLE, fg=self.COLORS["on_surface_variant"],
                      bg=self.COLORS["card_bg"]).pack(anchor="w")
 
@@ -1179,7 +1206,6 @@ class UnifiedSettingsWindow:
         # Card 2: Feature Flags & Experimental
         card2 = self._create_card(c, "Unfinished & Experimental Features")
         create_toggle_row(card2, "Enable Bulk Editor Tool", self.var_enable_bulk, ui_ref=self.app or self)
-        create_toggle_row(card2, "Show Focus Mode Header Toggle", self.var_enable_focus_toggle, ui_ref=self.app or self)
         create_toggle_row(card2, "Auto-resolve Conflicts", self.var_auto_resolve, ui_ref=self.app or self)
         create_toggle_row(card2, "Strict Input Validation", self.var_strict_validation,
                           ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["strict_input_validation"])
@@ -1249,17 +1275,89 @@ class UnifiedSettingsWindow:
                     "Configure field visibility and behaviors when focusing problems.",
                     "Open Focus Settings", "open_focus_settings")
 
-        # Card 3: Data Presets & Dictionaries
-        card3 = self._create_card(c, "Presets & Dictionaries")
-        _action_btn(card3, "Configure Ignored Words",
-                    "Add or remove terms ignored by spelling checks.",
-                    "Configure Words", "open_ignored_words_editor")
+        # Card 3: Data Presets & Profiles
+        card3 = self._create_card(c, "Presets & Profiles")
         _action_btn(card3, "Save Data Preset",
                     "Save current input fields configuration as a profile preset.",
                     "Save Preset...", "save_data_preset_dialog")
         _action_btn(card3, "Load Data Preset",
                     "Apply a previously saved input fields profile configuration.",
                     "Load Preset...", "show_load_data_preset_popup")
+
+        # Card 4: Suggestions Whitelist (Ignored Words)
+        card_words = self._create_card(c, "Botanical Whitelist (Ignored Words)")
+        tk.Label(
+            card_words,
+            text="Terms and tokens entered here (one per line) will be ignored during suggestion checks, discrepancy flags, and botanical reviews.",
+            font=self.FONT_SUBTITLE, fg=self.COLORS["on_surface_variant"], bg=self.COLORS["card_bg"],
+            wraplength=sc(560), justify="left"
+        ).pack(anchor="w", pady=(0, sc(6)))
+
+        tf = tk.Frame(card_words, bg=self.COLORS["card_bg"])
+        tf.pack(fill="x", pady=sc(4))
+
+        sb = ttk.Scrollbar(tf)
+        sb.pack(side="right", fill="y")
+
+        self.text_ignored_words = tk.Text(
+            tf, height=6, font=("JetBrains Mono", sc(9)),
+            bg=self.COLORS["surface"], fg=self.COLORS["on_surface"],
+            insertbackground=self.COLORS["on_surface"],
+            highlightbackground=self.COLORS["outline_variant"],
+            highlightcolor=self.COLORS["secondary"],
+            highlightthickness=1, bd=0, yscrollcommand=sb.set
+        )
+        self.text_ignored_words.pack(side="left", fill="both", expand=True)
+        sb.config(command=self.text_ignored_words.yview)
+
+        if self.draft_ignored_words:
+            self.text_ignored_words.insert("1.0", "\n".join(self.draft_ignored_words))
+
+        vf = tk.Frame(card_words, bg=self.COLORS["card_bg"])
+        vf.pack(fill="x", pady=(sc(6), sc(2)))
+
+        tk.Checkbutton(
+            vf, text="Include variations (ignore capitalization, punctuation, and extra whitespace)",
+            variable=self.var_ignored_variations, font=self.FONT_SUBTITLE,
+            bg=self.COLORS["card_bg"], fg=self.COLORS["on_surface"],
+            activebackground=self.COLORS["card_bg"], selectcolor=self.COLORS["surface"],
+            cursor="hand2"
+        ).pack(side="left")
+
+        def _save_ignored_words_now():
+            raw_text = self.text_ignored_words.get("1.0", "end").strip()
+            words = [line.strip() for line in raw_text.split("\n") if line.strip()]
+            var_val = self.var_ignored_variations.get()
+            self.draft_ignored_words = words
+            if self.app:
+                if hasattr(self.app, "ignored_words"):
+                    self.app.ignored_words = words
+                if hasattr(self.app, "ignored_words_variations"):
+                    self.app.ignored_words_variations.set(var_val)
+                if hasattr(self.app, "save_ignored_words"):
+                    self.app.save_ignored_words()
+                if hasattr(self.app, "_history_cache"):
+                    self.app._history_cache.clear()
+                if hasattr(self.app, "show_toast"):
+                    self.app.show_toast(f"Saved {len(words)} ignored words", "success")
+                else:
+                    messagebox.showinfo("Ignored Words", f"Saved {len(words)} ignored words.", parent=self.win)
+            else:
+                try:
+                    from ui.ignored_words_dialog import save_ignored_words
+                    from utils import get_resource_path
+                    ipath = get_resource_path("ignored_words.json")
+                    save_ignored_words(ipath, words, var_val)
+                    messagebox.showinfo("Ignored Words", f"Saved {len(words)} ignored words.", parent=self.win)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to save ignored words: {e}", parent=self.win)
+
+        tk.Button(
+            vf, text="Save Words", font=self.FONT_DATA,
+            fg=self.COLORS["on_primary"], bg=self.COLORS["secondary"], bd=0,
+            relief="flat", padx=sc(10), pady=sc(3), cursor="hand2",
+            command=_save_ignored_words_now
+        ).pack(side="right")
 
         # Card 4: Batch Operations
         card4 = self._create_card(c, "Batch Operations")
@@ -1296,6 +1394,12 @@ class UnifiedSettingsWindow:
                                 "Tutorial progress has been reset. Interactive tutorials can be launched from the Help Center at any time.",
                                 parent=self.win)
             return
+        if callback_name == "open_ignored_words_editor":
+            if hasattr(self, "text_ignored_words") and self.text_ignored_words.winfo_exists():
+                self.show_tab("tools")
+                self.text_ignored_words.focus_set()
+                return
+
         if not self.app:
             messagebox.showinfo("No Session",
                                 "This action requires an active Arbor session.",
@@ -1444,6 +1548,29 @@ class UnifiedSettingsWindow:
         adv["enable_excel_import_backup"] = p["enable_excel_import_backup"]
         adv["autosave_archive_limit"] = str(p.get("autosave_archive_limit", 10))
         adv["log_verbosity"] = p["log_verbosity"]
+
+        # ── Ignored Words ─────────────────────────────────────────────────────
+        if hasattr(self, "text_ignored_words") and self.text_ignored_words.winfo_exists():
+            raw_text = self.text_ignored_words.get("1.0", "end").strip()
+            words = [line.strip() for line in raw_text.split("\n") if line.strip()]
+            var_val = self.var_ignored_variations.get() if hasattr(self, "var_ignored_variations") else True
+            if self.app:
+                if hasattr(self.app, "ignored_words"):
+                    self.app.ignored_words = words
+                if hasattr(self.app, "ignored_words_variations"):
+                    self.app.ignored_words_variations.set(var_val)
+                if hasattr(self.app, "save_ignored_words"):
+                    self.app.save_ignored_words()
+                if hasattr(self.app, "_history_cache"):
+                    self.app._history_cache.clear()
+            else:
+                try:
+                    from ui.ignored_words_dialog import save_ignored_words
+                    from utils import get_resource_path
+                    ipath = get_resource_path("ignored_words.json")
+                    save_ignored_words(ipath, words, var_val)
+                except Exception:
+                    pass
 
         # ── Persist ───────────────────────────────────────────────────────────
         config.save_prefs(p)

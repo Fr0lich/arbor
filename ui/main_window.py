@@ -2237,10 +2237,38 @@ class ObjectProgramUI(
         help_dialogs.show_main_help(self.root)
 
     def show_quick_help(self):
-        help_dialogs.show_quick_help()
+        help_dialogs.show_quick_help(self)
 
     def show_about(self):
-        help_dialogs.show_about()
+        help_dialogs.show_about(self)
+
+    def start_tutorial_flow(self, tutorial_type=None):
+        """Starts an interactive sandbox tutorial or opens the Help Center tutorial selector."""
+        from ui import tutorials
+        if tutorial_type == "review":
+            return tutorials.start_review_tutorial(self)
+        elif tutorial_type == "discrepancy":
+            return tutorials.start_discrepancy_tutorial(self)
+        elif tutorial_type == "database":
+            return tutorials.start_database_tutorial(self)
+        else:
+            return self.open_help_window()
+
+    def select_object_id(self, oid):
+        """Shim: select and display object by id (calls load_object)."""
+        return self.load_object(oid)
+
+    def open_bulk_edit(self):
+        """Shim: opens the bulk edit modal dialog."""
+        return self.open_bulk_edit_window()
+
+    def open_unified_settings(self, tab=None):
+        """Shim: opens the unified settings window."""
+        return self._open_unified(tab)
+
+    def open_gbif_dialog(self):
+        """Shim: opens the batch GBIF update and review dialog."""
+        return self.batch_gbif_update_action()
 
 
     def open_advanced_settings(self):
@@ -2282,42 +2310,95 @@ class ObjectProgramUI(
 
     def show_load_data_preset_popup(self):
         PresetsManager.show_load_data_preset_popup(self)
-
     def show_file_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
-        popup.add_command(label="New Database", command=self.create_new_database)
-        popup.add_command(label="Open Excel", command=self.open_excel)
-        popup.add_command(label="Save", command=lambda: self.save_session("SAVE"))
-        popup.add_command(label="Save As...", command=self.save_as)
-        popup.add_command(label="Export filtered list...", command=self.export_filtered_list)
+        popup.add_command(label="Open Excel Database... (Ctrl+O)", command=self.open_excel)
+        popup.add_command(label="New Database Wizard...", command=self.create_new_database)
         popup.add_separator()
-        popup.add_command(label="📱 Mobile Companion...", command=self.open_mobile_dialog)
-        popup.add_command(label="Restore earlier autosave...", command=self.open_autosave_manager)
+        popup.add_command(label="Save Session (Ctrl+S)", command=lambda: self.save_session("SAVE"))
+        popup.add_command(label="Save As...", command=self.save_as)
+        popup.add_command(label="Export Filtered Subset...", command=self.export_filtered_list)
+        popup.add_separator()
+        popup.add_command(label="Restore Earlier Autosave Backup...", command=self.open_autosave_manager)
         popup.add_separator()
         popup.add_command(label="Exit", command=self.on_close)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
-    def show_data_dropdown(self):
+    def show_specimen_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
-        popup.add_command(label="Load Books", command=self.load_books_file)
-        popup.add_command(label="Load earlier databases", command=self.load_historical_databases)
+        popup.add_command(label="New Specimen Object... (Ctrl+N)", command=self.add_new_object)
+        popup.add_command(label="Quick Create Next Accession (Ctrl+Shift+N)", command=lambda: self._shortcut_quick_new_object(None))
+        popup.add_command(label="Duplicate Current Specimen (Ctrl+Shift+D)", command=lambda: self._shortcut_duplicate_object(None))
         popup.add_separator()
-        popup.add_command(label="Process Objects with Problems...", command=self.open_problem_queue_dialog)
+        popup.add_command(label="Mark Current as Reviewed (Ctrl+Enter)", command=self.mark_current_as_reviewed)
+        popup.add_command(label="Toggle Problem Checkbox (Space)", command=lambda: self._toggle_problem_checkbox(None))
         popup.add_separator()
-        popup.add_command(label="Advanced Historical Search...", command=self.open_advanced_search)
-        popup.add_separator()
-        popup.add_command(label="🌿 Run GBIF Taxonomy Check...", command=self.batch_gbif_update_action)
-        popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
+        popup.add_command(label="Delete Current Specimen (Ctrl+Delete)", command=self.delete_current_object)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
 
-    def show_gbif_dropdown(self):
+    def show_audit_tools_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
-        if self.app.current_object_id:
-            popup.add_command(label="🔍 Validate Current Specimen", command=self.check_gbif_action)
-            popup.add_separator()
-        popup.add_command(label="🌿 Run GBIF Taxonomy Check...", command=self.batch_gbif_update_action)
+        popup.add_command(label="🌿 Run GBIF Taxonomy Check & Batch Verification...", command=self.batch_gbif_update_action)
         popup.add_command(label="↩️ Revert Latest GBIF Taxonomy Update", command=self.rollback_gbif_action)
+        if self.app and self.app.current_object_id:
+            popup.add_command(label="🔍 Validate Active Specimen with GBIF", command=self.check_gbif_action)
+        popup.add_separator()
+        popup.add_command(label="⚠️ Open Problem Queue & Resolver...", command=self.open_problem_queue_dialog)
+        popup.add_command(label="📜 Load Historical Ledger Books...", command=self.load_books_file)
+        popup.add_command(label="Load Earlier Historical Databases...", command=self.load_historical_databases)
+        popup.add_separator()
+        popup.add_command(label="📊 Database Statistics Dashboard (Ctrl+J)", command=self.show_statistics)
+        popup.add_command(label="📝 Bulk Edit Selected Objects...", command=self.open_bulk_edit_window)
+        popup.add_command(label="🔍 Filter Objects Menu (Ctrl+G)", command=self.open_filter_menu)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def show_view_dropdown(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        popup.add_command(label="Image Source & URL Configuration...", command=self.open_image_menu)
+        popup.add_command(label="Toggle Image View Mode", command=self.toggle_image_view)
+        popup.add_separator()
+        popup.add_command(label="Rotate Specimen Image 90° CW (Alt+R)", command=self.rotate_image)
+        popup.add_command(label="Reset Image Viewport (Ctrl+0)", command=self.reset_image_view)
+        popup.add_separator()
+        popup.add_command(label="Toggle Left Object Directory (F6)", command=lambda: (self.show_list_var.set(not self.show_list_var.get()), self.toggle_list_panel()))
+        popup.add_command(label="Toggle Registration & Taxonomy (F7)", command=lambda: (self.show_reg_var.set(not self.show_reg_var.get()), self.toggle_reg_panel()))
+        popup.add_command(label="Toggle Specimen Image Viewport (F8)", command=lambda: (self.show_images_var.set(not self.show_images_var.get()), self.toggle_images_panel()))
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+
+    def show_help_dropdown(self):
+        popup = tk.Menu(self.root, tearoff=0)
+        popup.add_command(label="📖 User Guide (Documentation)", command=self.show_main_help)
+        popup.add_command(label="⌨️ Keyboard Shortcuts HUD (F1)", command=self.show_shortcuts)
+        
+        # Interactive Tutorials cascade
+        tut_menu = tk.Menu(popup, tearoff=0)
+        tut_menu.add_command(
+            label="1. Specimen Review & Verification",
+            command=lambda: self.start_tutorial_flow("review")
+        )
+        tut_menu.add_command(
+            label="2. Historical & GBIF Conflict Resolution",
+            command=lambda: self.start_tutorial_flow("discrepancy")
+        )
+        tut_menu.add_command(
+            label="3. Database Creation & New Accessions",
+            command=lambda: self.start_tutorial_flow("database")
+        )
+        tut_menu.add_separator()
+        tut_menu.add_command(
+            label="All Tutorials & Help Center...",
+            command=lambda: self.start_tutorial_flow(None)
+        )
+        popup.add_cascade(label="🎓 Interactive Walkthrough Tutorials", menu=tut_menu)
+        popup.add_command(label="🏛️ Help Center...", command=self.open_help_window)
+        popup.add_separator()
+        popup.add_command(label="ℹ️ About Arbor", command=self.show_about)
+        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+    def show_data_dropdown(self):
+        self.show_audit_tools_dropdown()
+
+    def show_gbif_dropdown(self):
+        ObjectProgramUI.show_audit_tools_dropdown(self)
 
     def open_problem_queue_dialog(self):
         """Opens ProblemQueueDialog for batch resolution scoping."""
@@ -2329,22 +2410,16 @@ class ObjectProgramUI(
         ProblemQueueDialog(self.root, self)
 
     def open_advanced_search(self):
-        """Opens modal Advanced Historical Search dialog."""
+        """Opens modal Filter Objects dialog focused on Historical & Books tab."""
         if self.app.df_reg is None or self.app.df_reg.empty:
             messagebox.showinfo("No Database", "Please load a database before executing advanced search.")
             return
 
-        if hasattr(self, "advanced_search_window") and self.advanced_search_window and self.advanced_search_window.winfo_exists():
-            self.advanced_search_window.lift()
-            self.advanced_search_window.focus_force()
-            return
+        from ui.filter_dialog import FilterDialogController
+        FilterDialogController.open_filter_menu(self, initial_tab="historical")
+        return
 
-        from ui.advanced_search import AdvancedSearchDialog
-        self.advanced_search_window = AdvancedSearchDialog(
-            parent=self.root,
-            app_state=self.app,
-            on_applied=self.on_advanced_search_applied,
-        )
+
 
     def on_advanced_search_applied(self, matched: list[str]):
         """Handler called when advanced historical search returns results."""
@@ -2382,18 +2457,11 @@ class ObjectProgramUI(
     def run_gbif_verification_for_current(self):
         """Runs GBIF verification/lookup for the active specimen."""
         self.check_gbif_action()
-
     def show_images_dropdown(self):
-        popup = tk.Menu(self.root, tearoff=0)
-        popup.add_command(label="Image Source", command=self.open_image_menu)
-        popup.add_command(label="Toggle image view", command=self.toggle_image_view)
-        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+        self.show_view_dropdown()
 
     def show_create_dropdown(self):
-        popup = tk.Menu(self.root, tearoff=0)
-        popup.add_command(label="New Object", command=self.add_new_object)
-        popup.add_command(label="New Database", command=self.create_new_database)
-        popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
+        self.show_specimen_dropdown()
 
 
 
@@ -2545,33 +2613,10 @@ class ObjectProgramUI(
 #---
 
     def toggle_focus_mode_shortcut(self, event=None):
-        oid = self.app.current_object_id
-        if not oid:
-            return
-
-        current = bool(self.focus_mode_var.get())
-        new = not current
-
-
-        self.push_undo_state()
-
-
-        self.focus_mode_var.set(new)
-
-
-        self.update_reg_fields_visibility()
-
-
-        state = "SET" if new else "UNSET"
-        self.log_action("FOCUS_MODE_TOGGLE", ["Focus Mode"], [state])
-
-
-        self.system_status.config(
-            text=f"Focus Mode = {new}",
-            foreground="green" if new else "gray"
-        )
-
-        self._list_dirty = True
+        if hasattr(self, "show_toast"):
+            self.show_toast("Focus Mode is phased out. Press F6 / F7 / F8 to toggle panels.", "info")
+        else:
+            self.system_status.config(text="Focus Mode is phased out. Press F6/F7/F8 to toggle panels.", foreground="gray")
 
         import config
         prefs = config.load_prefs() or {}
@@ -3004,6 +3049,7 @@ class ObjectProgramUI(
             self.left_content_frame.pack(in_=self.left_frame, side="left", fill="both", expand=True)
             if hasattr(self, "pin_btn"):
                 self.pin_btn.config(bg=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"))
+                self.add_tooltip(self.pin_btn, "Collapse Sidebar (Ctrl+O)")
             
 
 
@@ -3020,6 +3066,7 @@ class ObjectProgramUI(
             self.left_content_frame.pack_forget()
             if hasattr(self, "pin_btn"):
                 self.pin_btn.config(bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"))
+                self.add_tooltip(self.pin_btn, "Expand Sidebar (Ctrl+O)")
             
 
 
@@ -3108,127 +3155,18 @@ class ObjectProgramUI(
 
     def open_drawer(self):
         self._drawer_is_open = True
-        if hasattr(self, "left_content_frame") and hasattr(self, "drawer_overlay"):
-            self.left_content_frame.pack(in_=self.drawer_overlay, fill="both", expand=True)
-            self.drawer_overlay.lift()
-            self.left_content_frame.lift()
-            if hasattr(self, "left_panes"):
-                self.left_panes.pack(fill="both", expand=True)
-        
-        target_w = sc(config.DRAWER_THEME.get("drawer_width", 300))
-        self._animate_drawer(target_w)
-
-        try:
-            self.root.update_idletasks()
-            if hasattr(self, "left_content_frame"):
-                self.left_content_frame.update_idletasks()
-            if hasattr(self, "object_list") and hasattr(self.object_list, "update_idletasks"):
-                self.object_list.update_idletasks()
-            if hasattr(self, "refresh_list"):
-                self.refresh_list()
-        except Exception:
-            pass
 
     def close_drawer(self):
         self._drawer_is_open = False
-        self._animate_drawer(0)
-        if hasattr(self, "left_pinned") and self.left_pinned.get():
-            self._apply_pin_state(animate=False)
 
     def _animate_drawer(self, target_width):
-        import math
-        if hasattr(self, "_drawer_anim_job") and self._drawer_anim_job is not None:
-            try:
-                self.root.after_cancel(self._drawer_anim_job)
-            except Exception:
-                pass
-            self._drawer_anim_job = None
-
-        if not config.DRAWER_THEME.get("enable_animation", True):
-            self._drawer_current_width = float(target_width)
-            self._update_drawer_geometry()
-            if target_width == 0:
-                if hasattr(self, "drawer_overlay"):
-                    self.drawer_overlay.place_forget()
-            return
-
-        duration = float(config.DRAWER_THEME.get("anim_duration_ms", 140))
-        step_interval = int(config.DRAWER_THEME.get("anim_step_interval_ms", 8))
-        start_w = float(self._drawer_current_width)
-        distance = float(target_width - start_w)
-
-        if abs(distance) < 1:
-            self._drawer_current_width = float(target_width)
-            self._update_drawer_geometry()
-            if target_width == 0:
-                if hasattr(self, "drawer_overlay"):
-                    self.drawer_overlay.place_forget()
-            return
-
-        start_time = time.time() * 1000.0
-
-        def _step():
-            now = time.time() * 1000.0
-            elapsed = now - start_time
-            if elapsed >= duration:
-                self._drawer_current_width = float(target_width)
-                self._drawer_anim_job = None
-                self._update_drawer_geometry()
-                if target_width == 0:
-                    if hasattr(self, "drawer_overlay"):
-                        self.drawer_overlay.place_forget()
-            else:
-                progress = max(0.0, min(1.0, elapsed / duration))
-                ease_progress = 0.5 - 0.5 * math.cos(progress * math.pi)
-                self._drawer_current_width = start_w + distance * ease_progress
-                self._update_drawer_geometry()
-                self._drawer_anim_job = self.root.after(step_interval, _step)
-
-        _step()
+        pass
 
     def _update_drawer_geometry(self):
-        if not hasattr(self, "drawer_overlay") or not hasattr(self, "left_frame"):
-            return
-        w = int(self._drawer_current_width)
-        if w <= 0:
-            self.drawer_overlay.place_forget()
-            return
-            
-        try:
-            self.root.update_idletasks()
-            rail_x = self.left_frame.winfo_rootx() - self.root.winfo_rootx()
-            rail_w = self.left_frame.winfo_width()
-            top_y = self.left_frame.winfo_rooty() - self.root.winfo_rooty()
-            h = self.left_frame.winfo_height()
-
-            self.drawer_overlay.place(
-                x=rail_x + rail_w,
-                y=top_y,
-                width=w,
-                height=h
-            )
-            self.drawer_overlay.lift()
-        except Exception:
-            pass
+        pass
 
     def _on_global_click_for_drawer(self, event):
-        if hasattr(self, "left_pinned") and self.left_pinned.get():
-            return
-        if not hasattr(self, "drawer_overlay") or not self.drawer_overlay.winfo_exists():
-            return
-            
-        if self._drawer_is_open or self._drawer_current_width > 0:
-            try:
-                widget = event.widget
-                curr = widget
-                while curr is not None and curr != self.root:
-                    if curr == self.drawer_overlay or curr == getattr(self, "rail_frame", None):
-                        return
-                    curr = getattr(curr, "master", None)
-                
-                self.close_drawer()
-            except Exception:
-                pass
+        pass
 
     def toggle_list_panel(self):
         if self.show_list_var.get():
@@ -3411,14 +3349,13 @@ class ObjectProgramUI(
         self.responsive_btn_config = {
             'Next+Hist': (oi.OutlineIcon.HISTORY_TOGGLE, 1300, "Next+Hist"),
             'Next Problem': (oi.OutlineIcon.ALERT_TRIANGLE, 1200, "⚠ Next Problem"),
-            'CREATE': (oi.OutlineIcon.FILE_PLUS, 1150, "CREATE"),
-            'RECENT': (oi.OutlineIcon.HISTORY, 1100, "RECENT"),
-            'DATA': (oi.OutlineIcon.DATABASE, 1050, "DATA"),
-            'IMAGES ▾': (oi.OutlineIcon.PHOTO, 1000, "IMAGES ▾"),
+            'SPECIMEN ▾': (oi.OutlineIcon.FILE_PLUS, 1150, "SPECIMEN ▾"),
+            '🌿 AUDIT & TOOLS ▾': (oi.OutlineIcon.DATABASE, 1050, "🌿 AUDIT & TOOLS ▾"),
+            'VIEW ▾': (oi.OutlineIcon.PHOTO, 1000, "VIEW ▾"),
             'FILE ▾': (oi.OutlineIcon.FILE, 950, "FILE ▾"),
-            'Filter': (oi.OutlineIcon.FILTER, 900, "Filter"),
-            'SETTINGS': (oi.OutlineIcon.SETTINGS, 850, "SETTINGS"),
-            'HELP': (oi.OutlineIcon.HELP, 800, "HELP"),
+            '📱 MOBILE': (getattr(oi.OutlineIcon, 'DEVICE_MOBILE', oi.OutlineIcon.SETTINGS), 900, "📱 MOBILE"),
+            '⚙ SETTINGS': (oi.OutlineIcon.SETTINGS, 850, "⚙ SETTINGS"),
+            '❓ HELP ▾': (oi.OutlineIcon.HELP, 800, "❓ HELP ▾"),
             'Prev': (oi.OutlineIcon.PLAYER_TRACK_PREV, 800, "◄"),
             'Next': (oi.OutlineIcon.PLAYER_TRACK_NEXT, 800, "►"),
             'Last': (oi.OutlineIcon.ARROW_BAR_TO_LEFT, 800, "Last"),
@@ -6872,6 +6809,11 @@ class ObjectProgramUI(
             problem_categories=getattr(self, "problem_categories", {})
         )
 
+        hist_override = getattr(self, "_filter_history_matched_oids", None)
+        if hist_override is not None:
+            self._filter_history_matched_oids = None
+            matched = [oid for oid in matched if str(oid) in hist_override]
+
         if not matched:
             messagebox.showinfo("No results", "Filter returned no objects")
 
@@ -7434,6 +7376,13 @@ class ObjectProgramUI(
                 if val:
                     active.append(f"{loc_k}:{val}")
 
+        if hasattr(self, "filter_historical_vars"):
+            for h_k in ["Genus", "Species", "Author", "Family", "Collector", "Locality", "Year"]:
+                if h_k in self.filter_historical_vars:
+                    val = self.filter_historical_vars[h_k].get().strip() if hasattr(self.filter_historical_vars[h_k], "get") else ""
+                    if val:
+                        active.append(f"{h_k}:{val}")
+
         if active:
             short = ", ".join(active[:3])
             if len(active) > 3:
@@ -7982,9 +7931,8 @@ class ObjectProgramUI(
 
     def update_reviewed_button_state(self):
         oid = self.app.current_object_id
-        large_size = self.large_reviewed_button_var.get()
-        padx_val = sc(32) if large_size else sc(18)
-        pady_val = sc(14) if large_size else sc(8)
+        padx_val = sc(20)
+        pady_val = sc(10)
 
         if not oid:
             self.reviewed_button.config(
@@ -8348,6 +8296,9 @@ class ObjectProgramUI(
         self.commit_current_object()
         was_reviewed = bool(self.reviewed_var.get())
         self._toggle_reviewed_for_id(oid)
+        now_reviewed = not was_reviewed
+        msg = f"✓ Specimen #{oid} marked as Reviewed" if now_reviewed else f"Specimen #{oid} marked as Unreviewed"
+        self.show_toast(msg, toast_type="success" if now_reviewed else "info")
         
         # If toggled ON to Reviewed:
         if not was_reviewed:
@@ -8440,7 +8391,20 @@ class ObjectProgramUI(
             self.ignored_words,
             self.ignored_words_variations.get()
         )
-
     def open_ignored_words_editor(self):
-        ignored_words_dialog.open_ignored_words_editor(self)
+        self._open_unified("tools")
+
+    # ── Universal Command Palette (Ctrl+K), Toasts & DwC Export ───────────────
+
+    def open_command_palette(self):
+        """Open the universal Command Palette and quick switcher."""
+        from ui.command_palette import CommandPalette
+        CommandPalette(self)
+
+    def show_toast(self, message: str, toast_type: str = "success", duration_ms: int = 2500, action_label=None, action_callback=None):
+        """Display a non-blocking floating toast notification."""
+        from ui.toast import ToastManager
+        ToastManager.show(self.root, message, toast_type, duration_ms, action_label, action_callback)
+
+
 
