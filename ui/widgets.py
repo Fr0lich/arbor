@@ -439,13 +439,13 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         # Create Treeview for Compact Mode
         self.tree = ttk.Treeview(self, columns=("Rev", "ID", "Genus", "Species"), show="headings", selectmode="extended")
-        self.tree.heading("Rev", text="✔")
+        self.tree.heading("Rev", text="Status")
         self.tree.heading("ID", text="ID")
         self.tree.heading("Genus", text="Genus")
         self.tree.heading("Species", text="Species")
 
-        self.tree.column("Rev", width=sc(28), minwidth=sc(28), stretch=False, anchor="center")
-        self.tree.column("ID", width=sc(50), minwidth=sc(35), stretch=True)
+        self.tree.column("Rev", width=sc(34), minwidth=sc(34), stretch=False, anchor="center")
+        self.tree.column("ID", width=sc(55), minwidth=sc(35), stretch=False)
         self.tree.column("Genus", width=sc(85), minwidth=sc(60), stretch=True)
         self.tree.column("Species", width=sc(85), minwidth=sc(60), stretch=True)
 
@@ -495,6 +495,8 @@ class TreeviewListboxWrapper(ttk.Frame):
         for target_widget in (self, self.canvas, self.tree):
             target_widget.bind("<Up>", self._on_keypress_up)
             target_widget.bind("<Down>", self._on_keypress_down)
+            target_widget.bind("<Control-Up>", self._on_keypress_ctrl_up)
+            target_widget.bind("<Control-Down>", self._on_keypress_ctrl_down)
             target_widget.bind("<Prior>", self._on_keypress_page_up)
             target_widget.bind("<Next>", self._on_keypress_page_down)
             target_widget.bind("<Home>", self._on_keypress_home)
@@ -524,6 +526,16 @@ class TreeviewListboxWrapper(ttk.Frame):
                 data = self.item_data.get(oid)
                 if data:
                     self.tree.insert("", "end", iid=oid, values=tuple(data.get("values", ())), tags=tuple(data.get("tags", ())))
+
+    def _on_keypress_ctrl_up(self, event):
+        if hasattr(self.main_window, "_jump_to_next_problem_specimen"):
+            return self.main_window._jump_to_next_problem_specimen(-1)
+        return "break"
+
+    def _on_keypress_ctrl_down(self, event):
+        if hasattr(self.main_window, "_jump_to_next_problem_specimen"):
+            return self.main_window._jump_to_next_problem_specimen(1)
+        return "break"
 
     def _on_keypress_up(self, event):
         if not self.items_list:
@@ -754,27 +766,43 @@ class TreeviewListboxWrapper(ttk.Frame):
         elif self.active_view == "detailed":
             self.redraw_cards_highlights()
 
-    def redraw_cards_highlights(self):
+    def redraw_cards_highlights(self, force_all=False):
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
-        bg_selected = "#ffffff" if not is_dark else "#2d3149"
-        accent_selected = "#3a7d44" if not is_dark else "#a6e3a1"
-        bg_normal = "#f2f5f1" if not is_dark else "#24273a"
+        bg_selected = "#ffffff" if not is_dark else "#2c352e"
+        accent_selected = "#3a7d44" if not is_dark else "#85e89d"
+        bg_normal = "#f2f5f1" if not is_dark else "#212622"
 
-        # Only update active virtual cards on screen for instant O(1) response
-        for idx in list(self._active_card_windows.keys()):
+        last_highlighted = getattr(self, "_last_highlighted_oids", set())
+        current_selected = set(self.selected_iids)
+        self._last_highlighted_oids = set(current_selected)
+
+        # O(1) targeted difference: only update cards whose selection state changed
+        changed_oids = (last_highlighted ^ current_selected) if (last_highlighted and not force_all) else None
+
+        for idx, (win_id, widget_dict) in self._active_card_windows.items():
             if 0 <= idx < len(self.items_list):
                 oid = self.items_list[idx]
+                if changed_oids is not None and oid not in changed_oids:
+                    continue
                 if oid in self.item_data:
-                    card_body = self.item_data[oid].get("card_body")
-                    accent_strip = self.item_data[oid].get("accent_strip")
+                    card_body = widget_dict.get("card_body")
+                    accent_strip = widget_dict.get("accent_strip")
                     accent_normal = self.item_data[oid].get("accent_color_normal", bg_normal)
+                    is_sel = oid in current_selected
+                    bg = bg_selected if is_sel else bg_normal
                     if card_body and card_body.winfo_exists():
-                        is_sel = oid in self.selected_iids
-                        bg = bg_selected if is_sel else bg_normal
-                        self._set_bg_recursive(card_body, bg)
+                        self._set_card_background(widget_dict, bg)
                     if accent_strip and accent_strip.winfo_exists():
-                        is_sel = oid in self.selected_iids
                         accent_strip.configure(bg=accent_selected if is_sel else accent_normal)
+
+    def _set_card_background(self, widget_dict, bg_color):
+        for k in ("card_body", "row1", "row2", "row3", "cb_lbl", "tax_lbl", "id_lbl", "meta_lbl", "loc_lbl"):
+            w = widget_dict.get(k)
+            if w and w.winfo_exists():
+                try:
+                    w.configure(bg=bg_color)
+                except Exception:
+                    pass
 
     def _set_bg_recursive(self, widget, bg_color):
         if getattr(widget, "is_badge", False):
@@ -998,47 +1026,47 @@ class TreeviewListboxWrapper(ttk.Frame):
                 needs_photo = True
 
         if reviewed and has_problem:
-            new_color = "#ffb366" if is_dark else "#f0ad4e"
+            new_color = "#d9a036"
             badge_label, badge_bg, badge_fg = "REV+ERR", "#F57C00", "#ffffff"
         elif reviewed:
-            new_color = "#4CAF50" if is_dark else "#2E7D32"
-            badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
+            new_color = "#3a7d44"
+            badge_label, badge_bg, badge_fg = "REV",     ("#162d1a" if is_dark else "#f2f9f3"), ("#85e89d" if is_dark else "#3a7d44")
         elif "taxonomy" in active_cats:
-            new_color = "#f28b82" if is_dark else "#C62828"
-            badge_label, badge_bg, badge_fg = "TAX",     "#C62828", "#ffffff"
+            new_color = "#c93a40"
+            badge_label, badge_bg, badge_fg = "TAX",     ("#3b1c1e" if is_dark else "#fdf2f2"), ("#f28b82" if is_dark else "#c93a40")
         elif "collection" in active_cats:
-            new_color = "#f59e0b" if is_dark else "#D9A036"
-            badge_label, badge_bg, badge_fg = "PROV",    "#D9A036", "#2c302e"
+            new_color = "#d9a036"
+            badge_label, badge_bg, badge_fg = "PROV",    ("#3b2e15" if is_dark else "#fef9e7"), ("#fcd34d" if is_dark else "#b45309")
         elif "physical" in active_cats:
             is_plant_only = (active_cats == {"physical"} and obs_row and obs_row.get("PlantPart_Problem") and not obs_row.get("Box_Label_Problem"))
             if is_plant_only:
                 new_color = canvas_bg
-                badge_label, badge_bg, badge_fg = "UNREV",   "#6c757d" if not is_dark else "#45475a", "#ffffff"
+                badge_label, badge_bg, badge_fg = "UNREV",   ("#242725" if is_dark else "#f2f5f1"), ("#9ca3af" if is_dark else "#757d77")
             else:
-                new_color = "#a1887f" if is_dark else "#795548"
-                badge_label, badge_bg, badge_fg = "BOX",     "#795548", "#ffffff"
+                new_color = "#795548"
+                badge_label, badge_bg, badge_fg = "BOX",     ("#2d2422" if is_dark else "#f7f5f4"), ("#d7ccc8" if is_dark else "#795548")
         elif "media" in active_cats:
-            new_color = "#5ab0e8" if is_dark else "#0284C7"
-            badge_label, badge_bg, badge_fg = "IMG",     "#0284C7", "#ffffff"
+            new_color = "#0284c7"
+            badge_label, badge_bg, badge_fg = "IMG",     ("#1a2c3d" if is_dark else "#f0f8ff"), ("#7dd3fc" if is_dark else "#0284c7")
         elif has_problem and problems_have_history:
-            new_color = "#BB86FC" if is_dark else "#7B1FA2"
-            badge_label, badge_bg, badge_fg = "ERR+HIS", "#7B1FA2", "#ffffff"
+            new_color = "#7b1fa2"
+            badge_label, badge_bg, badge_fg = "ERR+HIS", ("#2a1b3d" if is_dark else "#f3e8ff"), ("#d8b4fe" if is_dark else "#7b1fa2")
         elif has_problem:
-            new_color = "#f28b82" if is_dark else "#C62828"
-            badge_label, badge_bg, badge_fg = "ERR",     "#C62828", "#ffffff"
+            new_color = "#c93a40"
+            badge_label, badge_bg, badge_fg = "ERR",     ("#3b1c1e" if is_dark else "#fdf2f2"), ("#f28b82" if is_dark else "#c93a40")
         elif problems_have_history:
-            new_color = "#5ab0e8" if is_dark else "#0284C7"
-            badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
+            new_color = "#4a7b9d"
+            badge_label, badge_bg, badge_fg = "CFCT",    ("#1e293b" if is_dark else "#e9f0f5"), ("#93c5fd" if is_dark else "#4a7b9d")
         else:
             new_color = canvas_bg
-            badge_label, badge_bg, badge_fg = "UNREV",   "#6c757d" if not is_dark else "#45475a", "#ffffff"
+            badge_label, badge_bg, badge_fg = "UNREV",   ("#242725" if is_dark else "#f2f5f1"), ("#9ca3af" if is_dark else "#757d77")
 
         accent_strip.configure(bg=new_color)
         self.item_data[oid]["accent_color_normal"] = new_color
 
         status_badge = self.item_data[oid].get("status_badge")
         if status_badge and status_badge.winfo_exists():
-            status_badge.configure(text=badge_label, bg=badge_bg, fg=badge_fg, highlightbackground=badge_bg)
+            status_badge.configure(text=badge_label, bg=badge_bg, fg=badge_fg)
 
         self._apply_tags_to_card(oid)
 
@@ -1091,12 +1119,12 @@ class TreeviewListboxWrapper(ttk.Frame):
             text=text,
             bg=bg,
             fg=fg,
-            font=("Segoe UI", sc(8), "bold"),
-            padx=sc(4),
+            font=("JetBrains Mono", sc(8), "bold"),
+            padx=sc(6),
             pady=sc(1),
-            highlightthickness=1,
-            highlightbackground=border_color,
-            bd=0
+            highlightthickness=0,
+            relief="solid",
+            bd=1
         )
         badge.is_badge = True
         return badge
@@ -1249,21 +1277,20 @@ class TreeviewListboxWrapper(ttk.Frame):
         from config import sc
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
         canvas_bg      = "#181c19" if is_dark else "#fbfaf8"
-        card_bg        = "#24273a" if is_dark else "#f2f5f1"
-        text_primary   = "#cad3f5" if is_dark else "#2c302e"
-        text_secondary = "#a5adcb" if is_dark else "#4c4546"
-        family_color   = "#a6e3a1" if is_dark else "#3a7d44"
+        card_bg        = "#212622" if is_dark else "#f2f5f1"
+        text_primary   = "#e8ebe9" if is_dark else "#2c302e"
+        text_secondary = "#9399b2" if is_dark else "#757d77"
 
         outer_frame = tk.Frame(parent, bg=canvas_bg, bd=0, highlightthickness=0, cursor="hand2")
         outer_frame.pack(fill="x", pady=sc(1))
 
-        accent_strip = tk.Frame(outer_frame, bg=canvas_bg, width=sc(4), bd=0, highlightthickness=0)
+        accent_strip = tk.Frame(outer_frame, bg=canvas_bg, width=sc(3), bd=0, highlightthickness=0)
         accent_strip.pack(side="left", fill="y")
         accent_strip.pack_propagate(False)
         accent_strip.is_accent_strip = True
 
         card_body = tk.Frame(outer_frame, bg=card_bg, bd=0, highlightthickness=0,
-                             padx=sc(8), pady=sc(6), cursor="hand2")
+                             padx=sc(8), pady=sc(5), cursor="hand2")
         card_body.pack(side="left", fill="both", expand=True)
 
         row1 = tk.Frame(card_body, bg=card_bg)
@@ -1271,64 +1298,44 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         cb_lbl = tk.Label(row1, text="☐", bg=card_bg, fg=text_secondary,
                           font=("Segoe UI", sc(10), "bold"), cursor="hand2")
-        cb_lbl.pack(side="left", padx=(0, sc(4)))
+        cb_lbl.pack(side="left", padx=(0, sc(5)))
 
         tax_lbl = tk.Label(row1, text="", bg=card_bg, fg=text_primary,
-                           font=("Georgia", sc(9), "italic bold"), anchor="w")
+                           font=("Lora", sc(10), "italic bold"), anchor="w")
         tax_lbl.pack(side="left", fill="x", expand=True, padx=(0, sc(4)))
 
-        status_badge = self._create_badge(row1, "UNREV", "#6c757d", "#ffffff", "#6c757d")
+        status_badge = self._create_badge(row1, "UNREV", "#242725" if is_dark else "#f2f5f1", "#9ca3af" if is_dark else "#757d77", "#313244" if is_dark else "#d1d1d1")
         status_badge.pack(side="right", padx=(sc(2), 0))
 
-        ukn_badge = self._create_badge(row1, "UKN", "#FBC02D", "#2c302e", "#FBC02D")
-        ukn_badge.pack(side="right", padx=(sc(2), sc(2)))
-        ukn_badge.pack_forget() # Initially hidden
-
-        img_badge = self._create_badge(row1, "📷", "#0284c7", "#ffffff", "#0284c7")
-        img_badge.pack(side="right", padx=(sc(2), sc(2)))
-        img_badge.pack_forget() # Initially hidden
-
-        loaned_badge = self._create_badge(row1, "Loaned", "#203040" if is_dark else "#e3f2fd", "#64b5f6" if is_dark else "#0d47a1", "#bbdefb" if is_dark else "#90caf9")
-        loaned_badge.pack(side="right", padx=(sc(2), sc(2)))
-        loaned_badge.pack_forget() # Initially hidden
-
-        unval_badge = self._create_badge(row1, "UNVAL", "#3e2723" if is_dark else "#fff3e0", "#ffb74d" if is_dark else "#e65100", "#ffb74d" if is_dark else "#ffe0b2")
-        unval_badge.pack(side="right", padx=(sc(2), sc(2)))
-        unval_badge.pack_forget() # Initially hidden
-
         row2 = tk.Frame(card_body, bg=card_bg)
-        row2.pack(fill="x", anchor="w", pady=(sc(3), 0))
-
-        fam_lbl = tk.Label(row2, text="", bg=card_bg, fg=family_color,
-                           font=("Segoe UI", sc(8), "bold"), anchor="w")
-        fam_lbl.pack(side="left", padx=(sc(18), 0))
-        fam_lbl.pack_forget()
-
-        sep_lbl = tk.Label(row2, text="•", bg=card_bg, fg=text_secondary,
-                           font=("Segoe UI", sc(8)))
-        sep_lbl.pack(side="left", padx=sc(3))
-        sep_lbl.pack_forget()
+        row2.pack(fill="x", anchor="w", pady=(sc(2), 0))
 
         id_lbl = tk.Label(row2, text="", bg=card_bg, fg=text_primary,
-                          font=("Consolas", sc(8)))
-        id_lbl.pack(side="left", padx=(sc(18), 0))
+                          font=("JetBrains Mono", sc(8), "bold"))
+        id_lbl.pack(side="left", padx=(sc(16), sc(4)))
 
-        photo_lbl = tk.Label(row2, text="📷 0", bg=card_bg, fg=text_secondary,
-                             font=("Segoe UI", sc(8)))
-        photo_lbl.pack(side="right", padx=(sc(2), 0))
+        meta_lbl = tk.Label(row2, text="", bg=card_bg, fg=text_secondary,
+                            font=("Inter", sc(8)), anchor="w")
+        meta_lbl.pack(side="left", fill="x", expand=True)
 
-        globe_lbl = tk.Label(row2, text="🌐", bg=card_bg,
-                             fg="#0284c7" if not is_dark else "#89b4fa",
-                             font=("Segoe UI", sc(8)))
-        globe_lbl.pack(side="right", padx=(sc(4), sc(2)))
-        globe_lbl.pack_forget()
+        # Backward compatibility dummy labels
+        fam_lbl = tk.Label(row2, text="", bg=card_bg)
+        sep_lbl = tk.Label(row2, text="", bg=card_bg)
+        photo_lbl = tk.Label(row2, text="", bg=card_bg)
+        globe_lbl = tk.Label(row2, text="", bg=card_bg)
+
+        # Dummy badges for backward compatibility
+        ukn_badge = tk.Label(row1, text="", bg=card_bg)
+        img_badge = tk.Label(row1, text="", bg=card_bg)
+        loaned_badge = tk.Label(row1, text="", bg=card_bg)
+        unval_badge = tk.Label(row1, text="", bg=card_bg)
 
         row3 = tk.Frame(card_body, bg=card_bg)
-        row3.pack(fill="x", anchor="w", pady=(sc(2), 0))
+        row3.pack(fill="x", anchor="w", pady=(sc(1), 0))
 
         loc_lbl = tk.Label(row3, text="", bg=card_bg, fg=text_secondary,
-                           font=("Segoe UI", sc(8)), anchor="w", justify="left")
-        loc_lbl.pack(side="left", padx=(sc(18), 0), fill="x", expand=True)
+                           font=("Inter", sc(8)), anchor="w", justify="left")
+        loc_lbl.pack(side="left", padx=(sc(16), 0), fill="x", expand=True)
 
         cb_lbl.is_cb_lbl = True
         def _add_virtual_tag(w):
@@ -1358,6 +1365,7 @@ class TreeviewListboxWrapper(ttk.Frame):
             "fam_lbl": fam_lbl,
             "sep_lbl": sep_lbl,
             "id_lbl": id_lbl,
+            "meta_lbl": meta_lbl,
             "globe_lbl": globe_lbl,
             "photo_lbl": photo_lbl,
             "row3": row3,
@@ -1439,40 +1447,40 @@ class TreeviewListboxWrapper(ttk.Frame):
                 needs_photo = True
 
         if reviewed and has_problem:
-            accent_color = "#ffb366" if is_dark else "#f0ad4e"
+            accent_color = "#d9a036"
             badge_label, badge_bg, badge_fg = "REV+ERR", "#F57C00", "#ffffff"
         elif reviewed:
-            accent_color = "#4CAF50" if is_dark else "#2E7D32"  # green
-            badge_label, badge_bg, badge_fg = "OK",      "#2E7D32", "#ffffff"
+            accent_color = "#3a7d44"
+            badge_label, badge_bg, badge_fg = "REV",     ("#162d1a" if is_dark else "#f2f9f3"), ("#85e89d" if is_dark else "#3a7d44")
         elif "taxonomy" in active_cats:
-            accent_color = "#f28b82" if is_dark else "#C62828"  # red
-            badge_label, badge_bg, badge_fg = "TAX",     "#C62828", "#ffffff"
+            accent_color = "#c93a40"
+            badge_label, badge_bg, badge_fg = "TAX",     ("#3b1c1e" if is_dark else "#fdf2f2"), ("#f28b82" if is_dark else "#c93a40")
         elif "collection" in active_cats:
-            accent_color = "#f59e0b" if is_dark else "#D9A036"  # amber
-            badge_label, badge_bg, badge_fg = "PROV",    "#D9A036", "#2c302e"
+            accent_color = "#d9a036"
+            badge_label, badge_bg, badge_fg = "PROV",    ("#3b2e15" if is_dark else "#fef9e7"), ("#fcd34d" if is_dark else "#b45309")
         elif "physical" in active_cats:
             is_plant_only = (active_cats == {"physical"} and obs_row and obs_row.get("PlantPart_Problem") and not obs_row.get("Box_Label_Problem"))
             if is_plant_only:
                 accent_color = canvas_bg
-                badge_label, badge_bg, badge_fg = "UNREV",   "#6c757d" if not is_dark else "#45475a", "#ffffff"
+                badge_label, badge_bg, badge_fg = "UNREV",   ("#242725" if is_dark else "#f2f5f1"), ("#9ca3af" if is_dark else "#757d77")
             else:
-                accent_color = "#a1887f" if is_dark else "#795548"  # slate
-                badge_label, badge_bg, badge_fg = "BOX",     "#795548", "#ffffff"
+                accent_color = "#795548"
+                badge_label, badge_bg, badge_fg = "BOX",     ("#2d2422" if is_dark else "#f7f5f4"), ("#d7ccc8" if is_dark else "#795548")
         elif "media" in active_cats:
-            accent_color = "#5ab0e8" if is_dark else "#0284C7"  # blue
-            badge_label, badge_bg, badge_fg = "IMG",     "#0284C7", "#ffffff"
+            accent_color = "#0284c7"
+            badge_label, badge_bg, badge_fg = "IMG",     ("#1a2c3d" if is_dark else "#f0f8ff"), ("#7dd3fc" if is_dark else "#0284c7")
         elif has_problem and problems_have_history:
-            accent_color = "#BB86FC" if is_dark else "#7B1FA2"  # purple
-            badge_label, badge_bg, badge_fg = "ERR+HIS", "#7B1FA2", "#ffffff"
+            accent_color = "#7b1fa2"
+            badge_label, badge_bg, badge_fg = "ERR+HIS", ("#2a1b3d" if is_dark else "#f3e8ff"), ("#d8b4fe" if is_dark else "#7b1fa2")
         elif has_problem:
-            accent_color = "#f28b82" if is_dark else "#C62828"  # red
-            badge_label, badge_bg, badge_fg = "ERR",     "#C62828", "#ffffff"
+            accent_color = "#c93a40"
+            badge_label, badge_bg, badge_fg = "ERR",     ("#3b1c1e" if is_dark else "#fdf2f2"), ("#f28b82" if is_dark else "#c93a40")
         elif problems_have_history:
-            accent_color = "#5ab0e8" if is_dark else "#0284C7"  # blue
-            badge_label, badge_bg, badge_fg = "CFCT",    "#0284C7", "#ffffff"
+            accent_color = "#4a7b9d"
+            badge_label, badge_bg, badge_fg = "CFCT",    ("#1e293b" if is_dark else "#e9f0f5"), ("#93c5fd" if is_dark else "#4a7b9d")
         else:
-            accent_color = canvas_bg  # visually transparent
-            badge_label, badge_bg, badge_fg = "UNREV",   "#6c757d" if not is_dark else "#45475a", "#ffffff"
+            accent_color = canvas_bg
+            badge_label, badge_bg, badge_fg = "UNREV",   ("#242725" if is_dark else "#f2f5f1"), ("#9ca3af" if is_dark else "#757d77")
 
         widgets["outer_frame"].configure(bg=canvas_bg)
         widgets["card_body"].configure(bg=card_bg)
@@ -1520,40 +1528,13 @@ class TreeviewListboxWrapper(ttk.Frame):
             if widgets["img_badge"].winfo_manager() == 'pack':
                 widgets["img_badge"].pack_forget()
 
-        if widgets.get("loaned_badge") and widgets["loaned_badge"].winfo_exists():
-            if loaned:
-                if widgets["loaned_badge"].winfo_manager() != 'pack':
-                    widgets["loaned_badge"].pack(side="right", padx=(sc(2), sc(2)))
-            else:
-                if widgets["loaned_badge"].winfo_manager() == 'pack':
-                    widgets["loaned_badge"].pack_forget()
-
         has_unval = self.main_window.has_unvalidated_sources(oid) if hasattr(self.main_window, "has_unvalidated_sources") else False
-        if widgets.get("unval_badge") and widgets["unval_badge"].winfo_exists():
-            if has_unval:
-                if widgets["unval_badge"].winfo_manager() != 'pack':
-                    widgets["unval_badge"].pack(side="right", padx=(sc(2), sc(2)))
-            else:
-                if widgets["unval_badge"].winfo_manager() == 'pack':
-                    widgets["unval_badge"].pack_forget()
+
+        widgets["id_lbl"].configure(text=str(oid))
 
         family = str(reg_row.get("Family", "") or "").strip()
-        if family in ("nan", "None"):
+        if family in ("nan", "None", "<NA>"):
             family = ""
-
-        if family:
-            widgets["fam_lbl"].configure(text=family.upper())
-            if widgets["fam_lbl"].winfo_manager() != 'pack':
-                widgets["fam_lbl"].pack(before=widgets["id_lbl"], side="left", padx=(sc(18), 0))
-                widgets["sep_lbl"].pack(before=widgets["id_lbl"], side="left", padx=sc(3))
-                widgets["id_lbl"].pack_configure(padx=(0, 0))
-        else:
-            if widgets["fam_lbl"].winfo_manager() == 'pack':
-                widgets["fam_lbl"].pack_forget()
-                widgets["sep_lbl"].pack_forget()
-                widgets["id_lbl"].pack_configure(padx=(sc(18), 0))
-
-        widgets["id_lbl"].configure(text=oid)
 
         # Unified Photo Count & Presence Resolution
         photo_count = 0
@@ -1604,36 +1585,25 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         has_img_prob = bool(obs_row.get("Images_Problem", False)) if obs_row else False
 
-        # Configure subtle unified photo indicator
-        photo_widget = widgets.get("photo_lbl")
-        if photo_widget and photo_widget.winfo_exists():
-            if has_img_prob:
-                photo_widget.configure(
-                    text=f"📷 {photo_count} ⚠" if photo_count > 0 else "📷 ⚠",
-                    fg="#d9a036" if not is_dark else "#f59e0b"
-                )
-            elif photo_count > 0:
-                photo_widget.configure(
-                    text=f"📷 {photo_count}",
-                    fg="#3a7d44" if not is_dark else "#a6e3a1"
-                )
-            else:
-                photo_widget.configure(
-                    text="📷 0",
-                    fg="#888c89" if not is_dark else "#6c7086"
-                )
-            if photo_widget.winfo_manager() != 'pack':
-                photo_widget.pack(side="right", padx=(sc(2), 0))
+        meta_parts = []
+        if family:
+            meta_parts.append(family.upper())
+        if photo_count > 0:
+            meta_parts.append(f"{photo_count} photo{'s' if photo_count > 1 else ''}")
+        elif has_img_prob or needs_photo:
+            meta_parts.append("NO PHOTO")
+        if has_online:
+            meta_parts.append("ONLINE")
+        if loaned:
+            meta_parts.append("LOAN")
+        if has_unknown:
+            meta_parts.append("UKN")
+        if has_unval:
+            meta_parts.append("UNVAL")
 
-        # Position globe widget right next to photo_lbl
-        globe_widget = widgets.get("globe_lbl")
-        if globe_widget and globe_widget.winfo_exists():
-            if has_online:
-                if globe_widget.winfo_manager() != 'pack':
-                    globe_widget.pack(side="right", padx=(sc(4), sc(2)))
-            else:
-                if globe_widget.winfo_manager() == 'pack':
-                    globe_widget.pack_forget()
+        meta_text = " • ".join(meta_parts)
+        if widgets.get("meta_lbl"):
+            widgets["meta_lbl"].configure(text=meta_text)
 
         def _clean(v):
             s = str(v).strip()

@@ -384,13 +384,9 @@ class ObjectProblemResolver:
         scrollbar.pack(side="right", fill="y")
         self.canvas.configure(yscrollcommand=scrollbar.set)
         
-        def _on_mousewheel(event):
-            try:
-                if self.canvas.winfo_exists():
-                    self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            except Exception:
-                pass
-        self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        from ui.scroll_helper import bind_mousewheel
+        bind_mousewheel(self.canvas, self.scrollable_frame)
+        bind_mousewheel(self.dir_canvas, getattr(self, "dir_scrollable_frame", None))
         
         self.populate_fields()
         
@@ -417,16 +413,7 @@ class ObjectProblemResolver:
 
         # Cleanup routine
         def _cleanup(event=None):
-            if event and event.widget != self.win:
-                return
-            try:
-                self.canvas.unbind_all("<MouseWheel>")
-            except Exception:
-                pass
-            try:
-                self.dir_canvas.unbind_all("<MouseWheel>")
-            except Exception:
-                pass
+            pass
 
         self.win.bind("<Destroy>", _cleanup)
 

@@ -137,6 +137,46 @@ class TestFuzzySearchAndCommandPalette(unittest.TestCase):
         except tk.TclError:
             pass
 
+    def test_command_palette_specimen_search(self):
+        import tkinter as tk
+        from unittest.mock import MagicMock
+        from ui.command_palette import CommandPalette
+
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            mock_ui = MagicMock()
+            mock_ui.root = root
+            mock_ui.dark_mode_active = False
+
+            # Setup mock_ui.app with df_reg
+            mock_app = MagicMock()
+            df_reg = pd.DataFrame(
+                {"Genus": ["Betula", "Quercus"], "Species": ["pendula", "robur"]},
+                index=["1042", "1043"]
+            )
+            mock_app.df_reg = df_reg
+            mock_app.df_obs = None
+            mock_ui.app = mock_app
+
+            palette = CommandPalette(mock_ui)
+            # Search by ID
+            palette.search_var.set("1042")
+            spec_matches = [i for i in palette._current_items if i.get("type") == "specimen"]
+            self.assertTrue(len(spec_matches) > 0)
+            self.assertEqual(spec_matches[0]["oid"], "1042")
+
+            # Search by Taxon
+            palette.search_var.set("Quercus")
+            spec_matches2 = [i for i in palette._current_items if i.get("type") == "specimen"]
+            self.assertTrue(len(spec_matches2) > 0)
+            self.assertEqual(spec_matches2[0]["oid"], "1043")
+
+            palette.destroy()
+            root.destroy()
+        except tk.TclError:
+            pass
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -73,6 +73,11 @@ SETTING_INFO_TEXTS = {
         "Require security PIN authentication for mobile devices connecting via Mobile Companion. "
         "When disabled, mobile devices are immediately granted a session without entering a PIN."
     ),
+    "mobile_autosave_on_stop": (
+        "When enabled, stopping the mobile companion server automatically writes all pending "
+        "in-memory mobile edits to the workbook on disk without prompting. When disabled (default), "
+        "Arbor displays a confirmation prompt to ensure no mobile edits are lost."
+    ),
 }
 
 
@@ -175,12 +180,7 @@ class UnifiedSettingsWindow:
         self.show_tab(initial_tab if initial_tab in self.tabs else "general")
 
     def _on_destroy(self, event):
-        if event.widget == self.win:
-            # Clean up any bound mousewheel events when window closes
-            try:
-                self.win.unbind_all("<MouseWheel>")
-            except Exception:
-                pass
+        pass
 
     def _build_header(self):
         header = tk.Frame(self.main_container, bg=self.COLORS["surface_container_low"], height=sc(52))
@@ -263,6 +263,7 @@ class UnifiedSettingsWindow:
         self.var_excel_backup = tk.BooleanVar(value=p.get("enable_excel_import_backup", True))
         self.var_log_verbosity = tk.StringVar(value=p.get("log_verbosity", "ERROR"))
         self.var_archive_limit = tk.StringVar(value=str(p.get("autosave_archive_limit", 10)))
+        self.var_mobile_autosave_on_stop = tk.BooleanVar(value=bool(p.get("mobile_autosave_on_stop", False)))
         
         auto_adv = _get_val("auto_advance_var", p.get("auto_advance_on_review", True))
         auto_adv_hist = _get_val("auto_advance_history_var", p.get("auto_advance_history", False))
@@ -316,6 +317,8 @@ class UnifiedSettingsWindow:
         self.var_show_image_tools = tk.BooleanVar(value=bool(show_img_tls))
         self.var_show_bulk_edit = tk.BooleanVar(value=bool(show_blk))
         self.var_image_stack = tk.BooleanVar(value=bool(img_stk))
+        show_sec_nav = _get_val("show_secondary_nav_var", p.get("show_secondary_nav", False))
+        self.var_show_secondary_nav = tk.BooleanVar(value=bool(show_sec_nav))
         self.var_layout_dynamic = tk.BooleanVar(value=False)  # runtime-only, not persisted
 
         # Focus Mode
@@ -510,11 +513,8 @@ class UnifiedSettingsWindow:
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
 
-        def _on_mousewheel(e):
-            if canvas.winfo_exists():
-                canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        from ui.scroll_helper import bind_mousewheel
+        bind_mousewheel(canvas, scroll_content)
 
         canvas.pack(side="left", fill="both", expand=True, padx=sc(12), pady=sc(8))
         scrollbar.pack(side="right", fill="y", pady=sc(8))
@@ -557,6 +557,8 @@ class UnifiedSettingsWindow:
 
         create_toggle_row(card1, "Enable Backup on Excel Import", self.var_excel_backup,
                           ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["enable_excel_import_backup"])
+        create_toggle_row(card1, "Auto-save when mobile server is stopped", self.var_mobile_autosave_on_stop,
+                          ui_ref=self.app or self, info_text=SETTING_INFO_TEXTS["mobile_autosave_on_stop"])
         tk.Label(card1,
                  text="Note: Saves use background atomic pickles for maximum performance.",
                  font=self.FONT_SUBTITLE, fg=self.COLORS["on_surface_variant"],
@@ -689,6 +691,16 @@ class UnifiedSettingsWindow:
         create_toggle_row(card1, "Show Bulk Edit Button", self.var_show_bulk_edit,
                           command=lambda: (_notify_panel("bulk_edit", self.var_show_bulk_edit), self._notify_live("show_bulk_edit", self.var_show_bulk_edit.get())))
 
+        def _on_secondary_nav_toggle():
+            if self.app and hasattr(self.app, "apply_secondary_nav_visibility"):
+                self.app.apply_secondary_nav_visibility(self.var_show_secondary_nav.get())
+            self._notify_live("show_secondary_nav", self.var_show_secondary_nav.get())
+            _apply_if_dynamic()
+
+        create_toggle_row(card1, "Show Quick Navigation & Problem Jumps (Top Bar)", self.var_show_secondary_nav,
+                          command=_on_secondary_nav_toggle, ui_ref=self.app or self,
+                          info_text="Displays ◄ ► Last and Next Problem jump buttons in the top navigation bar. When disabled, navigate using arrow keys and the Command Palette (Ctrl+K).")
+
         # Card 2: Behavior
         card2 = self._create_card(c, "View Display Options")
         create_toggle_row(card2, "Combine Local and Online Images",
@@ -763,6 +775,7 @@ class UnifiedSettingsWindow:
             "location_2row": self.var_location_2row.get(),
             "show_image_tools": self.var_show_image_tools.get(),
             "show_bulk_edit": self.var_show_bulk_edit.get(),
+            "show_secondary_nav": self.var_show_secondary_nav.get(),
             "combine_local_and_online": self.var_combine_images.get(),
             "image_stack": self.var_image_stack.get(),
             "large_reviewed_button": self.var_large_reviewed_btn.get(),
@@ -820,6 +833,11 @@ class UnifiedSettingsWindow:
                 self.app.show_bulk_edit_var.set(self.var_show_bulk_edit.get())
             if hasattr(self.app, "draft_show_bulk_edit_var"):
                 self.app.draft_show_bulk_edit_var.set(self.var_show_bulk_edit.get())
+
+            if hasattr(self.app, "show_secondary_nav_var"):
+                self.app.show_secondary_nav_var.set(self.var_show_secondary_nav.get())
+            if hasattr(self.app, "apply_secondary_nav_visibility"):
+                self.app.apply_secondary_nav_visibility(self.var_show_secondary_nav.get())
 
             if hasattr(self.app, "combine_images_var"):
                 self.app.combine_images_var.set(self.var_combine_images.get())
@@ -1374,6 +1392,70 @@ class UnifiedSettingsWindow:
                     "Clear completed tutorial flags so interactive guides show again.",
                     "Reset Tutorials", "reset_tutorials")
 
+        # Card 6: Application Updates & Version
+        card6 = self._create_card(c, "Application Updates & Version")
+
+        curr_ver = getattr(config, "APP_VERSION", "2.1.0")
+        ver_row = tk.Frame(card6, bg=self.COLORS["surface"])
+        ver_row.pack(fill="x", padx=sc(8), pady=(sc(4), sc(8)))
+        tk.Label(ver_row, text="Installed Version:", font=self.FONT_LABEL,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["surface"]).pack(side="left")
+        tk.Label(ver_row, text=f"v{curr_ver}", font=self.FONT_DATA,
+                 fg=self.COLORS["primary"], bg=self.COLORS["surface"], padx=sc(6)).pack(side="left")
+
+        _action_btn(card6, "Check for Updates Now",
+                    "Query GitHub releases to detect and download new Arbor updates.",
+                    "Check Now", "check_updates")
+
+        repo_frame = tk.Frame(card6, bg=self.COLORS["surface"])
+        repo_frame.pack(fill="x", padx=sc(8), pady=(sc(6), sc(4)))
+        tk.Label(repo_frame, text="GitHub Repository:", font=self.FONT_LABEL,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["surface"]).pack(anchor="w")
+        
+        repo_sub = tk.Frame(repo_frame, bg=self.COLORS["surface"])
+        repo_sub.pack(fill="x", pady=(sc(2), 0))
+        
+        self.entry_update_repo = tk.Entry(
+            repo_sub, font=self.FONT_DATA, bg=self.COLORS["surface"],
+            fg=self.COLORS["on_surface"], relief="flat", bd=sc(1)
+        )
+        self.entry_update_repo.insert(0, config.get_update_repo())
+        self.entry_update_repo.pack(side="left", fill="x", expand=True, padx=(0, sc(6)))
+
+        def _save_repo_target():
+            new_r = self.entry_update_repo.get().strip()
+            if "/" in new_r:
+                config.set_update_repo(new_r)
+                if self.app and hasattr(self.app, "show_toast"):
+                    self.app.show_toast(f"Update repository set to {new_r}", "success")
+                else:
+                    messagebox.showinfo("Repository Updated", f"Update repository set to: {new_r}", parent=self.win)
+            else:
+                messagebox.showerror("Invalid Repository", "Repository must be in 'owner/repo' format (e.g. Fr0lich/arbor).", parent=self.win)
+
+        def _reset_repo_target():
+            config.set_update_repo(config.DEFAULT_GITHUB_REPO)
+            self.entry_update_repo.delete(0, "end")
+            self.entry_update_repo.insert(0, config.DEFAULT_GITHUB_REPO)
+            if self.app and hasattr(self.app, "show_toast"):
+                self.app.show_toast(f"Reset to default repository: {config.DEFAULT_GITHUB_REPO}", "info")
+            else:
+                messagebox.showinfo("Repository Reset", f"Reset to default repository: {config.DEFAULT_GITHUB_REPO}", parent=self.win)
+
+        tk.Button(
+            repo_sub, text="Save Repo", font=self.FONT_DATA,
+            fg=self.COLORS["on_primary"], bg=self.COLORS["secondary"], bd=0,
+            relief="flat", padx=sc(8), pady=sc(2), cursor="hand2",
+            command=_save_repo_target
+        ).pack(side="left", padx=(0, sc(4)))
+
+        tk.Button(
+            repo_sub, text="Reset Default", font=self.FONT_DATA,
+            fg=self.COLORS["on_surface"], bg=self.COLORS["surface"], bd=0,
+            relief="flat", padx=sc(8), pady=sc(2), cursor="hand2",
+            command=_reset_repo_target
+        ).pack(side="left")
+
         if not self.app:
             note = tk.Frame(c, bg=self.COLORS["surface"], pady=sc(8))
             note.pack(fill="x")
@@ -1385,6 +1467,10 @@ class UnifiedSettingsWindow:
     def _execute_action(self, callback_name):
         """Dispatch a named action to the host application."""
         if not callback_name:
+            return
+        if callback_name == "check_updates":
+            from ui.update_dialog import check_for_updates_ui
+            check_for_updates_ui(self.win, app=self.app, manual=True)
             return
         if callback_name == "reset_tutorials":
             p = config.load_prefs() or {}
@@ -1476,6 +1562,7 @@ class UnifiedSettingsWindow:
             p["autosave_archive_limit"] = int(self.var_archive_limit.get())
         except ValueError:
             p["autosave_archive_limit"] = 10
+        p["mobile_autosave_on_stop"] = bool(self.var_mobile_autosave_on_stop.get())
 
         # ── Appearance & Visuals ──────────────────────────────────────────────
         old_ui_scale = old_prefs.get("ui_scale", getattr(config, "UI_SCALE", 1.0))
@@ -1499,6 +1586,7 @@ class UnifiedSettingsWindow:
         p["location_2row"] = self.var_location_2row.get()
         p["show_image_tools"] = self.var_show_image_tools.get()
         p["show_bulk_edit"] = self.var_show_bulk_edit.get()
+        p["show_secondary_nav"] = self.var_show_secondary_nav.get()
         p["combine_local_and_online"] = self.var_combine_images.get()
         p["image_stack"] = self.var_image_stack.get()
         p["toolbar_buttons"] = {k: v.get() for k, v in self.draft_toolbar_vars.items()}

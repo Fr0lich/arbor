@@ -20,6 +20,8 @@ class KeybindingManager:
         r.bind("<Right>", ui._safe_nav_right)
         r.bind("<Alt-Left>", lambda e: ui.go_back())
         r.bind("<Alt-Right>", lambda e: ui.go_forward())
+        r.bind("<Control-Up>", lambda e: ui._jump_to_next_problem_specimen(-1))
+        r.bind("<Control-Down>", lambda e: ui._jump_to_next_problem_specimen(1))
 
         # ── 2. Specimen Actions & Curation Verification ───────────────────────
         r.bind("<Control-n>", ui._shortcut_new_object)

@@ -1,4 +1,4 @@
-from ui.keybindings import KeybindingManager
+﻿from ui.keybindings import KeybindingManager
 from contextlib import nullcontext
 """
 ui/main_window.py
@@ -49,7 +49,7 @@ _NORMALIZE_NON_WORD_PATTERN = re.compile(r'[^\w\s]')
 _NORMALIZE_SPACE_PATTERN = re.compile(r'\s+')
 
 import uuid
-
+import cachetools
 from collections import OrderedDict
 import config
 from config import sc
@@ -737,7 +737,7 @@ class ObjectProgramUI(
         self._image_load_token = 0
         self.image_view_mode = "gallery"  # eller "stack"
 
-        self._history_cache = OrderedDict()
+        self._history_cache = cachetools.LRUCache(maxsize=100)
 
         self._problem_cache = {}
 
@@ -1307,11 +1307,11 @@ class ObjectProgramUI(
             })
 
         if not updates_available:
-            import tkinter.messagebox as mb
+            sc_name = result.get("scientificName", f"{old_genus} {old_species}".strip())
             if result.get("matchType") == "EXACT":
-                mb.showinfo("GBIF Check", f"Name is up to date and valid.\nMatch: {result.get('scientificName')}", parent=self.root)
+                self.show_toast(f"✓ Valid: {sc_name} (Exact GBIF match)", "success")
             else:
-                 mb.showinfo("GBIF Check", f"Match found (Type: {result.get('matchType')}). No significant updates available.", parent=self.root)
+                self.show_toast(f"✓ Match found: {sc_name} ({result.get('matchType', 'Fuzzy')})", "info")
             return
 
         # Show ObjectProblemResolver
@@ -2242,6 +2242,11 @@ class ObjectProgramUI(
     def show_about(self):
         help_dialogs.show_about(self)
 
+    def check_for_updates_action(self):
+        """Triggers the check for application updates modal dialog."""
+        from ui.update_dialog import check_for_updates_ui
+        check_for_updates_ui(self.root, app=self, manual=True)
+
     def start_tutorial_flow(self, tutorial_type=None):
         """Starts an interactive sandbox tutorial or opens the Help Center tutorial selector."""
         from ui import tutorials
@@ -2392,6 +2397,7 @@ class ObjectProgramUI(
         popup.add_cascade(label="🎓 Interactive Walkthrough Tutorials", menu=tut_menu)
         popup.add_command(label="🏛️ Help Center...", command=self.open_help_window)
         popup.add_separator()
+        popup.add_command(label="🔄 Check for Updates...", command=self.check_for_updates_action)
         popup.add_command(label="ℹ️ About Arbor", command=self.show_about)
         popup.post(self.root.winfo_pointerx(), self.root.winfo_pointery())
     def show_data_dropdown(self):
@@ -2985,7 +2991,7 @@ class ObjectProgramUI(
     def toggle_reg_panel(self):
         if self.show_reg_var.get():
             if str(self.reg_outer) not in self.panes.panes():
-                self.panes.add(self.reg_outer, weight=3)
+                self.panes.add(self.reg_outer, weight=0)
         else:
             self.panes.forget(self.reg_outer)
 
@@ -3031,7 +3037,10 @@ class ObjectProgramUI(
     def _apply_pin_state(self, animate=False):
         if not hasattr(self, "left_content_frame") or not hasattr(self, "left_frame"):
             return
-            
+
+        prefs = config.load_prefs() or {}
+        default_expanded = max(sc(320), sc(prefs.get("sidebar_width", 360)))
+
         if self.left_pinned.get():
             # Hide overlay if currently active
             if hasattr(self, "_drawer_anim_job") and self._drawer_anim_job is not None:
@@ -3046,14 +3055,13 @@ class ObjectProgramUI(
                 self.drawer_overlay.place_forget()
 
             # Pack content frame directly into left_frame
-            self.left_content_frame.pack(in_=self.left_frame, side="left", fill="both", expand=True)
+            if self.left_content_frame.winfo_manager() != "pack":
+                self.left_content_frame.pack(in_=self.left_frame, side="left", fill="both", expand=True)
             if hasattr(self, "pin_btn"):
-                self.pin_btn.config(bg=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"))
+                self.pin_btn.config(text="◀", bg=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"))
                 self.add_tooltip(self.pin_btn, "Collapse Sidebar (Ctrl+O)")
-            
 
-
-            target_sash = sc(300)
+            target_sash = default_expanded
             if animate:
                 self._animate_sash_transition(target_sash)
             elif hasattr(self, "panes"):
@@ -3062,43 +3070,68 @@ class ObjectProgramUI(
                 except Exception:
                     pass
         else:
-            # Unpinned mode: forget content frame from left_frame layout
-            self.left_content_frame.pack_forget()
+            # Unpinned mode: smoothly animate shut, then pack_forget
+            rail_width = sc(config.RAIL_THEME.get("rail_width", 40))
             if hasattr(self, "pin_btn"):
-                self.pin_btn.config(bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"))
+                self.pin_btn.config(text="▶", bg=config.RAIL_THEME.get("rail_bg", "#fbfaf8"))
                 self.add_tooltip(self.pin_btn, "Expand Sidebar (Ctrl+O)")
-            
 
+            # Remember current width before collapsing if valid
+            try:
+                current_sash = self.panes.sashpos(0)
+                if current_sash > rail_width + sc(100):
+                    dpi = getattr(config, "DPI_FACTOR", 1.0) or 1.0
+                    prefs["sidebar_width"] = int(current_sash / dpi)
+                    config.save_prefs(prefs)
+            except Exception:
+                pass
 
-            target_sash = sc(config.RAIL_THEME.get("rail_width", 40))
+            target_sash = rail_width
             if animate:
-                self._animate_sash_transition(target_sash)
-            elif hasattr(self, "panes"):
-                try:
-                    self.panes.sashpos(0, target_sash)
-                except Exception:
-                    pass
+                def _on_collapse_complete():
+                    if hasattr(self, "left_pinned") and not self.left_pinned.get():
+                        if hasattr(self, "left_content_frame"):
+                            self.left_content_frame.pack_forget()
+                self._animate_sash_transition(target_sash, on_complete=_on_collapse_complete)
+            else:
+                self.left_content_frame.pack_forget()
+                if hasattr(self, "panes"):
+                    try:
+                        self.panes.sashpos(0, target_sash)
+                    except Exception:
+                        pass
 
-    def _animate_sash_transition(self, target_sash):
+    def _animate_sash_transition(self, target_sash, on_complete=None):
         import math
         if not hasattr(self, "panes"):
+            if on_complete:
+                on_complete()
             return
-            
+
+        if hasattr(self, "_sash_anim_job") and self._sash_anim_job:
+            try:
+                self.root.after_cancel(self._sash_anim_job)
+            except Exception:
+                pass
+            self._sash_anim_job = None
+
         try:
             start_sash = self.panes.sashpos(0)
         except Exception:
             start_sash = target_sash
-            
+
         distance = float(target_sash - start_sash)
         if abs(distance) < 2:
             try:
                 self.panes.sashpos(0, target_sash)
             except Exception:
                 pass
+            if on_complete:
+                on_complete()
             return
-            
-        duration = float(config.DRAWER_THEME.get("anim_duration_ms", 140))
-        step_interval = int(config.DRAWER_THEME.get("anim_step_interval_ms", 8))
+
+        duration = 120.0
+        step_interval = 12
         start_time = time.time() * 1000.0
 
         def _step():
@@ -3109,17 +3142,65 @@ class ObjectProgramUI(
                     self.panes.sashpos(0, target_sash)
                 except Exception:
                     pass
+                self._sash_anim_job = None
+                if on_complete:
+                    on_complete()
             else:
                 progress = max(0.0, min(1.0, elapsed / duration))
-                ease_progress = 0.5 - 0.5 * math.cos(progress * math.pi)
+                ease_progress = 1.0 - math.pow(1.0 - progress, 3)
                 current_pos = int(start_sash + distance * ease_progress)
                 try:
                     self.panes.sashpos(0, current_pos)
                 except Exception:
                     pass
-                self.root.after(step_interval, _step)
+                self._sash_anim_job = self.root.after(step_interval, _step)
 
         _step()
+
+    def apply_proper_sash_positions(self):
+        """Ensure the 3-column workspace sashes are positioned with academic precision upon opening."""
+        if not hasattr(self, "panes") or not self.panes.winfo_exists():
+            return
+
+        total_w = self.panes.winfo_width()
+        if total_w <= 100:
+            self.root.update_idletasks()
+            total_w = self.panes.winfo_width()
+        if total_w <= 100:
+            total_w = self.root.winfo_width()
+        if total_w <= 100:
+            total_w = self.root.winfo_screenwidth()
+
+        prefs = config.load_prefs() or {}
+        active_panes = self.panes.panes()
+
+        # 1. Left pane (specimen directory)
+        is_pinned = getattr(self, "left_pinned", None) and self.left_pinned.get()
+        if not is_pinned:
+            sash0 = sc(config.RAIL_THEME.get("rail_width", 40))
+        else:
+            saved_sidebar = prefs.get("sidebar_width", 350)
+            sash0 = sc(saved_sidebar)
+            sash0 = max(sc(280), min(sash0, int(total_w * 0.35)))
+
+        if len(active_panes) >= 2:
+            try:
+                self.panes.sashpos(0, sash0)
+            except Exception:
+                pass
+
+        # 2. Right pane (registration / audit)
+        show_reg = getattr(self, "show_reg_var", None) and self.show_reg_var.get()
+        if show_reg and len(active_panes) >= 3 and str(self.reg_outer) in active_panes:
+            saved_right = prefs.get("right_panel_width", 420)
+            right_w = sc(saved_right)
+            right_w = max(sc(360), min(right_w, int(total_w * 0.40)))
+            sash1 = total_w - right_w
+            sash1 = max(sash0 + sc(320), sash1)
+            try:
+                self.panes.sashpos(1, sash1)
+            except Exception:
+                pass
 
     def handle_ctrl_o(self, event=None):
         return self.toggle_left_pin(event)
@@ -3171,7 +3252,7 @@ class ObjectProgramUI(
     def toggle_list_panel(self):
         if self.show_list_var.get():
             if str(self.left_frame) not in self.panes.panes():
-                self.panes.insert(0, self.left_frame, weight=1)
+                self.panes.insert(0, self.left_frame, weight=0)
         else:
             if str(self.left_frame) in self.panes.panes():
                 self.panes.forget(self.left_frame)
@@ -3481,7 +3562,7 @@ class ObjectProgramUI(
 
         middle = ttk.Frame(panes, style="MiddlePane.TFrame")
         self.middle_frame = middle
-        panes.add(middle, weight=3)
+        panes.add(middle, weight=1)
 
         # Contextual Action Strip for Active Specimen (Item B)
         from ui.object_context_bar import ObjectContextBar
@@ -3519,7 +3600,7 @@ class ObjectProgramUI(
         # Right (Scrollable registration area)
         reg_outer = ttk.Frame(panes, style="RightPane.TFrame")
         self.reg_outer = reg_outer
-        panes.add(reg_outer, weight=3)
+        panes.add(reg_outer, weight=0)
 
         # Create self.right_panes vertical paned window inside reg_outer
         self.right_panes = ttk.Panedwindow(reg_outer, orient="vertical")
@@ -4396,10 +4477,8 @@ class ObjectProgramUI(
                 else:
                     self._has_suggestions_set.discard(oid)
 
-                if hasattr(self, "_history_cache"):
-                    keys_to_remove = [k for k in self._history_cache if k[0] == oid]
-                    for k in keys_to_remove:
-                        self._history_cache.pop(k, None)
+                if hasattr(self, "invalidate_history_cache"):
+                    self.invalidate_history_cache(oid)
 
         
 
@@ -4954,21 +5033,25 @@ class ObjectProgramUI(
                 self._is_navigating = True
                 self.commit_current_object()
 
+            # Immediate lightweight context update for 0ms feedback during rapid stepping
+            if hasattr(self, "object_context_bar") and self.object_context_bar.winfo_exists():
+                self.object_context_bar.update_specimen(oid)
+
             if self._nav_idle_job:
                 try:
                     self.root.after_cancel(self._nav_idle_job)
                 except Exception:
                     pass
-            self._nav_idle_job = self.root.after(15, self._navigation_finished)
+            self._nav_idle_job = self.root.after(50, self._navigation_finished)
             
-            # Fast selection load (15ms)
+            # Debounce heavy load_object (image canvas destruction, full form reload) until user pauses
             if hasattr(self, '_list_select_job') and self._list_select_job:
                 try:
                     self.root.after_cancel(self._list_select_job)
                 except Exception:
                     pass
                 
-            self._list_select_job = self.root.after(15, lambda: self._deferred_list_select(oid))
+            self._list_select_job = self.root.after(50, lambda: self._deferred_list_select(oid))
 
     def _deferred_list_select(self, oid):
         self._list_select_job = None
@@ -5232,11 +5315,58 @@ class ObjectProgramUI(
             if not is_in_search and not is_in_listbox:
                 self.reg_entry_list[0].focus_set()
 
+    def _jump_to_next_problem_specimen(self, direction=1):
+        """Ergonomic curatorial shortcut: jumps to next/previous record with active issues or unreviewed state."""
+        if not self.app.active_object_ids:
+            return "break"
+        curr_oid = self.app.current_object_id
+        try:
+            curr_idx = self.app.active_object_ids.index(curr_oid)
+        except (ValueError, TypeError):
+            curr_idx = 0
+
+        n = len(self.app.active_object_ids)
+        step = 1 if direction > 0 else -1
+        target_idx = None
+
+        for offset in range(1, n):
+            check_idx = (curr_idx + offset * step) % n
+            check_oid = self.app.active_object_ids[check_idx]
+
+            is_reviewed = False
+            if hasattr(self, "_cached_reviewed_dict") and self._cached_reviewed_dict:
+                is_reviewed = bool(self._cached_reviewed_dict.get(check_oid, False))
+
+            has_prob = False
+            if hasattr(self, "_get_cached_problem"):
+                has_prob = self._get_cached_problem(check_oid)
+            elif hasattr(self, "_problem_cache"):
+                has_prob = self._problem_cache.get(check_oid, False)
+
+            has_history = False
+            if hasattr(self, "_problems_have_history"):
+                has_history = self._problems_have_history(check_oid)
+
+            if has_prob or has_history or not is_reviewed:
+                target_idx = check_idx
+                break
+
+        if target_idx is not None:
+            self.object_list.selection_clear(0, tk.END)
+            self.object_list.selection_set(target_idx)
+            self.object_list.see(target_idx)
+            self.object_list.activate(target_idx)
+            self.object_list.event_generate("<<ListboxSelect>>")
+        return "break"
+
     def load_object(self, oid, is_history_nav=False, skip_commit=False):
         payload = self._extract_object_payload(oid)
         payload["is_history_nav"] = is_history_nav
         payload["skip_commit"] = skip_commit
         self._render_object_payload(payload)
+        from ui.state import app_bus, OBJECT_LOADED
+        if app_bus:
+            app_bus.publish(OBJECT_LOADED, oid)
         
 
 
@@ -7933,17 +8063,20 @@ class ObjectProgramUI(
         oid = self.app.current_object_id
         padx_val = sc(20)
         pady_val = sc(10)
+        is_dark = getattr(self, "dark_mode_active", False)
 
         if not oid:
+            dis_bg = "#181c19" if is_dark else "#f2f5f1"
+            dis_fg = "#5e5e5e" if is_dark else "gray"
             self.reviewed_button.config(
                 text="✓ Mark as Reviewed",
                 state="disabled",
-                activebackground="#f2f5f1",
-                activeforeground="gray",
-                highlightbackground="gray",
+                activebackground=dis_bg,
+                activeforeground=dis_fg,
+                highlightbackground=dis_fg,
                 padx=padx_val, pady=pady_val
             )
-            self._animate_reviewed_button("#f2f5f1", "gray")
+            self._animate_reviewed_button(dis_bg, dis_fg)
             return
 
         self.reviewed_button.config(state="normal")
@@ -7970,23 +8103,31 @@ class ObjectProgramUI(
                     time_str = reviewed_at[:5]
             
             btn_text = f"✓ REVIEWED – {time_str}" if time_str else "✓ REVIEWED"
+            rev_bg = "#1e3a24" if is_dark else "#ffffff"
+            rev_fg = "#85e89d" if is_dark else "#3a7d44"
+            rev_act = "#264a2e" if is_dark else "#f2f5f1"
+
             self.reviewed_button.config(
                 text=btn_text,
-                activebackground="#f2f5f1",
-                activeforeground="#3a7d44",
+                activebackground=rev_act,
+                activeforeground=rev_fg,
                 highlightbackground="#3a7d44",
                 padx=padx_val, pady=pady_val
             )
-            self._animate_reviewed_button("#ffffff", "#3a7d44")
+            self._animate_reviewed_button(rev_bg, rev_fg)
         else:
+            unrev_bg = "#2d5e35" if is_dark else "#3a7d44"
+            unrev_fg = "#ffffff"
+            unrev_act = "#3a7d44" if is_dark else "#2e5228"
+
             self.reviewed_button.config(
                 text="✓ MARK AS REVIEWED",
-                activebackground="#2e5228",
-                activeforeground="#ffffff",
+                activebackground=unrev_act,
+                activeforeground=unrev_fg,
                 highlightbackground="#3a7d44",
                 padx=padx_val, pady=pady_val
             )
-            self._animate_reviewed_button("#3a7d44", "#ffffff")
+            self._animate_reviewed_button(unrev_bg, unrev_fg)
 
     def _on_reviewed_btn_enter(self, event):
         if not self.app.current_object_id:
@@ -7997,10 +8138,11 @@ class ObjectProgramUI(
             except Exception:
                 pass
             self._btn_anim_id = None
+        is_dark = getattr(self, "dark_mode_active", False)
         if bool(self.reviewed_var.get()):
-            self.reviewed_button.config(bg="#f2f5f1")
+            self.reviewed_button.config(bg="#264a2e" if is_dark else "#f2f5f1")
         else:
-            self.reviewed_button.config(bg="#2e5228")
+            self.reviewed_button.config(bg="#3a7d44" if is_dark else "#2e5228")
 
     def _on_reviewed_btn_leave(self, event):
         if not self.app.current_object_id:
@@ -8011,10 +8153,11 @@ class ObjectProgramUI(
             except Exception:
                 pass
             self._btn_anim_id = None
+        is_dark = getattr(self, "dark_mode_active", False)
         if bool(self.reviewed_var.get()):
-            self.reviewed_button.config(bg="#ffffff")
+            self.reviewed_button.config(bg="#1e3a24" if is_dark else "#ffffff")
         else:
-            self.reviewed_button.config(bg="#3a7d44")
+            self.reviewed_button.config(bg="#2d5e35" if is_dark else "#3a7d44")
 
     def _on_reviewed_btn_press(self, event):
         if not self.app.current_object_id:
@@ -8394,7 +8537,7 @@ class ObjectProgramUI(
     def open_ignored_words_editor(self):
         self._open_unified("tools")
 
-    # ── Universal Command Palette (Ctrl+K), Toasts & DwC Export ───────────────
+    # ── Universal Command Palette (Ctrl+K) & Toast Notifications ───────────────
 
     def open_command_palette(self):
         """Open the universal Command Palette and quick switcher."""

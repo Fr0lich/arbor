@@ -19,3 +19,25 @@ This document catalogues all current features implemented in the **arbor** proje
 *   **Virtual Keyboard Bindings**: Binds shortcuts to space, arrow keys, and control modifiers for rapid editing without requiring a mouse.
 *   **Image viewer canvas**: Implements gallery layouts, rotation angles, dynamic URL patterns, and image zoom configurations.
 *   **Bulk Editor Window**: Allows users to search, query, and bulk update registration or location fields across multiple selected objects at once.
+*   **Collection Blueprint & Standard Database Creator (`ui/create_collection_dialog.py`)**: Visual 4-sheet preview (`Registration`, `Observation`, `Log`, `Unvalidated_source`) with interactive `[?] Details` expanders tailored for both beginners and experienced curators, 1-click standard creation with sample record (*Welwitschia mirabilis*), and 6-step customization wizard integration.
+*   **Dedicated 220-Specimen Demo Dataset (`data/demo_collection.xlsx`)**: 11% slice of the real botanical collection with live online Unimus photo URLs and verified reviews, launched via `[ 🌿 Explore Demo Project ]` in `StartupDialog`.
+*   **Detached High-Resolution Image Viewport (`ui/image_popup.py`)**: Detached canvas popup supporting double-buffered panning, mousewheel zoom tracking, and asynchronous chunked remote image streaming.
+*   **Ergonomic Specimen Directory (`ui/widgets.py`)**: Dual view modes (Compact 4-column Treeview vs. Detailed Virtual Cards) featuring single-badge category discipline (`[ TAX ]`, `[ PROV ]`, `[ BOX ]`, `[ IMG ]`, `[ REV+ERR ]`, `[ REV ]`, `[ UNREV ]`), bullet-separated inline metadata rows without geometry churn, and $O(1)$ targeted selection diffing (`last_highlighted ^ current_selected`).
+*   **Curatorial Command Strip (`ui/object_context_bar.py`)**: Sticky contextual summary bar with monospace ID pill, live specimen counter (`42 of 1,250`), botanical italic serif typography (*Lora* / *Georgia*), clickable category problem badges launching resolvers, reactive amber `● Unsaved` dot, and emoji-free archival action buttons.
+*   **Smooth Drawer Sashing & Problem Jumping (`ui/main_window.py`, `ui/keybindings.py`)**: 120ms cubic ease-out collapsible sidebar drawer with width persistence in `prefs.json`, rapid keyboard stepping with debounced media loading, and `Ctrl+Up` / `Ctrl+Down` problem jumper shortcuts.
+
+---
+
+## 3. Data Export & Standards
+*   **Filtered Subset Exporter (`export_filtered_list`)**: Exports active or filtered specimen datasets directly to local **Excel (`.xlsx`)** or **CSV (`.csv`)** spreadsheets. Sanitizes values and uses UTF-8 BOM encoding.
+*   **Decommissioned Features (DO NOT RESTORE)**:
+    *   **Darwin Core (DwC) Occurrence Exporter**: Permanently decommissioned and removed from Arbor. Standard data exchange formats are strictly Excel and CSV. Future AI agents must not re-introduce Darwin Core export files or menu entries.
+
+---
+
+## 4. Application Updates & Session Preservation
+*   **1-Click In-App Updating (`backend/updater.py`, `ui/update_dialog.py`)**: Seamless check and update mechanism querying GitHub Releases for new Arbor binaries.
+*   **Atomic Windows Executable Swap**: Solves the Windows NTFS running executable locking limitation by atomically renaming `arbor.exe` -> `arbor.old.{timestamp}.exe`, moving the staged update into place, and restarting.
+*   **Zero Work-Loss Session Preservation**: Automatically flushes active entry focus, triggers autosaves, captures the active workbook path and selected specimen ID into `~/.arbor/session_restore.json`, and relaunches with `--restore-session` to immediately resume the user's workspace without presenting the startup modal.
+*   **GitHub Outage & Migration Resilience**: Handles HTTP 301/307 redirects automatically when repositories are renamed or moved, classifies HTTP 404/403/timeouts cleanly, and provides an editable repository configuration in `UnifiedSettingsWindow` (Tools tab) and an interactive fallback dialog to change the target repository or open the browser.
+*   **Offline-First & Protected Directory Detection**: Detects read-only directories (`Program Files`) without admin privileges and falls back gracefully to standard browser downloads. Fails completely silently during regular curation when internet is unavailable.

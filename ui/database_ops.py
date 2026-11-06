@@ -330,16 +330,22 @@ class DatabaseOpsMixin:
         in_startup = (getattr(self, '_loading_window', None) is not None)
 
         if self.app.active_object_ids:
-            first_oid = self.app.active_object_ids[0]
+            restore_oid = getattr(self.app, "_restore_object_id", None)
+            target_oid = self.app.active_object_ids[0]
+            if restore_oid is not None:
+                if restore_oid in self.app.active_object_ids:
+                    target_oid = restore_oid
+                elif str(restore_oid).isdigit() and int(restore_oid) in self.app.active_object_ids:
+                    target_oid = int(restore_oid)
+                self.app._restore_object_id = None
+
             if in_startup:
-                # Startup path: load the first object NOW (synchronous w.r.t. the
+                # Startup path: load target object NOW (synchronous w.r.t. the
                 # event loop) so the window is fully populated before it appears.
-                # _startup_load_first_and_reveal will call _on_startup_ready() after
-                # load_object() finishes (or defer to build_image_index if scanning).
-                self.root.after(0, lambda oid=first_oid: self._startup_load_first_and_reveal(oid))
+                self.root.after(0, lambda oid=target_oid: self._startup_load_first_and_reveal(oid))
             else:
-                # Normal mid-session reload: use the standard event-based flow.
-                self.root.after(0, self._select_first_object)
+                # Normal mid-session reload or session restore:
+                self.root.after(0, lambda oid=target_oid: self.load_object(oid))
                 if not self.image_folder:
                     self.image_scan_progress.configure(value=100)
                     self._hide_progress("Ready")

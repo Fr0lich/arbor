@@ -831,6 +831,7 @@ class MobileServer:
         self._batch_lock = threading.Lock()
         self._batch_timer = None
         self.on_client_connect_callback = None
+        self.on_presence_callback = None
         self.presence = {}  # session_id -> {"oid": oid_str or None, "last_seen": timestamp}
         self.presence_lock = threading.Lock()
         self._setup_routes()
@@ -1099,6 +1100,11 @@ class MobileServer:
             if oid_str:
                 cnt = self._get_active_viewers_count(oid_str)
                 self.broadcast_event("presence_updated", {"oid": oid_str, "viewers_count": cnt})
+                if getattr(self, "on_presence_callback", None):
+                    try:
+                        self.on_presence_callback(oid_str)
+                    except Exception:
+                        pass
 
     def _remove_presence(self, session_id):
         """Remove a worker from presence tracking on disconnect."""
@@ -2299,7 +2305,9 @@ self.addEventListener('fetch', (event) => {
             if not is_auth:
                 return jsonify({"error": "Unauthorized"}), 401
 
-            data = request.get_json(silent=True) or {}
+            from backend.mobile_schemas import PresenceSchema
+            raw_data = request.get_json(silent=True) or {}
+            data = PresenceSchema().load(raw_data)
             raw_oid = data.get("oid")
             self._update_presence(sid, raw_oid)
             other_cnt = self._get_other_viewers_count(raw_oid, current_session_id=sid) if raw_oid else 0
@@ -2440,18 +2448,21 @@ self.addEventListener('fetch', (event) => {
             if not is_auth:
                 return jsonify({"error": "Unauthorized"}), 401
 
-            data = request.get_json(silent=True) or {}
-            oid = str(data.get('id') or data.get('oid') or '').strip()
+            from backend.mobile_schemas import ObjectUpdateSchema, ValidationError
+            raw_data = request.get_json(silent=True) or {}
+            try:
+                data = ObjectUpdateSchema().load(raw_data)
+            except ValidationError as err:
+                return jsonify({"error": f"Invalid update payload: {err.messages}"}), 400
+
+            oid = data.get('oid', '').strip()
             if not oid:
                 return jsonify({"error": "Missing object ID"}), 400
 
             reviewed = data.get('reviewed')
-            updates = data.get('observation') or data.get('updates') or {}
-            reg_updates = data.get('registration') or {}
+            updates = data.get('observation', {})
+            reg_updates = data.get('registration', {})
             unval_updates = data.get('unvalidated_sources')
-            if unval_updates is None:
-                unval_updates = data.get('unvalidated')
-
             client_timestamp = data.get('timestamp')
             with self.app_state.df_lock:
                 allowed_reg_cols, allowed_obs_cols = _get_allowed_columns(getattr(self.app_state, "config", None))
@@ -2790,9 +2801,15 @@ self.addEventListener('fetch', (event) => {
             if not is_auth:
                 return jsonify({"error": "Unauthorized"}), 401
 
-            data = request.get_json(silent=True) or {}
-            updates_list = data.get('updates')
-            if not updates_list or not isinstance(updates_list, list):
+            from backend.mobile_schemas import BatchUpdateSchema, ValidationError
+            raw_data = request.get_json(silent=True) or {}
+            try:
+                data = BatchUpdateSchema().load(raw_data)
+            except ValidationError as err:
+                return jsonify({"error": f"Invalid batch payload: {err.messages}"}), 400
+
+            updates_list = data.get('updates', [])
+            if not updates_list:
                 return jsonify({"error": "Missing or invalid 'updates' array"}), 400
 
             updated_ids = []
@@ -2804,17 +2821,15 @@ self.addEventListener('fetch', (event) => {
                 allowed_reg_cols, allowed_obs_cols = _get_allowed_columns(getattr(self.app_state, "config", None))
 
                 for update in updates_list:
-                    oid = str(update.get('id') or update.get('oid') or '').strip()
+                    oid = update.get('oid', '').strip()
                     if not oid:
                         continue
 
                     reviewed = update.get('reviewed')
-                    obs_updates = update.get('observation') or {}
-                    reg_updates = update.get('registration') or {}
+                    obs_updates = update.get('observation', {})
+                    reg_updates = update.get('registration', {})
                     client_timestamp = update.get('timestamp')
                     unval_updates = update.get('unvalidated_sources')
-                    if unval_updates is None:
-                        unval_updates = update.get('unvalidated')
 
                     _, err = _execute_record_update(
                         self.app_state, oid, reg_updates, obs_updates, reviewed,
@@ -2842,7 +2857,7 @@ self.addEventListener('fetch', (event) => {
             # Notify desktop UI
             if self.on_edit_callback:
                 try:
-                    self.on_edit_callback("BATCH", f"Batch updated {len(updated_ids)} records")
+                    self.on_edit_callback("BATCH", f"📥 Synced {len(updated_ids)} offline edits from mobile session")
                 except Exception:
                     pass
 
@@ -3499,6 +3514,34 @@ INDEX_TEMPLATE = """
         </header>
 
         <div class="p-4 space-y-4">
+          <!-- Tactile Haptic Feedback (Adjustable & Toggleable) -->
+          <div class="p-2.5 bg-stone-50 border border-bordercol rounded-[2px] space-y-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="block font-sans text-xs font-bold text-ink">Tactile Haptic Feedback</span>
+                <span class="block font-sans text-[10px] text-muted">Vibrate on steppers, toggles, and flags</span>
+              </div>
+              <input type="checkbox" id="settingEnableHaptics" onchange="toggleHapticsSetting(this.checked)" class="w-4 h-4 text-fern rounded border-bordercol focus:ring-fern">
+            </div>
+
+            <!-- Intensity Segmented Control & Test Button -->
+            <div id="hapticsIntensityContainer" class="pt-1.5 border-t border-stone-200/60 flex items-center justify-between gap-2">
+              <div class="flex items-center rounded border border-bordercol overflow-hidden text-[10px] font-sans">
+                <button type="button" onclick="setHapticsIntensity('light')" id="btnHapticLight" class="px-2 py-1 bg-surface text-ink hover:bg-stone-100 transition-all">Light</button>
+                <button type="button" onclick="setHapticsIntensity('medium')" id="btnHapticMedium" class="px-2 py-1 bg-fern text-white font-bold transition-all">Medium</button>
+                <button type="button" onclick="setHapticsIntensity('strong')" id="btnHapticStrong" class="px-2 py-1 bg-surface text-ink hover:bg-stone-100 transition-all">Strong</button>
+              </div>
+              <button type="button" onclick="testHapticFeedback()" class="px-2.5 py-1 text-[10px] font-mono font-semibold bg-stone-200/80 hover:bg-stone-300 text-stone-700 rounded active:scale-95 transition-all">
+                ⚡ Test
+              </button>
+            </div>
+
+            <!-- iOS Safari Fallback Note -->
+            <p id="hapticsUnsupportedNote" class="hidden text-[9.5px] font-mono text-amber-700 bg-amber-50 p-1 rounded">
+              ℹ️ Web Vibration API is not supported on iOS Safari.
+            </p>
+          </div>
+
           <div>
             <label class="block font-sans text-xs font-medium text-ink mb-1">Image URL Pattern Override</label>
             <input type="text" id="settingImageUrlPattern" placeholder="e.g. https://example.com/{id}.jpg" class="w-full bg-surface border border-bordercol rounded-[2px] px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern" />
@@ -3536,6 +3579,34 @@ INDEX_TEMPLATE = """
         </header>
 
         <div class="p-4 space-y-4">
+          <!-- Tactile Haptic Feedback (Adjustable & Toggleable) -->
+          <div class="p-2.5 bg-stone-50 border border-bordercol rounded-[2px] space-y-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="block font-sans text-xs font-bold text-ink">Tactile Haptic Feedback</span>
+                <span class="block font-sans text-[10px] text-muted">Vibrate on steppers, toggles, and flags</span>
+              </div>
+              <input type="checkbox" id="settingEnableHaptics" onchange="toggleHapticsSetting(this.checked)" class="w-4 h-4 text-fern rounded border-bordercol focus:ring-fern">
+            </div>
+
+            <!-- Intensity Segmented Control & Test Button -->
+            <div id="hapticsIntensityContainer" class="pt-1.5 border-t border-stone-200/60 flex items-center justify-between gap-2">
+              <div class="flex items-center rounded border border-bordercol overflow-hidden text-[10px] font-sans">
+                <button type="button" onclick="setHapticsIntensity('light')" id="btnHapticLight" class="px-2 py-1 bg-surface text-ink hover:bg-stone-100 transition-all">Light</button>
+                <button type="button" onclick="setHapticsIntensity('medium')" id="btnHapticMedium" class="px-2 py-1 bg-fern text-white font-bold transition-all">Medium</button>
+                <button type="button" onclick="setHapticsIntensity('strong')" id="btnHapticStrong" class="px-2 py-1 bg-surface text-ink hover:bg-stone-100 transition-all">Strong</button>
+              </div>
+              <button type="button" onclick="testHapticFeedback()" class="px-2.5 py-1 text-[10px] font-mono font-semibold bg-stone-200/80 hover:bg-stone-300 text-stone-700 rounded active:scale-95 transition-all">
+                ⚡ Test
+              </button>
+            </div>
+
+            <!-- iOS Safari Fallback Note -->
+            <p id="hapticsUnsupportedNote" class="hidden text-[9.5px] font-mono text-amber-700 bg-amber-50 p-1 rounded">
+              ℹ️ Web Vibration API is not supported on iOS Safari.
+            </p>
+          </div>
+
           <div>
             <h3 class="font-bold text-xs text-ink uppercase tracking-wider mb-2">Saved Presets</h3>
             <div id="presetSettingsList" class="max-h-48 overflow-y-auto space-y-1">
@@ -6467,8 +6538,84 @@ INDEX_TEMPLATE = """
       }
     }
 
+    // -------------------------------------------------------------
+    // TACTILE HAPTIC ENGINE (V1 PARITY)
+    // -------------------------------------------------------------
+    const HAPTIC_PROFILES = {
+      light: { stepper: 8, reviewed_on: [15, 25, 15], reviewed_off: 12, copy_prev: [10, 20, 10], discrepancy: [25, 25, 25], scan: 15 },
+      medium: { stepper: 15, reviewed_on: [25, 40, 25], reviewed_off: 20, copy_prev: [15, 30, 15], discrepancy: [45, 40, 45], scan: 30 },
+      strong: { stepper: 28, reviewed_on: [40, 60, 40], reviewed_off: 35, copy_prev: [25, 40, 25], discrepancy: [70, 50, 70], scan: 50 }
+    };
+
+    let v1HapticsEnabled = localStorage.getItem('arbor_haptics_enabled') !== 'false';
+    let v1HapticsIntensity = localStorage.getItem('arbor_haptics_intensity') || 'medium';
+
+    function triggerHaptic(actionType) {
+      if (!v1HapticsEnabled) return;
+      if (typeof navigator === 'undefined' || !('vibrate' in navigator)) return;
+      const intensity = v1HapticsIntensity || 'medium';
+      const pattern = HAPTIC_PROFILES[intensity]?.[actionType] || HAPTIC_PROFILES['medium']?.[actionType];
+      if (pattern) {
+        try { navigator.vibrate(pattern); } catch (e) {}
+      }
+    }
+
+    function toggleHapticsSetting(enabled) {
+      v1HapticsEnabled = !!enabled;
+      try { localStorage.setItem('arbor_haptics_enabled', v1HapticsEnabled ? 'true' : 'false'); } catch(e) {}
+      updateHapticsUI();
+    }
+
+    function setHapticsIntensity(intensity) {
+      if (!['light', 'medium', 'strong'].includes(intensity)) return;
+      v1HapticsIntensity = intensity;
+      try { localStorage.setItem('arbor_haptics_intensity', intensity); } catch(e) {}
+      updateHapticsUI();
+      triggerHaptic('stepper');
+    }
+
+    function testHapticFeedback() {
+      triggerHaptic('reviewed_on');
+    }
+
+    function updateHapticsUI() {
+      const toggle = document.getElementById('settingEnableHaptics');
+      if (toggle) toggle.checked = v1HapticsEnabled;
+
+      const container = document.getElementById('hapticsIntensityContainer');
+      if (container) {
+        if (v1HapticsEnabled) {
+          container.classList.remove('opacity-40', 'pointer-events-none');
+        } else {
+          container.classList.add('opacity-40', 'pointer-events-none');
+        }
+      }
+
+      const cur = v1HapticsIntensity || 'medium';
+      ['light', 'medium', 'strong'].forEach(lvl => {
+        const btn = document.getElementById('btnHaptic' + lvl.charAt(0).toUpperCase() + lvl.slice(1));
+        if (btn) {
+          if (lvl === cur) {
+            btn.className = 'px-2 py-1 bg-fern text-white font-bold transition-all';
+          } else {
+            btn.className = 'px-2 py-1 bg-surface text-ink hover:bg-stone-100 transition-all';
+          }
+        }
+      });
+
+      const note = document.getElementById('hapticsUnsupportedNote');
+      if (note) {
+        if (typeof navigator !== 'undefined' && !('vibrate' in navigator)) {
+          note.classList.remove('hidden');
+        } else {
+          note.classList.add('hidden');
+        }
+      }
+    }
+
     async function openSettingsModal() {
       openModal('settingsModal');
+      updateHapticsUI();
       const input = document.getElementById('settingImageUrlPattern');
       try {
         const res = await apiFetch('/api/settings');
@@ -7342,7 +7489,7 @@ INDEX_TEMPLATE_V2 = """
     <div id="offlineBanner" class="hidden bg-ember-light border-b border-ember-border px-4 py-2 flex items-center justify-between gap-2 text-xs font-sans font-medium text-ember-dark shrink-0 z-50">
       <div class="flex items-center gap-2">
         <span class="text-sm">⚠</span>
-        <span>Host disconnected. Reconnecting...</span>
+        <span id="offlineBannerText">Host disconnected. Reconnecting...</span>
       </div>
       <button type="button" onclick="setupEventSource()" class="min-h-[30px] px-2.5 py-1 bg-ember text-white rounded font-bold text-[11px] tap-active">
         Retry
@@ -7983,10 +8130,62 @@ INDEX_TEMPLATE_V2 = """
             <input type="checkbox" id="settingShowFilterPills" onchange="toggleFilterPillsSetting(this.checked)" class="w-4 h-4 text-fern rounded border-bordercol focus:ring-fern">
           </div>
 
+          <!-- Tactile Haptic Feedback (Adjustable & Toggleable) -->
+          <div class="p-2.5 bg-stone-50 border border-bordercol rounded space-y-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="block font-sans text-xs font-bold text-ink">Tactile Haptic Feedback</span>
+                <span class="block font-sans text-[10px] text-muted">Vibrate on steppers, toggles, and flags</span>
+              </div>
+              <input type="checkbox" id="settingEnableHaptics" onchange="toggleHapticsSetting(this.checked)" class="w-4 h-4 text-fern rounded border-bordercol focus:ring-fern">
+            </div>
+
+            <!-- Intensity Segmented Control & Test Button -->
+            <div id="hapticsIntensityContainer" class="pt-1.5 border-t border-stone-200/60 flex items-center justify-between gap-2">
+              <div class="flex items-center rounded border border-bordercol overflow-hidden text-[10px] font-sans">
+                <button type="button" onclick="setHapticsIntensity('light')" id="btnHapticLight" class="px-2 py-1 bg-surface text-ink hover:bg-stone-100 transition-all">Light</button>
+                <button type="button" onclick="setHapticsIntensity('medium')" id="btnHapticMedium" class="px-2 py-1 bg-fern text-white font-bold transition-all">Medium</button>
+                <button type="button" onclick="setHapticsIntensity('strong')" id="btnHapticStrong" class="px-2 py-1 bg-surface text-ink hover:bg-stone-100 transition-all">Strong</button>
+              </div>
+              <button type="button" onclick="testHapticFeedback()" class="px-2.5 py-1 text-[10px] font-mono font-semibold bg-stone-200/80 hover:bg-stone-300 text-stone-700 rounded active:scale-95 transition-all">
+                ⚡ Test
+              </button>
+            </div>
+
+            <!-- iOS Safari Fallback Note -->
+            <p id="hapticsUnsupportedNote" class="hidden text-[9.5px] font-mono text-amber-700 bg-amber-50 p-1 rounded">
+              ℹ️ Web Vibration API is not supported on iOS Safari.
+            </p>
+          </div>
+
           <div>
             <label class="block font-sans text-xs font-medium text-ink mb-1">Image URL Pattern Override</label>
             <input type="text" id="settingImageUrlPattern" placeholder="e.g. https://example.com/{id}.jpg" class="w-full bg-surface border border-bordercol rounded px-2.5 py-1.5 text-xs text-ink outline-none focus:border-fern">
             <p class="text-[10px] text-ink-muted mt-1">Available tokens: {id}, {num}, {num:04d}, {suffix}.</p>
+          </div>
+
+          <!-- ICEDIG Botanical Missing Data Standards Reference -->
+          <div class="p-2.5 bg-stone-50 border border-bordercol rounded space-y-1.5">
+            <span class="block font-sans text-xs font-bold text-ink">🌿 ICEDIG Missing Data Standards</span>
+            <p class="font-sans text-[10px] text-muted">Use standard markers when label info is missing or obscure:</p>
+            <div class="space-y-1 font-mono text-[10px]">
+              <div class="flex justify-between items-center py-0.5 border-b border-stone-200/60">
+                <span class="text-fern font-bold">unknown:missing</span>
+                <span class="text-ink-muted text-[9.5px]">Omitted on label</span>
+              </div>
+              <div class="flex justify-between items-center py-0.5 border-b border-stone-200/60">
+                <span class="text-fern font-bold">unknown:indecipherable</span>
+                <span class="text-ink-muted text-[9.5px]">Illegible / damaged</span>
+              </div>
+              <div class="flex justify-between items-center py-0.5 border-b border-stone-200/60">
+                <span class="text-fern font-bold">unknown:undigitized</span>
+                <span class="text-ink-muted text-[9.5px]">Skipped during digitizing</span>
+              </div>
+              <div class="flex justify-between items-center py-0.5">
+                <span class="text-fern font-bold">withheld</span>
+                <span class="text-ink-muted text-[9.5px]">Conservation / legal</span>
+              </div>
+            </div>
           </div>
 
           <div class="pt-2 border-t border-tonal2 flex justify-end gap-2">
@@ -8187,6 +8386,8 @@ INDEX_TEMPLATE_V2 = """
       searchQuery: '',
       isReviewed: false,
       showFilterPills: false,
+      hapticsEnabled: localStorage.getItem('arbor_haptics_enabled') !== 'false',
+      hapticsIntensity: localStorage.getItem('arbor_haptics_intensity') || 'medium',
       lastSavedLocation: {
         building: '',
         floor: '',
@@ -8233,6 +8434,170 @@ INDEX_TEMPLATE_V2 = """
       if (savedLastLoc) state.lastSavedLocation = JSON.parse(savedLastLoc);
     } catch(e) {}
 
+    // -------------------------------------------------------------
+    // INDEXEDDB OFFLINE MUTATION QUEUE & CACHE
+    // -------------------------------------------------------------
+    let db;
+    function initIndexedDB() {
+      return new Promise((resolve) => {
+        if (!window.indexedDB) return resolve();
+        try {
+          const req = indexedDB.open('arbor_offline_db', 3);
+          req.onupgradeneeded = (e) => {
+            const dbInstance = e.target.result;
+            if (!dbInstance.objectStoreNames.contains('queued_mutations')) {
+              dbInstance.createObjectStore('queued_mutations', { keyPath: 'timestamp' });
+            }
+            if (!dbInstance.objectStoreNames.contains('api_cache')) {
+              dbInstance.createObjectStore('api_cache', { keyPath: 'url' });
+            }
+            if (!dbInstance.objectStoreNames.contains('historical_cache')) {
+              dbInstance.createObjectStore('historical_cache', { keyPath: 'oid' });
+            }
+          };
+          req.onsuccess = (e) => {
+            db = e.target.result;
+            updateOfflineBannerQueueCount();
+            resolve();
+          };
+          req.onerror = () => {
+            console.warn('IndexedDB unavailable');
+            resolve();
+          };
+        } catch(e) {
+          resolve();
+        }
+      });
+    }
+
+    function cacheApiResponse(url, data) {
+      if (!db || !data) return;
+      try {
+        const tx = db.transaction('api_cache', 'readwrite');
+        tx.objectStore('api_cache').put({ url, data });
+      } catch(e) {}
+    }
+
+    function getCachedApiResponse(url) {
+      return new Promise((resolve) => {
+        if (!db) return resolve(null);
+        try {
+          const tx = db.transaction('api_cache', 'readonly');
+          const req = tx.objectStore('api_cache').get(url);
+          req.onsuccess = () => resolve(req.result ? req.result.data : null);
+          req.onerror = () => resolve(null);
+        } catch(e) {
+          resolve(null);
+        }
+      });
+    }
+
+    function queueMutation(payload) {
+      if (!db || !payload) return;
+      try {
+        const tx = db.transaction('queued_mutations', 'readwrite');
+        tx.objectStore('queued_mutations').put(payload);
+        tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
+      } catch(e) {
+        console.error('Failed to queue mutation', e);
+      }
+    }
+
+    function getQueuedMutations() {
+      return new Promise((resolve) => {
+        if (!db) return resolve([]);
+        try {
+          const tx = db.transaction('queued_mutations', 'readonly');
+          const req = tx.objectStore('queued_mutations').getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => resolve([]);
+        } catch(e) {
+          resolve([]);
+        }
+      });
+    }
+
+    function clearQueuedMutations(timestamps) {
+      if (!db) return;
+      try {
+        const tx = db.transaction('queued_mutations', 'readwrite');
+        const store = tx.objectStore('queued_mutations');
+        if (timestamps && timestamps.length > 0) {
+          timestamps.forEach(ts => store.delete(ts));
+        } else {
+          store.clear();
+        }
+        tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
+      } catch(e) {}
+    }
+
+    function updateOfflineBannerQueueCount() {
+      if (!db) return;
+      try {
+        const tx = db.transaction('queued_mutations', 'readonly');
+        const req = tx.objectStore('queued_mutations').count();
+        req.onsuccess = () => {
+          const count = req.result || 0;
+          const banner = document.getElementById('offlineBanner');
+          const bannerText = document.getElementById('offlineBannerText');
+          if (!banner) return;
+          if (count > 0) {
+            banner.classList.remove('hidden');
+            if (bannerText) {
+              bannerText.textContent = `⚠️ Offline — ${count} edit${count > 1 ? 's' : ''} queued on device`;
+            }
+          } else if (navigator.onLine && eventSource && eventSource.readyState === EventSource.OPEN) {
+            banner.classList.add('hidden');
+          } else {
+            banner.classList.remove('hidden');
+            if (bannerText) {
+              bannerText.textContent = 'Host disconnected. Reconnecting...';
+            }
+          }
+        };
+      } catch(e) {}
+    }
+
+    let isFlushingMutations = false;
+    async function flushQueuedMutations() {
+      if (isFlushingMutations) return;
+      const mutations = await getQueuedMutations();
+      if (!mutations || mutations.length === 0) {
+        updateOfflineBannerQueueCount();
+        return;
+      }
+      isFlushingMutations = true;
+      mutations.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      const banner = document.getElementById('offlineBanner');
+      const bannerText = document.getElementById('offlineBannerText');
+      if (bannerText) {
+        bannerText.textContent = `🔄 Connected — Syncing ${mutations.length} queued edit${mutations.length > 1 ? 's' : ''}...`;
+      }
+      if (banner) banner.classList.remove('hidden');
+
+      try {
+        const res = await apiFetch('/api/batch_update', {
+          method: 'POST',
+          body: { updates: mutations }
+        });
+        if (res && (res.success || res.updated_count !== undefined)) {
+          clearQueuedMutations(mutations.map(m => m.timestamp));
+          showToast(`✓ Synced ${mutations.length} offline edits to workstation`);
+          if (banner) banner.classList.add('hidden');
+          fetchObjects(false);
+          if (state.currentOid) {
+            fetchObjectDetail(state.currentOid, false);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to flush queued mutations:', err);
+        updateOfflineBannerQueueCount();
+      } finally {
+        isFlushingMutations = false;
+      }
+    }
+
     // API Helper
     async function apiFetch(url, options = {}) {
       options.headers = options.headers || {};
@@ -8241,12 +8606,31 @@ INDEX_TEMPLATE_V2 = """
         options.headers['Content-Type'] = 'application/json';
         options.body = JSON.stringify(options.body);
       }
-      const res = await fetch(url, options);
-      if (res.status === 401) {
-        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
-        return null;
+      const isCacheable = options.method !== 'POST' && (url.startsWith('/api/schema') || url.startsWith('/api/objects') || url.startsWith('/api/object/'));
+      try {
+        const res = await fetch(url, options);
+        if (res.status === 401) {
+          window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
+          return null;
+        }
+        let data = null;
+        try {
+          data = await res.json();
+        } catch(jsonErr) {
+          data = null;
+        }
+        if (isCacheable && data) {
+          cacheApiResponse(url, data);
+        }
+        return data;
+      } catch(err) {
+        console.warn(`Fetch error on ${url}:`, err);
+        if (isCacheable) {
+          const cached = await getCachedApiResponse(url);
+          if (cached) return cached;
+        }
+        throw err;
       }
-      return res.json();
     }
 
     function showToast(msg, options = null) {
@@ -8298,10 +8682,19 @@ INDEX_TEMPLATE_V2 = """
     // INITIALIZATION & SSE CONNECTION
     // -------------------------------------------------------------
     async function init() {
+      await initIndexedDB();
       applyFilterPillVisibility();
       await fetchSchema();
       await fetchObjects();
       setupEventSource();
+      flushQueuedMutations();
+      window.addEventListener('online', () => {
+        setupEventSource();
+        flushQueuedMutations();
+      });
+      window.addEventListener('offline', () => {
+        updateOfflineBannerQueueCount();
+      });
       if (state.isWalkModeWanted) {
         acquireWakeLock(true);
       } else {
@@ -8328,10 +8721,10 @@ INDEX_TEMPLATE_V2 = """
       const sseUrl = '/api/events' + (TOKEN ? '?token=' + encodeURIComponent(TOKEN) : '');
       eventSource = new EventSource(sseUrl);
       eventSource.onopen = () => {
-        document.getElementById('offlineBanner')?.classList.add('hidden');
+        flushQueuedMutations();
       };
       eventSource.onerror = () => {
-        document.getElementById('offlineBanner')?.classList.remove('hidden');
+        updateOfflineBannerQueueCount();
       };
       eventSource.onmessage = (e) => {
         try {
@@ -8581,12 +8974,14 @@ INDEX_TEMPLATE_V2 = """
     // SCREEN 2: SPECIMEN DETAIL VIEW LOGIC
     // -------------------------------------------------------------
     async function openDetailView(oid) {
+      forceSaveImmediate();
       state.currentOid = String(oid);
       showDetailView();
       await fetchObjectDetail(oid);
     }
 
     function showListView() {
+      forceSaveImmediate();
       document.getElementById('listView').classList.remove('hidden');
       document.getElementById('detailView').classList.add('hidden');
       document.getElementById('batchLocationView').classList.add('hidden');
@@ -8747,6 +9142,7 @@ INDEX_TEMPLATE_V2 = """
       renderCoordinateSteppers(obs);
       updateDetailLocBreadcrumbs(obs);
       triggerAutoSave();
+      triggerHaptic('stepper');
     }
 
     function handleDirectCoordinateBlur(coord, input) {
@@ -8797,6 +9193,7 @@ INDEX_TEMPLATE_V2 = """
       renderCoordinateSteppers(obs);
       updateDetailLocBreadcrumbs(obs);
       triggerAutoSave();
+      triggerHaptic('stepper');
     }
 
     function populateDetailBuildingOptions(currentBldg) {
@@ -8974,6 +9371,7 @@ INDEX_TEMPLATE_V2 = """
       renderDetailStoredAsPills(obs['Stored as']);
       updateDetailLocBreadcrumbs(obs);
       triggerAutoSave();
+      triggerHaptic('copy_prev');
       showToast('📋 Copied coordinates from previous specimen');
     }
 
@@ -9015,6 +9413,7 @@ INDEX_TEMPLATE_V2 = """
 
     function toggleReviewed() {
       state.isReviewed = !state.isReviewed;
+      triggerHaptic(state.isReviewed ? 'reviewed_on' : 'reviewed_off');
       if (state.currentRecord) {
         state.currentRecord.observation = state.currentRecord.observation || {};
         state.currentRecord.observation.Reviewed = state.isReviewed;
@@ -10013,7 +10412,18 @@ INDEX_TEMPLATE_V2 = """
           showToast('Batch commit error');
         }
       } catch(err) {
-        showToast('Failed to commit batch location');
+        console.warn('Batch location network error, queuing offline:', err);
+        state.batchQueue.forEach(i => {
+          queueMutation({
+            id: i.oid,
+            observation: i.targetLocation,
+            timestamp: payload.timestamp
+          });
+        });
+        showToast(`💾 Queued ${state.batchQueue.length} batch locations for offline sync`);
+        state.batchQueue = [];
+        saveBatchQueueToStorage();
+        renderBatchQueue();
       }
     }
 
@@ -10027,6 +10437,13 @@ INDEX_TEMPLATE_V2 = """
     function triggerAutoSave() {
       clearTimeout(autoSaveTimer);
       autoSaveTimer = setTimeout(saveRecord, 800);
+    }
+
+    function forceSaveImmediate() {
+      if (dirtyFields.size > 0) {
+        clearTimeout(autoSaveTimer);
+        saveRecord();
+      }
     }
 
     async function saveRecord() {
@@ -10061,10 +10478,16 @@ INDEX_TEMPLATE_V2 = """
           showToast('✓ Saved & synchronized');
         } else if (res && res.error) {
           showToast(`⚠️ Sync failed: ${res.error}`);
+        } else {
+          queueMutation(payload);
+          dirtyFields.clear();
+          showToast('💾 Saved offline (queued for sync)');
         }
       } catch(err) {
-        console.error('Save error:', err);
-        showToast('⚠️ Network error saving record');
+        console.warn('Network save error, queuing offline:', err);
+        queueMutation(payload);
+        dirtyFields.clear();
+        showToast('💾 Saved offline (queued for sync)');
       } finally {
         isSaving = false;
       }
@@ -10099,6 +10522,7 @@ INDEX_TEMPLATE_V2 = """
 
     function openSettingsModal() {
       document.getElementById('settingShowFilterPills').checked = state.showFilterPills;
+      updateHapticsUI();
       openModal('settingsModal');
     }
 
@@ -10215,8 +10639,128 @@ INDEX_TEMPLATE_V2 = """
 
       closeModal('addDiscrepancyModal');
       triggerAutoSave();
+      triggerHaptic('discrepancy');
       renderDetailView(false);
       showToast('⚑ Issue flagged');
+    }
+
+    // -------------------------------------------------------------
+    // ACCIDENTAL UNLOAD & LIFECYCLE GUARDS
+    // -------------------------------------------------------------
+    window.addEventListener('beforeunload', (e) => {
+      const hasQueued = (typeof queuedMutations !== 'undefined' && queuedMutations.length > 0);
+      if (dirtyFields.size > 0 || hasQueued) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      if (dirtyFields.size > 0) {
+        forceSaveImmediate();
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && dirtyFields.size > 0) {
+        forceSaveImmediate();
+      }
+    });
+
+    // -------------------------------------------------------------
+    // TACTILE HAPTIC ENGINE (ADJUSTABLE & TOGGLEABLE)
+    // -------------------------------------------------------------
+    const HAPTIC_PROFILES = {
+      light: {
+        stepper: 8,
+        reviewed_on: [15, 25, 15],
+        reviewed_off: 12,
+        copy_prev: [10, 20, 10],
+        discrepancy: [25, 25, 25],
+        scan: 15
+      },
+      medium: {
+        stepper: 15,
+        reviewed_on: [25, 40, 25],
+        reviewed_off: 20,
+        copy_prev: [15, 30, 15],
+        discrepancy: [45, 40, 45],
+        scan: 30
+      },
+      strong: {
+        stepper: 28,
+        reviewed_on: [40, 60, 40],
+        reviewed_off: 35,
+        copy_prev: [25, 40, 25],
+        discrepancy: [70, 50, 70],
+        scan: 50
+      }
+    };
+
+    function triggerHaptic(actionType) {
+      if (!state.hapticsEnabled) return;
+      if (typeof navigator === 'undefined' || !('vibrate' in navigator)) return;
+      const intensity = state.hapticsIntensity || 'medium';
+      const pattern = HAPTIC_PROFILES[intensity]?.[actionType] || HAPTIC_PROFILES['medium']?.[actionType];
+      if (pattern) {
+        try {
+          navigator.vibrate(pattern);
+        } catch (e) {}
+      }
+    }
+
+    function toggleHapticsSetting(enabled) {
+      state.hapticsEnabled = !!enabled;
+      try { localStorage.setItem('arbor_haptics_enabled', state.hapticsEnabled ? 'true' : 'false'); } catch(e) {}
+      updateHapticsUI();
+    }
+
+    function setHapticsIntensity(intensity) {
+      if (!['light', 'medium', 'strong'].includes(intensity)) return;
+      state.hapticsIntensity = intensity;
+      try { localStorage.setItem('arbor_haptics_intensity', intensity); } catch(e) {}
+      updateHapticsUI();
+      triggerHaptic('stepper');
+    }
+
+    function testHapticFeedback() {
+      triggerHaptic('reviewed_on');
+    }
+
+    function updateHapticsUI() {
+      const toggle = document.getElementById('settingEnableHaptics');
+      if (toggle) toggle.checked = state.hapticsEnabled;
+
+      const container = document.getElementById('hapticsIntensityContainer');
+      if (container) {
+        if (state.hapticsEnabled) {
+          container.classList.remove('opacity-40', 'pointer-events-none');
+        } else {
+          container.classList.add('opacity-40', 'pointer-events-none');
+        }
+      }
+
+      const cur = state.hapticsIntensity || 'medium';
+      ['light', 'medium', 'strong'].forEach(lvl => {
+        const btn = document.getElementById('btnHaptic' + lvl.charAt(0).toUpperCase() + lvl.slice(1));
+        if (btn) {
+          if (lvl === cur) {
+            btn.className = 'px-2 py-1 bg-fern text-white font-bold transition-all';
+          } else {
+            btn.className = 'px-2 py-1 bg-surface text-ink hover:bg-stone-100 transition-all';
+          }
+        }
+      });
+
+      const note = document.getElementById('hapticsUnsupportedNote');
+      if (note) {
+        if (typeof navigator !== 'undefined' && !('vibrate' in navigator)) {
+          note.classList.remove('hidden');
+        } else {
+          note.classList.add('hidden');
+        }
+      }
     }
 
     // Start App

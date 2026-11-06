@@ -397,10 +397,8 @@ class AddObjectsWizard:
         self.form_canvas.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
-        def _on_form_scroll(event):
-            self.form_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        self.form_canvas.bind("<Enter>", lambda e: self.form_canvas.bind_all("<MouseWheel>", _on_form_scroll))
-        self.form_canvas.bind("<Leave>", lambda e: self.form_canvas.unbind_all("<MouseWheel>"))
+        from ui.scroll_helper import bind_mousewheel
+        bind_mousewheel(self.form_canvas, self.inner_form)
 
         # Build Fields based on config
         self.field_vars = {}

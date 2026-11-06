@@ -22,11 +22,12 @@ class ActionRail:
         is_pinned = getattr(app, "left_pinned", None) and app.left_pinned.get()
         bg_color = config.RAIL_THEME.get("icon_hover_bg", "#e9ece5") if is_pinned else config.RAIL_THEME.get("rail_bg", "#fbfaf8")
 
+        btn_text = "◀" if is_pinned else "▶"
         app.pin_btn = tk.Button(
-            rail, text="📌",
-            font=("Segoe UI Symbol", sc(11)),
+            rail, text=btn_text,
+            font=("Segoe UI", sc(10), "bold"),
             bg=bg_color,
-            fg=config.RAIL_THEME.get("icon_active_fg", "#000000"),
+            fg=config.RAIL_THEME.get("icon_active_fg", "#2c302e"),
             activebackground=config.RAIL_THEME.get("icon_hover_bg", "#e9ece5"),
             bd=0, relief="flat", cursor="hand2",
             command=app.toggle_left_pin

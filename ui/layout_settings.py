@@ -216,10 +216,8 @@ class LayoutSettingsMixin:
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
 
-        def _on_mousewheel(e):
-            if canvas.winfo_exists():
-                canvas.yview_scroll(int(-1*(e.delta/120)), "units")
-        self._wheel_bind_id = win.bind_all("<MouseWheel>", _on_mousewheel)
+        from ui.scroll_helper import bind_mousewheel
+        bind_mousewheel(canvas, scrollable_frame)
 
         self._layout_canvas = canvas
 
@@ -327,10 +325,6 @@ class LayoutSettingsMixin:
         btn_row.pack(fill="x", side="bottom")
 
         def _close_layout_win():
-            try:
-                win.unbind_all("<MouseWheel>")
-            except Exception:
-                pass
             win.destroy()
 
         win.protocol("WM_DELETE_WINDOW", _close_layout_win)
@@ -636,7 +630,7 @@ class LayoutSettingsMixin:
             nav_active_fg = "#e8ebe9"
             statusbar_bg = "#141715"
             statusbar_fg = "#e8ebe9"
-            reviewed_fg = "#3a7d44"   # green (dark mode)
+            reviewed_fg = "#b0f3a9"   # vibrant green with WCAG AA contrast (dark mode)
             problem_fg  = "#c93a40"   # red (dark mode)
 
             style.configure(".", background=bg_color, foreground=fg_color, bordercolor=border_color)
@@ -1122,6 +1116,73 @@ class LayoutSettingsMixin:
         if hasattr(self, "image_panel") and hasattr(self.image_panel, "set_dark_mode"):
             try:
                 self.image_panel.set_dark_mode(self.dark_mode_active)
+            except Exception:
+                pass
+
+        if hasattr(self, "object_context_bar") and hasattr(self.object_context_bar, "set_dark_mode"):
+            try:
+                self.object_context_bar.set_dark_mode(self.dark_mode_active)
+            except Exception:
+                pass
+
+        # Navigation Bar theme refresh
+        nav_bg = "#141715" if self.dark_mode_active else "#e9ece5"
+        nav_border = "#313244" if self.dark_mode_active else "#8b948d"
+        nav_fg = "#e8ebe9" if self.dark_mode_active else "#000000"
+        if hasattr(self, "nav_bar") and self.nav_bar.winfo_exists():
+            try:
+                self.nav_bar.configure(bg=nav_bg, highlightbackground=nav_border, highlightcolor=nav_border)
+            except Exception:
+                pass
+        if hasattr(self, "nav_title_lbl") and self.nav_title_lbl.winfo_exists():
+            try:
+                self.nav_title_lbl.configure(bg=nav_bg, fg=nav_fg)
+            except Exception:
+                pass
+        if hasattr(self, "nav_separators"):
+            for sep in self.nav_separators:
+                try:
+                    if sep.winfo_exists():
+                        sep.configure(bg=nav_border)
+                except Exception:
+                    pass
+
+        # Action Rail theme refresh
+        rail_bg = "#181c19" if self.dark_mode_active else "#fbfaf8"
+        rail_border = "#313244" if self.dark_mode_active else "#d1d1d1"
+        if hasattr(self, "rail_frame") and self.rail_frame.winfo_exists():
+            try:
+                self.rail_frame.configure(bg=rail_bg, highlightbackground=rail_border)
+            except Exception:
+                pass
+        if hasattr(self, "pin_btn") and self.pin_btn.winfo_exists():
+            try:
+                pin_bg = ("#212622" if self.dark_mode_active else "#e9ece5") if getattr(self, "left_pinned", None) and self.left_pinned.get() else rail_bg
+                pin_fg = "#e8ebe9" if self.dark_mode_active else "#000000"
+                self.pin_btn.configure(bg=pin_bg, fg=pin_fg, activebackground="#212622" if self.dark_mode_active else "#e9ece5")
+            except Exception:
+                pass
+
+        # Action row checkboxes theme refresh
+        chk_bg = "#181c19" if self.dark_mode_active else "#fbfaf8"
+        chk_fg = "#e8ebe9" if self.dark_mode_active else "#2c302e"
+        chk_sel = "#212622" if self.dark_mode_active else "#ffffff"
+        if hasattr(self, "clear_problems_cb") and self.clear_problems_cb.winfo_exists():
+            try:
+                self.clear_problems_cb.configure(bg=chk_bg, fg=chk_fg, selectcolor=chk_sel,
+                                                 activebackground=chk_bg, activeforeground=chk_fg)
+            except Exception:
+                pass
+        if hasattr(self, "auto_next_cb") and self.auto_next_cb.winfo_exists():
+            try:
+                self.auto_next_cb.configure(bg=chk_bg, fg=chk_fg, selectcolor=chk_sel,
+                                            activebackground=chk_bg, activeforeground=chk_fg)
+            except Exception:
+                pass
+
+        if hasattr(self, "update_reviewed_button_state"):
+            try:
+                self.update_reviewed_button_state()
             except Exception:
                 pass
 

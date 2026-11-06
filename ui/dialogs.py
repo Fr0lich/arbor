@@ -5,192 +5,13 @@ import threading
 import re
 from datetime import datetime
 import pandas as pd
-from PIL import Image, ImageTk
-from io import BytesIO
-import requests
+# Re-exports for backward compatibility
+from ui.image_popup import ZoomableImagePopup
+from ui.create_collection_dialog import CreateCollectionDialog, create_standard_collection_file
+
+
 from config import DATABASE_CONFIGS, sc, get_recent_files, add_recent_file
 from utils import debug_error, fade_in_toplevel
-
-class ZoomableImagePopup:
-    def __init__(self, parent, tk_img, source=None, is_online=False):
-        self.top = tk.Toplevel(parent)
-        self.top.title("Image")
-
-        self._scale = getattr(parent, "_scale", 1.0)
-        self._compact = False
-        self._last_scale = self._scale
-        self._zoom_job = None
-        self._resize_job = None
-
-        self.canvas = tk.Canvas(self.top, bg="black")
-        self.canvas.pack(fill="both", expand=True)
-
-        # ✅ Original PIL-image (kritisk), starter med thumbnail
-        self.orig_img = ImageTk.getimage(tk_img)
-
-        self.scale = 1.0
-        self.offset_x = 0
-        self.offset_y = 0
-
-        self._drag_start = None
-        self.tk_img = None
-        self.img_id = None
-        self.source = source
-        self.is_online = is_online
-        self._stop_event = threading.Event()
-        
-        # Slett referanser når vinduet lukkes for å unngå minnelekkasje
-        self.top.bind("<Destroy>", self._on_close)
-        self.top.bind("<Configure>", self._fit_to_window)
-        self.canvas.bind("<MouseWheel>", self._on_zoom)
-        self.canvas.bind("<ButtonPress-1>", self._start_pan)
-        self.canvas.bind("<B1-Motion>", self._do_pan)
-
-        self._fit_to_window()
-
-        if self.source:
-            self.top.title("Loading full resolution...")
-            threading.Thread(target=self._load_full_res, daemon=True).start()
-
-        fade_in_toplevel(self.top)
-
-
-    def _on_close(self, event=None):
-        if hasattr(self, "_zoom_job") and self._zoom_job:
-            try:
-                self.top.after_cancel(self._zoom_job)
-            except Exception:
-                pass
-        if hasattr(self, "_resize_job") and self._resize_job:
-            try:
-                self.top.after_cancel(self._resize_job)
-            except Exception:
-                pass
-        if hasattr(self, "_stop_event"):
-            self._stop_event.set()
-        self.orig_img = None
-        self.tk_img = None
-
-    def _load_full_res(self):
-        try:
-            if self.is_online:
-                r = requests.get(self.source, stream=True, timeout=10)
-                if r.status_code == 200:
-                    img_data = bytearray()
-                    for chunk in r.iter_content(chunk_size=8192):
-                        if self._stop_event.is_set():
-                            r.close()
-                            return
-                        img_data.extend(chunk)
-                    full_img = Image.open(BytesIO(img_data))
-                    full_img.load()
-                else:
-                    full_img = None
-            else:
-                full_img = Image.open(self.source)
-                full_img.load()
-            
-            if full_img:
-                self.top.after(0, lambda: self._apply_full_res(full_img))
-        except Exception as e:
-            if not getattr(self, "_stop_event", None) or not self._stop_event.is_set():
-                self.top.after(0, lambda: self.top.title("Image (Failed to load full res)"))
-
-    def _apply_full_res(self, full_img):
-        if not self.top.winfo_exists():
-            return
-        self.orig_img = full_img
-        self.top.title("Image (Full Resolution)")
-        self._fit_to_window()
-
-    def _fit_to_window(self, event=None):
-        cw = self.canvas.winfo_width()
-        ch = self.canvas.winfo_height()
-        if cw < 10 or ch < 10:
-            return
-
-        iw, ih = self.orig_img.size
-        self.scale = min(cw / iw, ch / ih)
-        self.offset_x = (cw - iw * self.scale) / 2
-        self.offset_y = (ch - ih * self.scale) / 2
-
-        # Debounce the high quality configure/resize events
-        if hasattr(self, "_resize_job") and self._resize_job:
-            try:
-                self.top.after_cancel(self._resize_job)
-            except Exception:
-                pass
-            self._resize_job = None
-
-        self._redraw(scale_changed=True, fast_filter=True)
-        self._resize_job = self.top.after(200, self._high_quality_resize)
-
-    def _high_quality_resize(self):
-        self._resize_job = None
-        self._redraw(scale_changed=True, fast_filter=False)
-
-    def _redraw(self, scale_changed=True, fast_filter=False):
-        if scale_changed or not self.tk_img or not self.img_id:
-            w = int(self.orig_img.width * self.scale)
-            h = int(self.orig_img.height * self.scale)
-
-            if w < 1 or h < 1:
-                return
-
-            filter_type = Image.NEAREST if fast_filter else Image.LANCZOS
-            resized = self.orig_img.resize((w, h), filter_type)
-            self.tk_img = ImageTk.PhotoImage(resized)
-
-            self.canvas.delete("all")
-            self.img_id = self.canvas.create_image(
-                self.offset_x,
-                self.offset_y,
-                anchor="nw",
-                image=self.tk_img
-            )
-        else:
-            if self.img_id:
-                self.canvas.coords(self.img_id, self.offset_x, self.offset_y)
-
-    def _on_zoom(self, event):
-        factor = 1.1 if event.delta > 0 else 0.9
-
-        old_scale = self.scale
-        self.scale *= factor
-
-        mx, my = event.x, event.y
-        self.offset_x = mx - (mx - self.offset_x) * (self.scale / old_scale)
-        self.offset_y = my - (my - self.offset_y) * (self.scale / old_scale)
-
-        if hasattr(self, "_zoom_job") and self._zoom_job:
-            try:
-                self.top.after_cancel(self._zoom_job)
-            except Exception:
-                pass
-            self._zoom_job = None
-
-        self._redraw(scale_changed=True, fast_filter=True)
-        self._zoom_job = self.top.after(200, self._high_quality_redraw)
-
-    def _high_quality_redraw(self):
-        self._zoom_job = None
-        self._redraw(scale_changed=True, fast_filter=False)
-
-    def _start_pan(self, event):
-        self._drag_start = (event.x, event.y)
-
-    def _do_pan(self, event):
-        if not self._drag_start:
-            return
-
-        dx = event.x - self._drag_start[0]
-        dy = event.y - self._drag_start[1]
-
-        self.offset_x += dx
-        self.offset_y += dy
-        self._drag_start = (event.x, event.y)
-
-        self._redraw(scale_changed=False)
 
 # =====================
 # SETUP UI
@@ -490,26 +311,9 @@ class StartupDialog:
         self._bind_canvas_mousewheel(canvas, outer)
 
     def _bind_canvas_mousewheel(self, canvas, frame=None):
-        """Bind mousewheel using a custom bindtag instead of recursive widget walking."""
-        tag = "StartupDialogScroll"
-        def _on_mousewheel(event):
-            try:
-                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            except Exception:
-                pass
-
-        canvas.bind_class(tag, "<MouseWheel>", _on_mousewheel)
-
-        def _apply_tag(w):
-            current_tags = list(w.bindtags())
-            if tag not in current_tags:
-                w.bindtags((tag,) + tuple(current_tags))
-            for child in w.winfo_children():
-                _apply_tag(child)
-
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-        if frame:
-            _apply_tag(frame)
+        """Bind mousewheel using the centralized, non-destructive scroll helper."""
+        from ui.scroll_helper import bind_mousewheel
+        bind_mousewheel(canvas, frame)
 
     def _sep(self, parent, color=None, vertical=False):
         """1px separator line."""
@@ -1086,6 +890,24 @@ class StartupDialog:
         self.help_btn.bind("<Enter>", lambda e: self.help_btn.config(bg=self.C_HOVER))
         self.help_btn.bind("<Leave>", lambda e: self.help_btn.config(bg=self.C_CARD))
 
+        # Demo Project button (Explore sample collection)
+        self.demo_btn = tk.Button(
+            footer,
+            text="🌿 Explore Demo Project",
+            bg=self.C_CARD,
+            fg="#2d6a4f",
+            font=("Segoe UI", sc(9.5), "bold"),
+            relief="flat", bd=0,
+            padx=int(14*s), pady=int(6*s),
+            cursor="hand2",
+            command=self.load_demo_project,
+            highlightthickness=1,
+            highlightbackground="#2d6a4f",
+        )
+        self.demo_btn.pack(side="left", padx=(0, 10))
+        self.demo_btn.bind("<Enter>", lambda e: self.demo_btn.config(bg="#e8f5e9"))
+        self.demo_btn.bind("<Leave>", lambda e: self.demo_btn.config(bg=self.C_CARD))
+
         # Status label for loading messages
         self.status_label = tk.Label(
             footer, text="",
@@ -1247,7 +1069,26 @@ class StartupDialog:
 
     def create_new_database_startup(self):
         from ui.new_database_wizard import NewDatabaseWizard
-        NewDatabaseWizard(self.win, self.app, self.on_new_db_created)
+        CreateCollectionDialog(self.win, self.app, self.on_new_db_created)
+
+    def load_demo_project(self):
+        demo_path = os.path.abspath(os.path.join("data", "demo_collection.xlsx"))
+        if not os.path.exists(demo_path):
+            try:
+                from scripts.create_demo_dataset import create_demo_subset
+                create_demo_subset()
+            except Exception as e:
+                messagebox.showerror("Demo Not Found", f"Could not create demo dataset:\n{e}", parent=self.win)
+                return
+        self.db_path_var.set(demo_path)
+        self.db_var.set("Økonomisk Botanisk")
+        self.image_mode.set("online")
+        self._refresh_launch_state()
+        if hasattr(self, "ready_status_label"):
+            self.ready_status_label.config(
+                text="🌿 Demo loaded (220 specimens) — Click LAUNCH SYSTEM!",
+                fg="#2d6a4f"
+            )
 
     def on_db_selected(self, event=None):
         if hasattr(self, "db_var") and self.db_var.get() == "<Create New Database...>":

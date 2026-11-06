@@ -1,7 +1,8 @@
 from tkinter import filedialog, messagebox
 import threading
-import pandas as pd
 from collections import OrderedDict
+import pandas as pd
+import cachetools
 
 class HistoricalSuggestionsMixin:
     def _get_history_lock(self):
@@ -84,10 +85,9 @@ class HistoricalSuggestionsMixin:
             if hasattr(self, "_history_cache") and self._history_cache is not None:
                 cached = self._history_cache.get(cache_key)
                 if cached is not None:
-                    self._history_cache.move_to_end(cache_key)
                     return cached
             else:
-                self._history_cache = OrderedDict()
+                self._history_cache = cachetools.LRUCache(maxsize=100)
 
         suggestions = {}
 
@@ -161,9 +161,9 @@ class HistoricalSuggestionsMixin:
                 }
 
         with self._get_history_lock():
+            if not hasattr(self, "_history_cache") or self._history_cache is None:
+                self._history_cache = cachetools.LRUCache(maxsize=100)
             self._history_cache[cache_key] = suggestions
-            if len(self._history_cache) > 50:
-                self._history_cache.popitem(last=False)
         return suggestions
 
 
@@ -317,7 +317,7 @@ class HistoricalSuggestionsMixin:
 
 
     def _finish_load_books(self, loaded):
-        self._history_cache = OrderedDict()
+        self._history_cache = cachetools.LRUCache(maxsize=100)
         self._cached_dbs_id = None
 
         if not loaded:

@@ -8,6 +8,12 @@ ENABLE_TUTORIALS = True
 _detected_scale = 1.0  # Overwritten at startup with the actual detected DPI ratio
 _PREFS_PATH = "user_prefs.json"  # Overwritten at startup with the correct exe-relative path
 
+# =====================
+# APPLICATION METADATA & UPDATES
+# =====================
+APP_VERSION = "2.1.0"
+DEFAULT_GITHUB_REPO = "Fr0lich/arbor"
+
 import tkinter as tk
 import os
 import json
@@ -116,6 +122,20 @@ def set_last_dir(key, path):
     prefs = load_prefs()
     prefs[key] = directory
     save_prefs(prefs)
+
+def get_update_repo():
+    """Retrieve the configured update repository (or fallback to DEFAULT_GITHUB_REPO)."""
+    return load_prefs().get("update_repository", DEFAULT_GITHUB_REPO)
+
+def set_update_repo(repo_str):
+    """Set and persist a custom update repository (e.g. 'NaturalHistoryMuseum/arbor')."""
+    if not repo_str:
+        repo_str = DEFAULT_GITHUB_REPO
+    repo_clean = repo_str.strip().replace("https://github.com/", "").replace("http://github.com/", "").strip("/")
+    prefs = load_prefs()
+    prefs["update_repository"] = repo_clean
+    save_prefs(prefs)
+    return repo_clean
 
 def get_recent_files():
     """Return list of recent file dicts: [{"path": str, "modified": str}, ...]"""

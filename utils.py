@@ -5,6 +5,7 @@ import threading
 import collections
 from datetime import datetime
 import pandas as pd
+from loguru import logger
 
 def fmt_pandas_val(val):
     if pd.isna(val) or val == "":
@@ -173,76 +174,105 @@ def _read_log_level_from_disk() -> str:
     return "ERROR"
 
 
-# -- P1-D: Asynchronous log queue ---------------------------------------------
-# Previously every debug_log() call did a synchronous file open/write/close on
-# the main UI thread. Under heavy event firing this added disk-I/O latency.
-#
-# Solution: collect entries in an in-memory deque; flush to disk in a single
-# batched write every LOG_FLUSH_INTERVAL_S seconds on a background daemon.
-# debug_error() bypasses the queue and writes directly so crash records always
-# survive even if the process is killed immediately afterwards.
+# -- Loguru Diagnostic & Logging Infrastructure --------------------------------
+_logger_initialized = False
+_logger_lock = threading.Lock()
 
-LOG_FLUSH_INTERVAL_S = 5.0
 
+def _ensure_logger_configured() -> None:
+    """Initialize Loguru with standard console and rotated/compressed file sinks."""
+    global _logger_initialized
+    if _logger_initialized:
+        return
+    with _logger_lock:
+        if _logger_initialized:
+            return
+
+        # Remove default sink to prevent duplicate console printing
+        logger.remove()
+
+        def _log_filter(record):
+            try:
+                current = get_log_level()
+                return record["level"].no >= logger.level(current).no
+            except Exception:
+                return True
+
+        # Console sink with clean timestamp and level formatting
+        logger.add(
+            sys.stdout,
+            format="[{time:YYYY-MM-DD HH:mm:ss}] [{level}] {message}",
+            filter=_log_filter,
+            backtrace=False,
+            diagnose=False
+        )
+
+        # File sink with automatic 10MB rotation, 7-day retention, zip compression, and lockless async enqueue
+        try:
+            log_file = get_session_log_path()
+            logger.add(
+                log_file,
+                format="[{time:YYYY-MM-DD HH:mm:ss}] [{level}] {message}",
+                filter=_log_filter,
+                rotation="10 MB",
+                retention="7 days",
+                compression="zip",
+                enqueue=True,
+                backtrace=True,
+                diagnose=True,
+                encoding="utf-8"
+            )
+            import atexit
+            atexit.register(logger.complete)
+        except Exception:
+            pass
+
+        _logger_initialized = True
+
+
+_ensure_logger_configured()
+
+# Legacy stubs preserved for backward compatibility
 _log_queue: collections.deque = collections.deque()
 _log_queue_lock = threading.Lock()
-_log_flush_thread: threading.Thread | None = None
-_log_flush_stop = threading.Event()
 
 
 def _ensure_flush_thread() -> None:
-    global _log_flush_thread
-    if _log_flush_thread is not None and _log_flush_thread.is_alive():
-        return
-    _log_flush_stop.clear()
-    t = threading.Thread(target=_flush_loop, daemon=True, name="log-flush")
-    t.start()
-    _log_flush_thread = t
+    """Legacy stub maintained for backward compatibility (Loguru handles enqueue natively)."""
+    pass
 
 
 def _flush_loop() -> None:
-    while not _log_flush_stop.wait(timeout=LOG_FLUSH_INTERVAL_S):
-        _flush_log_queue()
+    """Legacy stub maintained for backward compatibility."""
+    pass
 
 
 def _flush_log_queue() -> None:
-    with _log_queue_lock:
-        if not _log_queue:
-            return
-        entries = list(_log_queue)
-        _log_queue.clear()
-    try:
-        log_path = get_session_log_path()
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write("\n".join(entries) + "\n")
-    except Exception as e:
-        pass
+    """Legacy stub maintained for backward compatibility."""
+    pass
 
 
 def debug_error(context: str, extra: str = "", is_crash: bool = False) -> None:
-    """Log an error with full traceback to the session log and to stdout.
-
-    Always writes directly to disk (bypasses the async queue) so crash records
-    survive even if the process is terminated immediately afterwards.
-    """
+    """Log an error with full traceback to the session log and to stdout."""
     global _SESSION_HAS_ERRORS
     _SESSION_HAS_ERRORS = True
 
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    tb = traceback.format_exc()
+    _ensure_logger_configured()
+
     crash_prefix = "[CRASH] " if is_crash else ""
-    msg = f"[{ts}] [ERROR] {crash_prefix}{context}"
+    msg = f"{crash_prefix}{context}"
     if extra:
         msg += f" -- {extra}"
-    msg += f"\n{tb}"
 
-    print(msg)
+    exc = sys.exc_info()
+    if exc[0] is not None:
+        logger.opt(depth=1, exception=exc).error(msg)
+    else:
+        logger.opt(depth=1).error(msg)
 
-    log_path = get_session_log_path()
     try:
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(msg + "\n" + ("-" * 80) + "\n")
-    except Exception as e:
+        logger.complete()
+    except Exception:
         pass
 
 
@@ -313,32 +343,15 @@ def center_and_fit_toplevel(win, base_w=None, base_h=None):
 
 
 def debug_log(level: str, context: str, extra: str = "") -> None:
-    """Log a message at the specified level if it meets the verbosity threshold.
-
-    P1-C: Uses the in-memory cached log level -- no disk I/O per call.
-    P1-D: Enqueues the entry for batched background flush -- no synchronous
-          file open/write/close on the calling (UI) thread.
-    """
-    levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
-    current_level = get_log_level()
-
-    req_idx  = levels.index(level)         if level         in levels else 1
-    curr_idx = levels.index(current_level) if current_level in levels else 3
-
-    if req_idx < curr_idx:
-        return
-
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    msg = f"[{ts}] [{level}] {context}"
+    """Log a message at the specified level if it meets the verbosity threshold."""
+    _ensure_logger_configured()
+    msg = context
     if extra:
         msg += f" -- {extra}"
-
-    print(msg)
-
-    with _log_queue_lock:
-        _log_queue.append(msg)
-
-    _ensure_flush_thread()
+    level_name = level.upper() if level else "INFO"
+    if level_name not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        level_name = "INFO"
+    logger.opt(depth=1).log(level_name, msg)
 
 
 # ── Fast Fuzzy Matching (rapidfuzz with difflib fallback) ─────────────────────

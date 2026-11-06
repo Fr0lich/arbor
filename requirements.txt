@@ -10,4 +10,8 @@ pytest-xvfb
 xvfbwrapper
 PySide6
 rapidfuzz>=3.0.0
+loguru
+cachetools
+tifffile
+marshmallow
 

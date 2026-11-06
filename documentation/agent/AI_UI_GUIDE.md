@@ -256,3 +256,88 @@ Arbor is executed on high-resolution, variable-DPI displays.
 - **Color Accent Intention:** Do not over-saturate layouts. Use soft, non-glare off-whites on the main panel background to minimize visual fatigue. Reserved intense accent colors (Status Red, Search Orange) must be used sparingly to draw the user's eyes specifically to actionable items.
 - **Symmetry and Alignment:** Maintain strict, consistent visual alignment. Use borders and background panel tones as the primary visual separators. Space forms cleanly and logically.
 - **Space and Laptop Preservation:** Make tabs, lists, and tools collapsible or togglable. When users need more screen estate for visual inspection of specimens, the interface must let them hide auxiliary lists or panels without obstructing the core workflow.
+
+---
+
+## 7. Strict Dark Mode, Command Palette & Ergonomics Engineering Rules
+
+To ensure UI consistency across Light and Dark themes, eliminate modal clutter, and prevent future AI agents from introducing regression defects, all future UI code **MUST** adhere to the following contracts:
+
+### Rule 6: Mandatory `set_dark_mode()` Contract on Compound Widgets
+- Any compound widget, contextual strip (such as `ObjectContextBar`), or custom container frame added to Arbor **MUST** implement a `set_dark_mode(is_dark: bool)` method and register with `apply_theme()` in `ui/layout_settings.py`.
+- **No Unconditional Light Color Literals:** Never write hardcoded `#ffffff`, `#f2f5f1`, `#e9ece5`, or `#2c302e` directly onto Tkinter `Frame`, `Label`, or `Button` widgets without a dark mode condition or token mapping.
+- **Active/Success Token Standard:** When indicating reviewed, verified, or completed records in Dark Mode:
+  - **Light Mode:** `#ffffff` card with `#3a7d44` text and border.
+  - **Dark Mode:** Deep forest container (`#1e3a24`) with vibrant text (`#85e89d`) and `#3a7d44` border. Never animate or configure backgrounds to pure `#ffffff` in Dark Mode.
+- **Treeview Contrast (WCAG AA):** Foreground colors in dark Treeview rows (`#212622` / `#181c19`) must maintain high contrast (e.g., `#b0f3a9` for reviewed tags, not dark `#3a7d44`).
+
+### Rule 7: Non-Blocking Floating Toasts Over Modal Dialogs
+- Routine operation confirmations (saving sessions, successful GBIF validation matches, toggling review states, copying values) **MUST** use non-blocking floating toasts via `app.show_toast(msg, toast_type)` or `ToastManager.show()`.
+- Intrusive `messagebox.showinfo` popups are strictly prohibited for routine, clean curator workflows because they interrupt rapid keyboard navigation. Modal dialogs are strictly reserved for destructive confirmations (`messagebox.askyesno`) and fatal errors (`messagebox.showerror`).
+
+### Rule 8: Universal Command Palette Registration Protocol
+- Every new user-facing action, tool, export flow, dialog, or navigation shortcut **MUST** be cataloged in `ui/command_palette.py` under the appropriate category (`SPECIMEN`, `NAVIGATION`, `TOOLS`, `IMAGE`, `PRESETS`, `SESSION`, `HELP`).
+- **Specimen Lookup Hook:** Accessing the active database in the command palette must always query `getattr(self.ui, "app", getattr(self.ui, "app_state", None))`. Do not assume `self.ui.app_state` exists.
+
+### Rule 9: Top Navigation Bar Cleanliness & User Preferences
+- The top navigation bar (`ui/navigation_bar.py`) is reserved strictly for global menus and compact view management.
+- **Secondary Controls Clustered & Hidden by Default:** Auxiliary navigation buttons (`◄`, `►`, `Last`, `⚠ Next Problem`, `Next+Hist`) must be organized into segmented button clusters and hidden by default. Their visibility is controlled via the `show_secondary_nav` toggle in Unified Settings (`prefs.json`).
+- **No Fake Status Indicators:** Never introduce static, un-updated status indicators (e.g. dummy `STATUS: ONLINE` canvas dots). Real telemetry belongs exclusively in the 26px status bar at the bottom.
+
+### Rule 10: Supported Data Export Standards
+- Arbor's standard data exchange formats are **Excel Workbooks (`.xlsx`)** and **Delimited Spreadsheets (`.csv`)** via `Export Filtered Subset...` (`export_filtered_list`).
+- **Darwin Core (DwC) export has been permanently decommissioned and removed.** Do not re-introduce Darwin Core occurrence exporters or references.
+
+---
+
+## 8. Specimen Directory & Curatorial Card Design Standards
+
+To guarantee high visual clarity for curators and instant $O(1)$ responsiveness across datasets of 20,000+ specimens, all directory and card components **MUST** adhere to these strict ergonomic guidelines:
+
+### A. Single-Badge Discipline in Detailed Cards (`ui/widgets.py`)
+- **Zero Icon / Emoji Clutter:** Cards must never display multiple stacked badges or emoji icons (`🧬`, `📦`, `📷`, `🌐`).
+- **One Category Badge on Row 1:** Each card is assigned exactly one high-contrast status badge formatted in JetBrains Mono at `sc(8)` bold:
+  - `[ TAX ]`: Active taxonomy problems (`Taxonomy_Problem`, `Genus_Problem`, `Species_Problem`).
+  - `[ PROV ]`: Provenance/collection issues (`Locality_Problem`, `MissingLabel`, `Date_Problem`).
+  - `[ BOX ]`: Physical box/plant part problems (`PlantPart_Problem`, `Box_Label_Problem`).
+  - `[ IMG ]`: Media problems or missing images.
+  - `[ REV+ERR ]`: Specimen is marked reviewed but has unresolved flags.
+  - `[ REV ]`: Clean reviewed specimen.
+  - `[ UNREV ]`: Unreviewed record in good standing.
+- **Inline Metadata Row (Row 2):** Never unpack or repack individual badge widgets on Row 2. All secondary attributes are concatenated into a single, bullet-separated string rendered in a single `Label`:
+  ```
+  OBJ-0042 • PINACEAE • 2 photos • LOAN • UKN • UNVAL
+  ```
+  This eliminates Tkinter geometry recalculations (`pack_forget` / `pack`) during scrolling.
+
+### B. $O(1)$ Targeted Card Selection Diffing
+- In `redraw_cards_highlights()`, never iterate recursively through all rendered cards in the viewport.
+- Maintain `_last_highlighted_oids` and compute the symmetric difference:
+  ```python
+  changed_oids = (last_highlighted ^ current_selected)
+  ```
+  Only update background styling (`#ffffff` light / `#2c352e` dark) on the small subset of cards whose selection state actually toggled.
+
+### C. Curatorial Command Strip (`ui/object_context_bar.py`)
+- **Accession Pill:** Monospace ID badge (`[ 10482 ]`) paired with live specimen index counter (`42 of 1,250`).
+- **Botanical Typography:** Scientific name displayed in *Lora* / *Georgia* italic serif (`sc(12)` italic bold), with author citation in muted regular text.
+- **Interactive Status Badge:** Prominent, color-coded pill (`[ TAXONOMY ISSUE ]`, `[ PROVENANCE ERROR ]`, `[ ✓ REVIEWED ]`) that binds to `<Button-1>` to launch relevant problem resolvers directly.
+- **Dirty State Dot:** An amber `● Unsaved` indicator dynamically shows whenever `app.dirty` is true, disappearing immediately when saved.
+- **Emoji-Free Action Buttons:** Action controls (`[ GBIF Verify ]`, `[ Books (N) ]`, `[ Send to Phone ]`) must use clean archival text labels.
+
+### D. Sidebar Drawer Sashing & Easing Lifecycle (`ui/main_window.py`)
+- **Cubic Ease-Out Transition:** Sidebar expansion and collapse animations must use a cubic ease-out curve ($1 - (1 - t)^3$) over 120ms at ~12ms ticks (~80 FPS).
+- **Flicker-Free Unmapping Sequence:** Never call `left_content_frame.pack_forget()` before starting an animation. Only unmap the frame inside the `on_complete` callback *after* the sash transition reaches the collapsed boundary (`sc(40)`).
+- **Width Persistence & Ergonomics:**
+  - Collapsed rail width: `sc(40)`.
+  - Default expanded width: `max(sc(320), sc(360))`.
+  - User dragged sash width must persist in `prefs["sidebar_width"]` so expanding restores the curator's preferred layout.
+
+### E. Centralized, Non-Destructive Mousewheel Scroll Standard (`ui/scroll_helper.py`)
+- **Strictly Prohibit Global `bind_all("<MouseWheel>")` / `unbind_all` Hooks:** Never call `bind_all("<MouseWheel>")` or `unbind_all("<MouseWheel>")` on `<Enter>`/`<Leave>` of scrollable frames or in `<Destroy>` handlers. Doing so overrides or permanently unbinds scrolling in parent and overlapping windows.
+- **Use `ui.scroll_helper.bind_mousewheel(canvas, frame)`:**
+  ```python
+  from ui.scroll_helper import bind_mousewheel
+  bind_mousewheel(canvas, scrollable_frame)
+  ```
+  This attaches a canvas-specific bindtag that recursively applies to all children without altering global event bindings.

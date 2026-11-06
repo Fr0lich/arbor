@@ -89,22 +89,8 @@ class DashboardMixin:
         scrollbar.pack(side="right", fill="y")
 
         # Mousewheel
-        def _on_mousewheel(event):
-            try:
-                if canvas.winfo_exists():
-                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            except Exception:
-                pass
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
-        def _cleanup(event=None):
-            if event and event.widget != win:
-                return
-            try:
-                canvas.unbind_all("<MouseWheel>")
-            except Exception:
-                pass
-        win.bind("<Destroy>", _cleanup, add="+")
+        from ui.scroll_helper import bind_mousewheel
+        bind_mousewheel(canvas, scrollable_frame)
 
         # Stats calculations
         total = len(self.app.df_reg)

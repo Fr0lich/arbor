@@ -21,6 +21,11 @@ hiddenimports += [
     'jinja2',
     'jinja2.ext',
     'rapidfuzz',
+    'loguru',
+    'win32_setctime',
+    'cachetools',
+    'tifffile',
+    'marshmallow',
 ]
 
 # ── Bundled Data Files ────────────────────────────────────────────────────────

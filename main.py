@@ -23,6 +23,13 @@ try:
 except Exception as e:
     pass  # Non-Windows or already set — safe to ignore
 
+# Disable decompression bomb limits for legitimate 100MP+ museum scans
+try:
+    from PIL import Image
+    Image.MAX_IMAGE_PIXELS = None
+except Exception:
+    pass
+
 
 # ── Global exception hooks ────────────────────────────────────────────────────
 
@@ -350,49 +357,108 @@ if __name__ == "__main__":
         _install_exception_hooks(root, ui_ref)
         _install_atexit_crash_reporter()
 
-        # Hide main window initially while startup dialog runs
-        root.withdraw()
+        # Clean up old binaries from previous updates
+        try:
+            from backend.updater import cleanup_old_binaries
+            cleanup_old_binaries()
+        except Exception:
+            pass
 
-        # We do not pass ui to StartupDialog yet, because ui has not been created.
-        dialog = StartupDialog(root, app)
+        # Check if restarting from an update to restore previous session
+        session_to_restore = None
+        if "--restore-session" in sys.argv:
+            try:
+                from backend.updater import load_session_state
+                session_to_restore = load_session_state()
+            except Exception:
+                session_to_restore = None
 
-        # Ensure startup dialog is forcefully brought to the front
-        dialog.win.attributes("-topmost", True)
-        dialog.win.update()
-        dialog.win.attributes("-topmost", False)
-        dialog.win.focus_force()
+        if session_to_restore and session_to_restore.get("excel_path") and os.path.exists(session_to_restore["excel_path"]):
+            # Fast-path: directly rehydrate session without prompting StartupDialog
+            ui = ObjectProgramUI(root, app)
+            ui_ref[0] = ui
 
-        root.wait_window(dialog.win)
+            img_mode = session_to_restore.get("image_mode", "online")
+            if img_mode == "online":
+                ui.enable_online_images()
+            elif img_mode == "folder":
+                ui.image_mode = "folder"
+                ui.image_folder = session_to_restore.get("image_folder", "")
+            elif img_mode == "offline":
+                ui.enable_offline_mode()
 
-        if not dialog.completed:
-            root.destroy()
-            sys.exit(0)
+            ui.apply_config()
 
-        # If user launched directly into Mobile Mode from StartupDialog
-        if getattr(dialog, "mobile_mode", False):
-            from ui.mobile_host_app import MobileHostApp
-            selected_path = getattr(dialog, "selected_excel_path", None) or dialog.db_path_var.get().strip()
-            host = MobileHostApp(root=root, app=app, file_path=selected_path)
-            host.run()
-            sys.exit(0)
+            target_oid = session_to_restore.get("active_object_id")
+            if target_oid:
+                app._restore_object_id = target_oid
 
-        # Dialog completed successfully for Full Desktop UI. Now construct Main Window UI.
-        ui = ObjectProgramUI(root, app)
-        ui_ref[0] = ui
+            ui.open_excel_from_path(session_to_restore["excel_path"])
 
-        # Apply user configurations determined by the StartupDialog
-        if getattr(dialog, "image_mode_val", "online") == "online":
-            ui.enable_online_images()
-        elif getattr(dialog, "image_mode_val", "online") == "folder":
-            ui.image_mode = "folder"
-            ui.image_folder = getattr(dialog, "image_folder_val", "")
-        elif getattr(dialog, "image_mode_val", "online") == "offline":
-            ui.enable_offline_mode()
+            try:
+                from backend.updater import clear_session_state
+                clear_session_state()
+            except Exception:
+                pass
 
-        if hasattr(dialog, "books_path_val") and dialog.books_path_val:
-            app._startup_books_path = dialog.books_path_val
+            try:
+                root.attributes("-alpha", 1.0)
+            except Exception:
+                pass
+            root.deiconify()
+            root.state("zoomed")
 
-        ui.apply_config()
+            def _show_restore_toast():
+                from config import APP_VERSION
+                if hasattr(ui, "show_toast"):
+                    ui.show_toast(f"Updated to Arbor v{APP_VERSION}! Session restored.", "success")
+                elif hasattr(ui, "system_status"):
+                    ui.system_status.config(text=f"Arbor v{APP_VERSION} - Session restored successfully")
+            root.after(1500, _show_restore_toast)
+        else:
+            # Hide main window initially while startup dialog runs
+            root.withdraw()
+
+            # We do not pass ui to StartupDialog yet, because ui has not been created.
+            dialog = StartupDialog(root, app)
+
+            # Ensure startup dialog is forcefully brought to the front
+            dialog.win.attributes("-topmost", True)
+            dialog.win.update()
+            dialog.win.attributes("-topmost", False)
+            dialog.win.focus_force()
+
+            root.wait_window(dialog.win)
+
+            if not dialog.completed:
+                root.destroy()
+                sys.exit(0)
+
+            # If user launched directly into Mobile Mode from StartupDialog
+            if getattr(dialog, "mobile_mode", False):
+                from ui.mobile_host_app import MobileHostApp
+                selected_path = getattr(dialog, "selected_excel_path", None) or dialog.db_path_var.get().strip()
+                host = MobileHostApp(root=root, app=app, file_path=selected_path)
+                host.run()
+                sys.exit(0)
+
+            # Dialog completed successfully for Full Desktop UI. Now construct Main Window UI.
+            ui = ObjectProgramUI(root, app)
+            ui_ref[0] = ui
+
+            # Apply user configurations determined by the StartupDialog
+            if getattr(dialog, "image_mode_val", "online") == "online":
+                ui.enable_online_images()
+            elif getattr(dialog, "image_mode_val", "online") == "folder":
+                ui.image_mode = "folder"
+                ui.image_folder = getattr(dialog, "image_folder_val", "")
+            elif getattr(dialog, "image_mode_val", "online") == "offline":
+                ui.enable_offline_mode()
+
+            if hasattr(dialog, "books_path_val") and dialog.books_path_val:
+                app._startup_books_path = dialog.books_path_val
+
+            ui.apply_config()
 
         if getattr(app, "_history_cache_pending", False):
             from collections import OrderedDict

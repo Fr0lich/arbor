@@ -12,12 +12,15 @@ from PIL import Image, ImageTk, ImageFile
 # Allow loading truncated images to prevent broken data stream errors
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+# Disable decompression bomb limits for legitimate 100MP+ museum herbarium scans
+Image.MAX_IMAGE_PIXELS = None
+
 import config
 from config import sc
 from ui.image_toolbar import create_image_toolbar, Tooltip
 
 MAX_IMAGE_CACHE = 40
-MAX_PIL_CACHE = 15
+MAX_PIL_CACHE = 3
 _NUMERIC_OID_PATTERN = re.compile(r"(\d+)")
 
 
@@ -999,7 +1002,18 @@ class ImagePanel(ttk.Frame):
                             else:
                                 return
                         else:
-                            pil_img = Image.open(path)
+                            if path.lower().endswith((".tif", ".tiff")):
+                                try:
+                                    import tifffile
+                                    import numpy as np
+                                    tif_arr = tifffile.imread(path)
+                                    if tif_arr.dtype == np.uint16:
+                                        tif_arr = (tif_arr / 256).astype(np.uint8)
+                                    pil_img = Image.fromarray(tif_arr)
+                                except Exception:
+                                    pil_img = Image.open(path)
+                            else:
+                                pil_img = Image.open(path)
                             pil_img.load()
                         self.original_pil_cache[path] = pil_img
                         if len(self.original_pil_cache) > MAX_PIL_CACHE:
@@ -1528,7 +1542,7 @@ class ImagePanel(ttk.Frame):
             click_callback(event)
 
     def open_image_popup(self, tk_img, source=None, is_online=False):
-        from ui.dialogs import ZoomableImagePopup
+        from ui.image_popup import ZoomableImagePopup
         ZoomableImagePopup(self.root, tk_img, source, is_online)
 
     def open_image_web(self, path_or_url):

@@ -91,6 +91,43 @@ class MobileDialog:
         if hasattr(self.parent_ui, "_update_push_to_phone_state"):
             self.parent_ui.root.after(100, self.parent_ui._update_push_to_phone_state)
 
+        # Check for unsaved in-memory changes from mobile session
+        if getattr(self.app_state, "dirty", False):
+            import config
+            prefs = config.load_prefs() if hasattr(config, "load_prefs") else {}
+            auto_save = getattr(self.panel, "auto_save_var", None)
+            is_auto_save = auto_save.get() if auto_save else prefs.get("mobile_autosave_on_stop", False)
+
+            has_valid_path = bool(
+                hasattr(self.parent_ui, "app")
+                and getattr(self.parent_ui.app, "output_path", None)
+            )
+
+            if is_auto_save and has_valid_path:
+                if hasattr(self.parent_ui, "save_session"):
+                    self.parent_ui.save_session("MOBILE_SESSION_END")
+                elif hasattr(self.parent_ui, "save_database"):
+                    self.parent_ui.save_database()
+            else:
+                from tkinter import messagebox
+                try:
+                    save_now = messagebox.askyesno(
+                        title="Arbor Mobile Companion",
+                        message=(
+                            "Mobile session ended with unsaved changes in memory.\n\n"
+                            "Save the workbook to disk now?"
+                        ),
+                        parent=self.win,
+                    )
+                except Exception:
+                    save_now = False
+
+                if save_now:
+                    if hasattr(self.parent_ui, "save_session"):
+                        self.parent_ui.save_session("MOBILE_SESSION_END")
+                    elif hasattr(self.parent_ui, "save_database"):
+                        self.parent_ui.save_database()
+
         self.win.destroy()
 
     # ------------------------------------------------------------------

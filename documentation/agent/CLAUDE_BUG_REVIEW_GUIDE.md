@@ -30,6 +30,9 @@ Arbor relies heavily on Pandas for data manipulation and Tkinter for its desktop
 *   **Tkinter UI Performance:**
     *   **Layout Recalculations:** Explicitly check a widget's current layout state using `widget.winfo_manager()` before calling `.grid()`, `.pack()`, `.grid_remove()`, or `.pack_forget()` to prevent redundant Tkinter layout recalculations and UI thread stuttering.
     *   **Icon Rendering:** Arbor uses `pytablericons`. To prevent performance overhead and Tkinter garbage collection issues during window resizes, pre-render `ImageTk.PhotoImage` icons using `TablerIcons.load()` and store strong references in a dictionary cache during UI initialization. Do not load images dynamically on the fly within resize loops.
+    *   **Targeted Selection Diffing in Virtual Lists:** When updating selection highlights in virtual canvas or treeview lists (e.g. `redraw_cards_highlights()`), never recursively scan and update all active viewport widgets. Compute the symmetric difference `(last_highlighted ^ current_selected)` and only update cards whose state actually toggled. This guarantees $O(1)$ instantaneous selection responses regardless of dataset size.
+    *   **Single Inline Metadata vs. Geometry Churn:** Avoid packing and unpacking multiple individual badge widgets per card row. Format secondary attributes (e.g., family, photo count, loan status) into a single, bullet-separated string rendered in a single `Label.configure(text=...)`.
+    *   **Animation Sash Lifecycle:** Never call `widget.pack_forget()` or `grid_remove()` before an easing transition starts. Defer unmapping to the `on_complete` callback once the sash completes its transition to avoid abrupt layout pops or white flashes.
 
 ---
 
@@ -76,3 +79,7 @@ Arbor runs a Tkinter UI on the main thread alongside a Flask mobile companion se
     *   When running a long-lived background subprocess (e.g., an SSH tunnel using `subprocess.Popen`) where output is continually monitored via a blocking call like `readline()`, ensure the read operation does not indefinitely prevent checking for shutdown events. Wrap the subprocess loop in a `try...finally` block that explicitly calls `process.kill()` or `process.terminate()` to guarantee clean termination and prevent orphaned processes.
 *   **Server-Sent Events (SSE):**
     *   The `MobileServer` uses SSE at `/api/events`. The implementation uses a generator yielding from a `queue.Queue`. Ensure a `finally` block is used (instead of catching `GeneratorExit`) to reliably handle disconnects, and that a `threading.Lock` is used to safely manage the active client list.
+*   **Logging & Diagnostics (Loguru):**
+    *   **Asynchronous & Thread-Safe:** Use `utils.debug_log(level, msg, extra)` or `utils.debug_error(context, extra, is_crash)` for all logging. These write through Loguru with `enqueue=True`, guaranteeing zero UI-thread disk I/O latency.
+    *   **Do Not Implement Custom File Handlers:** Do not create ad-hoc file handlers or custom async queues in new modules. Loguru automatically manages rotation (`10 MB`), 7-day retention, and zip compression in `get_session_log_path()`.
+    *   **Local Variable Capture:** In crash reporting, Loguru's `diagnose=True` and `backtrace=True` automatically capture local variables on unhandled Tkinter callback exceptions. Avoid stripping tracebacks or catching exceptions without re-logging via `utils.debug_error()`.

@@ -271,13 +271,121 @@ class CommandPalette(tk.Toplevel):
                 "icon": "💾",
                 "action": lambda: ui.save_data_preset_dialog() if hasattr(ui, "save_data_preset_dialog") else None,
             },
+            # Panel Visibility Toggles (F6 / F7 / F8)
             {
                 "type": "command",
                 "category": "LAYOUT",
-                "label": "Toggle Focus Mode",
-                "shortcut": "Ctrl+Q",
-                "icon": "⛶",
-                "action": lambda: ui.toggle_focus_mode_shortcut(None) if hasattr(ui, "toggle_focus_mode_shortcut") else None,
+                "label": "Toggle Left Specimen Directory Panel",
+                "shortcut": "F6",
+                "icon": "📁",
+                "action": lambda: ui.toggle_list_panel_shortcut(None) if hasattr(ui, "toggle_list_panel_shortcut") else None,
+            },
+            {
+                "type": "command",
+                "category": "LAYOUT",
+                "label": "Toggle Right Registration & Taxonomy Panel",
+                "shortcut": "F7",
+                "icon": "📋",
+                "action": lambda: ui.toggle_reg_panel_shortcut(None) if hasattr(ui, "toggle_reg_panel_shortcut") else None,
+            },
+            {
+                "type": "command",
+                "category": "LAYOUT",
+                "label": "Toggle Middle Specimen Image Viewport",
+                "shortcut": "F8",
+                "icon": "🖼️",
+                "action": lambda: ui.toggle_images_panel_shortcut(None) if hasattr(ui, "toggle_images_panel_shortcut") else None,
+            },
+            # File, Database & Export Operations
+            {
+                "type": "command",
+                "category": "FILE",
+                "label": "Export Filtered Dataset (Excel / CSV)...",
+                "shortcut": "Export",
+                "icon": "📊",
+                "action": lambda: ui.export_filtered_list() if hasattr(ui, "export_filtered_list") else None,
+            },
+            {
+                "type": "command",
+                "category": "FILE",
+                "label": "Open Excel Database...",
+                "shortcut": "Ctrl+O",
+                "icon": "📂",
+                "action": lambda: ui.open_excel() if hasattr(ui, "open_excel") else None,
+            },
+            {
+                "type": "command",
+                "category": "FILE",
+                "label": "New Database Setup Wizard...",
+                "shortcut": "Wizard",
+                "icon": "✨",
+                "action": lambda: ui.create_new_database() if hasattr(ui, "create_new_database") else None,
+            },
+            {
+                "type": "command",
+                "category": "FILE",
+                "label": "Save Session As...",
+                "shortcut": "File",
+                "icon": "💾",
+                "action": lambda: ui.save_as() if hasattr(ui, "save_as") else None,
+            },
+            {
+                "type": "command",
+                "category": "FILE",
+                "label": "Restore Earlier Autosave Backup...",
+                "shortcut": "File",
+                "icon": "⏪",
+                "action": lambda: ui.open_autosave_manager() if hasattr(ui, "open_autosave_manager") else None,
+            },
+            # Problem Navigation Jumps
+            {
+                "type": "command",
+                "category": "NAVIGATION",
+                "label": "Jump to Next Problem",
+                "shortcut": "Nav",
+                "icon": "⚠",
+                "action": lambda: ui.goto_next_problem() if hasattr(ui, "goto_next_problem") else None,
+            },
+            {
+                "type": "command",
+                "category": "NAVIGATION",
+                "label": "Jump to Next Object with Historical Suggestions",
+                "shortcut": "Nav",
+                "icon": "📜",
+                "action": lambda: ui.goto_next_problem_with_history() if hasattr(ui, "goto_next_problem_with_history") else None,
+            },
+            # Tools & Batch Operations
+            {
+                "type": "command",
+                "category": "TOOLS",
+                "label": "Botanical Whitelist (Ignored Words)",
+                "shortcut": "Tools",
+                "icon": "🌿",
+                "action": lambda: ui.open_ignored_words_editor() if hasattr(ui, "open_ignored_words_editor") else None,
+            },
+            {
+                "type": "command",
+                "category": "TOOLS",
+                "label": "Open System Log Viewer",
+                "shortcut": "Tools",
+                "icon": "📑",
+                "action": lambda: ui.open_log_viewer_window() if hasattr(ui, "open_log_viewer_window") else None,
+            },
+            {
+                "type": "command",
+                "category": "TOOLS",
+                "label": "Batch Mark Filtered as Reviewed",
+                "shortcut": "Batch",
+                "icon": "✓",
+                "action": lambda: ui.batch_set_reviewed_true() if hasattr(ui, "batch_set_reviewed_true") else None,
+            },
+            {
+                "type": "command",
+                "category": "TOOLS",
+                "label": "Batch Unmark Filtered as Reviewed",
+                "shortcut": "Batch",
+                "icon": "⚪",
+                "action": lambda: ui.batch_set_reviewed_false() if hasattr(ui, "batch_set_reviewed_false") else None,
             },
             {
                 "type": "command",
@@ -327,6 +435,14 @@ class CommandPalette(tk.Toplevel):
                 "shortcut": "Help",
                 "icon": "📖",
                 "action": lambda: ui.show_main_help() if hasattr(ui, "show_main_help") else None,
+            },
+            {
+                "type": "command",
+                "category": "HELP",
+                "label": "Check for Application Updates (GitHub)",
+                "shortcut": "Help",
+                "icon": "🔄",
+                "action": lambda: ui.check_for_updates_action() if hasattr(ui, "check_for_updates_action") else None,
             },
         ]
         return cmds
@@ -436,7 +552,7 @@ class CommandPalette(tk.Toplevel):
 
         # 2. Matching specimens (if database is loaded and query is typed)
         matching_specimens = []
-        app_state = getattr(self.ui, "app_state", None)
+        app_state = getattr(self.ui, "app", getattr(self.ui, "app_state", None))
         if app_state and getattr(app_state, "df_reg", None) is not None and q:
             df_reg = app_state.df_reg
             df_obs = getattr(app_state, "df_obs", None)

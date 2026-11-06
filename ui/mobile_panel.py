@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 import qrcode
 from PIL import ImageTk
+import config
 
 from backend.mobile_server import MobileServer, get_local_ip
 from backend.tunnel import PinggyTunnel, CloudflareTunnel
@@ -65,6 +66,8 @@ class MobilePanel:
         self.public_url_with_token = ""
         self.current_qr_mode = "public"  # public tunnel is the default
         self.ui_version_choice = tk.StringVar(value="v2")
+        prefs = config.load_prefs() if hasattr(config, "load_prefs") else {}
+        self.auto_save_var = tk.BooleanVar(value=bool(prefs.get("mobile_autosave_on_stop", False)))
 
         self._build_ui()
 
@@ -146,7 +149,16 @@ class MobilePanel:
             font=("Segoe UI", 8),
             bg="#fbfbf9",
             fg="#5a655e",
-        ).pack(anchor="w", pady=(0, 6))
+        ).pack(anchor="w", pady=(0, 2))
+        self.net_hint_lbl = tk.Label(
+            setup_card,
+            text="• Public (Internet): Recommended for University / Eduroam Wi-Fi (bypasses AP firewall isolation)\n• LAN only: For private home Wi-Fi or offline portable routers",
+            font=("Segoe UI", 7, "italic"),
+            bg="#fbfbf9",
+            fg="#2d6a4f",
+            justify="left",
+        )
+        self.net_hint_lbl.pack(anchor="w", pady=(0, 6))
 
         self.network_choice = tk.StringVar(value="public")
 
@@ -285,6 +297,41 @@ class MobilePanel:
         )
         self.btn_ver_v1.pack(side="right", expand=True, fill="x", padx=(1, 0))
 
+        # Auto-save setting row
+        self.autosave_row = tk.Frame(setup_card, bg="#fbfbf9")
+        self.autosave_row.pack(fill="x", pady=(12, 0))
+
+        tk.Label(
+            self.autosave_row,
+            text="On Session End:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#fbfbf9",
+            fg="#1b4332",
+        ).pack(anchor="w", pady=(0, 2))
+
+        autosave_pill_frame = tk.Frame(self.autosave_row, bg="#fbfbf9")
+        autosave_pill_frame.pack(fill="x", pady=(0, 2))
+
+        self.btn_autosave_toggle = tk.Button(
+            autosave_pill_frame,
+            font=("Segoe UI", 8, "bold"),
+            relief="flat",
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            command=self._toggle_auto_save,
+        )
+        self.btn_autosave_toggle.pack(side="left")
+
+        self.lbl_autosave_tip = tk.Label(
+            self.autosave_row,
+            font=("Segoe UI", 7, "italic"),
+            bg="#fbfbf9",
+            fg="#5a655e",
+            anchor="w",
+        )
+        self.lbl_autosave_tip.pack(fill="x")
+
         self.start_btn = ttk.Button(
             self.setup_frame,
             text="▶ Start Mobile Session",
@@ -385,11 +432,28 @@ class MobilePanel:
             fg="#5a655e",
         ).pack(anchor="w")
 
+        url_frame = tk.Frame(info, bg="#fbfbf9")
+        url_frame.pack(fill="x", pady=(2, 4))
+
         self.url_var = tk.StringVar(value="Initializing...")
         self.url_entry = ttk.Entry(
-            info, textvariable=self.url_var, font=("Consolas", 8), state="readonly"
+            url_frame, textvariable=self.url_var, font=("Consolas", 8), state="readonly"
         )
-        self.url_entry.pack(fill="x", pady=(2, 4))
+        self.url_entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+        self.btn_copy_url = tk.Button(
+            url_frame,
+            text="📋 Copy",
+            font=("Segoe UI", 8),
+            bg="#e0e3df",
+            fg="#1b4332",
+            relief="flat",
+            padx=6,
+            pady=1,
+            command=self._copy_pairing_url,
+            cursor="hand2",
+        )
+        self.btn_copy_url.pack(side="right")
 
         pin_row = tk.Frame(info, bg="#fbfbf9")
         pin_row.pack(fill="x", pady=2)
@@ -467,17 +531,28 @@ class MobilePanel:
         notice = tk.Frame(self.active_frame, bg="#fffbeb",
                           bd=1, relief="solid", padx=10, pady=6)
         notice.pack(fill="x", pady=(0, 10))
-        tk.Label(
+        self.notice_frame = notice
+
+        self.notice_lbl = tk.Label(
             notice,
-            text=(
-                "📱 Mobile session active. All edits from your phone are synced into memory.\n"
-                "Save your database before closing this window to persist changes."
-            ),
+            text="",
             bg="#fffbeb",
             fg="#92400e",
             font=("Segoe UI", 8),
             justify="left",
-        ).pack(anchor="w")
+        )
+        self.notice_lbl.pack(side="left", fill="x", expand=True)
+
+        self.btn_active_autosave_toggle = tk.Button(
+            notice,
+            font=("Segoe UI", 8, "bold"),
+            relief="flat",
+            padx=6,
+            pady=2,
+            cursor="hand2",
+            command=self._toggle_auto_save,
+        )
+        self.btn_active_autosave_toggle.pack(side="right", padx=(6, 0))
 
         # ── Activity feed ─────────────────────────────────────────────
         feed_frame = tk.LabelFrame(
@@ -521,6 +596,49 @@ class MobilePanel:
         )
         self._end_btn.pack(fill="x", ipady=4)
 
+        self._update_autosave_ui()
+
+    def _toggle_auto_save(self):
+        new_val = not self.auto_save_var.get()
+        self.auto_save_var.set(new_val)
+        self._update_autosave_ui()
+        try:
+            prefs = config.load_prefs() or {}
+            prefs["mobile_autosave_on_stop"] = new_val
+            config.save_prefs(prefs)
+        except Exception:
+            pass
+
+    def _update_autosave_ui(self):
+        is_on = self.auto_save_var.get()
+        if is_on:
+            txt = "💾 Auto-save on stop: ON"
+            tip = "Edits will automatically save to disk when server stops."
+            bg = "#1b4332"
+            fg = "#ffffff"
+            notice_text = (
+                "📱 Mobile session active. In-memory edits from your phone will be\n"
+                "automatically saved to disk when you stop the server."
+            )
+        else:
+            txt = "⏸️ Auto-save on stop: OFF (Prompt)"
+            tip = "Arbor will ask whether to save when server stops."
+            bg = "#e0e3df"
+            fg = "#2c302e"
+            notice_text = (
+                "📱 Mobile session active. All edits are synced into memory.\n"
+                "When you stop the server, Arbor will ask if you want to save to disk."
+            )
+
+        if hasattr(self, "btn_autosave_toggle") and self.btn_autosave_toggle:
+            self.btn_autosave_toggle.config(text=txt, bg=bg, fg=fg)
+        if hasattr(self, "lbl_autosave_tip") and self.lbl_autosave_tip:
+            self.lbl_autosave_tip.config(text=tip)
+        if hasattr(self, "btn_active_autosave_toggle") and self.btn_active_autosave_toggle:
+            self.btn_active_autosave_toggle.config(text=txt, bg=bg, fg=fg)
+        if hasattr(self, "notice_lbl") and self.notice_lbl:
+            self.notice_lbl.config(text=notice_text)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -553,6 +671,7 @@ class MobilePanel:
             self.server.on_edit_callback = self._on_mobile_edit
 
         self.server.on_client_connect_callback = self._on_client_connect
+        self.server.on_presence_callback = self._on_client_presence
         self._on_client_connect(len(self.server.clients))
 
         # Populate PIN and local URL (kept as LAN fallback)
@@ -576,15 +695,14 @@ class MobilePanel:
 
         choice = self.network_choice.get()
         if choice == "public":
-            # Show connecting placeholder — public QR renders in _on_tunnel_ready()
+            # Render LAN fallback QR immediately so user can scan right away while public tunnel warms up
+            self.current_qr_mode = "public"
             self.url_var.set("🔄 Connecting public tunnel…")
-            self.qr_label.config(
-                image="",
-                text="🔄 Connecting\npublic tunnel…",
-                font=("Segoe UI", 9, "italic"),
-                fg="#d97706",
-            )
-            self.log(f"Local LAN fallback: http://{local_ip}:{self.server.port}")
+            self._render_qr(self.local_url_with_token)
+            self.status_lbl.config(text="🔄 Warming up public tunnel… (LAN QR active)", fg="#d97706")
+            self.tunnel_lbl.config(text="Tunnel: Establishing secure public tunnel...", fg="#d97706")
+            self.log(f"Local LAN ready: http://{local_ip}:{self.server.port}")
+            self.log("Establishing secure public tunnel in background...")
 
             # Start tunnel in background based on provider choice
             if getattr(self, 'provider_choice', tk.StringVar(value='cloudflare')).get() == 'cloudflare':
@@ -626,12 +744,36 @@ class MobilePanel:
                 pass
             if getattr(self.server, 'on_client_connect_callback', None) == self._on_client_connect:
                 self.server.on_client_connect_callback = None
+            if getattr(self.server, 'on_presence_callback', None) == self._on_client_presence:
+                self.server.on_presence_callback = None
             if getattr(self.server, 'on_edit_callback', None) == self._on_mobile_edit:
                 self.server.on_edit_callback = None
 
         if self.tunnel:
             self.tunnel.stop()
             self.tunnel = None
+
+    def _copy_pairing_url(self):
+        url = self.url_var.get().strip()
+        if url and not url.startswith("🔄") and not url.startswith("Init"):
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(url)
+                self.btn_copy_url.config(text="✓ Copied!", bg="#e8f5e9")
+                self.root.after(2000, lambda: self._is_alive() and self.btn_copy_url.config(text="📋 Copy", bg="#e0e3df"))
+            except Exception:
+                pass
+
+    def _on_client_presence(self, oid):
+        def _update():
+            if not self._is_alive():
+                return
+            self.log(f"📱 Phone inspecting Specimen #{oid}")
+        try:
+            if self._is_alive():
+                self.root.after(0, _update)
+        except Exception:
+            pass
 
     def log(self, message: str):
         """Append a timestamped line to the activity feed."""

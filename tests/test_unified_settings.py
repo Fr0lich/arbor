@@ -241,6 +241,34 @@ def test_toolbar_buttons_live_callback_and_persistence(tk_root, tmp_path, monkey
     assert loaded["toolbar_buttons"]["Filter"] is True
 
 
+def test_secondary_nav_toggle_and_persistence(tk_root, tmp_path, monkeypatch):
+    test_prefs_file = str(tmp_path / "user_prefs.json")
+    monkeypatch.setattr(config, "_PREFS_PATH", test_prefs_file)
+    monkeypatch.setattr(config, "_prefs_cache", None)
+
+    class MockApp:
+        def __init__(self):
+            self.show_secondary_nav_var = tk.BooleanVar(value=False)
+            self.applied_visibility = None
+
+        def apply_secondary_nav_visibility(self, val):
+            self.applied_visibility = val
+
+    mock_app = MockApp()
+    win = UnifiedSettingsWindow(tk_root, app_ref=mock_app, initial_tab="layout")
+    assert win.var_show_secondary_nav.get() is False
+
+    # Toggle to True
+    win.var_show_secondary_nav.set(True)
+    win._push_layout_to_app()
+    assert mock_app.show_secondary_nav_var.get() is True
+    assert mock_app.applied_visibility is True
+
+    win.save_settings()
+    loaded = config.load_prefs()
+    assert loaded.get("show_secondary_nav") is True
+
+
 def test_focus_section_visibility_synchronization(tk_root, tmp_path, monkeypatch):
     test_prefs_file = str(tmp_path / "user_prefs.json")
     monkeypatch.setattr(config, "_PREFS_PATH", test_prefs_file)

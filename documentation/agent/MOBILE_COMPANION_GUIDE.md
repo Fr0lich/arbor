@@ -15,10 +15,10 @@ The Mobile Companion must function as a true companion to the desktop experience
 - You must trace the original logic used in the main Tkinter application (`ui/` files) or its backend logic (`models.py`, `backend/search.py`, `backend/filter.py`, etc.).
 - Replicate that exact behavior (rules, logic, filtering hierarchy, etc.) in the `backend/mobile_server.py` API endpoints and the Vanilla JS frontend.
 
-## 3. No External Build Systems
-The user prefers keeping the Python server self-contained without external build dependencies.
-- The frontend must remain strictly Vanilla HTML, JavaScript, and Tailwind CSS (via CDN script).
-- **DO NOT** introduce React, Vue, Node.js, npm, or any external build steps.
+## 3. Zero Frontend Build Systems & Self-Contained Deployment
+The mobile companion is designed to be completely self-contained and zero-friction:
+- **Frontend Stack**: The mobile client must remain strictly Vanilla HTML, modern JavaScript, and Tailwind CSS (via CDN script). **DO NOT** introduce React, Vue, Node.js, npm, webpack, or any frontend build steps.
+- **Python Backend**: The backend is hosted by Flask directly inside Arbor. Standard Python pip packages are permitted on the Python side if needed, provided they are approved per AGENTS.md and bundle cleanly into PyInstaller without requiring external services or databases.
 
 ## 4. Disabling Features
 When disabling unused or deprecated frontend features in the mobile application (e.g., the barcode scanner):
@@ -53,3 +53,7 @@ When building or modifying backend endpoints and mobile frontends, adhere to the
     # app_bus.publish(DATABASE_UPDATED, mobile_edit=True)  ← DO NOT DO THIS
     ```
   The Tkinter UI should subscribe to these events and schedule its own UI reload using `self.root.after(0, ...)` inside the subscriber callback.
+
+### E. Declarative Request Validation (`backend/mobile_schemas.py`)
+- Inbound REST API payloads (`/api/update`, `/api/batch_update`, `/api/presence`) are validated through **Marshmallow** schemas.
+- Do not add manual procedural `data.get()` cascades or hand-coded formula injection startswith checks in route handlers. Use `ObjectUpdateSchema`, `BatchUpdateSchema`, or `PresenceSchema` to automatically validate types, strip dangerous Excel formula injection prefixes (`=`, `+`, `-`, `@`), and normalize identifier keys (`id` vs `oid`).

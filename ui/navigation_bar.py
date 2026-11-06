@@ -20,19 +20,24 @@ class NavigationBar:
                            highlightcolor=nav_border)
         nav_bar.pack(fill="x", side="top")
         nav_bar.pack_propagate(False)
+        app.nav_bar = nav_bar
+        app.nav_separators = []
 
         # App title
-        tk.Label(
+        app.nav_title_lbl = tk.Label(
             nav_bar,
             text="arbor",
             bg=nav_bar_bg,
             fg="#000000",
             font=("Segoe UI", sc(12), "bold"),
             padx=16
-        ).pack(side="left", anchor="center")
+        )
+        app.nav_title_lbl.pack(side="left", anchor="center")
 
         # 1px vertical separator after title
-        tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)
+        sep1 = tk.Frame(nav_bar, bg=nav_border, width=1)
+        sep1.pack(side="left", fill="y", pady=8)
+        app.nav_separators.append(sep1)
 
         # --- Nav link buttons ---
         # Each maps to an existing command. style="Nav.TButton" applied after apply_theme().
@@ -92,62 +97,89 @@ class NavigationBar:
         app.toolbar_buttons["HELP"] = btn_help
 
         # 1px separator before secondary controls
-        tk.Frame(nav_bar, bg=nav_border, width=1).pack(side="left", fill="y", pady=8)
+        sep2 = tk.Frame(nav_bar, bg=nav_border, width=1)
+        app.nav_separators.append(sep2)
+        app.secondary_nav_sep = sep2
 
-        # --- Secondary toolbar controls (kept for feature compatibility) ---
+        # --- Secondary toolbar controls (segmented button clusters) ---
         secondary_frame = ttk.Frame(nav_bar)
-        secondary_frame.pack(side="left", fill="y", padx=4)
+        app.secondary_nav_frame = secondary_frame
+
+        # Segment 1: Directional navigation cluster
+        nav_grp = ttk.Frame(secondary_frame)
+        nav_grp.pack(side="left", fill="y", padx=(1, 3))
 
         app.toolbar_buttons['Prev'] = ttk.Button(
-            secondary_frame, text="◄", style="Nav.TButton",
+            nav_grp, text="◄", style="Nav.TButton",
             command=lambda: app.navigate_object(-1), cursor="hand2")
         app.toolbar_buttons['Prev'].pack(side="left", padx=1)
-        app.add_tooltip(app.toolbar_buttons['Prev'], "Previous in list")
+        app.add_tooltip(app.toolbar_buttons['Prev'], "Previous in list (Left Arrow)")
 
         app.toolbar_buttons['Next'] = ttk.Button(
-            secondary_frame, text="►", style="Nav.TButton",
+            nav_grp, text="►", style="Nav.TButton",
             command=lambda: app.navigate_object(1), cursor="hand2")
         app.toolbar_buttons['Next'].pack(side="left", padx=1)
-        app.add_tooltip(app.toolbar_buttons['Next'], "Next in list")
+        app.add_tooltip(app.toolbar_buttons['Next'], "Next in list (Right Arrow)")
 
         app.toolbar_buttons['Last'] = ttk.Button(
-            secondary_frame, text="Last", style="Nav.TButton",
+            nav_grp, text="Last", style="Nav.TButton",
             command=app.goto_last_object, cursor="hand2")
-        app.toolbar_buttons['Last'].pack(side="left", padx=2)
+        app.toolbar_buttons['Last'].pack(side="left", padx=1)
         app.add_tooltip(app.toolbar_buttons['Last'], "Return to last visited object")
 
-        tk.Frame(secondary_frame, bg=nav_border, width=1).pack(side="left", fill="y", pady=6)
+        sep_mid = tk.Frame(secondary_frame, bg=nav_border, width=1)
+        sep_mid.pack(side="left", fill="y", pady=6, padx=3)
+        app.nav_separators.append(sep_mid)
+
+        # Segment 2: Problem jump cluster
+        prob_grp = ttk.Frame(secondary_frame)
+        prob_grp.pack(side="left", fill="y", padx=(2, 2))
 
         app.toolbar_buttons['Next Problem'] = ttk.Button(
-            secondary_frame, text="⚠ Next Problem", style="Primary.TButton",
+            prob_grp, text="⚠ Next Problem", style="Primary.TButton",
             command=app.goto_next_problem, cursor="hand2")
-        app.toolbar_buttons['Next Problem'].pack(side="left", padx=(4, 1))
+        app.toolbar_buttons['Next Problem'].pack(side="left", padx=1)
         app.add_tooltip(app.toolbar_buttons['Next Problem'], "Jump to next problem")
 
         app.next_history_btn = ttk.Button(
-            secondary_frame, text="Next+Hist", style="Primary.TButton",
+            prob_grp, text="Next+Hist", style="Primary.TButton",
             command=app.goto_next_problem_with_history, state="disabled", cursor="hand2")
         app.next_history_btn.pack(side="left", padx=1)
         app.toolbar_buttons['Next+Hist'] = app.next_history_btn
         app.add_tooltip(app.next_history_btn, "Jump to next object with suggestions")
 
-        tk.Frame(secondary_frame, bg=nav_border, width=1).pack(side="left", fill="y", pady=6)
+        # Load preference: default to False (hidden)
+        import config as cfg
+        p = cfg.load_prefs() or {}
+        show_sec = bool(p.get("show_secondary_nav", False))
+        app.show_secondary_nav_var = tk.BooleanVar(value=show_sec)
+
+        def _apply_secondary_nav(show=None):
+            val = app.show_secondary_nav_var.get() if show is None else bool(show)
+            app.show_secondary_nav_var.set(val)
+            if val:
+                if sep2.winfo_manager() != "pack":
+                    sep2.pack(side="left", fill="y", pady=8)
+                if secondary_frame.winfo_manager() != "pack":
+                    secondary_frame.pack(side="left", fill="y", padx=4)
+            else:
+                if secondary_frame.winfo_manager() == "pack":
+                    secondary_frame.pack_forget()
+                if sep2.winfo_manager() == "pack":
+                    sep2.pack_forget()
+
+        app.apply_secondary_nav_visibility = _apply_secondary_nav
+        if show_sec:
+            sep2.pack(side="left", fill="y", pady=8)
+            secondary_frame.pack(side="left", fill="y", padx=4)
 
         app.show_all_history_var = tk.BooleanVar(value=False)
 
         # --- Right side: status indicators ---
         status_container = ttk.Frame(nav_bar)
         status_container.pack(side="right", fill="y", padx=(0, sc(16)))
-
-        # Online status dot + label
-        status_dot_frame = ttk.Frame(status_container)
-        status_dot_frame.pack(anchor="center", side="right")
-        app._online_dot = tk.Canvas(status_dot_frame, width=sc(8), height=sc(8),
-                                     highlightthickness=0, bg=nav_bar_bg)
-        app._online_dot.create_oval(1, 1, sc(7), sc(7), fill="#3a7d44", outline="")
-        app._online_dot.pack(side="left", padx=(0, sc(4)))
-        tk.Label(status_dot_frame, text="STATUS: ONLINE", bg=nav_bar_bg,
-                 fg="#444748", font=("JetBrains Mono", sc(8.5))).pack(side="left")
+        app.status_container = status_container
+        app._online_dot = None  # Deprecated fake indicator removed
 
         # Data status badge (saved / unsaved)
         app.data_status = tk.Label(

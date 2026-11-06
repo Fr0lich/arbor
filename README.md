@@ -45,6 +45,8 @@ Inside the application, the User Guide can also be accessed at any time via **He
 - **Custom Tkinter UI:** A highly ergonomic, dynamic, and responsive graphical user interface.
 - **Event-Driven Architecture:** Decoupled UI updates and background threading using a lightweight EventBus system.
 - **Data Integrity:** Strict sanitization against CSV/Excel Formula Injection (DDE) and timezone conflicts.
+- **Zero-Friction Deployment:** Standalone, double-click Windows executable via PyInstaller with zero external database daemons (no PostgreSQL, MySQL, Redis, or Docker required).
+- **Offline-First Resilience:** 100% operational in subterranean herbarium vaults with zero network connectivity.
 
 ---
 
