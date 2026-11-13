@@ -4,7 +4,8 @@ import pytest
 import utils
 
 
-def test_debug_log_and_debug_error(tmp_path):
+def test_debug_log_and_debug_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(utils, "get_log_level", lambda: "DEBUG")
     # Verify session log path is created
     log_path = utils.get_session_log_path()
     assert log_path is not None

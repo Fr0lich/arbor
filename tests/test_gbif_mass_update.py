@@ -622,3 +622,91 @@ def test_single_specimen_gbif_update_dialog():
     finally:
         root.destroy()
 
+
+
+def test_sequential_gbif_rollbacks():
+    from ui.gbif_review import rollback_gbif_updates
+    app = AppState()
+    app.df_reg = pd.DataFrame([
+        {"ObjectID": "101", "Genus": "Pinus", "Species": "sylvestris", "Author": "Linnaeus"},
+        {"ObjectID": "102", "Genus": "Betula", "Species": "pendula", "Author": "Roth"}
+    ]).set_index("ObjectID")
+
+    app._log_records = [
+        {
+            "Timestamp": "2026-09-03T10:00:00",
+            "User": "botanist",
+            "Action": "GBIF_UPDATE",
+            "ObjectID": "101",
+            "Reviewed": "",
+            "ChangedFields": "Author",
+            "ChangedValues": 'Author: "L." -> "Linnaeus"',
+            "ProblemsChanged": "",
+            "ProblemsChangedValues": "",
+            "LocationChanged": "",
+            "LocationChangedValues": "",
+            "SourceFile": "test.xlsx",
+            "OutputFile": "test.xlsx"
+        },
+        {
+            "Timestamp": "2026-09-03T11:00:00",
+            "User": "botanist",
+            "Action": "GBIF_UPDATE",
+            "ObjectID": "102",
+            "Reviewed": "",
+            "ChangedFields": "Author",
+            "ChangedValues": 'Author: "Ehrh." -> "Roth"',
+            "ProblemsChanged": "",
+            "ProblemsChangedValues": "",
+            "LocationChanged": "",
+            "LocationChangedValues": "",
+            "SourceFile": "test.xlsx",
+            "OutputFile": "test.xlsx"
+        }
+    ]
+    app.df_log = pd.DataFrame(app._log_records)
+
+    success, msg = rollback_gbif_updates(app)
+    assert success is True
+    assert app.df_reg.at["102", "Author"] == "Ehrh."
+    assert app.df_reg.at["101", "Author"] == "Linnaeus"
+
+
+def test_gbif_rollback_timestamp_space_and_iso_normalization():
+    from ui.gbif_review import rollback_gbif_updates
+    from unittest.mock import MagicMock, patch
+    with patch("tkinter.messagebox.showinfo"):
+        app = AppState()
+        app.df_reg = pd.DataFrame([
+            {"ObjectID": "201", "Genus": "Pinus", "Species": "sylvestris", "Author": "Linnaeus"}
+        ]).set_index("ObjectID")
+
+        app._log_records = [
+            {
+                "Timestamp": "2026-09-03T10:30:00",
+                "User": "botanist",
+                "Action": "GBIF_UPDATE",
+                "ObjectID": "201",
+                "Reviewed": "",
+                "ChangedFields": "Author",
+                "ChangedValues": 'Author: "L." -> "Linnaeus"',
+                "ProblemsChanged": "",
+                "ProblemsChangedValues": "",
+                "LocationChanged": "",
+                "LocationChangedValues": "",
+                "SourceFile": "test.xlsx",
+                "OutputFile": "test.xlsx"
+            }
+        ]
+        app.df_log = pd.DataFrame(app._log_records)
+
+        mock_ui = MagicMock()
+        mock_ui.app = app
+        mock_ui._invalidate_row_cache = MagicMock()
+        mock_ui.invalidate_search_index = MagicMock()
+
+        success, msg = rollback_gbif_updates(app, main_window=mock_ui)
+        assert success is True
+        assert app.df_reg.at["201", "Author"] == "L."
+        assert mock_ui._invalidate_row_cache.called
+        assert mock_ui.invalidate_search_index.called

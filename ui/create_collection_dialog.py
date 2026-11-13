@@ -6,6 +6,7 @@ from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 import config
 from config import sc, DATABASE_CONFIGS
+from ui.scroll_helper import bind_mousewheel
 import utils
 
 
@@ -250,7 +251,6 @@ class CreateCollectionDialog:
         self.on_complete = on_complete
 
         self._scale = getattr(config, "_detected_scale", 1.0)
-        s = self._scale
 
         self.win = tk.Toplevel(parent)
         self.win.title("Create New Botanical Collection — Arbor")
@@ -260,10 +260,10 @@ class CreateCollectionDialog:
 
         screen_w = self.win.winfo_screenwidth()
         screen_h = self.win.winfo_screenheight()
-        w = int(min(700, max(480, screen_w - 40)) * s)
-        h = int(min(680, max(450, screen_h - 70)) * s)
+        w = sc(min(700, max(480, screen_w - 40)))
+        h = sc(min(680, max(450, screen_h - 70)))
         self.win.geometry(f"{w}x{h}")
-        self.win.minsize(int(460 * s), int(420 * s))
+        self.win.minsize(sc(460), sc(420))
 
         utils.center_and_fit_toplevel(self.win, w, h)
 
@@ -281,10 +281,8 @@ class CreateCollectionDialog:
         self._build_ui()
 
     def _build_ui(self):
-        s = self._scale
-
         # ── FIXED HEADER ──────────────────────────────────────────────────
-        header = tk.Frame(self.win, bg=self.C_HEADER_BG, padx=int(16*s), pady=int(10*s))
+        header = tk.Frame(self.win, bg=self.C_HEADER_BG, padx=sc(16), pady=sc(10))
         header.pack(fill="x", side="top")
 
         tk.Label(
@@ -295,7 +293,7 @@ class CreateCollectionDialog:
         tk.Label(
             header, text="Create New Botanical Collection",
             font=("Segoe UI", sc(15), "bold"), bg=self.C_HEADER_BG, fg=self.C_ON_SURFACE
-        ).pack(anchor="w", pady=(int(2*s), 0))
+        ).pack(anchor="w", pady=(sc(2), 0))
 
         tk.Label(
             header, text="Standard 4-Sheet Botanical Workbook (.xlsx) with built-in quality checks and audit log",
@@ -307,13 +305,13 @@ class CreateCollectionDialog:
         # ── FIXED FOOTER ──────────────────────────────────────────────────
         tk.Frame(self.win, bg=self.C_OUTLINE_VAR, height=1).pack(fill="x", side="bottom")
 
-        footer = tk.Frame(self.win, bg=self.C_FOOTER_BG, padx=int(16*s), pady=int(10*s))
+        footer = tk.Frame(self.win, bg=self.C_FOOTER_BG, padx=sc(16), pady=sc(10))
         footer.pack(fill="x", side="bottom")
 
         cancel_btn = tk.Button(
             footer, text="Cancel", font=("Segoe UI", sc(9.5)),
             bg=self.C_CARD, fg=self.C_ON_SURFACE, relief="flat", bd=0,
-            padx=int(14*s), pady=int(6*s), cursor="hand2",
+            padx=sc(14), pady=sc(6), cursor="hand2",
             highlightthickness=1, highlightbackground=self.C_OUTLINE,
             command=self.win.destroy
         )
@@ -323,7 +321,7 @@ class CreateCollectionDialog:
             footer, text="✓ Create & Launch Collection (Recommended)",
             font=("Segoe UI", sc(10), "bold"),
             bg=self.C_PRIMARY, fg=self.C_ON_PRIMARY, relief="flat", bd=0,
-            padx=int(18*s), pady=int(7*s), cursor="hand2",
+            padx=sc(18), pady=sc(7), cursor="hand2",
             command=self._on_create_standard
         )
         create_btn.pack(side="right")
@@ -335,8 +333,11 @@ class CreateCollectionDialog:
         body_container.pack(fill="both", expand=True)
 
         canvas = tk.Canvas(body_container, bg=self.C_BG, highlightthickness=0)
+        self.canvas = canvas
         sb = ttk.Scrollbar(body_container, orient="vertical", command=canvas.yview)
-        scroll_content = tk.Frame(canvas, bg=self.C_BG, padx=int(16*s), pady=int(12*s))
+        scroll_content = tk.Frame(canvas, bg=self.C_BG, padx=sc(16), pady=sc(12))
+        self.scrollable_frame = scroll_content
+        self.scroll_content = scroll_content
 
         inner_id = canvas.create_window((0, 0), window=scroll_content, anchor="nw")
         canvas.configure(yscrollcommand=sb.set)
@@ -355,13 +356,11 @@ class CreateCollectionDialog:
         sb.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
-        def _on_mousewheel(e):
-            if canvas.winfo_exists():
-                canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-
-        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
-        self.win.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        # Cross-platform non-destructive mousewheel binding
+        bind_mousewheel(self.canvas, self.scrollable_frame)
+        tag = f"ScrollTag_{id(self.canvas)}"
+        if tag not in self.canvas.bindtags():
+            self.canvas.bindtags((tag,) + tuple(self.canvas.bindtags()))
 
         # Build sheet cards from structured dictionary
         for key in ["reg", "obs", "log"]:
@@ -371,9 +370,8 @@ class CreateCollectionDialog:
         self._build_wizard_callout(scroll_content)
 
     def _build_sheet_card(self, parent, key, info):
-        s = self._scale
-        card = tk.Frame(parent, bg=self.C_CARD, highlightthickness=1, highlightbackground=self.C_OUTLINE_VAR, padx=int(14*s), pady=int(10*s))
-        card.pack(fill="x", pady=(0, int(10*s)))
+        card = tk.Frame(parent, bg=self.C_CARD, highlightthickness=1, highlightbackground=self.C_OUTLINE_VAR, padx=sc(14), pady=sc(10))
+        card.pack(fill="x", pady=(0, sc(10)))
 
         # Header row
         hdr = tk.Frame(card, bg=self.C_CARD)
@@ -382,12 +380,12 @@ class CreateCollectionDialog:
         tk.Label(hdr, text=info["title"], font=("Segoe UI", sc(10.5), "bold"), bg=self.C_CARD, fg=self.C_ON_SURFACE).pack(side="left")
 
         badge = tk.Label(hdr, text=info["badge"], font=("Courier New", sc(8), "bold"), bg=info["badge_bg"], fg="#ffffff", padx=4, pady=1)
-        badge.pack(side="left", padx=int(8*s))
+        badge.pack(side="left", padx=sc(8))
 
         btn = tk.Button(
             hdr, text="[?] Details", font=("Segoe UI", sc(8.5), "bold"),
             bg=self.C_SURFACE_LOW, fg=self.C_ON_SURFACE, relief="flat", bd=0,
-            padx=int(8*s), pady=int(2*s), cursor="hand2",
+            padx=sc(8), pady=sc(2), cursor="hand2",
             highlightthickness=1, highlightbackground=self.C_OUTLINE,
             command=lambda k=key: self._toggle_details(k)
         )
@@ -398,22 +396,22 @@ class CreateCollectionDialog:
         tk.Label(
             card, text=info["summary"],
             font=("Segoe UI", sc(9)), bg=self.C_CARD, fg=self.C_ON_VARIANT, anchor="w"
-        ).pack(fill="x", pady=(int(2*s), int(4*s)))
+        ).pack(fill="x", pady=(sc(2), sc(4)))
 
         # Field Chips
         chips_frame = tk.Frame(card, bg=self.C_CARD)
-        chips_frame.pack(fill="x", pady=(0, int(4*s)))
+        chips_frame.pack(fill="x", pady=(0, sc(4)))
         for chip in info["chips"]:
             tk.Label(chips_frame, text=f" {chip} ", font=("Segoe UI", sc(8)), bg=self.C_SURFACE_LOW, fg=self.C_ON_SURFACE, padx=3, pady=1).pack(side="left", padx=(0, 4), pady=2)
 
         # Expandable Detail Frame
-        detail_frame = tk.Frame(card, bg=self.C_SURFACE_LOW, padx=int(12*s), pady=int(8*s), highlightthickness=1, highlightbackground=self.C_OUTLINE_VAR)
+        detail_frame = tk.Frame(card, bg=self.C_SURFACE_LOW, padx=sc(12), pady=sc(8), highlightthickness=1, highlightbackground=self.C_OUTLINE_VAR)
         self._detail_frames[key] = detail_frame
 
         tk.Label(
             detail_frame, text=info["new_curator_bullets"],
             font=("Segoe UI", sc(8.5)), bg=self.C_SURFACE_LOW, fg=self.C_ON_SURFACE, justify="left", anchor="w"
-        ).pack(fill="x", pady=(0, int(6*s)))
+        ).pack(fill="x", pady=(0, sc(6)))
 
         tk.Label(
             detail_frame, text=info["curator_bullets"],
@@ -421,14 +419,13 @@ class CreateCollectionDialog:
         ).pack(fill="x")
 
     def _build_destination_section(self, parent):
-        s = self._scale
-        dest_card = tk.Frame(parent, bg=self.C_CARD, highlightthickness=1, highlightbackground=self.C_OUTLINE_VAR, padx=int(14*s), pady=int(10*s))
-        dest_card.pack(fill="x", pady=(0, int(10*s)))
+        dest_card = tk.Frame(parent, bg=self.C_CARD, highlightthickness=1, highlightbackground=self.C_OUTLINE_VAR, padx=sc(14), pady=sc(10))
+        dest_card.pack(fill="x", pady=(0, sc(10)))
 
         tk.Label(
             dest_card, text="Save New Collection File As:",
             font=("Segoe UI", sc(9.5), "bold"), bg=self.C_CARD, fg=self.C_ON_SURFACE
-        ).pack(anchor="w", pady=(0, int(4*s)))
+        ).pack(anchor="w", pady=(0, sc(4)))
 
         row = tk.Frame(dest_card, bg=self.C_CARD)
         row.pack(fill="x")
@@ -439,20 +436,19 @@ class CreateCollectionDialog:
             font=("Courier New", sc(9.5)), relief="flat",
             highlightthickness=1, highlightbackground=self.C_OUTLINE
         )
-        entry.pack(side="left", fill="x", expand=True, ipady=int(5*s))
+        entry.pack(side="left", fill="x", expand=True, ipady=sc(5))
 
         browse_btn = tk.Button(
             row, text="Browse...", font=("Segoe UI", sc(9)),
             bg=self.C_SURFACE_LOW, fg=self.C_ON_SURFACE, relief="flat", bd=0,
-            padx=int(12*s), pady=int(5*s), cursor="hand2",
+            padx=sc(12), pady=sc(5), cursor="hand2",
             highlightthickness=1, highlightbackground=self.C_OUTLINE,
             command=self._on_browse_dest
         )
-        browse_btn.pack(side="right", padx=(int(6*s), 0))
+        browse_btn.pack(side="right", padx=(sc(6), 0))
 
     def _build_wizard_callout(self, parent):
-        s = self._scale
-        callout = tk.Frame(parent, bg=self.C_SURFACE_LOW, padx=int(14*s), pady=int(10*s), highlightthickness=1, highlightbackground=self.C_OUTLINE_VAR)
+        callout = tk.Frame(parent, bg=self.C_SURFACE_LOW, padx=sc(14), pady=sc(10), highlightthickness=1, highlightbackground=self.C_OUTLINE_VAR)
         callout.pack(fill="x")
 
         tk.Label(
@@ -463,7 +459,7 @@ class CreateCollectionDialog:
         wiz_btn = tk.Button(
             callout, text="⚙ Customize in 6-Step Wizard...",
             font=("Segoe UI", sc(9), "bold"), bg=self.C_CARD, fg=self.C_ON_SURFACE,
-            relief="flat", bd=0, padx=int(10*s), pady=int(3*s), cursor="hand2",
+            relief="flat", bd=0, padx=sc(10), pady=sc(3), cursor="hand2",
             highlightthickness=1, highlightbackground=self.C_OUTLINE,
             command=self._on_launch_wizard
         )
@@ -481,8 +477,7 @@ class CreateCollectionDialog:
                 btn.config(text="[?] Details", bg=self.C_SURFACE_LOW)
                 self._details_visible[key] = False
             else:
-                s = self._scale
-                frame.pack(fill="x", pady=(int(8*s), 0))
+                frame.pack(fill="x", pady=(sc(8), 0))
                 btn.config(text="[-] Close", bg="#e8f5e9")
                 self._details_visible[key] = True
 

@@ -488,6 +488,9 @@ class TreeviewListboxWrapper(ttk.Frame):
         self._active_card_windows = {} # Maps idx -> (window_id, frame_widget)
         self._card_pool = [] # Pool of reusable card widget dictionaries
         self._pending_viewport_update = None
+        self._last_highlighted_oids = set()
+        import config
+        self._ui_card_prefs = config.get_directory_card_prefs()
 
         self._setup_virtual_card_bindtag()
 
@@ -777,7 +780,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         self._last_highlighted_oids = set(current_selected)
 
         # O(1) targeted difference: only update cards whose selection state changed
-        changed_oids = (last_highlighted ^ current_selected) if (last_highlighted and not force_all) else None
+        changed_oids = (last_highlighted ^ current_selected) if not force_all else None
 
         for idx, (win_id, widget_dict) in self._active_card_windows.items():
             if 0 <= idx < len(self.items_list):
@@ -974,6 +977,78 @@ class TreeviewListboxWrapper(ttk.Frame):
             if cb_lbl and cb_lbl.winfo_exists():
                 cb_lbl.configure(text=rev_char, fg=cb_color)
 
+    def _resolve_card_badge_display(self, active_cats, reviewed, has_problem, problems_have_history, obs_row, is_dark, canvas_bg, ui_prefs):
+        """
+        Pure UI Formatter: Resolves the single status badge and accent colors based on
+        the specimen's active problem state and the curator's view preferences.
+        """
+        if not ui_prefs.get("show_status_badge", True):
+            return canvas_bg, "", canvas_bg, canvas_bg
+
+        visible_cats = ui_prefs.get("visible_badge_categories", {})
+        preset = ui_prefs.get("badge_priority_preset", "default")
+
+        candidates = []
+
+        if visible_cats.get("reviewed", True):
+            if reviewed and has_problem:
+                candidates.append((100, "#d9a036", "REV+ERR", "#F57C00", "#ffffff"))
+            elif reviewed:
+                rev_bg = "#162d1a" if is_dark else "#f2f9f3"
+                rev_fg = "#85e89d" if is_dark else "#3a7d44"
+                candidates.append((90, "#3a7d44", "REV", rev_bg, rev_fg))
+
+        if visible_cats.get("taxonomy", True) and "taxonomy" in active_cats:
+            tax_bg = "#3b1c1e" if is_dark else "#fdf2f2"
+            tax_fg = "#f28b82" if is_dark else "#c93a40"
+            weight = 95 if preset == "taxonomist" else 80
+            candidates.append((weight, "#c93a40", "TAX", tax_bg, tax_fg))
+
+        if visible_cats.get("provenance", True) and "collection" in active_cats:
+            prov_bg = "#3b2e15" if is_dark else "#fef9e7"
+            prov_fg = "#fcd34d" if is_dark else "#b45309"
+            candidates.append((70, "#d9a036", "PROV", prov_bg, prov_fg))
+
+        if visible_cats.get("physical", True) and "physical" in active_cats:
+            is_plant_only = (active_cats == {"physical"} and obs_row and obs_row.get("PlantPart_Problem") and not obs_row.get("Box_Label_Problem"))
+            if not is_plant_only:
+                box_bg = "#2d2422" if is_dark else "#f7f5f4"
+                box_fg = "#d7ccc8" if is_dark else "#795548"
+                weight = 96 if preset == "collections_manager" else 60
+                candidates.append((weight, "#795548", "BOX", box_bg, box_fg))
+
+        if visible_cats.get("media", True) and "media" in active_cats:
+            img_bg = "#1a2c3d" if is_dark else "#f0f8ff"
+            img_fg = "#7dd3fc" if is_dark else "#0284c7"
+            candidates.append((50, "#0284c7", "IMG", img_bg, img_fg))
+
+        if visible_cats.get("conflicts", True):
+            if has_problem and problems_have_history:
+                his_bg = "#2a1b3d" if is_dark else "#f3e8ff"
+                his_fg = "#d8b4fe" if is_dark else "#7b1fa2"
+                candidates.append((45, "#7b1fa2", "ERR+HIS", his_bg, his_fg))
+            elif problems_have_history:
+                cfct_bg = "#1e293b" if is_dark else "#e9f0f5"
+                cfct_fg = "#93c5fd" if is_dark else "#4a7b9d"
+                candidates.append((40, "#4a7b9d", "CFCT", cfct_bg, cfct_fg))
+
+        if visible_cats.get("general_err", True) and has_problem:
+            err_bg = "#3b1c1e" if is_dark else "#fdf2f2"
+            err_fg = "#f28b82" if is_dark else "#c93a40"
+            candidates.append((30, "#c93a40", "ERR", err_bg, err_fg))
+
+        if candidates:
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            _, accent_color, badge_label, badge_bg, badge_fg = candidates[0]
+            return accent_color, badge_label, badge_bg, badge_fg
+
+        if visible_cats.get("unreviewed", True):
+            unrev_bg = "#242725" if is_dark else "#f2f5f1"
+            unrev_fg = "#9ca3af" if is_dark else "#757d77"
+            return canvas_bg, "UNREV", unrev_bg, unrev_fg
+
+        return canvas_bg, "", canvas_bg, canvas_bg
+
     def _refresh_card_accent(self, oid):
         if oid not in self.item_data:
             return
@@ -1002,64 +1077,22 @@ class TreeviewListboxWrapper(ttk.Frame):
             has_problem = bool(active_cats) or getattr(self.main_window, "_problem_cache", {}).get(oid, False)
         problems_have_history = self.main_window._problems_have_history(oid) if hasattr(self.main_window, "_problems_have_history") else False
 
-        has_unknown = False
-        if hasattr(self.main_window, "is_unknown"):
-            reg_dict = self.main_window._get_reg_dict() if hasattr(self.main_window, "_get_reg_dict") else getattr(self.main_window, "_cached_reg_dict", {})
-            reg_row = reg_dict.get(oid) or {}
-            if reg_row is None and str(oid).isdigit():
-                reg_row = reg_dict.get(int(oid), {}) if reg_dict else {}
-            for v in reg_row.values():
-                if self.main_window.is_unknown(v):
-                    has_unknown = True
-                    break
-
         obs_dict = self.main_window._get_obs_dict() if hasattr(self.main_window, "_get_obs_dict") else getattr(self.main_window, "_cached_obs_dict", None)
         obs_row = obs_dict.get(oid) if obs_dict else {}
         if obs_row is None and str(oid).isdigit():
             obs_row = obs_dict.get(int(oid), {}) if obs_dict else {}
 
-        needs_photo = False
-        if "media" in active_cats:
-            needs_photo = True
-        elif hasattr(self.main_window, "image_mode") and self.main_window.image_mode not in ("online", "offline"):
-            if obs_row and bool(obs_row.get("Images_Missing", False)):
-                needs_photo = True
+        import config
+        ui_prefs = getattr(self, "_ui_card_prefs", None) or config.get_directory_card_prefs()
+        new_color, badge_label, badge_bg, badge_fg = self._resolve_card_badge_display(
+            active_cats, reviewed, has_problem, problems_have_history, obs_row, is_dark, canvas_bg, ui_prefs
+        )
 
-        if reviewed and has_problem:
-            new_color = "#d9a036"
-            badge_label, badge_bg, badge_fg = "REV+ERR", "#F57C00", "#ffffff"
-        elif reviewed:
-            new_color = "#3a7d44"
-            badge_label, badge_bg, badge_fg = "REV",     ("#162d1a" if is_dark else "#f2f9f3"), ("#85e89d" if is_dark else "#3a7d44")
-        elif "taxonomy" in active_cats:
-            new_color = "#c93a40"
-            badge_label, badge_bg, badge_fg = "TAX",     ("#3b1c1e" if is_dark else "#fdf2f2"), ("#f28b82" if is_dark else "#c93a40")
-        elif "collection" in active_cats:
-            new_color = "#d9a036"
-            badge_label, badge_bg, badge_fg = "PROV",    ("#3b2e15" if is_dark else "#fef9e7"), ("#fcd34d" if is_dark else "#b45309")
-        elif "physical" in active_cats:
-            is_plant_only = (active_cats == {"physical"} and obs_row and obs_row.get("PlantPart_Problem") and not obs_row.get("Box_Label_Problem"))
-            if is_plant_only:
-                new_color = canvas_bg
-                badge_label, badge_bg, badge_fg = "UNREV",   ("#242725" if is_dark else "#f2f5f1"), ("#9ca3af" if is_dark else "#757d77")
-            else:
-                new_color = "#795548"
-                badge_label, badge_bg, badge_fg = "BOX",     ("#2d2422" if is_dark else "#f7f5f4"), ("#d7ccc8" if is_dark else "#795548")
-        elif "media" in active_cats:
-            new_color = "#0284c7"
-            badge_label, badge_bg, badge_fg = "IMG",     ("#1a2c3d" if is_dark else "#f0f8ff"), ("#7dd3fc" if is_dark else "#0284c7")
-        elif has_problem and problems_have_history:
-            new_color = "#7b1fa2"
-            badge_label, badge_bg, badge_fg = "ERR+HIS", ("#2a1b3d" if is_dark else "#f3e8ff"), ("#d8b4fe" if is_dark else "#7b1fa2")
-        elif has_problem:
-            new_color = "#c93a40"
-            badge_label, badge_bg, badge_fg = "ERR",     ("#3b1c1e" if is_dark else "#fdf2f2"), ("#f28b82" if is_dark else "#c93a40")
-        elif problems_have_history:
-            new_color = "#4a7b9d"
-            badge_label, badge_bg, badge_fg = "CFCT",    ("#1e293b" if is_dark else "#e9f0f5"), ("#93c5fd" if is_dark else "#4a7b9d")
-        else:
+        accent_mode = ui_prefs.get("accent_strip_mode", "problems")
+        if accent_mode == "review_only":
+            new_color = "#3a7d44" if reviewed else canvas_bg
+        elif accent_mode == "hidden":
             new_color = canvas_bg
-            badge_label, badge_bg, badge_fg = "UNREV",   ("#242725" if is_dark else "#f2f5f1"), ("#9ca3af" if is_dark else "#757d77")
 
         accent_strip.configure(bg=new_color)
         self.item_data[oid]["accent_color_normal"] = new_color
@@ -1070,47 +1103,13 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         self._apply_tags_to_card(oid)
 
-        from config import sc
-
-        # Update ukn_badge dynamically
-        ukn_badge = self.item_data[oid].get("ukn_badge")
-        if ukn_badge and ukn_badge.winfo_exists():
-            if has_unknown:
-                if ukn_badge.winfo_manager() != 'pack':
-                    ukn_badge.pack(side="right", padx=(sc(2), sc(2)))
-            else:
-                if ukn_badge.winfo_manager() == 'pack':
-                    ukn_badge.pack_forget()
-
-        # img_badge is retired in favor of the unified photo indicator on row 2
-        img_badge = self.item_data[oid].get("img_badge")
-        if img_badge and img_badge.winfo_exists():
-            if img_badge.winfo_manager() == 'pack':
-                img_badge.pack_forget()
-
-        # Update Loaned badge dynamically
-        loaned_raw = obs_row.get("Loaned out", False) if obs_row else False
-        loaned = utils.parse_bool(loaned_raw)
-
-        loaned_badge = self.item_data[oid].get("loaned_badge")
-        if loaned_badge and loaned_badge.winfo_exists():
-            if loaned:
-                if loaned_badge.winfo_manager() != 'pack':
-                    loaned_badge.pack(side="right", padx=(sc(2), sc(2)))
-            else:
-                if loaned_badge.winfo_manager() == 'pack':
-                    loaned_badge.pack_forget()
-
-        has_unval = self.main_window.has_unvalidated_sources(oid) if hasattr(self.main_window, "has_unvalidated_sources") else False
-        unval_badge = self.item_data[oid].get("unval_badge")
-
-        if unval_badge and unval_badge.winfo_exists():
-            if has_unval:
-                if unval_badge.winfo_manager() != 'pack':
-                    unval_badge.pack(side="right", padx=(sc(2), sc(2)))
-            else:
-                if unval_badge.winfo_manager() == 'pack':
-                    unval_badge.pack_forget()
+        # Single-badge discipline: Row 1 hosts strictly cb_lbl, tax_lbl, and status_badge.
+        # Retired backward-compatibility dummy badges remain un-packed dummy objects without geometry hooks.
+        for b_name in ("ukn_badge", "img_badge", "loaned_badge", "unval_badge"):
+            b = self.item_data[oid].get(b_name)
+            if b and b.winfo_exists() and b.winfo_manager() == 'pack':
+                b.pack_forget()
+                b.pack_forget()
 
     def _create_badge(self, parent, text, bg, fg, border_color):
         from config import sc
@@ -1273,8 +1272,51 @@ class TreeviewListboxWrapper(ttk.Frame):
                 if accent_strip and accent_strip.winfo_exists():
                     accent_strip.configure(bg=accent_selected)
 
+    def apply_directory_view_preferences(self, new_prefs=None):
+        """Safely update virtual card templates and geometry across any permutation of settings."""
+        if new_prefs is not None:
+            self._ui_card_prefs = new_prefs
+        else:
+            import config
+            self._ui_card_prefs = config.get_directory_card_prefs()
+
+        for win_id, widget_dict in self._card_pool:
+            try:
+                widget_dict["outer_frame"].destroy()
+            except Exception:
+                pass
+        self._card_pool.clear()
+
+        for win_id, widget_dict in list(self._active_card_windows.values()):
+            try:
+                widget_dict["outer_frame"].destroy()
+            except Exception:
+                pass
+        self._active_card_windows.clear()
+
+        self._card_height = None
+        if self.active_view == "detailed" and self.winfo_exists():
+            self._measure_card_height()
+            self._schedule_viewport_update()
+
     def _build_empty_card_widget(self, parent):
         from config import sc
+        import config
+        ui_prefs = getattr(self, "_ui_card_prefs", None) or config.get_directory_card_prefs()
+        density = ui_prefs.get("density_mode", "standard")
+        if density == "compact":
+            body_padx = sc(6)
+            body_pady = sc(3)
+            row2_pady = (sc(1), 0)
+        elif density == "expanded":
+            body_padx = sc(8)
+            body_pady = sc(7)
+            row2_pady = (sc(3), 0)
+        else: # standard
+            body_padx = sc(8)
+            body_pady = sc(5)
+            row2_pady = (sc(2), 0)
+
         is_dark = self.main_window.dark_mode_active if hasattr(self.main_window, "dark_mode_active") else False
         canvas_bg      = "#181c19" if is_dark else "#fbfaf8"
         card_bg        = "#212622" if is_dark else "#f2f5f1"
@@ -1290,7 +1332,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         accent_strip.is_accent_strip = True
 
         card_body = tk.Frame(outer_frame, bg=card_bg, bd=0, highlightthickness=0,
-                             padx=sc(8), pady=sc(5), cursor="hand2")
+                             padx=body_padx, pady=body_pady, cursor="hand2")
         card_body.pack(side="left", fill="both", expand=True)
 
         row1 = tk.Frame(card_body, bg=card_bg)
@@ -1308,7 +1350,7 @@ class TreeviewListboxWrapper(ttk.Frame):
         status_badge.pack(side="right", padx=(sc(2), 0))
 
         row2 = tk.Frame(card_body, bg=card_bg)
-        row2.pack(fill="x", anchor="w", pady=(sc(2), 0))
+        row2.pack(fill="x", anchor="w", pady=row2_pady)
 
         id_lbl = tk.Label(row2, text="", bg=card_bg, fg=text_primary,
                           font=("JetBrains Mono", sc(8), "bold"))
@@ -1330,12 +1372,15 @@ class TreeviewListboxWrapper(ttk.Frame):
         loaned_badge = tk.Label(row1, text="", bg=card_bg)
         unval_badge = tk.Label(row1, text="", bg=card_bg)
 
+        show_loc = ui_prefs.get("show_location_row", True) and ui_prefs.get("location_granularity", "full") != "none"
         row3 = tk.Frame(card_body, bg=card_bg)
-        row3.pack(fill="x", anchor="w", pady=(sc(1), 0))
+        if show_loc:
+            row3.pack(fill="x", anchor="w", pady=(sc(1), 0))
 
         loc_lbl = tk.Label(row3, text="", bg=card_bg, fg=text_secondary,
                            font=("Inter", sc(8)), anchor="w", justify="left")
-        loc_lbl.pack(side="left", padx=(sc(16), 0), fill="x", expand=True)
+        if show_loc:
+            loc_lbl.pack(side="left", padx=(sc(16), 0), fill="x", expand=True)
 
         cb_lbl.is_cb_lbl = True
         def _add_virtual_tag(w):
@@ -1446,41 +1491,17 @@ class TreeviewListboxWrapper(ttk.Frame):
             if obs_row and bool(obs_row.get("Images_Missing", False)):
                 needs_photo = True
 
-        if reviewed and has_problem:
-            accent_color = "#d9a036"
-            badge_label, badge_bg, badge_fg = "REV+ERR", "#F57C00", "#ffffff"
-        elif reviewed:
-            accent_color = "#3a7d44"
-            badge_label, badge_bg, badge_fg = "REV",     ("#162d1a" if is_dark else "#f2f9f3"), ("#85e89d" if is_dark else "#3a7d44")
-        elif "taxonomy" in active_cats:
-            accent_color = "#c93a40"
-            badge_label, badge_bg, badge_fg = "TAX",     ("#3b1c1e" if is_dark else "#fdf2f2"), ("#f28b82" if is_dark else "#c93a40")
-        elif "collection" in active_cats:
-            accent_color = "#d9a036"
-            badge_label, badge_bg, badge_fg = "PROV",    ("#3b2e15" if is_dark else "#fef9e7"), ("#fcd34d" if is_dark else "#b45309")
-        elif "physical" in active_cats:
-            is_plant_only = (active_cats == {"physical"} and obs_row and obs_row.get("PlantPart_Problem") and not obs_row.get("Box_Label_Problem"))
-            if is_plant_only:
-                accent_color = canvas_bg
-                badge_label, badge_bg, badge_fg = "UNREV",   ("#242725" if is_dark else "#f2f5f1"), ("#9ca3af" if is_dark else "#757d77")
-            else:
-                accent_color = "#795548"
-                badge_label, badge_bg, badge_fg = "BOX",     ("#2d2422" if is_dark else "#f7f5f4"), ("#d7ccc8" if is_dark else "#795548")
-        elif "media" in active_cats:
-            accent_color = "#0284c7"
-            badge_label, badge_bg, badge_fg = "IMG",     ("#1a2c3d" if is_dark else "#f0f8ff"), ("#7dd3fc" if is_dark else "#0284c7")
-        elif has_problem and problems_have_history:
-            accent_color = "#7b1fa2"
-            badge_label, badge_bg, badge_fg = "ERR+HIS", ("#2a1b3d" if is_dark else "#f3e8ff"), ("#d8b4fe" if is_dark else "#7b1fa2")
-        elif has_problem:
-            accent_color = "#c93a40"
-            badge_label, badge_bg, badge_fg = "ERR",     ("#3b1c1e" if is_dark else "#fdf2f2"), ("#f28b82" if is_dark else "#c93a40")
-        elif problems_have_history:
-            accent_color = "#4a7b9d"
-            badge_label, badge_bg, badge_fg = "CFCT",    ("#1e293b" if is_dark else "#e9f0f5"), ("#93c5fd" if is_dark else "#4a7b9d")
-        else:
+        import config
+        ui_prefs = getattr(self, "_ui_card_prefs", None) or config.get_directory_card_prefs()
+        accent_color, badge_label, badge_bg, badge_fg = self._resolve_card_badge_display(
+            active_cats, reviewed, has_problem, problems_have_history, obs_row, is_dark, canvas_bg, ui_prefs
+        )
+
+        accent_mode = ui_prefs.get("accent_strip_mode", "problems")
+        if accent_mode == "review_only":
+            accent_color = "#3a7d44" if reviewed else canvas_bg
+        elif accent_mode == "hidden":
             accent_color = canvas_bg
-            badge_label, badge_bg, badge_fg = "UNREV",   ("#242725" if is_dark else "#f2f5f1"), ("#9ca3af" if is_dark else "#757d77")
 
         widgets["outer_frame"].configure(bg=canvas_bg)
         widgets["card_body"].configure(bg=card_bg)
@@ -1508,25 +1529,29 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         genus   = str(reg_row.get("Genus",   "") or "").strip()
         species = str(reg_row.get("Species", "") or "").strip()
-        tax_text = f"{genus} {species}".strip() or "Unknown Specimen"
+        author  = str(reg_row.get("Author",  "") or "").strip() if ui_prefs.get("show_author_citation", False) else ""
+        name_parts = [p for p in (genus, species, author) if p]
+        if name_parts:
+            tax_text = " ".join(name_parts)
+        else:
+            fallback = ui_prefs.get("unknown_taxon_fallback", "unknown")
+            if fallback == "stored_as" and obs_row and obs_row.get("Stored as"):
+                tax_text = str(obs_row.get("Stored as")).strip()
+            elif fallback == "empty":
+                tax_text = ""
+            else:
+                tax_text = "Unknown Specimen"
         widgets["tax_lbl"].configure(text=tax_text)
 
         badge_frame = widgets["status_badge"]
         badge_frame.configure(text=badge_label, bg=badge_bg, fg=badge_fg, highlightbackground=badge_bg)
 
-        # Update ukn_badge dynamically
-        if widgets.get("ukn_badge") and widgets["ukn_badge"].winfo_exists():
-            if has_unknown:
-                if widgets["ukn_badge"].winfo_manager() != 'pack':
-                    widgets["ukn_badge"].pack(side="right", padx=(sc(2), sc(2)))
-            else:
-                if widgets["ukn_badge"].winfo_manager() == 'pack':
-                    widgets["ukn_badge"].pack_forget()
-
-        # img_badge is retired in favor of the unified photo indicator on row 2
-        if widgets.get("img_badge") and widgets["img_badge"].winfo_exists():
-            if widgets["img_badge"].winfo_manager() == 'pack':
-                widgets["img_badge"].pack_forget()
+        # Single-badge discipline: Row 1 hosts strictly cb_lbl, tax_lbl, and status_badge.
+        # Retired backward-compatibility dummy badges remain un-packed dummy objects without geometry hooks.
+        for b_name in ("ukn_badge", "img_badge", "loaned_badge", "unval_badge"):
+            b = widgets.get(b_name)
+            if b and b.winfo_exists() and b.winfo_manager() == 'pack':
+                b.pack_forget()
 
         has_unval = self.main_window.has_unvalidated_sources(oid) if hasattr(self.main_window, "has_unvalidated_sources") else False
 
@@ -1586,19 +1611,21 @@ class TreeviewListboxWrapper(ttk.Frame):
         has_img_prob = bool(obs_row.get("Images_Problem", False)) if obs_row else False
 
         meta_parts = []
-        if family:
+        meta_prefs = ui_prefs.get("visible_meta_tags", {})
+        if meta_prefs.get("family", True) and family:
             meta_parts.append(family.upper())
-        if photo_count > 0:
-            meta_parts.append(f"{photo_count} photo{'s' if photo_count > 1 else ''}")
-        elif has_img_prob or needs_photo:
-            meta_parts.append("NO PHOTO")
-        if has_online:
-            meta_parts.append("ONLINE")
-        if loaned:
+        if meta_prefs.get("photos", True):
+            if photo_count > 0:
+                meta_parts.append(f"{photo_count} photo{'s' if photo_count > 1 else ''}")
+            elif has_img_prob or needs_photo:
+                meta_parts.append("NO PHOTO")
+            if has_online:
+                meta_parts.append("ONLINE")
+        if meta_prefs.get("loan", True) and loaned:
             meta_parts.append("LOAN")
-        if has_unknown:
+        if meta_prefs.get("unknown", True) and has_unknown:
             meta_parts.append("UKN")
-        if has_unval:
+        if meta_prefs.get("unvalidated", True) and has_unval:
             meta_parts.append("UNVAL")
 
         meta_text = " • ".join(meta_parts)
@@ -1616,15 +1643,23 @@ class TreeviewListboxWrapper(ttk.Frame):
         cabinet   = _clean(obs_row.get("Cabinet",   ""))
         shelf     = _clean(obs_row.get("Shelf",     ""))
 
+        show_loc = ui_prefs.get("show_location_row", True) and ui_prefs.get("location_granularity", "full") != "none"
         loc_parts = []
-        if building: loc_parts.append(building)
-        fr = ", ".join(filter(None, [f"Floor {floor}" if floor else "", extra]))
-        if fr: loc_parts.append(fr)
-        cab_shelf = ", ".join(filter(None, [f"Cab {cabinet}" if cabinet else "", f"Shelf {shelf}" if shelf else ""]))
-        st = " / ".join(filter(None, [stored_as, cab_shelf]))
-        if st: loc_parts.append(st)
-        loc_text = " \u2022 ".join(loc_parts) if loc_parts else "No location info"
+        if show_loc:
+            granularity = ui_prefs.get("location_granularity", "full")
+            if granularity == "compact":
+                cab_shelf = ", ".join(filter(None, [f"Cab {cabinet}" if cabinet else "", f"Shelf {shelf}" if shelf else ""]))
+                st = " / ".join(filter(None, [stored_as, cab_shelf]))
+                if st: loc_parts.append(st)
+            else:
+                if building: loc_parts.append(building)
+                fr = ", ".join(filter(None, [f"Floor {floor}" if floor else "", extra]))
+                if fr: loc_parts.append(fr)
+                cab_shelf = ", ".join(filter(None, [f"Cab {cabinet}" if cabinet else "", f"Shelf {shelf}" if shelf else ""]))
+                st = " / ".join(filter(None, [stored_as, cab_shelf]))
+                if st: loc_parts.append(st)
 
+        loc_text = " • ".join(loc_parts) if loc_parts else ("No location info" if show_loc else "")
         widgets["loc_lbl"].configure(text=loc_text)
 
         self._bind_card_events(widgets["outer_frame"], widgets["card_body"], oid)
@@ -1829,6 +1864,7 @@ class TreeviewListboxWrapper(ttk.Frame):
 
         self._clear_virtual_cards()
         self.item_data.clear()
+        self._last_highlighted_oids.clear()
         self._schedule_viewport_update()
 
     def insert(self, index, title, genus=None, species=None, reviewed=None, color=None, has_online_photo=False, bulk=False):
@@ -2034,6 +2070,12 @@ class TreeviewListboxWrapper(ttk.Frame):
             self.canvas.focus_set()
 
     def destroy(self):
+        if hasattr(self, "_pending_viewport_update") and self._pending_viewport_update:
+            try:
+                self.after_cancel(self._pending_viewport_update)
+            except Exception:
+                pass
+            self._pending_viewport_update = None
         if hasattr(self, "_resize_job") and self._resize_job:
             try:
                 self.canvas.after_cancel(self._resize_job)

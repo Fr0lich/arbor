@@ -296,6 +296,71 @@ class CommandPalette(tk.Toplevel):
                 "icon": "🖼️",
                 "action": lambda: ui.toggle_images_panel_shortcut(None) if hasattr(ui, "toggle_images_panel_shortcut") else None,
             },
+            # Directory Card Customization & View Presets
+            {
+                "type": "command",
+                "category": "VIEW",
+                "label": "Card Layout: Standard (78px, 3 Rows)",
+                "shortcut": "View",
+                "icon": "🗂️",
+                "action": lambda: ui.apply_card_persona("standard") if hasattr(ui, "apply_card_persona") else (ui.apply_card_preset("standard") if hasattr(ui, "apply_card_preset") else None),
+            },
+            {
+                "type": "command",
+                "category": "VIEW",
+                "label": "Card Layout: Compact (64px, 2 Rows)",
+                "shortcut": "View",
+                "icon": "⚡",
+                "action": lambda: ui.apply_card_persona("compact") if hasattr(ui, "apply_card_persona") else (ui.apply_card_preset("compact") if hasattr(ui, "apply_card_preset") else None),
+            },
+            {
+                "type": "command",
+                "category": "VIEW",
+                "label": "Card Layout: Full Details (92px, Author + Location)",
+                "shortcut": "View",
+                "icon": "🌿",
+                "action": lambda: ui.apply_card_persona("full_detail") if hasattr(ui, "apply_card_persona") else (ui.apply_card_preset("full_detail") if hasattr(ui, "apply_card_preset") else None),
+            },
+            {
+                "type": "command",
+                "category": "VIEW",
+                "label": "Card Layout: Minimalist (Clean, No Badges/Location)",
+                "shortcut": "View",
+                "icon": "📖",
+                "action": lambda: ui.apply_card_persona("minimalist") if hasattr(ui, "apply_card_persona") else (ui.apply_card_preset("minimalist") if hasattr(ui, "apply_card_preset") else None),
+            },
+            {
+                "type": "command",
+                "category": "VIEW",
+                "label": "Configure Directory Cards & View Settings...",
+                "shortcut": "View",
+                "icon": "⚙️",
+                "action": lambda: ui.open_unified_settings("appearance") if hasattr(ui, "open_unified_settings") else None,
+            },
+            {
+                "type": "command",
+                "category": "VIEW",
+                "label": "Toggle Directory Card Location Row (Row 3)",
+                "shortcut": "View",
+                "icon": "📍",
+                "action": lambda: ui.toggle_card_location_row() if hasattr(ui, "toggle_card_location_row") else None,
+            },
+            {
+                "type": "command",
+                "category": "VIEW",
+                "label": "Toggle Directory Card Status Pill Badges",
+                "shortcut": "View",
+                "icon": "🏷️",
+                "action": lambda: ui.toggle_card_status_badges() if hasattr(ui, "toggle_card_status_badges") else None,
+            },
+            {
+                "type": "command",
+                "category": "VIEW",
+                "label": "Restore Directory Card Settings to Default",
+                "shortcut": "View",
+                "icon": "↺",
+                "action": lambda: ui.restore_default_card_settings() if hasattr(ui, "restore_default_card_settings") else None,
+            },
             # File, Database & Export Operations
             {
                 "type": "command",
@@ -512,6 +577,9 @@ class CommandPalette(tk.Toplevel):
             "<Configure>",
             lambda e: self.canvas.itemconfig("inner_frame", width=e.width)
         )
+
+        from ui.scroll_helper import bind_mousewheel
+        bind_mousewheel(self.canvas, self.items_frame)
 
         # Footer hint bar
         footer = tk.Frame(self, bg=self.bg_card, padx=pad_x, pady=sc(6))

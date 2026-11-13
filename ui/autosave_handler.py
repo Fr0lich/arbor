@@ -51,10 +51,26 @@ class AutosaveMixin:
                 }
                 # Write to tmp first then replace for atomic safety
                 tmp_path = path + ".tmp"
-                with open(tmp_path, "w", encoding="utf-8") as f:
-                    json.dump(json_data, f)
-                os.replace(tmp_path, path)
-                self.root.after(0, lambda: callback(True, None) if callback else None)
+                try:
+                    with open(tmp_path, "w", encoding="utf-8") as f:
+                        json.dump(json_data, f)
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            os.replace(tmp_path, path)
+                            break
+                        except (PermissionError, OSError):
+                            if attempt == max_retries - 1:
+                                raise
+                            import time
+                            time.sleep(0.1 * (attempt + 1))
+                    self.root.after(0, lambda: callback(True, None) if callback else None)
+                finally:
+                    if os.path.exists(tmp_path):
+                        try:
+                            os.remove(tmp_path)
+                        except OSError:
+                            pass
             except Exception as e:
                 from utils import debug_error
                 debug_error("_write_autosave_async worker", str(e))

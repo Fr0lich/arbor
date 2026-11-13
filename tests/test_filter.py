@@ -520,3 +520,101 @@ class TestFilterManager:
             image_mode="folder"
         )
         assert res == ["4"]
+
+
+# ==============================================================================
+# CONSOLIDATED SEARCH ENGINE & FILTER DIALOG TESTS
+# ==============================================================================
+
+def test_consolidated_search_engine_caching():
+    from backend.search import SearchEngine
+    engine = SearchEngine()
+    df_reg = pd.DataFrame({"Genus": ["Quercus"], "Species": ["alba"]}, index=["obj_1"])
+    reg_dict = {"obj_1": {"Genus": "Quercus", "Species": "alba", "Family": "Fagaceae"}}
+    assert engine._search_index_cache is None
+    index1 = engine.get_search_index(df_reg, reg_dict)
+    assert engine._search_index_cache is not None
+    assert index1 == engine._search_index_cache
+    assert "obj_1" in index1
+    index2 = engine.get_search_index(None, None)
+    assert index1 is index2
+    engine.invalidate_search_index()
+    assert engine._search_index_cache is None
+    index3 = engine.get_search_index(None, None)
+    assert index3 == {}
+
+
+def test_consolidated_apply_search():
+    from backend.search import SearchEngine
+    engine = SearchEngine()
+    index = {
+        "obj_1": {
+            "id": "obj_1",
+            "genus_species": "quercus alba",
+            "family": "fagaceae",
+            "all": "obj_1 quercus alba fagaceae"
+        },
+        "obj_2": {
+            "id": "obj_2",
+            "genus_species": "acer saccharum",
+            "family": "sapindaceae",
+            "all": "obj_2 acer saccharum sapindaceae"
+        }
+    }
+    assert engine.apply_search("", index) is None
+    assert engine.apply_search("quercus", index) == ["obj_1"]
+    assert engine.apply_search("acer", index) == ["obj_2"]
+
+
+def test_consolidated_filter_dialog_lifecycle(tk_root):
+    import tkinter as tk
+    from ui.filter_dialog import FilterDialogController
+    class DummyApp:
+        def __init__(self):
+            self.config = {
+                "ui_sections": {
+                    "location": [
+                        {"name": "Room", "type": "text"},
+                        {"name": "Status", "type": "choice", "choices": ["Active", "Archived"]},
+                    ]
+                }
+            }
+            self.df_reg = None
+            self.active_object_ids = []
+
+    class DummyUI:
+        def __init__(self, root):
+            self.root = root
+            self.app = DummyApp()
+            self.filter_window = None
+            self.problem_columns = ["Genus_Problem", "Species_Problem", "Image_Problem"]
+            self.filter_vars = {
+                "Reviewed": tk.StringVar(value="Ignore"),
+                "Reviewed_With_Problem": tk.StringVar(value="Ignore"),
+                "Problem_With_History": tk.StringVar(value="Ignore"),
+                "Has_History": tk.StringVar(value="Ignore"),
+                "Has_Comment": tk.StringVar(value="Ignore"),
+                "Has_Location_Comment": tk.StringVar(value="Ignore"),
+                "Genus_Problem": tk.StringVar(value="Ignore"),
+                "Species_Problem": tk.StringVar(value="Ignore"),
+                "Image_Problem": tk.StringVar(value="Ignore"),
+                "Any_Problem": tk.StringVar(value="Ignore"),
+                "Historical_Data": tk.StringVar(value="Ignore"),
+                "Has_Images": tk.StringVar(value="Ignore"),
+            }
+            self.filter_mode = tk.StringVar(value="AND")
+            self.filter_entries = {"Room": tk.StringVar(value="")}
+            self.filter_dropdowns = {"Status": tk.StringVar(value="")}
+            self.filter_location_vars = {}
+        def filter_objects(self): pass
+        def select_object_id(self, oid): pass
+        def update_filter_button_text(self): pass
+        def refresh_list(self): pass
+        def update_object_count(self): pass
+
+    ui = DummyUI(tk_root)
+    FilterDialogController.open_filter_menu(ui)
+    assert ui.filter_window is not None
+    assert ui.filter_window.winfo_exists()
+    FilterDialogController.clear_filter(ui, ui.filter_window, destroy_win=True)
+    assert ui.filter_vars["Reviewed"].get() == "Ignore"

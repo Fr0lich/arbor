@@ -26,57 +26,65 @@ from ui.state import app_bus, SETTINGS_CHANGED, LAYOUT_CHANGED
 
 SETTING_INFO_TEXTS = {
     "focus_fallback": (
-        "When Focus Mode is active, if a record has no active problem fields, "
-        "Arbor automatically falls back to showing standard registration fields "
-        "so you are never left with an empty screen."
+        "When Focus Mode is active, records without open problems automatically display standard "
+        "registration fields so you are never left with an empty screen.\n\n"
+        "Excel Impact: Displays default catalog fields from the 'Registration' sheet even when all "
+        "problem flag columns on the 'Observation' sheet are FALSE."
     ),
     "focus_dynamic_update": (
-        "As you navigate between records, the form dynamically adjusts to display "
-        "only the specific fields that have problems for that exact record, "
-        "rather than a static list."
+        "As you navigate between specimen cards, the form dynamically shows only the specific fields "
+        "that have problem flags for that active record.\n\n"
+        "Excel Impact: Filters visible inputs based on which problem columns are set to TRUE in "
+        "the 'Observation' sheet row for the active ObjectID."
     ),
     "snap_lock": (
-        "Automatically snaps and adjusts panel sash dividers when entering Focus Mode "
-        "to optimize visible screen space for problem fields and zoom in on content."
+        "Automatically snaps and adjusts panel widths when entering Focus Mode to optimize visible "
+        "screen space for problem fields and specimen photos.\n\n"
+        "Technical: Smoothly adjusts workspace sash dividers without modifying any saved database fields."
     ),
     "image_url_pattern_override": (
-        "Custom URL format template for fetching object photos online. Supports tokens:\n"
-        "• {id} – Full alphanumeric Object ID\n"
-        "• {num} – Numeric ID only\n"
-        "• {num:04d} – Zero-padded 4-digit number\n"
-        "• {suffix} – Photo variant suffix ('', '-01', '-02')\n"
-        "Leave blank to use the database default."
+        "Custom web address template for viewing specimen photographs online if your museum hosts scans on a web server.\n\n"
+        "Data Tokens: {id} (Alphanumeric ID), {num} (Numeric only), {num:04d} (4-digit padded), {suffix} (photo variant).\n"
+        "Excel Impact: Overrides default URL generation for links stored in the 'Photo' sheet. Leave blank for default."
     ),
     "image_resampling_algorithm": (
-        "Rendering filter used during image zoom:\n"
-        "• LANCZOS: Maximum clarity, slower for very large images.\n"
+        "Rendering filter used during image zoom to ensure label handwriting and plant parts remain legible:\n\n"
+        "• LANCZOS: Maximum clarity and sharpness (best for reading faded handwriting).\n"
         "• BILINEAR: Smooth and balanced performance.\n"
-        "• NEAREST: No smoothing (pixelated), fastest for low-spec hardware or pixel-level inspection."
+        "• NEAREST: No smoothing (pixelated), fastest for low-spec computer hardware."
     ),
     "auto_advance_history": (
-        "After accepting a historical suggestion to resolve a conflict, "
-        "Arbor immediately navigates to the next record that contains outstanding historical suggestions."
+        "After accepting a historical suggestion to resolve a conflict, Arbor immediately jumps to "
+        "the next card that has outstanding historical suggestions.\n\n"
+        "Excel Impact: Applies accepted values to the 'Registration' sheet, records the edit in the "
+        "'Log' sheet, and advances to the next conflicting record."
     ),
     "autosave_archive_limit": (
-        "Threshold of historical session autosaves stored before Arbor prompts you to "
-        "review or clean up old restore points."
+        "The threshold of historical session backups stored before Arbor prompts you to review or clean up old restore points.\n\n"
+        "Excel / Safety: Timestamped backup copies of your workbook are preserved in the '.arbor_backups/' "
+        "folder to ensure no curation work can be lost."
     ),
     "enable_excel_import_backup": (
-        "Automatically generates a timestamped snapshot of your current dataset inside "
-        "the 'backups/' directory before importing an external Excel sheet."
+        "Automatically generates a timestamped safety backup copy of your current dataset before importing external Excel sheets.\n\n"
+        "Excel / Safety: Creates a safety snapshot inside 'backups/' before any external import to prevent overwriting records."
     ),
     "strict_input_validation": (
-        "Enforces strict data format checks before committing edits or navigating away, "
-        "rather than solely applying visual warning tints."
+        "Enforces strict data format checks before committing edits or navigating away, ensuring consistent data entry.\n\n"
+        "Excel Impact: Validates text formatting before writing to the 'Registration' sheet rather than solely showing a visual tint."
     ),
     "require_mobile_pin": (
-        "Require security PIN authentication for mobile devices connecting via Mobile Companion. "
-        "When disabled, mobile devices are immediately granted a session without entering a PIN."
+        "Requires security PIN authentication for phone or tablet devices connecting via the Mobile Companion.\n\n"
+        "Network / Security: When enabled, mobile browsers must enter the 4-digit PIN shown on the computer screen before viewing records."
     ),
     "mobile_autosave_on_stop": (
-        "When enabled, stopping the mobile companion server automatically writes all pending "
-        "in-memory mobile edits to the workbook on disk without prompting. When disabled (default), "
-        "Arbor displays a confirmation prompt to ensure no mobile edits are lost."
+        "When enabled, stopping the Mobile Companion server automatically writes all pending mobile updates "
+        "to the Excel workbook on disk without prompting.\n\n"
+        "Excel Impact: Writes in-memory mobile edits to the '.xlsx' file immediately. When disabled (default), "
+        "Arbor prompts for confirmation to ensure no edits are saved unintentionally."
+    ),
+    "directory_view_strip": (
+        "When enabled, adds a compact toolbar directly above the specimen directory with 1-click density buttons (Compact ⚡, Standard 🗂️, Full Details 🌿), a physical location toggle (📍), and a quick settings button (⚙️).\n\n"
+        "Interface Ergonomics: Gives instant access to switch density and toggle storage locations in-situ without opening Settings. Default is off to keep the directory header clean and minimal."
     ),
 }
 
@@ -282,6 +290,32 @@ class UnifiedSettingsWindow:
         
         snap_lck = _get_val("snap_lock_var", p.get("snap_lock", False))
         self.var_snap_lock = tk.BooleanVar(value=bool(snap_lck))
+
+        # Directory Card View Preferences
+        card_p = config.get_directory_card_prefs()
+        self.var_card_density = tk.StringVar(value=card_p.get("density_mode", "standard"))
+        self.var_card_show_loc = tk.BooleanVar(value=bool(card_p.get("show_location_row", True)))
+        self.var_card_loc_granularity = tk.StringVar(value=card_p.get("location_granularity", "full"))
+        self.var_card_show_badge = tk.BooleanVar(value=bool(card_p.get("show_status_badge", True)))
+        self.var_card_show_author = tk.BooleanVar(value=bool(card_p.get("show_author_citation", False)))
+        self.var_card_fallback = tk.StringVar(value=card_p.get("unknown_taxon_fallback", "unknown"))
+        self.var_card_badge_priority = tk.StringVar(value=card_p.get("badge_priority_preset", "default"))
+        self.var_card_accent_mode = tk.StringVar(value=card_p.get("accent_strip_mode", "problems"))
+        self.var_card_show_view_strip = tk.BooleanVar(value=bool(card_p.get("show_directory_view_strip", False)))
+
+        vis_cats = card_p.get("visible_badge_categories", {})
+        self.var_badge_cats = {
+            k: tk.BooleanVar(value=bool(vis_cats.get(k, True)))
+            for k in ("reviewed", "taxonomy", "provenance", "physical", "media", "conflicts", "general_err", "unreviewed")
+        }
+
+        vis_meta = card_p.get("visible_meta_tags", {})
+        self.var_meta_tags = {
+            k: tk.BooleanVar(value=bool(vis_meta.get(k, True)))
+            for k in ("family", "photos", "loan", "unknown", "unvalidated")
+        }
+        self.var_preview_status = tk.StringVar(value="taxonomy")
+        self._preview_widgets = {}
 
         # Layout & Panels
         combine_imgs = _get_val("combine_images_var", p.get("combine_local_and_online", False))
@@ -646,7 +680,156 @@ class UnifiedSettingsWindow:
         cb_hl.pack(side="left", padx=sc(12))
         cb_hl.bind("<<ComboboxSelected>>", lambda e: self._notify_live("problem_highlight_color", self.var_highlight_color.get()))
 
-        # Card 3: Visual Controls
+        # Card 3: Directory Cards & View Ergonomics
+        card_dir = self._create_card(c, "Specimen Directory Cards & View Ergonomics")
+
+        # 1. Quick Profiles
+        tk.Label(card_dir, text="QUICK CARD LAYOUT PROFILES", font=self.FONT_LABEL,
+                 fg=self.COLORS["secondary"], bg=self.COLORS["card_bg"]).pack(anchor="w", pady=(0, sc(4)))
+        p_row = tk.Frame(card_dir, bg=self.COLORS["card_bg"])
+        p_row.pack(fill="x", pady=(0, sc(8)))
+
+        def _profile_btn(parent, text, cmd):
+            btn = tk.Button(parent, text=text, font=self.FONT_DATA, bg=self.COLORS["surface_container_highest"],
+                            fg=self.COLORS["on_surface"], activebackground=self.COLORS["secondary"],
+                            activeforeground="#ffffff", relief="flat", bd=0, padx=sc(8), pady=sc(3),
+                            cursor="hand2", command=cmd)
+            btn.pack(side="left", padx=(0, sc(6)))
+            return btn
+
+        _profile_btn(p_row, "🗂️ Standard", lambda: self._apply_card_preset_in_settings("standard"))
+        _profile_btn(p_row, "⚡ Compact", lambda: self._apply_card_preset_in_settings("compact"))
+        _profile_btn(p_row, "🌿 Full Details", lambda: self._apply_card_preset_in_settings("full_detail"))
+        _profile_btn(p_row, "📖 Minimalist", lambda: self._apply_card_preset_in_settings("minimalist"))
+        _profile_btn(p_row, "↺ Defaults", lambda: self._reset_card_settings_to_default_ui())
+
+        tk.Frame(card_dir, bg=self.COLORS["outline_variant"], height=1).pack(fill="x", pady=sc(6))
+
+        # 2. Live Interactive Card Preview
+        self._build_card_preview_widget(card_dir)
+
+        tk.Frame(card_dir, bg=self.COLORS["outline_variant"], height=1).pack(fill="x", pady=sc(6))
+
+        # 3. Badge Reference Legend & Priority
+        self._build_badge_legend_widget(card_dir)
+
+        tk.Frame(card_dir, bg=self.COLORS["outline_variant"], height=1).pack(fill="x", pady=sc(6))
+
+        # 4. Row 1: Title & Status Badges
+        tk.Label(card_dir, text="ROW 1: TITLE & STATUS PILL BADGE", font=self.FONT_LABEL,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(anchor="w", pady=(0, sc(4)))
+
+        create_toggle_row(card_dir, "Append Botanical Author Citation (e.g. Quercus robur L.)", self.var_card_show_author,
+                          command=self._sync_card_settings_live)
+
+        create_toggle_row(card_dir, "Enable Status Pill Badges", self.var_card_show_badge,
+                          command=self._sync_card_settings_live)
+
+        f_prio = tk.Frame(card_dir, bg=self.COLORS["card_bg"])
+        f_prio.pack(fill="x", pady=sc(3))
+        tk.Label(f_prio, text="Badge Priority Workflow:", font=self.FONT_DATA,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
+        cb_prio = ttk.Combobox(f_prio, textvariable=self.var_card_badge_priority,
+                               values=["default", "taxonomist", "collections_manager"],
+                               state="readonly", width=18, cursor="hand2")
+        cb_prio.pack(side="left", padx=sc(10))
+        cb_prio.bind("<<ComboboxSelected>>", lambda e: self._sync_card_settings_live())
+
+        f_cats = tk.Frame(card_dir, bg=self.COLORS["card_bg"])
+        f_cats.pack(fill="x", pady=sc(4))
+        cat_labels = [
+            ("taxonomy", "Taxonomy [TAX]"),
+            ("provenance", "Provenance [PROV]"),
+            ("physical", "Storage Box [BOX]"),
+            ("media", "Media [IMG]"),
+            ("conflicts", "Conflicts [CFCT]"),
+            ("reviewed", "Reviewed [REV]"),
+            ("general_err", "Errors [ERR]"),
+            ("unreviewed", "Unreviewed [UNREV]"),
+        ]
+        for idx, (cat_key, cat_name) in enumerate(cat_labels):
+            var = self.var_badge_cats[cat_key]
+            cb = tk.Checkbutton(f_cats, text=cat_name, variable=var, font=self.FONT_DATA,
+                                bg=self.COLORS["card_bg"], activebackground=self.COLORS["card_bg"],
+                                cursor="hand2", command=self._sync_card_settings_live)
+            cb.grid(row=idx // 2, column=idx % 2, sticky="w", padx=sc(6), pady=sc(2))
+
+        tk.Frame(card_dir, bg=self.COLORS["outline_variant"], height=1).pack(fill="x", pady=sc(6))
+
+        # 5. Row 2 Metadata Tokens
+        tk.Label(card_dir, text="ROW 2: INLINE METADATA TAGS", font=self.FONT_LABEL,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(anchor="w", pady=(0, sc(4)))
+
+        f_meta = tk.Frame(card_dir, bg=self.COLORS["card_bg"])
+        f_meta.pack(fill="x", pady=sc(4))
+        meta_labels = [
+            ("family", "Botanical Family (e.g. FAGACEAE)"),
+            ("photos", "Photos Count (e.g. 2 photos)"),
+            ("loan", "Loan Status (LOAN)"),
+            ("unknown", "Unknown Warning (UKN)"),
+            ("unvalidated", "Unvalidated Note (UNVAL)"),
+        ]
+        for idx, (m_key, m_name) in enumerate(meta_labels):
+            var = self.var_meta_tags[m_key]
+            cb = tk.Checkbutton(f_meta, text=m_name, variable=var, font=self.FONT_DATA,
+                                bg=self.COLORS["card_bg"], activebackground=self.COLORS["card_bg"],
+                                cursor="hand2", command=self._sync_card_settings_live)
+            cb.grid(row=idx // 2, column=idx % 2, sticky="w", padx=sc(6), pady=sc(2))
+
+        tk.Frame(card_dir, bg=self.COLORS["outline_variant"], height=1).pack(fill="x", pady=sc(6))
+
+        # 6. Row 3 Physical Storage Location
+        tk.Label(card_dir, text="ROW 3: PHYSICAL VAULT LOCATION", font=self.FONT_LABEL,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(anchor="w", pady=(0, sc(4)))
+
+        create_toggle_row(card_dir, "Show Physical Location (Row 3)", self.var_card_show_loc,
+                          command=self._sync_card_settings_live)
+
+        f_gran = tk.Frame(card_dir, bg=self.COLORS["card_bg"])
+        f_gran.pack(fill="x", pady=sc(3))
+        tk.Label(f_gran, text="Location Detail Level:", font=self.FONT_DATA,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
+        cb_gran = ttk.Combobox(f_gran, textvariable=self.var_card_loc_granularity,
+                               values=["full", "compact", "none"],
+                               state="readonly", width=14, cursor="hand2")
+        cb_gran.pack(side="left", padx=sc(10))
+        cb_gran.bind("<<ComboboxSelected>>", lambda e: self._sync_card_settings_live())
+
+        tk.Frame(card_dir, bg=self.COLORS["outline_variant"], height=1).pack(fill="x", pady=sc(6))
+
+        # 7. Card Layout & Vertical Density
+        tk.Label(card_dir, text="CARD SIZING & DENSITY", font=self.FONT_LABEL,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(anchor="w", pady=(0, sc(4)))
+
+        f_den = tk.Frame(card_dir, bg=self.COLORS["card_bg"])
+        f_den.pack(fill="x", pady=sc(3))
+        tk.Label(f_den, text="Vertical Density Mode:", font=self.FONT_DATA,
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
+        cb_den = ttk.Combobox(f_den, textvariable=self.var_card_density,
+                              values=["compact", "standard", "expanded"],
+                              state="readonly", width=14, cursor="hand2")
+        cb_den.pack(side="left", padx=sc(10))
+        cb_den.bind("<<ComboboxSelected>>", lambda e: self._sync_card_settings_live())
+
+        tk.Label(card_dir,
+                 text="Compact (64px) shows ~15 cards on screen • Standard (78px) ~12 cards • Expanded (92px) ~10 cards",
+                 font=("Inter", sc(8)), fg=self.COLORS["on_surface_variant"], bg=self.COLORS["card_bg"]).pack(anchor="w", pady=(sc(2), sc(6)))
+
+        create_toggle_row(card_dir, "Show Directory View Strip (Header Quick Controls)", self.var_card_show_view_strip,
+                          command=self._sync_card_settings_live, ui_ref=self.app or self,
+                          info_text=SETTING_INFO_TEXTS.get("directory_view_strip", ""))
+
+        tk.Frame(card_dir, bg=self.COLORS["outline_variant"], height=1).pack(fill="x", pady=sc(8))
+
+        # 8. Return to Default Button
+        btn_reset = tk.Button(card_dir, text="↺ Return to Default Card Settings", font=self.FONT_LABEL,
+                              bg=self.COLORS["surface_container_highest"], fg=self.COLORS["error"],
+                              activebackground=self.COLORS["error"], activeforeground="#ffffff",
+                              relief="flat", bd=0, padx=sc(10), pady=sc(5), cursor="hand2",
+                              command=self._reset_card_settings_to_default_ui)
+        btn_reset.pack(anchor="w", pady=(sc(2), 0))
+
+        # Card 4: Visual Controls
         card3 = self._create_card(c, "Visual Controls")
         create_toggle_row(card3, "Snap Window Layout Grid", self.var_snap_lock,
                           command=lambda: self._notify_live("snap_lock", self.var_snap_lock.get()),
@@ -699,7 +882,7 @@ class UnifiedSettingsWindow:
 
         create_toggle_row(card1, "Show Quick Navigation & Problem Jumps (Top Bar)", self.var_show_secondary_nav,
                           command=_on_secondary_nav_toggle, ui_ref=self.app or self,
-                          info_text="Displays ◄ ► Last and Next Problem jump buttons in the top navigation bar. When disabled, navigate using arrow keys and the Command Palette (Ctrl+K).")
+                          info_text="Displays ◄ ► Last and Next Problem jump buttons in the top navigation bar for rapid navigation.\n\nExcel Impact: Jumps directly to records where any problem flag column on the Observation sheet is TRUE.")
 
         # Card 2: Behavior
         card2 = self._create_card(c, "View Display Options")
@@ -1238,13 +1421,13 @@ class UnifiedSettingsWindow:
         card3 = self._create_card(c, "Taxonomy & Validation")
         create_toggle_row(card3, "Enable GBIF Validation", self.var_enable_gbif,
                           command=lambda: self._notify_live("enable_gbif", self.var_enable_gbif.get()),
-                          ui_ref=self.app or self, info_text="Shows the 'Check GBIF' button to validate Genus and Species against GBIF.")
+                          ui_ref=self.app or self, info_text="Shows the 'Check GBIF' button to verify plant names against global taxonomic databases.\n\nExcel Impact: Matched names update Genus and Species columns on the Registration sheet upon curator confirmation.")
 
         f_workers = tk.Frame(card3, bg=self.COLORS["card_bg"])
         f_workers.pack(fill="x", pady=sc(6))
         tk.Label(f_workers, text="GBIF Batch Concurrency:", font=self.FONT_DATA,
                  fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"]).pack(side="left")
-        create_info_badge(f_workers, "Maximum concurrent worker threads when running batch taxonomic checks against GBIF (1-10). Lower if experiencing rate limits or timeouts.", ui_ref=self.app or self).pack(side="left", padx=(sc(6), sc(8)))
+        create_info_badge(f_workers, "Controls how many plant names Arbor checks simultaneously during batch verification.\n\nTechnical: Number of background worker threads (1-10). Lower values reduce timeouts on slower network connections.", ui_ref=self.app or self).pack(side="left", padx=(sc(6), sc(8)))
         ttk.Combobox(f_workers, textvariable=self.var_gbif_max_workers,
                      values=[1, 2, 3, 4, 5, 6, 8, 10],
                      state="readonly", width=6, cursor="hand2").pack(side="left", padx=sc(4))
@@ -1516,6 +1699,290 @@ class UnifiedSettingsWindow:
             except Exception as e:
                 pass
 
+    def _get_current_directory_card_dict(self):
+        return {
+            "density_mode": self.var_card_density.get(),
+            "show_location_row": self.var_card_show_loc.get(),
+            "location_granularity": self.var_card_loc_granularity.get(),
+            "show_status_badge": self.var_card_show_badge.get(),
+            "show_author_citation": self.var_card_show_author.get(),
+            "unknown_taxon_fallback": self.var_card_fallback.get(),
+            "badge_priority_preset": self.var_card_badge_priority.get(),
+            "accent_strip_mode": self.var_card_accent_mode.get(),
+            "visible_badge_categories": {k: v.get() for k, v in self.var_badge_cats.items()},
+            "visible_meta_tags": {k: v.get() for k, v in self.var_meta_tags.items()},
+            "show_directory_view_strip": self.var_card_show_view_strip.get()
+        }
+
+    def _sync_card_settings_live(self):
+        card_dict = self._get_current_directory_card_dict()
+        config.save_directory_card_prefs(card_dict)
+        self._notify_live("directory_card_display_changed", card_dict)
+        self._refresh_live_preview()
+
+    def _apply_card_preset_in_settings(self, preset_name):
+        import config
+        prefs = config.get_card_preset_config(preset_name)
+        self.var_card_density.set(prefs["density_mode"])
+        self.var_card_show_loc.set(prefs["show_location_row"])
+        self.var_card_loc_granularity.set(prefs["location_granularity"])
+        self.var_card_show_badge.set(prefs["show_status_badge"])
+        self.var_card_show_author.set(prefs["show_author_citation"])
+        self.var_card_badge_priority.set(prefs.get("badge_priority_preset", "default"))
+        self._sync_card_settings_live()
+
+    def _apply_card_persona_in_settings(self, persona_name):
+        return self._apply_card_preset_in_settings(persona_name)
+
+    def _reset_card_settings_to_default_ui(self):
+        default_prefs = config.reset_directory_card_prefs_to_default()
+        self.var_card_density.set(default_prefs["density_mode"])
+        self.var_card_show_loc.set(default_prefs["show_location_row"])
+        self.var_card_loc_granularity.set(default_prefs["location_granularity"])
+        self.var_card_show_badge.set(default_prefs["show_status_badge"])
+        self.var_card_show_author.set(default_prefs["show_author_citation"])
+        self.var_card_fallback.set(default_prefs["unknown_taxon_fallback"])
+        self.var_card_badge_priority.set(default_prefs["badge_priority_preset"])
+        self.var_card_accent_mode.set(default_prefs["accent_strip_mode"])
+        for k, v in default_prefs["visible_badge_categories"].items():
+            if k in self.var_badge_cats:
+                self.var_badge_cats[k].set(v)
+        for k, v in default_prefs["visible_meta_tags"].items():
+            if k in self.var_meta_tags:
+                self.var_meta_tags[k].set(v)
+        self.var_card_show_view_strip.set(default_prefs.get("show_directory_view_strip", False))
+        self._sync_card_settings_live()
+
+    def _build_card_preview_widget(self, parent):
+        """Constructs an interactive live preview card widget with real-time feedback."""
+        from config import sc
+
+        container = tk.Frame(parent, bg=self.COLORS["card_bg"])
+        container.pack(fill="x", pady=(sc(2), sc(6)))
+
+        bar = tk.Frame(container, bg=self.COLORS["card_bg"])
+        bar.pack(fill="x", pady=(0, sc(4)))
+
+        tk.Label(bar, text="Sample Record Status:", font=self.FONT_DATA,
+                 fg=self.COLORS["on_surface_variant"], bg=self.COLORS["card_bg"]).pack(side="left", padx=(0, sc(8)))
+
+        sample_options = [
+            ("taxonomy", "⚠️ Taxonomy"),
+            ("provenance", "📍 Missing Label"),
+            ("box", "📦 Storage Box"),
+            ("reviewed", "✓ Reviewed"),
+        ]
+
+        for st_key, st_label in sample_options:
+            b = tk.Radiobutton(
+                bar, text=st_label, value=st_key, variable=self.var_preview_status,
+                font=self.FONT_DATA, bg=self.COLORS["card_bg"],
+                activebackground=self.COLORS["card_bg"],
+                cursor="hand2", command=self._refresh_live_preview
+            )
+            b.pack(side="left", padx=(0, sc(6)))
+
+        card_box = tk.Frame(container, bg=self.COLORS["surface_container_highest"],
+                            highlightbackground=self.COLORS["outline_variant"],
+                            highlightthickness=1, padx=sc(2), pady=sc(2))
+        card_box.pack(fill="x")
+
+        card_inner = tk.Frame(card_box, bg=self.COLORS["card_bg"])
+        card_inner.pack(fill="x")
+
+        accent_strip = tk.Frame(card_inner, bg=self.COLORS["error"], width=sc(4))
+        accent_strip.pack(side="left", fill="y")
+
+        card_body = tk.Frame(card_inner, bg=self.COLORS["card_bg"])
+        card_body.pack(side="left", fill="both", expand=True, padx=sc(6), pady=sc(4))
+
+        row1 = tk.Frame(card_body, bg=self.COLORS["card_bg"])
+        row1.pack(fill="x", anchor="w")
+
+        cb_lbl = tk.Label(row1, text="[ ]", font=("Inter", sc(9)),
+                          fg=self.COLORS["on_surface_variant"], bg=self.COLORS["card_bg"])
+        cb_lbl.pack(side="left", padx=(0, sc(4)))
+
+        tax_lbl = tk.Label(row1, text="Quercus robur", font=("Inter", sc(9), "bold"),
+                           fg=self.COLORS["on_surface"], bg=self.COLORS["card_bg"], anchor="w")
+        tax_lbl.pack(side="left", fill="x", expand=True)
+
+        badge_lbl = tk.Label(row1, text="[ TAX ]", font=("JetBrains Mono", sc(8), "bold"),
+                             fg="#ffffff", bg=self.COLORS["error"], padx=sc(4), pady=sc(1))
+        badge_lbl.pack(side="right", padx=(sc(4), 0))
+
+        row2 = tk.Frame(card_body, bg=self.COLORS["card_bg"])
+        row2.pack(fill="x", anchor="w", pady=(sc(1), 0))
+
+        meta_lbl = tk.Label(row2, text="OBJ-00042 • FAGACEAE • 2 photos • UKN",
+                            font=("Inter", sc(8)), fg=self.COLORS["on_surface_variant"],
+                            bg=self.COLORS["card_bg"], anchor="w")
+        meta_lbl.pack(side="left", fill="x", expand=True)
+
+        row3 = tk.Frame(card_body, bg=self.COLORS["card_bg"])
+        row3.pack(fill="x", anchor="w", pady=(sc(2), 0))
+
+        loc_lbl = tk.Label(row3, text="📍 Herbarium • Floor 2 • Cabinet 04 • Shelf B",
+                           font=("Inter", sc(8)), fg=self.COLORS["on_surface_variant"],
+                           bg=self.COLORS["card_bg"], anchor="w")
+        loc_lbl.pack(side="left", fill="x", expand=True)
+
+        self._preview_widgets = {
+            "card_body": card_body,
+            "accent_strip": accent_strip,
+            "cb_lbl": cb_lbl,
+            "tax_lbl": tax_lbl,
+            "badge_lbl": badge_lbl,
+            "row2": row2,
+            "meta_lbl": meta_lbl,
+            "row3": row3,
+            "loc_lbl": loc_lbl,
+        }
+
+        self._refresh_live_preview()
+
+    def _refresh_live_preview(self):
+        """Dynamically re-render the sample card to reflect all current user preferences."""
+        if not hasattr(self, "_preview_widgets") or not self._preview_widgets:
+            return
+
+        from config import sc
+        st = self.var_preview_status.get() if hasattr(self, "var_preview_status") else "taxonomy"
+
+        samples = {
+            "taxonomy": {
+                "taxon": "Quercus robur", "author": "L.", "id": "OBJ-00042", "fam": "FAGACEAE",
+                "badge": "[ TAX ]", "badge_bg": "#ba1a1a", "accent": "#ba1a1a", "rev": False,
+                "photos": "2 photos", "loan": "", "ukn": "UKN", "unval": "",
+                "loc_full": "📍 Herbarium • Floor 2 • Cabinet 04 • Shelf B",
+                "loc_compact": "📍 C-04 • S-B",
+            },
+            "provenance": {
+                "taxon": "Pinus sylvestris", "author": "L.", "id": "OBJ-00108", "fam": "PINACEAE",
+                "badge": "[ PROV ]", "badge_bg": "#d95c14", "accent": "#d95c14", "rev": False,
+                "photos": "1 photo", "loan": "LOAN", "ukn": "", "unval": "UNVAL",
+                "loc_full": "📍 Herbarium • Floor 1 • Cabinet 12 • Shelf A",
+                "loc_compact": "📍 C-12 • S-A",
+            },
+            "box": {
+                "taxon": "Betula pendula", "author": "Roth", "id": "OBJ-00215", "fam": "BETULACEAE",
+                "badge": "[ BOX ]", "badge_bg": "#4a7b9d", "accent": "#4a7b9d", "rev": False,
+                "photos": "No photos", "loan": "", "ukn": "", "unval": "",
+                "loc_full": "📍 Vault B • Floor B1 • Cabinet 02 • Shelf 3",
+                "loc_compact": "📍 C-02 • S-3",
+            },
+            "reviewed": {
+                "taxon": "Fraxinus excelsior", "author": "L.", "id": "OBJ-00350", "fam": "OLEACEAE",
+                "badge": "[ REV ]", "badge_bg": "#3a7d44", "accent": "#3a7d44", "rev": True,
+                "photos": "3 photos", "loan": "", "ukn": "", "unval": "",
+                "loc_full": "📍 Herbarium • Floor 3 • Cabinet 08 • Shelf C",
+                "loc_compact": "📍 C-08 • S-C",
+            },
+        }
+
+        data = samples.get(st, samples["taxonomy"])
+
+        # 1. Row 1 Taxon & Author
+        if self.var_card_show_author.get():
+            self._preview_widgets["tax_lbl"].config(text=f"{data['taxon']} {data['author']}")
+        else:
+            self._preview_widgets["tax_lbl"].config(text=data["taxon"])
+
+        self._preview_widgets["cb_lbl"].config(text="[☑]" if data["rev"] else "[ ]")
+        self._preview_widgets["accent_strip"].config(bg=data["accent"])
+
+        if self.var_card_show_badge.get():
+            self._preview_widgets["badge_lbl"].config(
+                text=data["badge"], bg=data["badge_bg"], fg="#ffffff"
+            )
+        else:
+            self._preview_widgets["badge_lbl"].config(
+                text="", bg=self.COLORS["card_bg"], fg=self.COLORS["card_bg"]
+            )
+
+        # 2. Row 2 Metadata
+        meta_parts = [data["id"]]
+        if self.var_meta_tags.get("family") and self.var_meta_tags["family"].get():
+            meta_parts.append(data["fam"])
+        if self.var_meta_tags.get("photos") and self.var_meta_tags["photos"].get() and data["photos"]:
+            meta_parts.append(data["photos"])
+        if self.var_meta_tags.get("loan") and self.var_meta_tags["loan"].get() and data["loan"]:
+            meta_parts.append(data["loan"])
+        if self.var_meta_tags.get("unknown") and self.var_meta_tags["unknown"].get() and data["ukn"]:
+            meta_parts.append(data["ukn"])
+        if self.var_meta_tags.get("unvalidated") and self.var_meta_tags["unvalidated"].get() and data["unval"]:
+            meta_parts.append(data["unval"])
+
+        self._preview_widgets["meta_lbl"].config(text=" • ".join(meta_parts))
+
+        # 3. Row 3 Location
+        show_loc = self.var_card_show_loc.get() and self.var_card_loc_granularity.get() != "none"
+        if show_loc:
+            loc_str = data["loc_full"] if self.var_card_loc_granularity.get() == "full" else data["loc_compact"]
+            self._preview_widgets["loc_lbl"].config(text=loc_str)
+            if self._preview_widgets["row3"].winfo_manager() != "pack":
+                self._preview_widgets["row3"].pack(fill="x", anchor="w", pady=(sc(2), 0))
+        else:
+            if self._preview_widgets["row3"].winfo_manager() == "pack":
+                self._preview_widgets["row3"].pack_forget()
+
+        # 4. Density padding
+        mode = self.var_card_density.get()
+        pad_y = sc(2) if mode == "compact" else (sc(6) if mode == "expanded" else sc(4))
+        self._preview_widgets["card_body"].pack_configure(pady=pad_y)
+
+    def _build_badge_legend_widget(self, parent):
+        """Constructs an explanatory visual reference for status pill badges and priority rules."""
+        from config import sc
+
+        legend_box = tk.Frame(parent, bg=self.COLORS["surface_container_low"],
+                              highlightbackground=self.COLORS["outline_variant"],
+                              highlightthickness=1, padx=sc(10), pady=sc(8))
+        legend_box.pack(fill="x", pady=(sc(2), sc(6)))
+
+        tk.Label(legend_box, text="STATUS BADGE REFERENCE & PRIORITY RULE", font=self.FONT_LABEL,
+                 fg=self.COLORS["secondary"], bg=self.COLORS["surface_container_low"]).pack(anchor="w")
+
+        rule_text = (
+            "Single-Badge Discipline: To maintain instant scrolling (0ms latency), Row 1 displays strictly ONE "
+            "status pill badge for the highest-priority issue. Secondary problem tags appear on Row 2."
+        )
+        tk.Label(legend_box, text=rule_text, font=self.FONT_DATA, wraplength=sc(560),
+                 justify="left", fg=self.COLORS["on_surface_variant"],
+                 bg=self.COLORS["surface_container_low"]).pack(anchor="w", pady=(sc(2), sc(4)))
+
+        priority_chain = "Priority: Taxonomy [TAX]  ▶  Provenance [PROV]  ▶  Storage Box [BOX]  ▶  Media [IMG]  ▶  Conflicts [CFCT]  ▶  Reviewed [REV]"
+        tk.Label(legend_box, text=priority_chain, font=("JetBrains Mono", sc(8), "bold"),
+                 fg=self.COLORS["on_surface"], bg=self.COLORS["surface_container_low"]).pack(anchor="w", pady=(0, sc(6)))
+
+        grid_frame = tk.Frame(legend_box, bg=self.COLORS["surface_container_low"])
+        grid_frame.pack(fill="x")
+
+        badges_info = [
+            ("[ TAX ]", "#ba1a1a", "Taxonomy Discrepancy", "Species, Genus, or Family problem"),
+            ("[ PROV ]", "#d95c14", "Provenance / Locality", "MissingLabel, Date, or Locality issue"),
+            ("[ BOX ]", "#4a7b9d", "Physical Storage Container", "Box_Label_Problem, PlantPart issue"),
+            ("[ IMG ]", "#6750a4", "Media / Image Missing", "Missing voucher photos or scan errors"),
+            ("[ CFCT ]", "#d9a036", "Historical Conflict", "Workbook mismatch or unvalidated notes"),
+            ("[ REV+ERR ]", "#3a7d44", "Reviewed with Warnings", "Marked reviewed but retains active flags"),
+            ("[ REV ]", "#3a7d44", "Clean Reviewed Record", "Verified specimen with zero open problems"),
+            ("[ UNREV ]", "#757d77", "Unreviewed Record", "Good standing with no flagged errors"),
+        ]
+
+        for i, (b_code, b_color, b_title, b_desc) in enumerate(badges_info):
+            r = i // 2
+            col = i % 2
+            cell = tk.Frame(grid_frame, bg=self.COLORS["surface_container_low"])
+            cell.grid(row=r, column=col, sticky="w", padx=sc(6), pady=sc(2))
+
+            pill = tk.Label(cell, text=b_code, font=("JetBrains Mono", sc(7), "bold"),
+                            fg="#ffffff", bg=b_color, padx=sc(4), pady=sc(1))
+            pill.pack(side="left")
+
+            desc = tk.Label(cell, text=f" {b_title}: {b_desc}", font=("Inter", sc(8)),
+                            fg=self.COLORS["on_surface"], bg=self.COLORS["surface_container_low"])
+            desc.pack(side="left")
+
     # ── RESTORE DEFAULTS ─────────────────────────────────────────────────────
     def restore_defaults(self):
         if messagebox.askyesno("Restore Defaults",
@@ -1576,6 +2043,11 @@ class UnifiedSettingsWindow:
         p["problem_highlight_color"] = self.var_highlight_color.get()
         p["large_reviewed_button"] = self.var_large_reviewed_btn.get()
         p["snap_lock"] = self.var_snap_lock.get()
+
+        # ── Directory Card View Settings ─────────────────────────────────────
+        card_p = self._get_current_directory_card_dict()
+        p["directory_card_display"] = card_p
+        self._notify_live("directory_card_display_changed", card_p)
 
         # ── Layout ────────────────────────────────────────────────────────────
         p["show_list"] = self.var_show_list.get()

@@ -424,6 +424,18 @@ class MobilePanel:
             fg="#1b4332",
         ).pack(anchor="w", pady=(0, 2))
 
+        self.local_ip_lbl = tk.Label(
+            info,
+            text=f"📶 Local Wi-Fi IP: {get_local_ip()}",
+            font=("Segoe UI", 9, "bold"),
+            bg="#e8f5e9",
+            fg="#1b4332",
+            padx=4,
+            pady=2,
+            anchor="w",
+        )
+        self.local_ip_lbl.pack(anchor="w", fill="x", pady=(2, 4))
+
         tk.Label(
             info,
             text="Or open this link on your phone:",
@@ -677,6 +689,11 @@ class MobilePanel:
         # Populate PIN and local URL (kept as LAN fallback)
         self.pin_var.set(self.server.pin)
         local_ip = get_local_ip()
+        if hasattr(self, "local_ip_lbl") and self.local_ip_lbl:
+            try:
+                self.local_ip_lbl.config(text=f"📶 Local Wi-Fi IP: {local_ip}")
+            except Exception:
+                pass
         ver = self.ui_version_choice.get()
         v_path = "/v2" if ver == "v2" else "/"
         self.local_url_with_token = (

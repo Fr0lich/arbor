@@ -177,6 +177,133 @@ class TestFuzzySearchAndCommandPalette(unittest.TestCase):
         except tk.TclError:
             pass
 
+    def test_command_palette_mousewheel_scrolling(self):
+        import tkinter as tk
+        from unittest.mock import MagicMock
+        from ui.command_palette import CommandPalette
+
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            mock_ui = MagicMock()
+            mock_ui.root = root
+            mock_ui.dark_mode_active = False
+            mock_ui.app_state = None
+
+            palette = CommandPalette(mock_ui)
+
+            # Verify canvas and items_frame were constructed
+            self.assertIsNotNone(palette.canvas)
+            self.assertIsNotNone(palette.items_frame)
+
+            # Verify scrolltag from bind_mousewheel was applied to items_frame
+            tag = f"ScrollTag_{id(palette.canvas)}"
+            self.assertIn(tag, palette.items_frame.bindtags())
+
+            # Verify canvas has bindings for MouseWheel and Linux Button-4/5
+            canvas_bindings = palette.canvas.bind()
+            self.assertIn("<MouseWheel>", canvas_bindings)
+            self.assertIn("<Button-4>", canvas_bindings)
+            self.assertIn("<Button-5>", canvas_bindings)
+
+            # Verify no destructive global bind_all was placed on root
+            root_bindings = root.bind()
+            self.assertNotIn("<MouseWheel>", root_bindings)
+
+            palette.destroy()
+            root.destroy()
+        except tk.TclError:
+            pass
+
+    def test_command_palette_card_view_presets_update_config(self):
+        import tkinter as tk
+        from unittest.mock import MagicMock
+        import config
+        from ui.command_palette import CommandPalette
+        from ui.main_window import ObjectProgramUI
+
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            mock_ui = MagicMock(spec=ObjectProgramUI)
+            mock_ui.root = root
+            mock_ui.dark_mode_active = False
+            mock_ui.app_state = None
+            mock_ui.object_list = MagicMock()
+            mock_ui.show_toast = MagicMock()
+
+            # Wire real card persona and toggle methods to mock_ui
+            mock_ui.apply_card_persona = lambda name: ObjectProgramUI.apply_card_persona(mock_ui, name)
+            mock_ui.apply_card_preset = lambda name: ObjectProgramUI.apply_card_preset(mock_ui, name)
+            mock_ui.toggle_card_location_row = lambda: ObjectProgramUI.toggle_card_location_row(mock_ui)
+            mock_ui.toggle_card_status_badges = lambda: ObjectProgramUI.toggle_card_status_badges(mock_ui)
+            mock_ui.restore_default_card_settings = lambda: ObjectProgramUI.restore_default_card_settings(mock_ui)
+
+            palette = CommandPalette(mock_ui)
+
+            # Find all card commands
+            card_commands = [c for c in palette._commands_registry if "card" in c.get("label", "").lower()]
+            self.assertGreaterEqual(len(card_commands), 7)
+
+            # Test 1: Compact Preset
+            compact_cmd = next(c for c in palette._commands_registry if "compact" in c.get("label", "").lower() and "card layout" in c.get("label", "").lower())
+            compact_cmd["action"]()
+            prefs = config.get_directory_card_prefs()
+            self.assertEqual(prefs["density_mode"], "compact")
+            self.assertFalse(prefs["show_location_row"])
+            mock_ui.show_toast.assert_called_with("Card View Preset: Compact")
+
+            # Test 2: Full Detail Preset
+            full_cmd = next(c for c in palette._commands_registry if "full details" in c.get("label", "").lower() and "card layout" in c.get("label", "").lower())
+            full_cmd["action"]()
+            prefs = config.get_directory_card_prefs()
+            self.assertEqual(prefs["density_mode"], "expanded")
+            self.assertTrue(prefs["show_location_row"])
+            self.assertTrue(prefs["show_author_citation"])
+            mock_ui.show_toast.assert_called_with("Card View Preset: Full Detail")
+
+            # Test 3: Minimalist Preset
+            min_cmd = next(c for c in palette._commands_registry if "minimalist" in c.get("label", "").lower())
+            min_cmd["action"]()
+            prefs = config.get_directory_card_prefs()
+            self.assertFalse(prefs["show_status_badge"])
+            mock_ui.show_toast.assert_called_with("Card View Preset: Minimalist")
+
+            # Test 4: Standard Preset
+            std_cmd = next(c for c in palette._commands_registry if "standard" in c.get("label", "").lower())
+            std_cmd["action"]()
+            prefs = config.get_directory_card_prefs()
+            self.assertEqual(prefs["density_mode"], "standard")
+            mock_ui.show_toast.assert_called_with("Card View Preset: Standard")
+
+            # Test 5: Toggle Location Row
+            loc_cmd = next(c for c in palette._commands_registry if "location row" in c.get("label", "").lower())
+            prev_loc = config.get_directory_card_prefs().get("show_location_row", True)
+            loc_cmd["action"]()
+            self.assertEqual(config.get_directory_card_prefs().get("show_location_row"), not prev_loc)
+
+            # Test 6: Toggle Status Badges
+            badge_cmd = next(c for c in palette._commands_registry if "status pill badges" in c.get("label", "").lower())
+            prev_badge = config.get_directory_card_prefs().get("show_status_badge", True)
+            badge_cmd["action"]()
+            self.assertEqual(config.get_directory_card_prefs().get("show_status_badge"), not prev_badge)
+
+            # Test 7: Restore to Default
+            restore_cmd = next(c for c in palette._commands_registry if "restore" in c.get("label", "").lower() and "card" in c.get("label", "").lower())
+            restore_cmd["action"]()
+            prefs = config.get_directory_card_prefs()
+            self.assertEqual(prefs["density_mode"], "standard")
+            self.assertTrue(prefs["show_location_row"])
+            self.assertTrue(prefs["show_status_badge"])
+
+            # Verify directory object_list was informed on each dispatch
+            self.assertGreaterEqual(mock_ui.object_list.apply_directory_view_preferences.call_count, 7)
+
+            palette.destroy()
+            root.destroy()
+        except tk.TclError:
+            pass
+
 
 if __name__ == "__main__":
     unittest.main()

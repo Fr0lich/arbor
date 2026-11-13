@@ -55,12 +55,33 @@ Arbor follows a **Zero-Friction, Offline-First** architecture. When improving, m
 
 ---
 
+## 📝 MANDATORY DOCUMENTATION SYNC & CHANGE LOGGING RULE
+
+Arbor serves non-technical trainees, museum interns, and collection assistants. Technical clarity and synchronicity between the codebase and documentation are critical.
+
+Whenever any coding agent modifies, adds, or removes:
+1. **A keyboard shortcut** (e.g. in `ui/help_dialogs.py`, `ui/command_palette.py`, or event bindings),
+2. **A user-facing setting or toggle** (e.g. in `ui/unified_settings.py`),
+3. **A status badge or visual label** (e.g. in `ui/widgets.py`), or
+4. **A workflow, dialog flow, or navigation sequence**,
+
+The agent **MUST ALWAYS**:
+1. **Append an entry to `documentation/CHANGE_JOURNAL.md`**: Record the feature area, code delta, plain-language trainee impact, and fill out the Documentation Sync Checklist.
+2. **Adhere to the Canonical Trainee Lexicon**: Use the standardized terminology established in `documentation/MASTER_DOCUMENTATION_MAP.md` (e.g. always *"Specimen Directory"*, *"Mark Reviewed"*, *"Storage Location"*, and never banned jargon like "schema", "REST API", "daemon", or "relational join").
+3. **Notify the User / Documentation Agent**: Indicate whether user-facing manuals (`USER_GUIDE.md`), desk cheat sheets, or in-app tutorial steps need synchronization via the **1-Prompt Sync Protocol**.
+
+---
+
 ## Task Routing Directory
 
 * **Working on Tkinter UI, New Features, Layouts, or Bug Fixes? (DEFAULT)**
   * 👉 Read **`documentation/agent/codebase_guide.md`** and **`documentation/agent/feature_catalog.md`** for architecture.
   * 👉 Read **`documentation/agent/AI_UI_GUIDE.md`** for design system tokens (colors, padding, fonts).
   * 👉 Read **`documentation/agent/CLAUDE_BUG_REVIEW_GUIDE.md`** for performance, threading, and safe Pandas conventions.
+
+* **Updating Documentation, User Assistance, or Synching Guides?**
+  * 👉 Read **`documentation/MASTER_DOCUMENTATION_MAP.md`** for the Master Blueprint, Canonical Lexicon, and 4-Tier Curriculum.
+  * 👉 Read and append to **`documentation/CHANGE_JOURNAL.md`** for tracking user-facing changes.
 
 * **Working on the Mobile Companion App or Backend Server (`mobile_server.py`)?**
   * 👉 Read **`documentation/agent/MOBILE_COMPANION_GUIDE.md`** (CRITICAL). This contains strict rules for frontend implementation, logic syncing, and performance.

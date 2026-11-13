@@ -20,16 +20,22 @@ class DatabaseOpsMixin:
                     self.app.df_obs[missing_problem_cols] = pd.DataFrame({col: False for col in missing_problem_cols}, index=self.app.df_obs.index)
 
         from repository import SQLiteRepository
-        SQLiteRepository.export_to_excel(
-            sqlite_path=None,
-            excel_path=path,
-            config=self.app.config,
-            df_reg=self.app.df_reg,
-            df_obs=self.app.df_obs,
-            df_log=self.app.df_log,
-            df_photo=self.app.df_photo,
-            df_unvalidated=getattr(self.app, 'df_unvalidated', None)
-        )
+        try:
+            SQLiteRepository.export_to_excel(
+                sqlite_path=None,
+                excel_path=path,
+                config=self.app.config,
+                df_reg=self.app.df_reg,
+                df_obs=self.app.df_obs,
+                df_log=self.app.df_log,
+                df_photo=self.app.df_photo,
+                df_unvalidated=getattr(self.app, 'df_unvalidated', None)
+            )
+        except (PermissionError, IOError) as e:
+            from utils import debug_error
+            debug_error("_write_excel PermissionError", str(e))
+            self.handle_excel_save_lock(path)
+            raise
 
 
     def _write_excel_async(self, path, callback=None, show_saving_badge=True):
@@ -631,15 +637,25 @@ class DatabaseOpsMixin:
                 self.build_search_index()
                 self.invalidate_search_index()  # Genus/Species may have changed
             else:
-                from utils import debug_error
+                from utils import debug_error, ExcelFileLockedError
                 debug_error("save_session async", str(err))
                 self.set_status_badge("error", "Save Failed")
-                self.show_traceback_dialog(
-                    "Save Error",
-                    f"Failed to save to database: {err}",
-                    ""
+                err_str = str(err) if err else ""
+                is_locked = (
+                    "currently open in Microsoft Excel" in err_str or
+                    "PermissionError" in err_str or
+                    isinstance(err, (PermissionError, ExcelFileLockedError)) or
+                    "locked" in err_str.lower()
                 )
-            if on_complete:
+                if is_locked:
+                    self.handle_excel_save_lock(output_path, action, on_complete)
+                else:
+                    self.show_traceback_dialog(
+                        "Save Error",
+                        f"Failed to save to database: {err}",
+                        ""
+                    )
+            if on_complete and not is_locked:
                 on_complete(success, err)
 
         # show_saving_badge=True fires the "💾 Saving…" badge immediately
@@ -747,12 +763,16 @@ class DatabaseOpsMixin:
                     self.show_banner(f"Exported to: {path}", "success")
 
                 def _on_error(err):
-                    from utils import debug_error
+                    from utils import debug_error, ExcelFileLockedError
                     import traceback
                     tb = "".join(traceback.format_exception(type(err), err, err.__traceback__)) if hasattr(err, "__traceback__") else str(err)
                     debug_error("save_as_export_to_excel", str(err))
                     self._hide_progress("Export failed")
-                    self.show_traceback_dialog("Export Error", f"Failed to export: {err}", tb)
+                    err_str = str(err) if err else ""
+                    if "currently open in Microsoft Excel" in err_str or "PermissionError" in err_str or isinstance(err, (PermissionError, ExcelFileLockedError)) or "locked" in err_str.lower():
+                        self.handle_excel_save_lock(path, "SAVE_AS")
+                    else:
+                        self.show_traceback_dialog("Export Error", f"Failed to export: {err}", tb)
 
                 app_worker.run_in_background(_do_export, _on_done, error_callback=_on_error)
             else:
@@ -887,10 +907,88 @@ class DatabaseOpsMixin:
             self.show_banner(f"Exported to: {excel_path}", "success")
 
         def _on_error(err):
+            from utils import debug_error, ExcelFileLockedError
             debug_error("export_to_excel", str(err))
             import traceback
             tb = "".join(traceback.format_exception(type(err), err, err.__traceback__)) if hasattr(err, "__traceback__") else str(err)
             self._hide_progress("Export failed")
-            self.show_traceback_dialog("Export Error", f"Failed to export: {err}", tb)
+            err_str = str(err) if err else ""
+            if "currently open in Microsoft Excel" in err_str or "PermissionError" in err_str or isinstance(err, (PermissionError, ExcelFileLockedError)) or "locked" in err_str.lower():
+                self.handle_excel_save_lock(excel_path, "EXPORT")
+            else:
+                self.show_traceback_dialog("Export Error", f"Failed to export: {err}", tb)
 
         app_worker.run_in_background(_do_export, _on_done, error_callback=_on_error)
+
+    def handle_excel_save_lock(self, file_path, action="SAVE", on_complete=None):
+        """Surface a clear, trainee-friendly error message when the Excel workbook is locked,
+        providing an immediate 'Retry Save' and 'Save a Copy' mechanism so trainee work is never lost."""
+        filename = os.path.basename(file_path) if file_path else "Workbook"
+        friendly_msg = (
+            f"The Excel file '{filename}' is currently open in Microsoft Excel or another program.\n\n"
+            "Please close Excel and click 'Retry Save', or click 'Save a Copy' to save your work to a new location."
+        )
+
+        win = tk.Toplevel(self.root)
+        win.title("Excel File In Use")
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.grab_set()
+
+        from config import sc
+        import utils
+        utils.center_and_fit_toplevel(win, sc(520), sc(220))
+
+        frame = ttk.Frame(win, padding=sc(16))
+        frame.pack(fill="both", expand=True)
+
+        lbl_icon = ttk.Label(frame, text="🔒", font=("Segoe UI", sc(24)))
+        lbl_icon.pack(side="left", anchor="n", padx=(0, sc(12)))
+
+        content_box = ttk.Frame(frame)
+        content_box.pack(side="left", fill="both", expand=True)
+
+        ttk.Label(
+            content_box,
+            text="File Locked by Another Program",
+            font=("Segoe UI", sc(11), "bold")
+        ).pack(anchor="w", pady=(0, sc(6)))
+
+        ttk.Label(
+            content_box,
+            text=friendly_msg,
+            font=("Segoe UI", sc(9)),
+            wraplength=sc(400),
+            justify="left"
+        ).pack(anchor="w", pady=(0, sc(16)))
+
+        btn_box = ttk.Frame(content_box)
+        btn_box.pack(fill="x", side="bottom")
+
+        def _do_retry():
+            win.destroy()
+            self.save_session(action, on_complete=on_complete)
+
+        def _do_save_copy():
+            win.destroy()
+            self.save_as()
+
+        def _do_cancel():
+            win.destroy()
+            self.set_status_badge("error", "Save Cancelled")
+            self.show_banner(
+                "Unsaved changes remain safely in memory. Please close Excel and save before exiting.",
+                "warning",
+                duration_ms=8000
+            )
+            if on_complete:
+                on_complete(False, "Save cancelled by user")
+
+        btn_retry = ttk.Button(btn_box, text="Retry Save", command=_do_retry, style="Primary.TButton", cursor="hand2")
+        btn_retry.pack(side="left", padx=(0, sc(8)))
+
+        btn_copy = ttk.Button(btn_box, text="Save a Copy...", command=_do_save_copy, cursor="hand2")
+        btn_copy.pack(side="left", padx=(0, sc(8)))
+
+        btn_cancel = ttk.Button(btn_box, text="Cancel", command=_do_cancel, cursor="hand2")
+        btn_cancel.pack(side="right")

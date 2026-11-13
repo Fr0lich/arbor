@@ -17,6 +17,74 @@ def fmt_pandas_val(val):
 
 import re
 
+class ExcelFileLockedError(PermissionError):
+    """Raised when an Excel file cannot be overwritten because it is open in Microsoft Excel
+    or another program holding a Windows file lock."""
+    def __init__(self, file_path: str, message: str | None = None):
+        self.file_path = file_path
+        self.filename = os.path.basename(file_path) if file_path else "Workbook"
+        if not message:
+            message = (
+                f"The Excel file '{self.filename}' is currently open in Microsoft Excel or another program. "
+                "Please close Excel and click 'Retry Save'."
+            )
+        self.message = message
+        super().__init__(13, message, file_path)
+
+    def __str__(self):
+        return self.message
+
+
+def create_presave_backup(file_path: str, max_backups: int = 5) -> str | None:
+    """Create an automatic pre-save backup in a local .arbor_backups/ directory before replacing.
+    
+    Capped at a sensible rolling limit (default 5 backups). If the source file does not exist
+    or is empty, returns None.
+    """
+    if not file_path or not os.path.exists(file_path):
+        return None
+    try:
+        if os.path.getsize(file_path) == 0:
+            return None
+    except OSError:
+        return None
+
+    try:
+        import shutil
+        parent_dir = os.path.dirname(os.path.abspath(file_path))
+        backup_dir = os.path.join(parent_dir, ".arbor_backups")
+        os.makedirs(backup_dir, exist_ok=True)
+
+        base_name = os.path.basename(file_path)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_filename = f"{base_name}.{timestamp}.bak"
+        backup_path = os.path.join(backup_dir, backup_filename)
+
+        shutil.copy2(file_path, backup_path)
+
+        # Roll old backups for this file
+        prefix = f"{base_name}."
+        existing = [
+            f for f in os.listdir(backup_dir)
+            if f.startswith(prefix) and (f.endswith(".bak") or f.endswith(".xlsx"))
+        ]
+        # Sort newest first
+        existing.sort(
+            key=lambda f: os.path.getmtime(os.path.join(backup_dir, f)),
+            reverse=True
+        )
+        if len(existing) > max_backups:
+            for old_file in existing[max_backups:]:
+                try:
+                    os.remove(os.path.join(backup_dir, old_file))
+                except OSError:
+                    pass
+        return backup_path
+    except Exception as e:
+        debug_error("create_presave_backup", str(e))
+        return None
+
+
 def sanitize_df_for_excel(df: pd.DataFrame) -> pd.DataFrame:
     """Sanitize DataFrame string columns to prevent CSV/Excel formula injection
     and remove illegal XML characters.

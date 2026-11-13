@@ -1,6 +1,208 @@
 import tkinter as tk
 
 
+# ==============================================================================
+# CANONICAL SHORTCUTS REGISTRY (DUAL-DEPTH LEARNING & EXCEL BRIDGE)
+# ==============================================================================
+CANONICAL_SHORTCUTS = [
+    # ── 1. Primary Work Keys ────────────────────────────────────────────────
+    (
+        "PRIMARY WORK KEYS",
+        "[ CTRL ] + [ ENTER ] or [ CTRL ] + [ R ]",
+        "Mark Reviewed & Advance",
+        "Signs off record, advances to next (sets Reviewed = TRUE in Excel)"
+    ),
+    (
+        "PRIMARY WORK KEYS",
+        "[ SPACE ]",
+        "Toggle Problem Checkbox",
+        "Flags or clears problem on active field (sets problem flag TRUE / FALSE in Excel)"
+    ),
+    (
+        "PRIMARY WORK KEYS",
+        "[ ↓ ] / [ ↑ ]",
+        "Move Down / Up in Specimen Directory",
+        "Steps through cards in the Specimen Directory without using the mouse"
+    ),
+    (
+        "PRIMARY WORK KEYS",
+        "[ CTRL ] + [ ↓ ] / [ ↑ ]",
+        "Jump to Next / Previous Problem Card",
+        "Skips clean records directly to rows where Observation problem columns are TRUE"
+    ),
+    (
+        "PRIMARY WORK KEYS",
+        "[ CTRL ] + [ S ]",
+        "Save Active Workbook to Excel",
+        "Writes all in-memory changes directly into the .xlsx workbook on disk"
+    ),
+
+    # ── 2. Searching & Record Navigation ────────────────────────────────────
+    (
+        "SEARCHING & RECORD NAVIGATION",
+        "[ CTRL ] + [ K ]",
+        "Command Palette & Omni-Search",
+        "Instant keyboard switcher to run any command or jump to #ObjectID"
+    ),
+    (
+        "SEARCHING & RECORD NAVIGATION",
+        "[ CTRL ] + [ F ]",
+        "Search Bar Focus",
+        "Focuses directory search box to filter by ID, genus, or species"
+    ),
+    (
+        "SEARCHING & RECORD NAVIGATION",
+        "[ CTRL ] + [ G ]",
+        "Filter Menu",
+        "Filters by Reviewed status, specific problem flags, or photos"
+    ),
+    (
+        "SEARCHING & RECORD NAVIGATION",
+        "[ ALT ] + [ ← ] / [ → ]",
+        "Browsing History",
+        "Navigates between recently viewed specimen cards in this session"
+    ),
+    (
+        "SEARCHING & RECORD NAVIGATION",
+        "[ ← ] / [ → ]",
+        "Next / Previous Specimen in Batch",
+        "Switches active specimen without moving mouse cursor"
+    ),
+    (
+        "SEARCHING & RECORD NAVIGATION",
+        "[ CTRL ] + [ O ]",
+        "Toggle Left Sidebar Drawer",
+        "Expands or collapses Specimen Directory to maximize workspace screen space"
+    ),
+    (
+        "SEARCHING & RECORD NAVIGATION",
+        "[ CTRL ] + [ P ]",
+        "Quick Peek Specimen Inspector",
+        "Displays compact popup summary of active plant record and verification level"
+    ),
+
+    # ── 3. Data Entry & Curation ───────────────────────────────────────────
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ E ] or [ I ]",
+        "Jump to First Registration Form Field",
+        "Moves cursor focus to Genus text box to start typing botanical details"
+    ),
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ L ] or [ F4 ]",
+        "Jump to Storage Location Field",
+        "Moves cursor focus to Cabinet/Shelf coordinates"
+    ),
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ Z ] / [ Y ]",
+        "Undo / Redo Last Change",
+        "Reverts or re-applies previous field value or problem checkbox change"
+    ),
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ SHIFT ] + [ M ]",
+        "Insert unknown:missing (?m)",
+        "Writes 'unknown:missing' when detail was omitted from physical label"
+    ),
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ SHIFT ] + [ I ]",
+        "Insert unknown:indecipherable (?i)",
+        "Writes 'unknown:indecipherable' when handwriting is faded or illegible"
+    ),
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ SHIFT ] + [ U ]",
+        "Insert unknown:undigitized (?u)",
+        "Writes 'unknown:undigitized' when data was skipped during capture"
+    ),
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ SHIFT ] + [ W ]",
+        "Insert withheld (?w)",
+        "Writes 'withheld' when conservation/legal protections apply"
+    ),
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ SHIFT ] + [ BKSP ]",
+        "Clear Field Value",
+        "Erases current input field completely"
+    ),
+    (
+        "DATA ENTRY & CURATION",
+        "[ CTRL ] + [ H ]",
+        "Open Conflict Resolver",
+        "Compares active sheet with historical ledger books and GBIF taxonomy"
+    ),
+
+    # ── 4. Specimen Photos & View Controls ──────────────────────────────────
+    (
+        "SPECIMEN PHOTOS & VIEW CONTROLS",
+        "[ ALT ] + [ R ]",
+        "Rotate Specimen Image 90° Clockwise",
+        "Fixes upside-down specimen scans"
+    ),
+    (
+        "SPECIMEN PHOTOS & VIEW CONTROLS",
+        "[ CTRL ] + [ + ] / [ - ]",
+        "Zoom Photo In / Out",
+        "Inspects fine hairs, seeds, and pencil (or roll Mouse Wheel)"
+    ),
+    (
+        "SPECIMEN PHOTOS & VIEW CONTROLS",
+        "[ CTRL ] + [ 0 ]",
+        "Reset Zoom",
+        "Fits entire specimen sheet back into visible frame"
+    ),
+    (
+        "SPECIMEN PHOTOS & VIEW CONTROLS",
+        "[ SHIFT ] + [ ← ] / [ → ]",
+        "Next / Previous Photo in Gallery",
+        "Flips between attached photo files for active ObjectID"
+    ),
+    (
+        "SPECIMEN PHOTOS & VIEW CONTROLS",
+        "[ DOUBLE-CLICK PHOTO ]",
+        "Detached High-Res Viewer Popup",
+        "Launches popout window with up to 500% zoom and mouse panning"
+    ),
+
+    # ── 5. Assistance & Workspace ───────────────────────────────────────────
+    (
+        "ASSISTANCE & WORKSPACE",
+        "[ F1 ]",
+        "Help Center & Shortcuts HUD",
+        "Opens central assistance hub and keyboard cheat sheet"
+    ),
+    (
+        "ASSISTANCE & WORKSPACE",
+        "[ F6 ] / [ F7 ] / [ F8 ]",
+        "Toggle Workspace Panels",
+        "F6: Specimen Directory • F7: Registration Form • F8: Specimen Photos"
+    ),
+    (
+        "ASSISTANCE & WORKSPACE",
+        "[ CTRL ] + [ J ]",
+        "Open Database Statistics Dashboard",
+        "Displays completion progress, review percentages, and taxonomy totals"
+    ),
+    (
+        "ASSISTANCE & WORKSPACE",
+        "[ CTRL ] + [ Q ]",
+        "Toggle Focus Mode",
+        "Collapses non-problem fields for distraction-free label auditing"
+    ),
+]
+
+
+def get_canonical_shortcuts():
+    """Returns the standardized, dynamic registry of all keyboard shortcuts with visual keycaps,
+    plain-language trainee descriptions, and underlying Excel spreadsheet column impacts."""
+    return list(CANONICAL_SHORTCUTS)
+
+
 class KeybindingManager:
     """
     Centralizes all keyboard shortcuts and event bindings for the application.
@@ -9,6 +211,11 @@ class KeybindingManager:
     def __init__(self, main_ui, root):
         self.ui = main_ui
         self.root = root
+
+    @classmethod
+    def get_shortcuts_registry(cls):
+        """Dynamic access to the standardized shortcuts registry."""
+        return get_canonical_shortcuts()
 
     def bind_global_shortcuts(self):
         """Binds all global shortcuts to the root window."""
@@ -53,9 +260,11 @@ class KeybindingManager:
         r.bind("<Control-Shift-V>", ui._paste_field_value)
 
         # ── 3. Search, Command Palette & Filtering ───────────────────────────
-        # Universal Command Palette & Quick Switcher (Ctrl+K)
+        # Universal Command Palette & Quick Switcher (Ctrl+K and Ctrl+Shift+P)
         r.bind("<Control-k>", lambda e: ui.open_command_palette())
         r.bind("<Control-K>", lambda e: ui.open_command_palette())
+        r.bind("<Control-Shift-p>", lambda e: ui.open_command_palette())
+        r.bind("<Control-Shift-P>", lambda e: ui.open_command_palette())
 
         # Instant Search Bar Focus (Ctrl+F)
         r.bind("<Control-f>", ui.handle_ctrl_f)
@@ -131,8 +340,8 @@ class KeybindingManager:
         r.bind("<Shift-Right>", ui._next_image_shortcut)
 
         # ── 7. Workspace Panels & Help ────────────────────────────────────────
-        # Keyboard Shortcuts HUD (F1)
-        r.bind("<F1>", lambda e: ui.show_shortcuts())
+        # Keyboard Shortcuts HUD / Help Center (F1)
+        r.bind("<F1>", lambda e: (ui.open_help_window() if hasattr(ui, "open_help_window") else ui.show_shortcuts()))
 
         # Collapsible Panel Toggles (F6: Directory, F7: Registration, F8: Image)
         r.bind("<F6>", ui.toggle_list_panel_shortcut)

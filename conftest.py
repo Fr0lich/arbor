@@ -1,5 +1,6 @@
 import os
 import tkinter as tk
+import pytest
 
 # Remove any pre-existing environment variables pointing to restricted WindowsApps paths
 for var in ("TCL_LIBRARY", "TK_LIBRARY"):
@@ -21,3 +22,16 @@ def _safe_tk_init(self, *args, **kwargs):
         _original_tk_init(self, *args, **kwargs)
 
 tk.Tk.__init__ = _safe_tk_init
+
+
+@pytest.fixture
+def tk_root():
+    """Global headless root window for Tkinter unit tests."""
+    root = tk.Tk()
+    root.withdraw()
+    yield root
+    try:
+        root.destroy()
+    except Exception:
+        pass
+

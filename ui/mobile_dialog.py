@@ -23,9 +23,9 @@ class MobileDialog:
 
         # Build modal window
         self.win = tk.Toplevel(root)
-        self.win.title("Arbor Mobile Companion")
-        self.win.geometry("540x730")
-        self.win.minsize(500, 690)
+        self.win.title("Arbor Mobile Companion - Vault Auditing & Offline Sync")
+        self.win.geometry("540x750")
+        self.win.minsize(500, 700)
         self.win.transient(root)
 
         # Only lock if simultaneous edit is not enabled

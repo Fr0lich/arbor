@@ -185,6 +185,109 @@ class TestMainWindowImageDelegation(unittest.TestCase):
             root.destroy()
 
 
+
+
+class TestAsyncGBIFWorkflows(unittest.TestCase):
+    def setUp(self):
+        import tkinter as tk
+        from unittest.mock import MagicMock
+        from ui.main_window import ObjectProgramUI
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.mw = ObjectProgramUI.__new__(ObjectProgramUI)
+        self.mw.root = self.root
+        self.mw.app = MagicMock()
+        self.mw.app.current_object_id = "12345"
+        self.mw.reg_vars = {
+            "Genus": tk.StringVar(),
+            "Species": tk.StringVar()
+        }
+        self.mw.gbif_btn = MagicMock()
+        self.mw.gbif_btn.winfo_exists.return_value = True
+
+    def tearDown(self):
+        self.root.destroy()
+
+    def test_check_gbif_missing_genus_shows_toast_not_messagebox(self):
+        from unittest.mock import patch
+        with patch("ui.toast.ToastManager.show") as mock_toast,              patch("tkinter.messagebox.showinfo") as mock_msgbox:
+            self.mw.reg_vars["Genus"].set("")
+            self.mw.check_gbif_action()
+
+            mock_msgbox.assert_not_called()
+            mock_toast.assert_called_once_with(self.root, "Genus is required for GBIF verification", toast_type="warning")
+
+    def test_check_gbif_dispatches_app_worker(self):
+        from unittest.mock import patch
+        with patch("ui.toast.ToastManager.show") as mock_toast,              patch("tkinter.messagebox.showwarning") as mock_warn,              patch("backend.task_queue.app_worker.run_in_background") as mock_run_bg:
+            self.mw.reg_vars["Genus"].set("Betula")
+            self.mw.reg_vars["Species"].set("pendula")
+            self.mw.check_gbif_action()
+
+            mock_warn.assert_not_called()
+            self.assertTrue(mock_run_bg.called)
+            self.mw.gbif_btn.config.assert_called_with(text="Loading...", bg="#6c757d")
+
+    def test_gbif_no_match_shows_toast_not_messagebox(self):
+        from unittest.mock import patch
+        with patch("ui.toast.ToastManager.show") as mock_toast,              patch("tkinter.messagebox.showwarning") as mock_warn:
+            self.mw._on_gbif_result(None, "Unknown", "species")
+            mock_warn.assert_not_called()
+            mock_toast.assert_called_once_with(self.root, "No match found in GBIF Backbone Taxonomy", toast_type="warning")
+
+    def test_gbif_network_error_shows_toast_not_messagebox(self):
+        from unittest.mock import patch
+        with patch("ui.toast.ToastManager.show") as mock_toast,              patch("tkinter.messagebox.showerror") as mock_err:
+            self.mw._on_gbif_result({"error": "Timeout 504"}, "Betula", "pendula")
+            mock_err.assert_not_called()
+            mock_toast.assert_called_once_with(self.root, "GBIF connection error: Timeout 504", toast_type="error")
+
+    def test_gbif_exception_handler_shows_toast_not_messagebox(self):
+        from unittest.mock import patch
+        with patch("ui.toast.ToastManager.show") as mock_toast,              patch("tkinter.messagebox.showerror") as mock_err:
+            self.mw._on_gbif_error("DNS resolution failed")
+            mock_err.assert_not_called()
+            mock_toast.assert_called_once_with(self.root, "GBIF connection error: DNS resolution failed", toast_type="error")
+
+    def test_gbif_synonym_fetches_accepted_name_via_app_worker(self):
+        from unittest.mock import patch
+        with patch("backend.task_queue.app_worker.run_in_background") as mock_run_bg:
+            result = {"synonym": True, "acceptedUsageKey": 98765}
+            self.mw._on_gbif_result(result, "Betula", "alba")
+            self.assertTrue(mock_run_bg.called)
+
+
+class TestAsyncImageTasks(unittest.TestCase):
+    def test_image_panel_tasks_route_through_app_worker(self):
+        import tkinter as tk
+        from unittest.mock import patch, MagicMock
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            panel = ImagePanel(root)
+            with patch("backend.task_queue.app_worker.run_in_background") as mock_run_bg,                  patch("tkinter.filedialog.askdirectory", return_value="C:/herbarium_images"):
+                panel.select_image_folder()
+                self.assertTrue(mock_run_bg.called)
+
+            with patch("backend.task_queue.app_worker.run_in_background") as mock_run_bg:
+                mock_label = MagicMock()
+                mock_label.winfo_exists.return_value = True
+                panel._load_image_async("C:/herbarium_images/123.jpg", False, mock_label)
+                self.assertTrue(mock_run_bg.called)
+
+            with patch("backend.task_queue.app_worker.run_in_background") as mock_run_bg:
+                panel.app = MagicMock()
+                panel.app.config = {"has_images": True}
+                panel.app.active_object_ids = ["122", "123", "124"]
+                panel.image_mode = "folder"
+                panel.show_images_var.set(True)
+                panel.image_index = {"124": ["C:/herbarium_images/124.jpg"]}
+                panel._preload_adjacent_images("123")
+                self.assertTrue(mock_run_bg.called)
+        finally:
+            root.destroy()
+
+
 if __name__ == "__main__":
     unittest.main()
 

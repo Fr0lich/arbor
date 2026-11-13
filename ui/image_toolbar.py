@@ -360,10 +360,12 @@ class ImageToolbar(tk.Frame):
         btn_specs = [
             ("zoom_in", "➕", "Zoom In", "Zoom in on image canvas", self._handle_zoom_in, "Ctrl+Plus"),
             ("zoom_out", "➖", "Zoom Out", "Zoom out on image canvas", self._handle_zoom_out, "Ctrl+Minus"),
-            ("rotate_cw", "↻", "Rotate 90°", "Rotate image clockwise", self._handle_rotate_cw, "Ctrl+R"),
-            ("rotate_ccw", "↺", "Rotate -90°", "Rotate image counter-clockwise", self._handle_rotate_ccw, "Ctrl+Shift+R"),
-            ("reset", "⟲", "Reset", "Reset zoom and rotation", self._handle_reset, "Esc"),
-            ("fit", "⤢", "Fit View", "Fit image to viewport", self._handle_fit, "Double-Click"),
+            ("rotate_cw", "↻", "Rotate 90°", "Rotate image clockwise", self._handle_rotate_cw, "Alt+R"),
+            ("rotate_ccw", "↺", "Rotate -90°", "Rotate image counter-clockwise", self._handle_rotate_ccw, "Shift+Alt+R"),
+            ("reset", "⟲", "Reset", "Reset zoom and rotation", self._handle_reset, "Ctrl+0"),
+            ("fit", "⤢", "Fit Window", "Fit whole sheet to window", self._handle_fit, "Ctrl+1"),
+            ("fit_width", "↔", "Fit Width", "Fit sheet width to window", self._handle_fit_width, "Ctrl+2"),
+            ("actual_pixels", "1:1", "100%", "100% 1:1 Actual Pixel Inspection", self._handle_actual_pixels, "Ctrl+3"),
         ]
 
         for key, icon, label, tip, cmd, scut in btn_specs:
@@ -472,7 +474,22 @@ class ImageToolbar(tk.Frame):
             cb()
 
     def _handle_fit(self):
-        cb = self.live_callbacks.get("fit") or self.live_callbacks.get("on_fit")
+        cb = self.live_callbacks.get("fit") or self.live_callbacks.get("on_fit") or self.live_callbacks.get("zoom_fit_window") or self.live_callbacks.get("fit_window")
+        if cb:
+            cb()
+
+    def _handle_fit_width(self):
+        cb = self.live_callbacks.get("fit_width") or self.live_callbacks.get("on_fit_width") or self.live_callbacks.get("zoom_fit_width")
+        if cb:
+            cb()
+
+    def _handle_actual_pixels(self):
+        cb = (
+            self.live_callbacks.get("actual_pixels")
+            or self.live_callbacks.get("on_actual_pixels")
+            or self.live_callbacks.get("zoom_actual_pixels")
+            or self.live_callbacks.get("zoom_100")
+        )
         if cb:
             cb()
 

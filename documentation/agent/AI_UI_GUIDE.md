@@ -294,23 +294,46 @@ To ensure UI consistency across Light and Dark themes, eliminate modal clutter, 
 
 To guarantee high visual clarity for curators and instant $O(1)$ responsiveness across datasets of 20,000+ specimens, all directory and card components **MUST** adhere to these strict ergonomic guidelines:
 
-### A. Single-Badge Discipline in Detailed Cards (`ui/widgets.py`)
+### A. Single-Badge Discipline & Priority Hierarchy (`ui/widgets.py`)
 - **Zero Icon / Emoji Clutter:** Cards must never display multiple stacked badges or emoji icons (`🧬`, `📦`, `📷`, `🌐`).
-- **One Category Badge on Row 1:** Each card is assigned exactly one high-contrast status badge formatted in JetBrains Mono at `sc(8)` bold:
-  - `[ TAX ]`: Active taxonomy problems (`Taxonomy_Problem`, `Genus_Problem`, `Species_Problem`).
-  - `[ PROV ]`: Provenance/collection issues (`Locality_Problem`, `MissingLabel`, `Date_Problem`).
-  - `[ BOX ]`: Physical box/plant part problems (`PlantPart_Problem`, `Box_Label_Problem`).
-  - `[ IMG ]`: Media problems or missing images.
-  - `[ REV+ERR ]`: Specimen is marked reviewed but has unresolved flags.
-  - `[ REV ]`: Clean reviewed specimen.
-  - `[ UNREV ]`: Unreviewed record in good standing.
+- **One Status Badge on Row 1:** To maintain instantaneous 0ms scrolling latency across datasets of 20,000+ specimens, each card hosts strictly ONE status badge on Row 1.
+- **Priority Hierarchy:** When multiple issues occur simultaneously on a specimen, Arbor resolves them in strict order of critical priority:
+  ```
+  [ TAX ]   ▶   [ PROV ]   ▶   [ BOX ]   ▶   [ IMG ]   ▶   [ CFCT ]   ▶   [ REV+ERR ]   ▶   [ REV ]
+  Taxonomy     Provenance      Physical        Media       Historical       Reviewed        Clean
+  Errors         Errors         Storage        Issues       Conflict      with Warnings    Reviewed
+  ```
+- **Badge Token Reference:**
+  - `[ TAX ]` (`#ba1a1a`): Active taxonomy problem (`Taxonomy_Problem`, `Genus_Problem`, `Species_Problem`).
+  - `[ PROV ]` (`#d95c14`): Provenance or locality error (`MissingLabel`, `Locality_Problem`, `Date_Problem`).
+  - `[ BOX ]` (`#4a7b9d`): Physical container or box problem (`Box_Label_Problem`, `PlantPart_Problem`).
+  - `[ IMG ]` (`#6750a4`): Missing scan or photo asset (`Images_Missing`).
+  - `[ CFCT ]` (`#d9a036`): Historical workbook conflict or unvalidated source note.
+  - `[ REV+ERR ]` (`#3a7d44` + warning border): Reviewed specimen retaining unresolved flags.
+  - `[ REV ]` (`#3a7d44`): Clean reviewed specimen in good standing.
+  - `[ UNREV ]` (`#757d77`): Unreviewed record without active errors.
 - **Inline Metadata Row (Row 2):** Never unpack or repack individual badge widgets on Row 2. All secondary attributes are concatenated into a single, bullet-separated string rendered in a single `Label`:
   ```
   OBJ-0042 • PINACEAE • 2 photos • LOAN • UKN • UNVAL
   ```
   This eliminates Tkinter geometry recalculations (`pack_forget` / `pack`) during scrolling.
+- **Toggleable Badges Invariant:** When status pill badges are disabled by user preferences, the `status_badge` widget remains mapped in Row 1 geometry with `text=""` and `bg=card_bg`. Dynamically removing or re-packing widgets in Row 1 violates single-badge discipline and introduces scroll stutter.
 
-### B. $O(1)$ Targeted Card Selection Diffing
+### B. Card Density Tokens & Vertical Geometry
+Card vertical geometry is configurable to suit different curatorial workflows while guaranteeing zero runtime layout recalculations during scrolling:
+- **`compact` (~64px, ~50px without location):** Minimalist cataloging profile (`pady=(sc(2), sc(2))`, `row1_pad=(0, sc(1))`). Maximum information density for high-throughput curation.
+- **`standard` (~78px, ~64px without location):** Balanced default profile (`pady=(sc(4), sc(4))`, `row1_pad=(0, sc(2))`). Optimal balance between spacing, readability, and location context.
+- **`expanded` (~92px, ~78px without location):** Generous audit profile (`pady=(sc(6), sc(6))`, `row1_pad=(0, sc(4))`). Maximum comfort for detailed review and large display monitors.
+- **Height Re-measurement Contract:** Whenever density or Row 3 visibility changes, the UI invokes `apply_directory_view_preferences()`, clearing active card pools, resetting `_card_height = None`, and triggering an immediate `_measure_card_height()` pass so virtual canvas scroll physics and scrollbar thumbs remain pixel-perfect.
+
+### C. Simplified Layout Profiles (Menu & Command Palette Searchable)
+Card layout is a persistent visual preference rather than a high-frequency real-time operational loop. To avoid polluting the global shortcut namespace, layout presets are applied via **Settings (Appearance Tab)** with an interactive Live Preview or via the **Command Palette (`Ctrl+K`)** without dedicated physical keybindings:
+1. **Standard:** Balanced default (78px, 3 rows, status pills on, full location visible).
+2. **Compact:** High-speed density (64px, 2 rows, status pills on, location hidden).
+3. **Full Details:** Comprehensive audit (92px, 3 rows, botanical author citation on, full location visible).
+4. **Minimalist:** Clean reading (64px, 2 rows, status badges hidden, location hidden, core taxon name only).
+
+### D. $O(1)$ Targeted Card Selection Diffing
 - In `redraw_cards_highlights()`, never iterate recursively through all rendered cards in the viewport.
 - Maintain `_last_highlighted_oids` and compute the symmetric difference:
   ```python

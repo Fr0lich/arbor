@@ -156,6 +156,109 @@ def add_recent_file(path):
     prefs["recent_files"] = recent[:8]
     save_prefs(prefs)
 
+# ==============================================================================
+# DIRECTORY CARD & WIDGET VIEW PREFERENCES (UI PRESENTATION ONLY)
+# ==============================================================================
+DEFAULT_DIRECTORY_CARD_PREFS = {
+    "density_mode": "standard",            # 'compact' (64px), 'standard' (78px), 'expanded' (92px)
+    "show_location_row": True,             # bool
+    "location_granularity": "full",        # 'full' (Building/Floor/Cab/Shelf), 'compact' (Cab/Shelf), 'none'
+    "show_status_badge": True,             # bool: Row 1 status pill badge
+    "show_author_citation": False,         # bool: Append botanical author to scientific name
+    "unknown_taxon_fallback": "unknown",   # 'unknown' ("Unknown Specimen"), 'stored_as', 'empty'
+    "visible_badge_categories": {
+        "reviewed": True,                  # [ REV ], [ REV+ERR ]
+        "taxonomy": True,                  # [ TAX ]
+        "provenance": True,                # [ PROV ]
+        "physical": True,                  # [ BOX ]
+        "media": True,                     # [ IMG ]
+        "conflicts": True,                 # [ CFCT ], [ ERR+HIS ]
+        "general_err": True,               # [ ERR ]
+        "unreviewed": True,                # [ UNREV ]
+    },
+    "badge_priority_preset": "default",    # 'default', 'taxonomist', 'collections_manager'
+    "accent_strip_mode": "problems",       # 'problems', 'review_only', 'hidden'
+    "visible_meta_tags": {
+        "family": True,                    # e.g., FAGACEAE
+        "photos": True,                    # e.g., 2 photos / ONLINE / NO PHOTO
+        "loan": True,                      # e.g., LOAN
+        "unknown": True,                   # e.g., UKN
+        "unvalidated": True,               # e.g., UNVAL
+    },
+    "show_directory_view_strip": False,    # bool: Optional in-situ quick view controls above list (default: False)
+}
+
+def get_directory_card_prefs():
+    """Retrieve current directory card display preferences merged with defaults."""
+    import copy
+    prefs = load_prefs()
+    user_card_prefs = prefs.get("directory_card_display", {})
+    merged = copy.deepcopy(DEFAULT_DIRECTORY_CARD_PREFS)
+    if isinstance(user_card_prefs, dict):
+        for k, v in user_card_prefs.items():
+            if isinstance(v, dict) and isinstance(merged.get(k), dict):
+                merged[k].update(v)
+            else:
+                merged[k] = v
+    return merged
+
+def save_directory_card_prefs(card_prefs):
+    """Persist directory card display preferences to user_prefs.json."""
+    prefs = load_prefs()
+    prefs["directory_card_display"] = card_prefs
+    save_prefs(prefs)
+
+def reset_directory_card_prefs_to_default():
+    """Restore directory card view customizations to factory defaults."""
+    import copy
+    default_copy = copy.deepcopy(DEFAULT_DIRECTORY_CARD_PREFS)
+    save_directory_card_prefs(default_copy)
+    return default_copy
+
+CARD_PRESET_ALIASES = {
+    "default": "standard",
+    "high_speed": "compact",
+    "taxonomist": "full_detail",
+    "collections_manager": "minimalist",
+}
+
+def resolve_card_preset_name(preset_name: str) -> str:
+    """Normalize a card layout preset or persona alias to canonical name."""
+    norm = str(preset_name).strip().lower()
+    return CARD_PRESET_ALIASES.get(norm, norm)
+
+def get_card_preset_config(preset_name: str) -> dict:
+    """Return dictionary of card preference overrides for a given preset."""
+    import copy
+    canonical = resolve_card_preset_name(preset_name)
+    prefs = get_directory_card_prefs()
+    if canonical == "compact":
+        prefs["density_mode"] = "compact"
+        prefs["show_location_row"] = False
+        prefs["location_granularity"] = "none"
+        prefs["show_status_badge"] = True
+        prefs["show_author_citation"] = False
+        prefs["badge_priority_preset"] = "default"
+    elif canonical == "full_detail":
+        prefs["density_mode"] = "expanded"
+        prefs["show_location_row"] = True
+        prefs["location_granularity"] = "full"
+        prefs["show_status_badge"] = True
+        prefs["show_author_citation"] = True
+        prefs["badge_priority_preset"] = "taxonomist"
+    elif canonical == "minimalist":
+        prefs["density_mode"] = "compact"
+        prefs["show_location_row"] = False
+        prefs["location_granularity"] = "none"
+        prefs["show_status_badge"] = False
+        prefs["show_author_citation"] = False
+        prefs["badge_priority_preset"] = "default"
+    else:  # "standard" / "default"
+        current_strip = prefs.get("show_directory_view_strip", False)
+        prefs = copy.deepcopy(DEFAULT_DIRECTORY_CARD_PREFS)
+        prefs["show_directory_view_strip"] = current_strip
+    return prefs
+
 def sc(n):
     """Scale a pixel or font size by the current UI scale factor."""
     return max(1, int(n * UI_SCALE))

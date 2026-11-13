@@ -7,6 +7,39 @@ from ui.state import app_bus, OBJECT_DATA_CHANGED, OBJECT_LOADED
 class StatusBarPanel:
     """Decoupled status bar component for Arbor desktop UI."""
 
+    # Backward compatibility stub properties for legacy inspection scripts
+    @property
+    def sb_top(self):
+        return None
+
+    @sb_top.setter
+    def sb_top(self, val):
+        pass
+
+    @property
+    def sb_buttons_frame(self):
+        return None
+
+    @sb_buttons_frame.setter
+    def sb_buttons_frame(self, val):
+        pass
+
+    @property
+    def sb_settings_btn(self):
+        return None
+
+    @sb_settings_btn.setter
+    def sb_settings_btn(self, val):
+        pass
+
+    @property
+    def sb_help_btn(self):
+        return None
+
+    @sb_help_btn.setter
+    def sb_help_btn(self, val):
+        pass
+
     def __init__(self, parent_frame, ui):
         self.frame = parent_frame
         self.ui = ui
@@ -18,23 +51,6 @@ class StatusBarPanel:
         statusbar_fg = "#e2e2e2"
         # Single-row streamlined status bar: 26px height
         # Settings & Help are now hosted on the Top Navigation Bar.
-        # sb_top and buttons are retained as un-packed attributes for backward compatibility.
-        self.sb_top = tk.Frame(self.frame, bg=statusbar_bg, height=0)
-        self.sb_buttons_frame = tk.Frame(self.sb_top, bg=statusbar_bg)
-        self.sb_settings_btn = ttk.Button(
-            self.sb_buttons_frame,
-            text="SETTINGS",
-            style="Nav.TButton",
-            command=self.ui._open_unified,
-            cursor="hand2"
-        )
-        self.sb_help_btn = ttk.Button(
-            self.sb_buttons_frame,
-            text="HELP",
-            style="Nav.TButton",
-            command=self.ui.open_help_window,
-            cursor="hand2"
-        )
 
         # Ensure sb_bottom references the single status bar frame
         self.sb_bottom = self.frame
@@ -88,15 +104,42 @@ class StatusBarPanel:
         self.ui._status_bar_labels = self.labels
         self.ui._status_bar_problems_lbl = self.problems_lbl
         self.ui._filter_active_badge = self.filter_active_badge
-        self.ui.sb_top = self.sb_top
         self.ui.sb_bottom = self.sb_bottom
-        self.ui.sb_buttons_frame = self.sb_buttons_frame
-        self.ui.sb_settings_btn = self.sb_settings_btn
-        self.ui.sb_help_btn = self.sb_help_btn
 
         # Subscribe to app_bus events
         app_bus.subscribe_managed(self.frame, OBJECT_DATA_CHANGED, self._on_bus_data_changed)
         app_bus.subscribe_managed(self.frame, OBJECT_LOADED, self._on_bus_object_loaded)
+
+    def update_status(self, total=None, reviewed=None, problems=None, last_save=None):
+        """Update status bar telemetry labels directly or from active dataset."""
+        if not self.frame.winfo_exists():
+            return
+
+        if total is None and reviewed is None and problems is None and last_save is None:
+            self.update_object_count()
+            self.update_review_progress()
+            return
+
+        if total is not None and "object_count" in self.labels:
+            if isinstance(total, int):
+                self.labels["object_count"].config(text=f"OBJECT_COUNT: {total:,}")
+            else:
+                self.labels["object_count"].config(text=f"OBJECT_COUNT: {total}")
+
+        if reviewed is not None and "reviewed" in self.labels:
+            self.labels["reviewed"].config(text=f"REVIEWED: {reviewed}")
+
+        if problems is not None and "problems" in self.labels:
+            self.labels["problems"].config(text=f"PROBLEMS: {problems}")
+            if hasattr(self, "problems_lbl") and self.problems_lbl.winfo_exists():
+                try:
+                    prob_val = int(problems)
+                    self.problems_lbl.config(fg="#ff6b6b" if prob_val > 0 else "#e2e2e2")
+                except (ValueError, TypeError):
+                    pass
+
+        if last_save is not None and "last_save" in self.labels:
+            self.labels["last_save"].config(text=f"LAST_SAVE: {last_save}")
 
     def _on_bus_data_changed(self, *args, **kwargs):
         if self.frame.winfo_exists():

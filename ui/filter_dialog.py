@@ -531,6 +531,9 @@ class FilterDialogController:
         style = ttk.Style(win)
         style.configure("Flat.TCombobox", fieldbackground=COLORS["surface"], background=COLORS["surface"], borderwidth=0)
 
+        if not hasattr(ui, "filter_location_vars"):
+            ui.filter_location_vars = {}
+
         for field in loc_fields:
             name = field["name"]
             ftype = field.get("type", "text")

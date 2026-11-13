@@ -160,7 +160,7 @@ class TestExcelArchitecture:
                     df_reg=df_reg,
                     df_obs=df_obs
                 )
-            assert "The file is open in Microsoft Excel" in str(exc_info.value)
+            assert "open in Microsoft Excel" in str(exc_info.value)
             # Ensure no orphan tmp file matching .tmp.xlsx remains
             remaining_tmps = [f for f in os.listdir(str(tmp_path)) if f.endswith(".tmp.xlsx")]
             assert len(remaining_tmps) == 0

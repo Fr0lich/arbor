@@ -439,7 +439,6 @@ class LayoutSettingsMixin:
 
             # No saved layout — apply resolution-aware sash defaults
             def _set_default_sashes():
-            def _set_default_sashes():
                 try:
                     if hasattr(self, "apply_proper_sash_positions"):
                         self.apply_proper_sash_positions()
@@ -560,10 +559,19 @@ class LayoutSettingsMixin:
         self.dark_mode_active = not self.dark_mode_active
         self.apply_theme()
 
+    def apply_light_theme(self):
+        """Apply light theme styling."""
+        self.dark_mode_active = False
+        return self.apply_theme()
+
+    def apply_dark_theme(self):
+        """Apply dark theme styling."""
+        self.dark_mode_active = True
+        return self.apply_theme()
+
     def _ensure_theme_widgets_registered(self, force=False):
         if getattr(self, "_theme_widgets_registered", False) and not force:
             # Filter out any destroyed widgets to prevent leaks
-            self._theme_sb_top_widgets = [w for w in getattr(self, "_theme_sb_top_widgets", []) if w.winfo_exists()]
             self._theme_sb_bottom_widgets = [w for w in getattr(self, "_theme_sb_bottom_widgets", []) if w.winfo_exists()]
             self._theme_loc_vert_widgets = [w for w in getattr(self, "_theme_loc_vert_widgets", []) if w.winfo_exists()]
             self._theme_loc_horiz_widgets = [w for w in getattr(self, "_theme_loc_horiz_widgets", []) if w.winfo_exists()]
@@ -571,7 +579,6 @@ class LayoutSettingsMixin:
             self._theme_loc_checkbuttons = [w for w in getattr(self, "_theme_loc_checkbuttons", []) if w.winfo_exists()]
             return
         
-        self._theme_sb_top_widgets = []
         self._theme_sb_bottom_widgets = []
         self._theme_loc_vert_widgets = []
         self._theme_loc_horiz_widgets = []
@@ -586,8 +593,6 @@ class LayoutSettingsMixin:
                     lst.append(child)
                     collect_widgets(child, lst)
                 
-        if hasattr(self, "sb_top"):
-            collect_widgets(self.sb_top, self._theme_sb_top_widgets)
         if hasattr(self, "sb_bottom"):
             collect_widgets(self.sb_bottom, self._theme_sb_bottom_widgets)
             
@@ -781,16 +786,6 @@ class LayoutSettingsMixin:
                 self.reg_canvas.configure(background=bg_color, highlightbackground=border_color)
             if hasattr(self, "_status_bar_frame"):
                 self._status_bar_frame.configure(bg=statusbar_bg)
-            if hasattr(self, "sb_top"):
-                self.sb_top.configure(bg=bg_color)
-                for w in self._theme_sb_top_widgets:
-                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
-                        try:
-                            w.configure(bg=bg_color)
-                        except Exception:
-                            pass
-            if hasattr(self, "sb_buttons_frame"):
-                self.sb_buttons_frame.configure(bg=bg_color)
             if hasattr(self, "sb_bottom"):
                 self.sb_bottom.configure(bg=statusbar_bg)
                 for w in self._theme_sb_bottom_widgets:
@@ -987,16 +982,6 @@ class LayoutSettingsMixin:
                 self.reg_canvas.configure(background=bg_color, highlightbackground="#d0d0d0")
             if hasattr(self, "_status_bar_frame"):
                 self._status_bar_frame.configure(bg=statusbar_bg)
-            if hasattr(self, "sb_top"):
-                self.sb_top.configure(bg=bg_color)
-                for w in self._theme_sb_top_widgets:
-                    if w.winfo_exists() and not w.winfo_class().startswith("T"):
-                        try:
-                            w.configure(bg=bg_color)
-                        except Exception:
-                            pass
-            if hasattr(self, "sb_buttons_frame"):
-                self.sb_buttons_frame.configure(bg=bg_color)
             if hasattr(self, "sb_bottom"):
                 self.sb_bottom.configure(bg=statusbar_bg)
                 for w in self._theme_sb_bottom_widgets:

@@ -131,3 +131,93 @@ def test_import_to_sqlite_and_save_as_integration():
         assert app._log_records[0]["Action"] == "EDIT"
         assert app.df_unvalidated is not None
         assert len(app.df_unvalidated) == 1
+
+
+def test_sqlite_strict_schema_log_save_with_session_id():
+    import sqlite3
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "strict_log_test.db")
+        conn = sqlite3.connect(db_path)
+        canonical_cols = [
+            "Timestamp", "Action", "Reviewed", "ObjectID",
+            "ChangedFields", "ChangedValues",
+            "ProblemsChanged", "ProblemsChangedValues",
+            "LocationChanged", "LocationChangedValues",
+            "User", "SourceFile", "OutputFile"
+        ]
+        col_defs = ", ".join([f'"{col}" TEXT' for col in canonical_cols])
+        conn.execute(f'CREATE TABLE "Log" ({col_defs});')
+        conn.execute('CREATE TABLE "Registration" ("ObjectID" TEXT, "Genus" TEXT);')
+        conn.execute('CREATE TABLE "Observation" ("ObjectID" TEXT, "Reviewed" BOOLEAN);')
+        conn.commit()
+        conn.close()
+
+        df_reg = pd.DataFrame([{"ObjectID": "101", "Genus": "Quercus"}]).set_index("ObjectID")
+        df_obs = pd.DataFrame([{"ObjectID": "101", "Reviewed": True}]).set_index("ObjectID")
+        df_photo = pd.DataFrame()
+        df_log = pd.DataFrame([{
+            "Timestamp": "2026-09-03T12:00:00",
+            "Action": "MOBILE_EDIT",
+            "Reviewed": "Yes",
+            "ObjectID": "101",
+            "ChangedFields": "Genus",
+            "ChangedValues": 'Genus: "Fagus" -> "Quercus"',
+            "ProblemsChanged": "",
+            "ProblemsChangedValues": "",
+            "LocationChanged": "",
+            "LocationChangedValues": "",
+            "User": "Mobile-Companion",
+            "SourceFile": "test.db",
+            "OutputFile": "test.db",
+            "_session_id": "session_abc123"
+        }])
+
+        SQLiteRepository.save_sqlite(db_path, df_reg, df_obs, df_photo, df_log)
+        df_read_log = SQLiteRepository.load_sqlite(db_path, {"ui_sections": {}})[3]
+        assert len(df_read_log) == 1
+        assert "_session_id" not in df_read_log.columns
+        assert df_read_log.iloc[0]["Action"] == "MOBILE_EDIT"
+
+
+def test_concurrent_log_action_thread_safety():
+    import threading
+    from models import AppState
+    from ui.main_window import ObjectProgramUI
+    from unittest.mock import MagicMock
+
+    app = AppState()
+    app.config = config.DATABASE_CONFIGS["Økonomisk Botanisk"]
+    app.df_reg = pd.DataFrame([{"ObjectID": f"{i}", "Genus": "Pinus"} for i in range(100)]).set_index("ObjectID")
+    app.df_obs = pd.DataFrame([{"ObjectID": f"{i}", "Reviewed": False} for i in range(100)]).set_index("ObjectID")
+    app.df_photo = pd.DataFrame(columns=["ObjectID", "ImagePath"]).set_index("ObjectID")
+    app.df_log = pd.DataFrame()
+    app._log_records = []
+
+    mock_ui = MagicMock()
+    mock_ui.app = app
+    mock_ui.log_action = ObjectProgramUI.log_action.__get__(mock_ui, MagicMock)
+
+    errors = []
+    def worker(worker_id):
+        try:
+            for i in range(25):
+                oid = f"{(worker_id * 25 + i) % 100}"
+                mock_ui.log_action(
+                    "EDIT",
+                    changed_fields=["Genus"],
+                    changed_values=[f'Genus: "Pinus" -> "Pinus_{worker_id}_{i}"'],
+                    oid=oid
+                )
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=(w,)) for w in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors
+    assert len(app._log_records) == 100
+    assert len(app.df_log) == 100

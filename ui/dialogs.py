@@ -48,8 +48,8 @@ class ArborDropdownMenu(tk.Frame):
             highlightthickness=1,
             highlightbackground=self.colors["outline"],
             cursor="hand2",
-            padx=int(8 * scale),
-            pady=int(3 * scale),
+            padx=sc(8),
+            pady=sc(3),
             **kwargs
         )
 
@@ -72,7 +72,7 @@ class ArborDropdownMenu(tk.Frame):
             font=("Segoe UI", sc(8)),
             cursor="hand2"
         )
-        self._arrow.pack(side="right", padx=(int(6 * scale), 0))
+        self._arrow.pack(side="right", padx=(sc(6), 0))
 
         # Trace variable to keep display label updated
         self._trace_id = self.var.trace_add("write", self._on_var_changed)
@@ -206,8 +206,8 @@ class StartupDialog:
 
         screen_w = self.win.winfo_screenwidth()
         screen_h = self.win.winfo_screenheight()
-        min_w = min(480, max(360, screen_w - 40))
-        min_h = min(520, max(400, screen_h - 80))
+        min_w = sc(min(480, max(360, screen_w - 40)))
+        min_h = sc(min(520, max(400, screen_h - 80)))
         self.win.minsize(min_w, min_h)
         self.win.configure(bg=self.C_BG)
 
@@ -246,8 +246,8 @@ class StartupDialog:
         self.win.update_idletasks()
         import utils
 
-        w = int(660 * self._scale)
-        h = int(700 * self._scale)
+        w = sc(660)
+        h = sc(700)
 
         self.win.geometry(f"{w}x{h}")
         utils.center_and_fit_toplevel(self.win, w, h)
@@ -260,8 +260,6 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_window(self):
-        s = self._scale
-
         # Card frame (white, 1px outline border)
         card = tk.Frame(
             self.win,
@@ -271,7 +269,7 @@ class StartupDialog:
             highlightcolor=self.C_OUTLINE,
         )
         self._card = card
-        card.pack(fill="both", expand=True, padx=int(12*s), pady=int(12*s))
+        card.pack(fill="both", expand=True, padx=sc(12), pady=sc(12))
 
         # 1. Pinned Header at top (always visible)
         self._build_header(card)
@@ -284,6 +282,7 @@ class StartupDialog:
         container.pack(side="top", fill="both", expand=True)
 
         canvas = tk.Canvas(container, bg=self.C_CARD, highlightthickness=0, bd=0)
+        self.canvas = canvas
         scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
@@ -292,7 +291,8 @@ class StartupDialog:
 
         # Scrollable inner frame (bg = white)
         outer = tk.Frame(canvas, bg=self.C_CARD)
-        self._outer = outer  
+        self._outer = outer
+        self.scrollable_frame = outer
 
         canvas_win_id = canvas.create_window((0, 0), window=outer, anchor="nw")
 
@@ -314,6 +314,9 @@ class StartupDialog:
         """Bind mousewheel using the centralized, non-destructive scroll helper."""
         from ui.scroll_helper import bind_mousewheel
         bind_mousewheel(canvas, frame)
+        tag = f"ScrollTag_{id(canvas)}"
+        if tag not in canvas.bindtags():
+            canvas.bindtags((tag,) + tuple(canvas.bindtags()))
 
     def _sep(self, parent, color=None, vertical=False):
         """1px separator line."""
@@ -348,8 +351,7 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_header(self, card):
-        s = self._scale
-        header = tk.Frame(card, bg=self.C_HEADER_BG, padx=int(16*s), pady=int(12*s))
+        header = tk.Frame(card, bg=self.C_HEADER_BG, padx=sc(16), pady=sc(12))
         header.pack(fill="x")
 
         tk.Label(
@@ -364,7 +366,7 @@ class StartupDialog:
             bg=self.C_HEADER_BG, fg=self.C_ON_SURFACE,
             font=("Segoe UI", sc(18), "bold"),
             anchor="w"
-        ).pack(anchor="w", pady=(int(2*s), 0))
+        ).pack(anchor="w", pady=(sc(2), 0))
 
         self._sep(header, self.C_OUTLINE_VAR)
 
@@ -373,21 +375,20 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_body(self, card):
-        s = self._scale
-        body = tk.Frame(card, bg=self.C_CARD, padx=int(16*s), pady=int(16*s))
+        body = tk.Frame(card, bg=self.C_CARD, padx=sc(16), pady=sc(16))
         body.pack(fill="both", expand=True)
 
         # 1 — Select Database & Configuration Profile
         self._build_database_section(body)
-        tk.Frame(body, bg=self.C_CARD, height=int(18*s)).pack()  # spacer
+        tk.Frame(body, bg=self.C_CARD, height=sc(18)).pack()  # spacer
 
         # 2 — Image Source toggle
         self._build_image_source(body)
-        tk.Frame(body, bg=self.C_CARD, height=int(20*s)).pack()  # spacer
+        tk.Frame(body, bg=self.C_CARD, height=sc(20)).pack()  # spacer
 
         # 3 — Historical Books
         self._build_books_source(body)
-        tk.Frame(body, bg=self.C_CARD, height=int(20*s)).pack()  # spacer
+        tk.Frame(body, bg=self.C_CARD, height=sc(20)).pack()  # spacer
 
         # 4 — Recent Projects
         self._build_recent_table(body)
@@ -397,9 +398,8 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_section_header(self, parent, text, status_type=None):
-        s = self._scale
         header_frame = tk.Frame(parent, bg=self.C_CARD)
-        header_frame.pack(anchor="w", fill="x", pady=(0, int(4*s)))
+        header_frame.pack(anchor="w", fill="x", pady=(0, sc(4)))
 
         # Determine badge text and color
         badge_text = ""
@@ -421,7 +421,7 @@ class StartupDialog:
                 font=("Courier New", sc(8), "bold"),
                 padx=4, pady=1
             )
-            badge_lbl.pack(side="left", padx=(0, 6))
+            badge_lbl.pack(side="left", padx=(0, sc(6)))
 
         lbl = tk.Label(
             header_frame, text=text,
@@ -439,7 +439,6 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_database_section(self, parent):
-        s = self._scale
         self._build_section_header(parent, "Select Database", status_type="required")
 
         # Database File Entry Row
@@ -460,7 +459,7 @@ class StartupDialog:
             highlightcolor=self.C_PRIMARY,
             state="readonly",
         )
-        entry.pack(side="left", fill="x", expand=True, ipady=int(6*s))
+        entry.pack(side="left", fill="x", expand=True, ipady=sc(6))
 
         # Placeholder update
         placeholder = "No database file selected..."
@@ -491,7 +490,7 @@ class StartupDialog:
             highlightthickness=1,
             highlightbackground=self.C_OUTLINE,
         )
-        browse_btn.pack(side="right", ipady=int(5*s))
+        browse_btn.pack(side="right", ipady=sc(5))
         browse_btn.bind("<Enter>", lambda e: browse_btn.config(bg=self.C_HOVER))
         browse_btn.bind("<Leave>", lambda e: browse_btn.config(bg=self.C_HEADER_BG))
 
@@ -499,7 +498,7 @@ class StartupDialog:
 
         # Sub-row for Actions and Database Profile selection
         sub_row = tk.Frame(parent, bg=self.C_CARD)
-        sub_row.pack(fill="x", pady=(int(8*s), 0))
+        sub_row.pack(fill="x", pady=(sc(8), 0))
 
         # Prominent "+ Create New Database" button
         create_btn = tk.Button(
@@ -511,8 +510,8 @@ class StartupDialog:
             relief="flat",
             bd=0,
             cursor="hand2",
-            padx=int(10*s),
-            pady=int(4*s),
+            padx=sc(10),
+            pady=sc(4),
             command=self.create_new_database_startup,
             highlightthickness=1,
             highlightbackground=self.C_OUTLINE
@@ -531,7 +530,7 @@ class StartupDialog:
             bg=self.C_CARD,
             fg=self.C_ON_VARIANT,
             font=("Segoe UI", sc(9), "bold")
-        ).pack(side="left", padx=(0, int(6*s)))
+        ).pack(side="left", padx=(0, sc(6)))
 
         db_names = list(DATABASE_CONFIGS.keys())
         if not self.db_var.get() and db_names:
@@ -541,7 +540,7 @@ class StartupDialog:
             profile_frame,
             textvariable=self.db_var,
             values=db_names,
-            scale=s,
+            scale=1.0,
             colors={
                 "bg": self.C_SURFACE_LOW,
                 "fg": self.C_PRIMARY,
@@ -574,8 +573,6 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_image_source(self, parent):
-        s = self._scale
-        
         # Container frame for everything in the image source section
         self._image_source_container = tk.Frame(parent, bg=self.C_CARD)
         self._image_source_container.tutorial_id = "image_source_frame"
@@ -608,10 +605,10 @@ class StartupDialog:
                 command=lambda m=mode: self._set_image_mode(m),
             )
             if i < len(segments) - 1:
-                btn.pack(side="left", fill="both", expand=True, ipady=int(6*s))
+                btn.pack(side="left", fill="both", expand=True, ipady=sc(6))
                 tk.Frame(toggle_outer, bg=self.C_OUTLINE, width=1).pack(side="left", fill="y")
             else:
-                btn.pack(side="left", fill="both", expand=True, ipady=int(6*s))
+                btn.pack(side="left", fill="both", expand=True, ipady=sc(6))
             self._seg_buttons[mode] = btn
 
         # Local folder sub-row (hidden unless "folder" is selected)
@@ -621,7 +618,6 @@ class StartupDialog:
         self._set_image_mode("folder")  # initial state
 
     def _build_folder_picker_row(self, parent):
-        s = self._scale
         self._build_section_header(parent, "Local Image Directory")
 
         row = tk.Frame(parent, bg=self.C_CARD)
@@ -640,7 +636,7 @@ class StartupDialog:
             highlightcolor=self.C_PRIMARY,
             state="readonly",
         )
-        entry.pack(side="left", fill="x", expand=True, ipady=int(6*s))
+        entry.pack(side="left", fill="x", expand=True, ipady=sc(6))
 
         placeholder = "No folder selected..."
         def _update_folder_ph(*_):
@@ -669,7 +665,7 @@ class StartupDialog:
             highlightthickness=1,
             highlightbackground=self.C_OUTLINE,
         )
-        btn.pack(side="right", ipady=int(5*s))
+        btn.pack(side="right", ipady=sc(5))
         btn.bind("<Enter>", lambda e: btn.config(bg=self.C_HOVER))
         btn.bind("<Leave>", lambda e: btn.config(bg=self.C_HEADER_BG))
 
@@ -692,7 +688,7 @@ class StartupDialog:
         # 2. Show / hide folder row
         if mode == "folder":
             if not self._folder_row.winfo_ismapped():
-                self._folder_row.pack(fill="x", pady=(int(6 * self._scale), 0))
+                self._folder_row.pack(fill="x", pady=(sc(6), 0))
                 self._folder_row.update_idletasks()
         else:
             if self._folder_row.winfo_ismapped():
@@ -703,8 +699,6 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_books_source(self, parent):
-        s = self._scale
-
         container = tk.Frame(parent, bg=self.C_CARD)
         container.pack(fill="x")
 
@@ -726,7 +720,7 @@ class StartupDialog:
             highlightcolor=self.C_PRIMARY,
             state="readonly",
         )
-        entry.pack(side="left", fill="x", expand=True, ipady=int(6*s))
+        entry.pack(side="left", fill="x", expand=True, ipady=sc(6))
 
         placeholder = "No books file selected..."
         def _update_books_ph(*_):
@@ -761,7 +755,7 @@ class StartupDialog:
             highlightthickness=1,
             highlightbackground=self.C_OUTLINE,
         )
-        btn.pack(side="right", ipady=int(5*s))
+        btn.pack(side="right", ipady=sc(5))
         btn.bind("<Enter>", lambda e: btn.config(bg=self.C_HOVER))
         btn.bind("<Leave>", lambda e: btn.config(bg=self.C_HEADER_BG))
 
@@ -771,9 +765,8 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_recent_table(self, parent):
-        s = self._scale
         self._label_md(parent, "Recent Projects", bg=self.C_CARD).pack(
-            anchor="w", pady=(0, int(4*s))
+            anchor="w", pady=(0, sc(4))
         )
 
         table = tk.Frame(
@@ -785,12 +778,12 @@ class StartupDialog:
         table.pack(fill="both", expand=True)
 
         # Table header row
-        hdr = tk.Frame(table, bg=self.C_SURFACE_LOW, height=int(28*s))
+        hdr = tk.Frame(table, bg=self.C_SURFACE_LOW, height=sc(28))
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
 
         self._label_md(hdr, "FILE PATH", bg=self.C_SURFACE_LOW).pack(
-            side="left", padx=int(8*s), anchor="w"
+            side="left", padx=sc(8), anchor="w"
         )
         self._sep(table, self.C_OUTLINE)
 
@@ -798,22 +791,21 @@ class StartupDialog:
         recent = get_recent_files()
 
         if not recent:
-            empty = tk.Frame(table, bg=self.C_CARD, height=int(28*s))
+            empty = tk.Frame(table, bg=self.C_CARD, height=sc(28))
             empty.pack(fill="x")
             empty.pack_propagate(False)
             tk.Label(
                 empty, text="No recent projects",
                 bg=self.C_CARD, fg=self.C_ON_VARIANT,
                 font=("Courier New", sc(9)), anchor="w"
-            ).pack(side="left", padx=int(8*s), anchor="center")
+            ).pack(side="left", padx=sc(8), anchor="center")
         else:
             for i, entry in enumerate(recent[:5]):
                 path = entry.get("path", "")
                 self._build_recent_row(table, path, i)
 
     def _build_recent_row(self, table, path, index):
-        s = self._scale
-        row = tk.Frame(table, bg=self.C_CARD, height=int(28*s), cursor="hand2")
+        row = tk.Frame(table, bg=self.C_CARD, height=sc(28), cursor="hand2")
         row.pack(fill="x")
         row.pack_propagate(False)
 
@@ -823,7 +815,7 @@ class StartupDialog:
             font=("Courier New", sc(9)),
             anchor="w", cursor="hand2"
         )
-        path_lbl.pack(side="left", padx=int(8*s), fill="x", expand=True)
+        path_lbl.pack(side="left", padx=sc(8), fill="x", expand=True)
 
         # Hover + click for each widget in the row
         def _hover_on(e):
@@ -850,8 +842,7 @@ class StartupDialog:
     # ------------------------------------------------------------------
 
     def _build_footer(self, card):
-        s = self._scale
-        footer = tk.Frame(card, bg=self.C_FOOTER_BG, padx=int(16*s), pady=int(10*s))
+        footer = tk.Frame(card, bg=self.C_FOOTER_BG, padx=sc(16), pady=sc(10))
         footer.pack(side="bottom", fill="x", expand=False)
 
         sep = tk.Frame(card, bg=self.C_OUTLINE_VAR, height=1)
@@ -864,7 +855,7 @@ class StartupDialog:
             font=("Segoe UI", sc(9), "bold"),
             anchor="e"
         )
-        self.ready_status_label.pack(side="top", fill="x", pady=(int(2*s), int(6*s)))
+        self.ready_status_label.pack(side="top", fill="x", pady=(sc(2), sc(6)))
 
         # Progress bar (hidden by default)
         self.progress_var = tk.DoubleVar()
@@ -880,7 +871,7 @@ class StartupDialog:
             fg=self.C_ON_SURFACE,
             font=("Segoe UI", sc(10), "bold"),
             relief="flat", bd=0,
-            padx=int(16*s), pady=int(6*s),
+            padx=sc(16), pady=sc(6),
             cursor="hand2",
             command=self.show_help,
             highlightthickness=1,
@@ -898,7 +889,7 @@ class StartupDialog:
             fg="#2d6a4f",
             font=("Segoe UI", sc(9.5), "bold"),
             relief="flat", bd=0,
-            padx=int(14*s), pady=int(6*s),
+            padx=sc(14), pady=sc(6),
             cursor="hand2",
             command=self.load_demo_project,
             highlightthickness=1,
@@ -914,7 +905,7 @@ class StartupDialog:
             bg=self.C_FOOTER_BG, fg=self.C_ON_VARIANT,
             font=("Segoe UI", sc(9)), anchor="w"
         )
-        self.status_label.pack(side="left", padx=int(10*s))
+        self.status_label.pack(side="left", padx=sc(10))
 
         # LAUNCH SYSTEM button (Primary style: black bg, white text)
         self.continue_btn = tk.Button(
@@ -924,7 +915,7 @@ class StartupDialog:
             fg=self.C_ON_PRIMARY,
             font=("Segoe UI", sc(10), "bold"),
             relief="flat", bd=0,
-            padx=int(24*s), pady=int(8*s),
+            padx=sc(24), pady=sc(8),
             cursor="hand2",
             state="disabled",
             command=self.finish,
@@ -943,7 +934,7 @@ class StartupDialog:
             fg="#ffffff",
             font=("Segoe UI", sc(10), "bold"),
             relief="flat", bd=0,
-            padx=int(16*s), pady=int(8*s),
+            padx=sc(16), pady=sc(8),
             cursor="hand2",
             state="disabled",
             command=self.launch_mobile_mode,

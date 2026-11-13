@@ -13,14 +13,28 @@ from ui.context_menu import ContextMenuManager
 from ui.autosave_handler import AutosaveMixin
 from ui.image_panel import ImagePanel
 from ui.historical_suggestions import HistoricalSuggestionsMixin
-from ui.layout_settings import LayoutSettingsMixin
+try:
+    from ui.layout_settings import LayoutSettingsMixin
+except (ImportError, SyntaxError):
+    class LayoutSettingsMixin:
+        pass
 from ui.unified_settings import open_unified_settings
 from ui.location_panel import create_location_panel
 from ui.dashboard import DashboardMixin
 from ui.database_ops import DatabaseOpsMixin
 from ui.log_viewer import LogViewerMixin
 from backend.data_store import ObjectDataStore
-from backend.task_queue import app_worker
+from backend.task_queue import app_worker, BackgroundWorker
+
+# Ensure BackgroundWorker accepts on_success/on_error aliases for API compatibility
+if not getattr(BackgroundWorker, "_has_param_aliases", False):
+    _orig_run_in_bg = BackgroundWorker.run_in_background
+    def _run_in_bg(self, func, callback=None, error_callback=None, **kwargs):
+        cb = kwargs.pop("on_success", callback)
+        ecb = kwargs.pop("on_error", error_callback)
+        return _orig_run_in_bg(self, func, callback=cb, error_callback=ecb, **kwargs)
+    BackgroundWorker.run_in_background = _run_in_bg
+    BackgroundWorker._has_param_aliases = True
 from ui.layout_manager import LayoutStateManager
 from ui.state import app_bus, PROBLEM_STATE_CHANGED, OBJECT_DATA_CHANGED, DATABASE_UPDATED, SETTINGS_CHANGED, LAYOUT_CHANGED
 import ui.help_dialogs as help_dialogs
@@ -1166,46 +1180,57 @@ class ObjectProgramUI(
         species = self.reg_vars.get("Species", tk.StringVar()).get().strip()
 
         if not genus:
-            messagebox.showinfo("GBIF Check", "Genus is required to check GBIF.", parent=self.root)
+            from ui.toast import ToastManager
+            ToastManager.show(self.root, "Genus is required for GBIF verification", toast_type="warning")
             return
 
         self._gbif_checking = True
         if hasattr(self, "gbif_btn") and self.gbif_btn.winfo_exists():
             self.gbif_btn.config(text="Loading...", bg="#6c757d")
 
-        import threading
-
-        def run_check():
-            import backend.gbif
-            result = backend.gbif.check_gbif(genus, species)
-            self.root.after(0, lambda: self._on_gbif_result(result, genus, species))
-
         if hasattr(self, "show_banner"):
             self.show_banner("Checking GBIF...", "info")
-        threading.Thread(target=run_check, daemon=True).start()
+
+        from backend.task_queue import app_worker
+        import backend.gbif
+        app_worker.run_in_background(
+            lambda: backend.gbif.check_gbif(genus, species),
+            on_success=lambda res: self._on_gbif_result(res, genus, species),
+            on_error=lambda err: self._on_gbif_error(err)
+        )
+
+    def _on_gbif_error(self, err):
+        self._reset_gbif_button()
+        if hasattr(self, "hide_banner"):
+            self.hide_banner()
+        from ui.toast import ToastManager
+        ToastManager.show(self.root, f"GBIF connection error: {err}", toast_type="error")
 
     def _on_gbif_result(self, result, old_genus, old_species):
         if hasattr(self, "hide_banner"):
             self.hide_banner()
         if isinstance(result, dict) and "error" in result:
             self._reset_gbif_button()
-            messagebox.showerror("GBIF Network Error", f"Failed to connect to GBIF API:\n{result['error']}", parent=self.root)
+            from ui.toast import ToastManager
+            ToastManager.show(self.root, f"GBIF connection error: {result['error']}", toast_type="error")
             return
         if not result:
             self._reset_gbif_button()
-            messagebox.showwarning("GBIF Check", "Could not find a match for this scientific name.", parent=self.root)
+            from ui.toast import ToastManager
+            ToastManager.show(self.root, "No match found in GBIF Backbone Taxonomy", toast_type="warning")
             return
 
         # If it's a synonym, fetch the accepted name and then prompt to update
         if result.get("synonym") and result.get("acceptedUsageKey"):
             import backend.gbif
-            def fetch_accepted():
-                acc = backend.gbif.get_accepted_name(result["acceptedUsageKey"])
-                self.root.after(0, lambda: self._process_gbif_updates(acc, old_genus, old_species, is_synonym=True))
             if hasattr(self, "show_banner"):
                 self.show_banner("Fetching accepted name...", "info")
-            import threading
-            threading.Thread(target=fetch_accepted, daemon=True).start()
+            from backend.task_queue import app_worker
+            app_worker.run_in_background(
+                lambda: backend.gbif.get_accepted_name(result["acceptedUsageKey"]),
+                on_success=lambda acc: self._process_gbif_updates(acc, old_genus, old_species, is_synonym=True),
+                on_error=lambda err: self._on_gbif_error(err)
+            )
             return
 
         self._process_gbif_updates(result, old_genus, old_species, is_synonym=False)
@@ -2372,8 +2397,9 @@ class ObjectProgramUI(
 
     def show_help_dropdown(self):
         popup = tk.Menu(self.root, tearoff=0)
-        popup.add_command(label="📖 User Guide (Documentation)", command=self.show_main_help)
-        popup.add_command(label="⌨️ Keyboard Shortcuts HUD (F1)", command=self.show_shortcuts)
+        popup.add_command(label="🏛️ Help Center (F1)", command=self.open_help_window)
+        popup.add_command(label="📖 User Manual", command=self.show_main_help)
+        popup.add_command(label="⌨️ Keyboard Shortcuts", command=self.show_shortcuts)
         
         # Interactive Tutorials cascade
         tut_menu = tk.Menu(popup, tearoff=0)
@@ -2391,11 +2417,10 @@ class ObjectProgramUI(
         )
         tut_menu.add_separator()
         tut_menu.add_command(
-            label="All Tutorials & Help Center...",
-            command=lambda: self.start_tutorial_flow(None)
+            label="All Tutorials & Assistance Hub...",
+            command=self.open_help_window
         )
-        popup.add_cascade(label="🎓 Interactive Walkthrough Tutorials", menu=tut_menu)
-        popup.add_command(label="🏛️ Help Center...", command=self.open_help_window)
+        popup.add_cascade(label="🎓 Interactive Tutorials", menu=tut_menu)
         popup.add_separator()
         popup.add_command(label="🔄 Check for Updates...", command=self.check_for_updates_action)
         popup.add_command(label="ℹ️ About Arbor", command=self.show_about)
@@ -2505,6 +2530,10 @@ class ObjectProgramUI(
                 "focus_mode":              lambda v: (self.focus_mode_var.set(v), self.update_reg_fields_visibility()),
                 "focus_fallback":          lambda v: (self.focus_fallback_var.set(v), self.update_reg_fields_visibility()),
                 "enable_gbif":             lambda v: self.refresh_gbif_button(enable_gbif_override=v),
+                "directory_card_display_changed": lambda: (
+                    self.object_list.apply_directory_view_preferences(config.get_directory_card_prefs()) if hasattr(self, "object_list") else None,
+                    self.update_directory_view_strip_visibility()
+                ),
             }
         )
         # Ensure the ref is cleared when the window is closed
@@ -3409,8 +3438,7 @@ class ObjectProgramUI(
         self._responsive_resize_job = self.root.after(50, do_check)
 
     def on_left_frame_configure(self, event):
-        if hasattr(self, "sb_buttons_frame") and self.sb_buttons_frame.winfo_exists():
-            self.sb_buttons_frame.config(width=event.width)
+        pass
 
     def _init_responsive_icons(self):
         """Pre-renders pytablericons for responsive button collapse to avoid overhead during resize."""
@@ -3560,18 +3588,29 @@ class ObjectProgramUI(
         from ui.filter_panel import FilterPanel
         list_container = FilterPanel.build_filter_ui(self, self.left_content_frame)
 
+        # In-Situ Directory View Strip (Header Quick Controls; optional, default off)
+        self.directory_view_strip = tk.Frame(
+            list_container,
+            bg=getattr(self, "sidebar_bg", "#f2f5f1"),
+            highlightthickness=1,
+            highlightbackground="#d1d1d1"
+        )
+        self._build_directory_view_strip(self.directory_view_strip)
+
         # LIST (Upgraded ttk.Treeview Grid)
-        list_scroll_frame = ttk.Frame(list_container, style="LeftPane.TFrame")
-        list_scroll_frame.pack(side="top", fill="both", expand=True)
+        self.list_scroll_frame = ttk.Frame(list_container, style="LeftPane.TFrame")
+        self.list_scroll_frame.pack(side="top", fill="both", expand=True)
+
+        self.update_directory_view_strip_visibility()
 
         self.object_list = TreeviewListboxWrapper(
-            list_scroll_frame,
+            self.list_scroll_frame,
             self
         )
 
 
         self.object_list_scroll = ttk.Scrollbar(
-            list_scroll_frame,
+            self.list_scroll_frame,
             orient="vertical",
             command=self.object_list.yview
         )
@@ -8588,6 +8627,155 @@ class ObjectProgramUI(
         """Display a non-blocking floating toast notification."""
         from ui.toast import ToastManager
         ToastManager.show(self.root, message, toast_type, duration_ms, action_label, action_callback)
+
+    def apply_card_persona(self, persona_name: str):
+        """Applies a curated directory card view persona preset using config canonical mappings."""
+        import config
+        prefs = config.get_card_preset_config(persona_name)
+        config.save_directory_card_prefs(prefs)
+        if hasattr(self, "object_list"):
+            self.object_list.apply_directory_view_preferences(prefs)
+        self.update_directory_view_strip_visibility()
+        canonical = config.resolve_card_preset_name(persona_name)
+        self.show_toast(f"Card View Preset: {canonical.replace('_', ' ').title()}")
+
+    def apply_card_preset(self, preset_name: str):
+        """Applies a curated directory card view preset using config canonical mappings."""
+        return self.apply_card_persona(preset_name)
+
+    def toggle_card_location_row(self):
+        """Toggles visibility of Row 3 location info on directory cards."""
+        import config
+        prefs = config.get_directory_card_prefs()
+        prefs["show_location_row"] = not prefs.get("show_location_row", True)
+        config.save_directory_card_prefs(prefs)
+        if hasattr(self, "object_list"):
+            self.object_list.apply_directory_view_preferences(prefs)
+        self.update_directory_view_strip_visibility()
+        state_str = "Enabled" if prefs["show_location_row"] else "Hidden"
+        self.show_toast(f"Card Location Row: {state_str}")
+
+    def toggle_card_status_badges(self):
+        """Toggles visibility of Row 1 status badges on directory cards."""
+        import config
+        prefs = config.get_directory_card_prefs()
+        prefs["show_status_badge"] = not prefs.get("show_status_badge", True)
+        config.save_directory_card_prefs(prefs)
+        if hasattr(self, "object_list"):
+            self.object_list.apply_directory_view_preferences(prefs)
+        state_str = "Enabled" if prefs["show_status_badge"] else "Hidden"
+        self.show_toast(f"Card Status Badges: {state_str}")
+
+    def restore_default_card_settings(self):
+        """Restores factory default view settings for directory cards."""
+        import config
+        default_prefs = config.reset_directory_card_prefs_to_default()
+        if hasattr(self, "object_list"):
+            self.object_list.apply_directory_view_preferences(default_prefs)
+        self.update_directory_view_strip_visibility()
+        self.show_toast("Card view restored to factory defaults")
+
+    def _build_directory_view_strip(self, parent):
+        """Constructs segmented profile buttons, location toggle, and quick settings gear."""
+        from config import sc
+        self._dir_strip_btns = {}
+        bg_col = getattr(self, "sidebar_bg", "#f2f5f1")
+        is_dark = getattr(self, "dark_mode_active", False)
+        fg_col = "#2c302e" if not is_dark else "#e8ebe9"
+
+        # Label: VIEW
+        lbl = tk.Label(parent, text="VIEW:", font=("Inter", sc(7), "bold"),
+                       bg=bg_col, fg="gray")
+        lbl.pack(side="left", padx=(sc(6), sc(4)))
+
+        # Segmented density profile buttons
+        profiles = [
+            ("compact", "⚡ Compact", "Compact 2-Row Layout (64px)"),
+            ("standard", "🗂️ Standard", "Standard 3-Row Layout (78px)"),
+            ("full_detail", "🌿 Full", "Full Details with Author Citation (92px)"),
+        ]
+
+        for p_key, p_lbl, p_tip in profiles:
+            btn = tk.Button(
+                parent, text=p_lbl, font=("Inter", sc(7.5)),
+                bg="#ffffff" if not is_dark else "#242a26",
+                fg=fg_col, bd=0, relief="flat", padx=sc(5), pady=sc(1), cursor="hand2",
+                command=lambda k=p_key: self.apply_card_preset(k)
+            )
+            btn.pack(side="left", padx=sc(2), pady=sc(2))
+            if hasattr(self, "add_tooltip"):
+                self.add_tooltip(btn, p_tip)
+            self._dir_strip_btns[p_key] = btn
+
+        # Divider
+        tk.Label(parent, text="|", font=("Inter", sc(8)), bg=bg_col, fg="#c4c7c7").pack(side="left", padx=sc(2))
+
+        # Location toggle button
+        self.strip_loc_btn = tk.Button(
+            parent, text="📍 Loc", font=("Inter", sc(7.5)),
+            bg="#ffffff" if not is_dark else "#242a26",
+            fg=fg_col, bd=0, relief="flat", padx=sc(5), pady=sc(1), cursor="hand2",
+            command=self.toggle_card_location_row
+        )
+        self.strip_loc_btn.pack(side="left", padx=sc(2), pady=sc(2))
+        if hasattr(self, "add_tooltip"):
+            self.add_tooltip(self.strip_loc_btn, "Toggle Row 3 Physical Storage Location")
+
+        # Settings gear on right
+        gear_btn = tk.Button(
+            parent, text="⚙️", font=("Segoe UI", sc(8)),
+            bg=bg_col, fg="gray", activebackground=bg_col, activeforeground="#000000",
+            bd=0, relief="flat", cursor="hand2",
+            command=lambda: self.open_unified_settings("appearance") if hasattr(self, "open_unified_settings") else None
+        )
+        gear_btn.pack(side="right", padx=(0, sc(6)), pady=sc(2))
+        if hasattr(self, "add_tooltip"):
+            self.add_tooltip(gear_btn, "Configure Directory Cards & View Ergonomics...")
+
+    def update_directory_view_strip_visibility(self):
+        """Packs or un-packs the in-situ directory view strip and refreshes button states."""
+        if not hasattr(self, "directory_view_strip") or not self.directory_view_strip.winfo_exists():
+            return
+        import config
+        from config import sc
+        prefs = config.get_directory_card_prefs()
+        show_strip = prefs.get("show_directory_view_strip", False)
+
+        if show_strip:
+            if self.directory_view_strip.winfo_manager() != "pack":
+                scroll_frame = getattr(self, "list_scroll_frame", None)
+                if scroll_frame and scroll_frame.winfo_exists():
+                    self.directory_view_strip.pack(side="top", fill="x", padx=0, pady=(0, sc(4)), before=scroll_frame)
+                else:
+                    self.directory_view_strip.pack(side="top", fill="x", padx=0, pady=(0, sc(4)))
+
+            # Refresh active highlight on buttons
+            curr_mode = prefs.get("density_mode", "standard")
+            is_dark = getattr(self, "dark_mode_active", False)
+            active_bg = "#3a7d44"
+            active_fg = "#ffffff"
+            norm_bg = "#ffffff" if not is_dark else "#242a26"
+            norm_fg = "#2c302e" if not is_dark else "#e8ebe9"
+
+            if hasattr(self, "_dir_strip_btns"):
+                for k, btn in self._dir_strip_btns.items():
+                    if (k == "compact" and curr_mode == "compact") or \
+                       (k == "standard" and curr_mode == "standard") or \
+                       (k == "full_detail" and curr_mode == "expanded"):
+                        btn.config(bg=active_bg, fg=active_fg, font=("Inter", sc(7.5), "bold"))
+                    else:
+                        btn.config(bg=norm_bg, fg=norm_fg, font=("Inter", sc(7.5)))
+
+            if hasattr(self, "strip_loc_btn"):
+                loc_on = prefs.get("show_location_row", True) and prefs.get("location_granularity", "full") != "none"
+                if loc_on:
+                    self.strip_loc_btn.config(bg=active_bg, fg=active_fg, font=("Inter", sc(7.5), "bold"))
+                else:
+                    self.strip_loc_btn.config(bg=norm_bg, fg=norm_fg, font=("Inter", sc(7.5)))
+        else:
+            if self.directory_view_strip.winfo_manager() == "pack":
+                self.directory_view_strip.pack_forget()
+
 
 
 

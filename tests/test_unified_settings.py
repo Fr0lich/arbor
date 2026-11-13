@@ -637,3 +637,93 @@ def test_ignored_words_embedded_in_tools_tab(tk_root):
     assert app.ignored_words_variations.get() is False
 
     win.win.destroy()
+
+
+def test_card_view_preview_and_profile_switching(tk_root):
+    """Verify live card preview updates correctly when profiles and settings are modified."""
+    win = UnifiedSettingsWindow(tk_root, initial_tab="appearance")
+
+    # Assert preview widgets exist
+    assert hasattr(win, "_preview_widgets")
+    assert "tax_lbl" in win._preview_widgets
+    assert "badge_lbl" in win._preview_widgets
+    assert "loc_lbl" in win._preview_widgets
+
+    # Default profile is standard
+    assert "Quercus robur" in win._preview_widgets["tax_lbl"].cget("text")
+    assert win._preview_widgets["badge_lbl"].cget("text") == "[ TAX ]"
+
+    # Switch to compact profile
+    win._apply_card_preset_in_settings("compact")
+    assert win.var_card_density.get() == "compact"
+    assert win.var_card_show_loc.get() is False
+    assert win._preview_widgets["row3"].winfo_manager() != "pack"
+
+    # Switch to full_detail profile
+    win._apply_card_preset_in_settings("full_detail")
+    assert win.var_card_density.get() == "expanded"
+    assert win.var_card_show_author.get() is True
+    assert "L." in win._preview_widgets["tax_lbl"].cget("text")
+    assert win._preview_widgets["row3"].winfo_manager() == "pack"
+
+    # Switch to minimalist profile
+    win._apply_card_preset_in_settings("minimalist")
+    assert win.var_card_show_badge.get() is False
+    assert win._preview_widgets["badge_lbl"].cget("text") == ""
+    assert win._preview_widgets["row3"].winfo_manager() != "pack"
+
+    # Test sample record status switcher
+    win._apply_card_preset_in_settings("standard")
+    win.var_preview_status.set("reviewed")
+    win._refresh_live_preview()
+    assert win._preview_widgets["badge_lbl"].cget("text") == "[ REV ]"
+    assert win._preview_widgets["cb_lbl"].cget("text") == "[☑]"
+    assert "Fraxinus excelsior" in win._preview_widgets["tax_lbl"].cget("text")
+
+    # Test persona alias routing in settings
+    win._apply_card_persona_in_settings("taxonomist")
+    assert win.var_card_density.get() == "expanded"
+    assert win.var_card_show_author.get() is True
+    assert win._preview_widgets["row3"].winfo_manager() == "pack"
+
+    win._apply_card_persona_in_settings("collections_manager")
+    assert win.var_card_show_badge.get() is False
+    assert win._preview_widgets["badge_lbl"].cget("text") == ""
+
+    win._apply_card_persona_in_settings("high_speed")
+    assert win.var_card_density.get() == "compact"
+    assert win.var_card_show_loc.get() is False
+
+    win.win.destroy()
+
+
+def test_directory_view_strip_setting_toggle_and_reset(tk_root):
+    """Verify Directory View Strip toggle in Settings tab, persistence, and reset."""
+    import config
+    from ui.unified_settings import SETTING_INFO_TEXTS
+
+    config.reset_directory_card_prefs_to_default()
+    assert config.get_directory_card_prefs()["show_directory_view_strip"] is False
+
+    win = UnifiedSettingsWindow(tk_root, initial_tab="appearance")
+
+    # Assert setting info text exists
+    assert "directory_view_strip" in SETTING_INFO_TEXTS
+    assert "compact toolbar directly above the specimen directory" in SETTING_INFO_TEXTS["directory_view_strip"]
+
+    # Assert default state of variable is False
+    assert win.var_card_show_view_strip.get() is False
+
+    # Toggle to True and sync live
+    win.var_card_show_view_strip.set(True)
+    win._sync_card_settings_live()
+    assert config.get_directory_card_prefs()["show_directory_view_strip"] is True
+
+    # Reset to default in UI
+    win._reset_card_settings_to_default_ui()
+    assert win.var_card_show_view_strip.get() is False
+    assert config.get_directory_card_prefs()["show_directory_view_strip"] is False
+
+    win.win.destroy()
+
+

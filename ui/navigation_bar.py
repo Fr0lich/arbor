@@ -1,11 +1,25 @@
 import tkinter as tk
 from tkinter import ttk
+from config import sc
 
 class NavigationBar:
     @staticmethod
     def build_nav_ui(app, parent_frame):
-        from config import sc
-        from ui.main_window import LabelWrapper
+        try:
+            from ui.main_window import LabelWrapper
+        except Exception:
+            class LabelWrapper:
+                def __init__(self, real, ui):
+                    self.real = real
+                    self.ui = ui
+                def config(self, cnf=None, **kw):
+                    return self.real.config(cnf, **kw)
+                def configure(self, cnf=None, **kw):
+                    return self.real.configure(cnf, **kw)
+                def cget(self, option):
+                    return self.real.cget(option)
+                def __getattr__(self, name):
+                    return getattr(self.real, name)
 
         # ----------------------------------------------------------------
         # LAYER 2: Stitch Top Navigation Bar
@@ -15,7 +29,7 @@ class NavigationBar:
         nav_bar_bg = "#e9ece5"
         nav_border = "#8b948d"
 
-        nav_bar = tk.Frame(parent_frame, bg=nav_bar_bg, height=48,
+        nav_bar = tk.Frame(parent_frame, bg=nav_bar_bg, height=sc(48),
                            highlightthickness=1, highlightbackground=nav_border,
                            highlightcolor=nav_border)
         nav_bar.pack(fill="x", side="top")
@@ -30,13 +44,13 @@ class NavigationBar:
             bg=nav_bar_bg,
             fg="#000000",
             font=("Segoe UI", sc(12), "bold"),
-            padx=16
+            padx=sc(16)
         )
         app.nav_title_lbl.pack(side="left", anchor="center")
 
         # 1px vertical separator after title
         sep1 = tk.Frame(nav_bar, bg=nav_border, width=1)
-        sep1.pack(side="left", fill="y", pady=8)
+        sep1.pack(side="left", fill="y", pady=sc(8))
         app.nav_separators.append(sep1)
 
         # --- Nav link buttons ---
@@ -107,44 +121,44 @@ class NavigationBar:
 
         # Segment 1: Directional navigation cluster
         nav_grp = ttk.Frame(secondary_frame)
-        nav_grp.pack(side="left", fill="y", padx=(1, 3))
+        nav_grp.pack(side="left", fill="y", padx=(sc(1), sc(3)))
 
         app.toolbar_buttons['Prev'] = ttk.Button(
             nav_grp, text="◄", style="Nav.TButton",
             command=lambda: app.navigate_object(-1), cursor="hand2")
-        app.toolbar_buttons['Prev'].pack(side="left", padx=1)
+        app.toolbar_buttons['Prev'].pack(side="left", padx=sc(1))
         app.add_tooltip(app.toolbar_buttons['Prev'], "Previous in list (Left Arrow)")
 
         app.toolbar_buttons['Next'] = ttk.Button(
             nav_grp, text="►", style="Nav.TButton",
             command=lambda: app.navigate_object(1), cursor="hand2")
-        app.toolbar_buttons['Next'].pack(side="left", padx=1)
+        app.toolbar_buttons['Next'].pack(side="left", padx=sc(1))
         app.add_tooltip(app.toolbar_buttons['Next'], "Next in list (Right Arrow)")
 
         app.toolbar_buttons['Last'] = ttk.Button(
             nav_grp, text="Last", style="Nav.TButton",
             command=app.goto_last_object, cursor="hand2")
-        app.toolbar_buttons['Last'].pack(side="left", padx=1)
+        app.toolbar_buttons['Last'].pack(side="left", padx=sc(1))
         app.add_tooltip(app.toolbar_buttons['Last'], "Return to last visited object")
 
         sep_mid = tk.Frame(secondary_frame, bg=nav_border, width=1)
-        sep_mid.pack(side="left", fill="y", pady=6, padx=3)
+        sep_mid.pack(side="left", fill="y", pady=sc(6), padx=sc(3))
         app.nav_separators.append(sep_mid)
 
         # Segment 2: Problem jump cluster
         prob_grp = ttk.Frame(secondary_frame)
-        prob_grp.pack(side="left", fill="y", padx=(2, 2))
+        prob_grp.pack(side="left", fill="y", padx=(sc(2), sc(2)))
 
         app.toolbar_buttons['Next Problem'] = ttk.Button(
             prob_grp, text="⚠ Next Problem", style="Primary.TButton",
             command=app.goto_next_problem, cursor="hand2")
-        app.toolbar_buttons['Next Problem'].pack(side="left", padx=1)
+        app.toolbar_buttons['Next Problem'].pack(side="left", padx=sc(1))
         app.add_tooltip(app.toolbar_buttons['Next Problem'], "Jump to next problem")
 
         app.next_history_btn = ttk.Button(
             prob_grp, text="Next+Hist", style="Primary.TButton",
             command=app.goto_next_problem_with_history, state="disabled", cursor="hand2")
-        app.next_history_btn.pack(side="left", padx=1)
+        app.next_history_btn.pack(side="left", padx=sc(1))
         app.toolbar_buttons['Next+Hist'] = app.next_history_btn
         app.add_tooltip(app.next_history_btn, "Jump to next object with suggestions")
 
@@ -159,9 +173,9 @@ class NavigationBar:
             app.show_secondary_nav_var.set(val)
             if val:
                 if sep2.winfo_manager() != "pack":
-                    sep2.pack(side="left", fill="y", pady=8)
+                    sep2.pack(side="left", fill="y", pady=sc(8))
                 if secondary_frame.winfo_manager() != "pack":
-                    secondary_frame.pack(side="left", fill="y", padx=4)
+                    secondary_frame.pack(side="left", fill="y", padx=sc(4))
             else:
                 if secondary_frame.winfo_manager() == "pack":
                     secondary_frame.pack_forget()
@@ -170,8 +184,8 @@ class NavigationBar:
 
         app.apply_secondary_nav_visibility = _apply_secondary_nav
         if show_sec:
-            sep2.pack(side="left", fill="y", pady=8)
-            secondary_frame.pack(side="left", fill="y", padx=4)
+            sep2.pack(side="left", fill="y", pady=sc(8))
+            secondary_frame.pack(side="left", fill="y", padx=sc(4))
 
         app.show_all_history_var = tk.BooleanVar(value=False)
 
@@ -182,13 +196,14 @@ class NavigationBar:
         app._online_dot = None  # Deprecated fake indicator removed
 
         # Data status badge (saved / unsaved)
+        # Kept for backward compatibility, but pack() commented out to avoid duplicate saved indicators.
         app.data_status = tk.Label(
             status_container,
             anchor="e",
             bg=nav_bar_bg,
             font=("Segoe UI", sc(9), "bold")
         )
-        app.data_status.pack(side="right", padx=(0, sc(8)))
+        # app.data_status.pack(side="right", padx=(0, sc(8)))
 
         # System status (loading messages etc.)
         real_system_status = ttk.Label(
@@ -196,7 +211,7 @@ class NavigationBar:
             anchor="e",
             foreground="#444748"
         )
-        real_system_status.pack(side="right", padx=(0, 4))
+        real_system_status.pack(side="right", padx=(0, sc(4)))
         app.system_status = LabelWrapper(real_system_status, app)
 
         # Object count label now lives in the sort_frame (left panel), near Filter button.
@@ -214,9 +229,23 @@ class NavigationBar:
             status_container,
             orient="horizontal",
             mode="determinate",
-            length=140
+            length=sc(140)
         )
-        real_image_scan_progress.pack(side="right", padx=(0, 8))
+        real_image_scan_progress.pack(side="right", padx=(0, sc(8)))
         real_image_scan_progress.pack_forget()
-        from ui.main_window import ProgressbarWrapper
+        try:
+            from ui.main_window import ProgressbarWrapper
+        except Exception:
+            class ProgressbarWrapper:
+                def __init__(self, real, ui):
+                    self.real = real
+                    self.ui = ui
+                def configure(self, cnf=None, **kw):
+                    return self.real.configure(cnf, **kw)
+                def config(self, cnf=None, **kw):
+                    return self.real.config(cnf, **kw)
+                def cget(self, option):
+                    return self.real.cget(option)
+                def __getattr__(self, name):
+                    return getattr(self.real, name)
         app.image_scan_progress = ProgressbarWrapper(real_image_scan_progress, app)

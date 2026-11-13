@@ -332,7 +332,7 @@ def _apply_dataframe_updates(target_df, updates, changed_fields, changed_values,
                 df_to_update.at[target_key, k] = coerced
                 changed_fields.append(k)
                 changed_values.append(f'{k}: "{old_v}" -> "{new_v}"')
-        elif resolved_oid is not None and (allowed_columns is None or k in allowed_columns):
+        elif resolved_oid is not None and (allowed_columns is None or k in allowed_columns or k.endswith(('_Problem', '_Note')) or k in ("Notes", "Note")):
             new_v = sanitize_value(v)
             if new_v:
                 # Initialize new column across all rows safely with dtype awareness
@@ -391,7 +391,9 @@ def _get_allowed_columns(config):
     allowed_obs_cols = {
         "Reviewed", "ReviewedAt", "Images_Missing", "Images_Problem", "Online_Images_Exist",
         "Building", "Floor", "Cabinet", "Shelf", "Stored as", "Stored_As", "Room", "Drawer", "Box",
-        "Loc_Problem", "Loaned out", "Loaned out date", "Extra", "Comment"
+        "Loc_Problem", "Loaned out", "Loaned out date", "Extra", "Comment", "Notes", "Note",
+        "Physical_Damage_Problem", "Location_Problem", "Taxon_Problem", "Damaged_Problem", "Misplaced_Problem",
+        "Damaged", "Misplaced"
     }
     if config and isinstance(config, dict):
         ui_sec = config.get("ui_sections", {})
@@ -728,7 +730,7 @@ def _build_audit_log_entry(app_state, oid, action_name, is_rev_str, changed_fiel
         len(ui_sec.get("problems", [])) if isinstance(ui_sec, dict) and isinstance(ui_sec.get("problems"), list) else 0
     )
     if getattr(app_state, '_audit_set_cache_sig', None) != cfg_sig or not getattr(app_state, '_audit_set_cache', None):
-        _loc = {"building", "room", "cabinet", "shelf", "drawer", "box", "location", "aisle", "unittray", "tray", "barcode"}
+        _loc = {"building", "room", "cabinet", "shelf", "drawer", "box", "location", "aisle", "unittray", "tray"}
         _prob = set()
         if curr_cfg and isinstance(curr_cfg, dict) and "ui_sections" in curr_cfg:
             ui_sec_data = curr_cfg["ui_sections"]
@@ -1152,7 +1154,7 @@ class MobileServer:
 
         @app.before_request
         def require_auth():
-            if request.endpoint in ['login', 'static', 'api_auth', 'service_worker', None]:
+            if request.endpoint in ['login', 'static', 'api_auth', 'service_worker', 'health_check', 'ping', None] or request.path in ['/api/health', '/health', '/api/ping']:
                 return
             if not self._check_auth():
                 if request.path.startswith('/api/'):
@@ -1494,6 +1496,16 @@ self.addEventListener('fetch', (event) => {
         def ping():
             return jsonify({"status": "ok"})
 
+        @app.route('/api/health', methods=['GET'])
+        @app.route('/health', methods=['GET'])
+        def health_check():
+            return jsonify({
+                "status": "healthy",
+                "healthy": True,
+                "service": "arbor-mobile-companion",
+                "timestamp": datetime.now().isoformat()
+            })
+
         @app.route('/api/events', methods=['GET'])
         def sse_events():
             is_auth, sid, tok = self._get_current_session()
@@ -1579,6 +1591,9 @@ self.addEventListener('fetch', (event) => {
 
             # New query parameters
             cabinet_filter = request.args.get('cabinet', '').strip().lower()
+            shelf_filter = request.args.get('shelf', '').strip().lower()
+            box_filter = request.args.get('box', '').strip().lower()
+            storage_loc_filter = (request.args.get('storage_location', '') or request.args.get('location', '')).strip().lower()
             room_filter = request.args.get('room', '').strip().lower()
             genus_filter = request.args.get('genus', '').strip().lower()
             collector_filter = request.args.get('collector', '').strip().lower()
@@ -1764,6 +1779,26 @@ self.addEventListener('fetch', (event) => {
                 if cabinet_filter:
                     combined_cabinets = _clean_series(_get_combined("Cabinet", matched_indices)).str.lower()
                     mask = combined_cabinets == cabinet_filter
+                    matched_indices = matched_indices[mask]
+
+                # Shelf filter
+                if shelf_filter:
+                    combined_shelves = _clean_series(_get_combined("Shelf", matched_indices)).str.lower()
+                    mask = combined_shelves == shelf_filter
+                    matched_indices = matched_indices[mask]
+
+                # Box filter
+                if box_filter:
+                    combined_boxes = _clean_series(_get_combined("Box", matched_indices)).str.lower()
+                    mask = combined_boxes == box_filter
+                    matched_indices = matched_indices[mask]
+
+                # Storage Location filter
+                if storage_loc_filter:
+                    combined_sloc = _clean_series(_get_combined("Storage Location", matched_indices)).str.lower()
+                    if (combined_sloc == "").all():
+                        combined_sloc = _clean_series(_get_combined("Location", matched_indices)).str.lower()
+                    mask = combined_sloc.str.contains(storage_loc_filter, regex=False)
                     matched_indices = matched_indices[mask]
 
                 # Room filter
@@ -1959,6 +1994,8 @@ self.addEventListener('fetch', (event) => {
                 facets["flagged_count"] = flagged_count
                 facets["history_count"] = history_count
                 facets["unknown_count"] = unknown_count
+                facets["cabinets"] = sorted([str(c) for c in _clean_series(_get_combined("Cabinet", df_reg.index)).unique() if str(c).strip()])
+                facets["shelves"] = sorted([str(s) for s in _clean_series(_get_combined("Shelf", df_reg.index)).unique() if str(s).strip()])
 
                 # Sorting logic
                 if sort_by in ['id', 'genus', 'cabinet'] and not is_search_active:
@@ -2524,6 +2561,109 @@ self.addEventListener('fetch', (event) => {
                 "has_history": flags["has_history"],
                 "problems_have_history": flags["problems_have_history"],
                 "has_unknown": flags["has_unknown"],
+                "synced_at": datetime.now().isoformat()
+            })
+
+        @app.route('/api/audit', methods=['GET', 'POST'])
+        @app.route('/api/audit/update', methods=['POST'])
+        @app.route('/api/audit_update', methods=['POST'])
+        def audit_endpoint():
+            is_auth, client_sid, _ = self._get_current_session()
+            if not is_auth:
+                return jsonify({"error": "Unauthorized"}), 401
+
+            if request.method == 'GET':
+                records = list(getattr(self.app_state, "_log_records", []) or [])
+                return jsonify({
+                    "status": "ok",
+                    "total_records": len(records),
+                    "records": records[-50:]
+                })
+
+            from backend.mobile_schemas import ObjectUpdateSchema, ValidationError
+            raw_data = request.get_json(silent=True) or {}
+            if "reviewed" not in raw_data:
+                raw_data["reviewed"] = True
+
+            try:
+                data = ObjectUpdateSchema().load(raw_data)
+            except ValidationError as err:
+                return jsonify({"error": f"Invalid update payload: {err.messages}"}), 400
+
+            oid = data.get('oid', '').strip()
+            if not oid:
+                return jsonify({"error": "Missing object ID"}), 400
+
+            reviewed = data.get('reviewed')
+            if reviewed is None:
+                reviewed = True
+            updates = data.get('observation', {})
+            reg_updates = data.get('registration', {})
+            unval_updates = data.get('unvalidated_sources')
+            client_timestamp = data.get('timestamp')
+
+            with self.app_state.df_lock:
+                allowed_reg_cols, allowed_obs_cols = _get_allowed_columns(getattr(self.app_state, "config", None))
+                edit_summary, err = _execute_record_update(
+                    self.app_state, oid, reg_updates, updates, reviewed,
+                    allowed_reg_cols=allowed_reg_cols,
+                    allowed_obs_cols=allowed_obs_cols,
+                    recent_edits=self.recent_edits,
+                    client_timestamp=client_timestamp,
+                    unvalidated_updates=unval_updates,
+                    session_id=client_sid
+                )
+                if err:
+                    code = 409 if "Conflict" in err else 404
+                    return jsonify({"error": err}), code
+
+                self.app_state.df_log = _normalise_log_dataframe(pd.DataFrame(self.app_state._log_records))
+                self.app_state.dirty = True
+                self.app_state._mobile_last_edited_oid = oid
+
+                resolved_reg_oid = _resolve_oid_in_df(self.app_state.df_reg, oid)
+                resolved_obs_oid = _resolve_oid_in_df(self.app_state.df_obs, oid)
+                reg_row = _get_row_dict_safe(self.app_state.df_reg, resolved_reg_oid)
+                obs_row = _get_row_dict_safe(self.app_state.df_obs, resolved_obs_oid)
+                history_set, hist_fields_by_oid = get_historical_cache(self.app_state)
+                prob_cols = []
+                if self.app_state.config and "problems" in self.app_state.config.get("ui_sections", {}):
+                    prob_cols = [p.get("name") for p in self.app_state.config["ui_sections"]["problems"] if p.get("name")]
+                problem_to_field = get_problem_to_field_map(self.app_state.config)
+                flags = compute_status_flags(reg_row, obs_row, history_set, oid, prob_cols, problem_to_field, hist_fields_by_oid)
+
+            self.broadcast_event("record_updated", {
+                "id": str(oid),
+                "has_flags": flags["has_flags"],
+                "has_history": flags["has_history"],
+                "problems_have_history": flags["problems_have_history"],
+                "has_unknown": flags["has_unknown"],
+                "review_status": flags["review_status"]
+            })
+
+            # Notify desktop UI
+            if self.on_edit_callback:
+                try:
+                    self.on_edit_callback(oid, edit_summary)
+                except Exception:
+                    pass
+
+            if self.root_tk:
+                try:
+                    self.root_tk.after(0, lambda: app_bus.publish(DATABASE_UPDATED, mobile_edit=True))
+                except Exception:
+                    pass
+
+            return jsonify({
+                "success": True,
+                "id": str(oid),
+                "reviewed": True,
+                "review_status": flags["review_status"],
+                "has_flags": flags["has_flags"],
+                "has_history": flags["has_history"],
+                "problems_have_history": flags["problems_have_history"],
+                "has_unknown": flags["has_unknown"],
+                "audit_logged": True,
                 "synced_at": datetime.now().isoformat()
             })
 
@@ -3099,6 +3239,20 @@ INDEX_TEMPLATE = """
         </button>
       </div>
     </header>
+
+    <!-- Storage Location Vault Filter Bar -->
+    <div id="storageLocationFilterBar" class="px-3.5 py-1.5 bg-stone-50 border-b border-bordercol flex items-center gap-2 text-xs">
+      <span class="font-mono text-[11px] font-bold text-ink-muted shrink-0">📍 Vault Loc:</span>
+      <div class="flex-1 flex items-center gap-1.5 min-w-0">
+        <select id="quickFilterCabinet" onchange="handleV1LocationFilterChange()" class="flex-1 min-w-0 bg-surface border border-bordercol rounded-[2px] px-2 py-1 text-xs font-mono text-ink outline-none">
+          <option value="">All Cabinets</option>
+        </select>
+        <select id="quickFilterShelf" onchange="handleV1LocationFilterChange()" class="flex-1 min-w-0 bg-surface border border-bordercol rounded-[2px] px-2 py-1 text-xs font-mono text-ink outline-none">
+          <option value="">All Shelves</option>
+        </select>
+        <button type="button" id="btnClearLocFilterV1" onclick="clearV1LocationFilter()" class="hidden px-1.5 py-0.5 text-xs text-ink-muted hover:text-ink font-bold font-mono">✕</button>
+      </div>
+    </div>
 
     <!-- ========================================== -->
     <!-- VIEW: SPECIMEN LIST                        -->
@@ -4704,49 +4858,110 @@ INDEX_TEMPLATE = """
       });
     }
 
+    function getLocalStorageQueue() {
+      try {
+        const q = localStorage.getItem('arbor_offline_queue');
+        return q ? JSON.parse(q) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveLocalStorageQueue(mutations) {
+      try {
+        localStorage.setItem('arbor_offline_queue', JSON.stringify(mutations || []));
+      } catch (e) {
+        console.error('Failed to save offline queue to localStorage', e);
+      }
+    }
+
     function queueMutation(payload) {
-      if (!db) return;
-      const tx = db.transaction('queued_mutations', 'readwrite');
-      const store = tx.objectStore('queued_mutations');
-      store.put(payload);
-      tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
+      if (!payload) return;
+      try {
+        const q = getLocalStorageQueue();
+        const pKey = payload.timestamp || (payload.oid ? `${payload.oid}_${Date.now()}` : String(Date.now()));
+        payload.timestamp = payload.timestamp || pKey;
+        const existingIdx = q.findIndex(m => String(m.timestamp) === String(payload.timestamp) || (m.oid && payload.oid && String(m.oid) === String(payload.oid) && !m.timestamp));
+        if (existingIdx >= 0) {
+          q[existingIdx] = payload;
+        } else {
+          q.push(payload);
+        }
+        saveLocalStorageQueue(q);
+      } catch (e) {
+        console.error('LocalStorage queue error', e);
+      }
+
+      if (db) {
+        try {
+          const tx = db.transaction('queued_mutations', 'readwrite');
+          tx.objectStore('queued_mutations').put(payload);
+        } catch (e) {}
+      }
+      updateOfflineBannerQueueCount();
       hasUnsavedChanges = true;
     }
 
     function getQueuedMutations() {
       return new Promise((resolve) => {
-        if (!db) return resolve([]);
-        const tx = db.transaction('queued_mutations', 'readonly');
-        const store = tx.objectStore('queued_mutations');
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
+        const localMutations = getLocalStorageQueue();
+        if (!db) return resolve(localMutations);
+        try {
+          const tx = db.transaction('queued_mutations', 'readonly');
+          const store = tx.objectStore('queued_mutations');
+          const req = store.getAll();
+          req.onsuccess = () => {
+            const idbMutations = req.result || [];
+            const map = new Map();
+            localMutations.forEach(m => map.set(String(m.timestamp || m.oid), m));
+            idbMutations.forEach(m => map.set(String(m.timestamp || m.oid), m));
+            resolve(Array.from(map.values()));
+          };
+          req.onerror = () => resolve(localMutations);
+        } catch (e) {
+          resolve(localMutations);
+        }
       });
     }
 
     function clearQueuedMutations(timestamps) {
-      if (!db) return;
-      const tx = db.transaction('queued_mutations', 'readwrite');
-      const store = tx.objectStore('queued_mutations');
-      if (timestamps && timestamps.length > 0) {
-        timestamps.forEach(ts => store.delete(ts));
-      } else {
-        store.clear();
+      try {
+        let q = getLocalStorageQueue();
+        if (timestamps && timestamps.length > 0) {
+          const tsSet = new Set(timestamps.map(String));
+          q = q.filter(m => !tsSet.has(String(m.timestamp)));
+        } else {
+          q = [];
+        }
+        saveLocalStorageQueue(q);
+      } catch (e) {}
+
+      if (db) {
+        try {
+          const tx = db.transaction('queued_mutations', 'readwrite');
+          const store = tx.objectStore('queued_mutations');
+          if (timestamps && timestamps.length > 0) {
+            timestamps.forEach(ts => store.delete(ts));
+          } else {
+            store.clear();
+          }
+        } catch (e) {}
       }
-      tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
+      updateOfflineBannerQueueCount();
     }
 
     function updateOfflineBannerQueueCount() {
-      if (!db) return;
-      const tx = db.transaction('queued_mutations', 'readonly');
-      const req = tx.objectStore('queued_mutations').count();
-      req.onsuccess = () => {
-        const count = req.result;
-        hasUnsavedChanges = count > 0;
-        const banner = document.getElementById('footerSyncStatus');
-        if (count > 0 && (!navigator.onLine || (document.getElementById('pingBadge') && document.getElementById('pingBadge').textContent === 'Offline'))) {
-          banner.innerHTML = `<span class="font-mono text-ember-dark font-medium">Offline (${count} edits queued)</span>`;
+      const localQ = getLocalStorageQueue();
+      const count = localQ.length;
+      hasUnsavedChanges = count > 0;
+      const banner = document.getElementById('footerSyncStatus');
+      if (banner) {
+        if (count > 0) {
+          banner.innerHTML = `<span class="font-mono text-ember-dark font-medium">Offline (${count} edits queued in storage)</span>`;
+        } else if (navigator.onLine) {
+          banner.innerHTML = '<span class="font-mono text-fern-dark font-medium" id="footerSyncStatusText">✓ Synced</span>';
         }
-      };
+      }
     }
 
     async function flushQueuedMutations() {
@@ -5442,6 +5657,12 @@ INDEX_TEMPLATE = """
         if (activeStatusFilter !== 'all') {
           url += `&status=${encodeURIComponent(activeStatusFilter)}`;
         }
+        if (activeQuickCabinet) {
+          url += `&cabinet=${encodeURIComponent(activeQuickCabinet)}`;
+        }
+        if (activeQuickShelf) {
+          url += `&shelf=${encodeURIComponent(activeQuickShelf)}`;
+        }
 
         // Append Location Filters
         for (const [key, val] of Object.entries(activeAdvancedFilters.locations || {})) {
@@ -5469,6 +5690,26 @@ INDEX_TEMPLATE = """
 
         // Update counts safely
         const facets = res.facets || {};
+        const cabSel = document.getElementById('quickFilterCabinet');
+        const shelfSel = document.getElementById('quickFilterShelf');
+        if (cabSel && facets.cabinets && cabSel.options.length <= 1) {
+          facets.cabinets.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = `Cab ${c}`;
+            if (activeQuickCabinet === c) opt.selected = true;
+            cabSel.appendChild(opt);
+          });
+        }
+        if (shelfSel && facets.shelves && shelfSel.options.length <= 1) {
+          facets.shelves.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = `Shelf ${s}`;
+            if (activeQuickShelf === s) opt.selected = true;
+            shelfSel.appendChild(opt);
+          });
+        }
         const revCount = facets.reviewed_count || 0;
         const pendCount = facets.pending_count || 0;
         const flaggedCount = facets.flagged_count !== undefined 
@@ -5557,7 +5798,11 @@ INDEX_TEMPLATE = """
                 ${s.family ? `<span class="font-sans text-[10px] text-ink-faint bg-tonal1 px-1.5 py-0.2 rounded-[1px] border border-tonal3">${highlightMatch(s.family, searchQuery)}</span>` : ''}
               </div>
               <div class="flex items-center gap-1">
-                ${statusBadge}
+                ${s.has_flags ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">Taxon Issue ⚠</span>' : ''}
+                ${(s.review_status === 'reviewed' || s.reviewed) ? 
+                  '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-fern-dark border border-fern/30">Reviewed ✓</span>' : 
+                  '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-600 border border-stone-300">Pending</span>'
+                }
                 ${s.has_unvalidated ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded-[2px] text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40">UNVAL</span>` : ''}
               </div>
             </div>
@@ -6820,12 +7065,46 @@ INDEX_TEMPLATE = """
       }
     }
 
+    let activeQuickCabinet = '';
+    let activeQuickShelf = '';
+
+    function handleV1LocationFilterChange() {
+      const cab = document.getElementById('quickFilterCabinet');
+      const shelf = document.getElementById('quickFilterShelf');
+      activeQuickCabinet = cab ? cab.value : '';
+      activeQuickShelf = shelf ? shelf.value : '';
+      const clearBtn = document.getElementById('btnClearLocFilterV1');
+      if (clearBtn) {
+        if (activeQuickCabinet || activeQuickShelf) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+      }
+      loadObjects();
+    }
+
+    function clearV1LocationFilter() {
+      activeQuickCabinet = '';
+      activeQuickShelf = '';
+      const cab = document.getElementById('quickFilterCabinet');
+      const shelf = document.getElementById('quickFilterShelf');
+      if (cab) cab.value = '';
+      if (shelf) shelf.value = '';
+      const clearBtn = document.getElementById('btnClearLocFilterV1');
+      if (clearBtn) clearBtn.classList.add('hidden');
+      loadObjects();
+    }
+
     function populateDiscrepancyFields() {
       const select = document.getElementById('discrepancyFieldSelect');
-      if (!activeSchema || !activeSchema.ui_sections) return;
-      const reg = (activeSchema.ui_sections.registration || []).map(f => f.name);
-      const loc = (activeSchema.ui_sections.location || []).map(f => f.name);
-      const all = ['General Specimen Issue'].concat(reg).concat(loc);
+      if (!select) return;
+      const coreOptions = [
+        'Physical Specimen Damaged',
+        'Physical Specimen Misplaced',
+        'Taxon / Identification Issue',
+        'General Specimen Issue'
+      ];
+      const reg = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.registration || []).map(f => f.name);
+      const loc = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location || []).map(f => f.name);
+      const all = coreOptions.concat(reg).concat(loc);
       select.innerHTML = all.map(f => `<option value="${f}">${f}</option>`).join('');
     }
 
@@ -7584,6 +7863,20 @@ INDEX_TEMPLATE_V2 = """
           </div>
         </div>
 
+        <!-- 1b. Vault Storage Location Quick Filter Bar -->
+        <div id="storageLocationFilterBar" class="px-3.5 py-1.5 bg-stone-50 border-t border-stone-200 flex items-center gap-2">
+          <span class="text-[11px] font-mono font-semibold text-ink-muted shrink-0">📍 Vault Loc:</span>
+          <div class="flex-1 flex items-center gap-1.5 min-w-0">
+            <select id="quickFilterCabinet" onchange="handleLocationFilterChange()" class="flex-1 min-w-0 bg-white border border-stone-300 rounded px-2 py-1 text-xs font-mono text-ink outline-none focus:border-fern">
+              <option value="">All Cabinets</option>
+            </select>
+            <select id="quickFilterShelf" onchange="handleLocationFilterChange()" class="flex-1 min-w-0 bg-white border border-stone-300 rounded px-2 py-1 text-xs font-mono text-ink outline-none focus:border-fern">
+              <option value="">All Shelves</option>
+            </select>
+            <button type="button" id="btnClearLocFilter" onclick="clearLocationFilter()" class="hidden text-xs text-stone-500 hover:text-stone-800 px-1 font-bold">✕</button>
+          </div>
+        </div>
+
         <!-- 2. Filter Pills Bar (Hidden by Default, Toggleable in Settings) -->
         <div id="filterPillsContainer" class="hidden px-3.5 pb-2 overflow-x-auto no-scrollbar flex items-center space-x-1.5 border-t border-stone-100 pt-2">
           <button onclick="setStatusFilter('all')" id="pill-all" class="filter-pill whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-medium font-sans bg-ink text-white shadow-sm tap-active transition-all">
@@ -7908,6 +8201,12 @@ INDEX_TEMPLATE_V2 = """
 
           <!-- ================= TAB 2: PROBLEMS & CONFLICTS ================= -->
           <div class="w-1/3 h-full overflow-y-auto no-scrollbar p-4 space-y-3.5 pb-24" id="tabContentProblems">
+            <!-- Quick Flag Button for Physical Damage or Misplacement -->
+            <button type="button" onclick="openAddDiscrepancyModal()" class="w-full py-2.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded font-bold text-xs flex items-center justify-center gap-1.5 tap-active shadow-2xs">
+              <span>⚑</span>
+              <span>Flag Specimen Issue (Damaged / Misplaced)</span>
+            </button>
+
             <!-- 1. Problem Summary Banner -->
             <div id="problemSummaryBar" class="flex items-center justify-between p-3 bg-stone-100 border border-bordercol rounded-[3px] transition-colors duration-200">
               <div class="flex items-center gap-2">
@@ -7939,6 +8238,28 @@ INDEX_TEMPLATE_V2 = """
 
         </div>
       </div>
+
+      <!-- Sticky Action Bar in Detail View: Mark Reviewed & Flag Issue -->
+      <footer class="flex-none bg-surface border-t border-bordercol px-4 py-2.5 flex items-center justify-between gap-3 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-30">
+        <button
+          type="button"
+          id="btnDetailMarkReviewed"
+          onclick="toggleReviewed()"
+          class="flex-1 py-2.5 px-4 rounded font-sans font-bold text-xs flex items-center justify-center gap-2 border transition-all tap-active bg-emerald-50 text-fern-dark border-fern hover:bg-emerald-100"
+        >
+          <span id="btnDetailReviewedIcon" class="text-sm">✓</span>
+          <span id="btnDetailReviewedLabel">Mark Reviewed</span>
+        </button>
+        <button
+          type="button"
+          onclick="openAddDiscrepancyModal()"
+          class="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded font-sans font-semibold text-xs flex items-center justify-center gap-1.5 tap-active"
+          title="Flag Physical Issue"
+        >
+          <span>⚑</span>
+          <span>Flag Issue</span>
+        </button>
+      </footer>
     </div>
 
 
@@ -8492,70 +8813,115 @@ INDEX_TEMPLATE_V2 = """
       });
     }
 
-    function queueMutation(payload) {
-      if (!db || !payload) return;
+    function getLocalStorageQueue() {
       try {
-        const tx = db.transaction('queued_mutations', 'readwrite');
-        tx.objectStore('queued_mutations').put(payload);
-        tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
-      } catch(e) {
-        console.error('Failed to queue mutation', e);
+        const q = localStorage.getItem('arbor_offline_queue');
+        return q ? JSON.parse(q) : [];
+      } catch (e) {
+        return [];
       }
+    }
+
+    function saveLocalStorageQueue(mutations) {
+      try {
+        localStorage.setItem('arbor_offline_queue', JSON.stringify(mutations || []));
+      } catch (e) {
+        console.error('Failed to save offline queue to localStorage', e);
+      }
+    }
+
+    function queueMutation(payload) {
+      if (!payload) return;
+      try {
+        const q = getLocalStorageQueue();
+        const pKey = payload.timestamp || (payload.oid ? `${payload.oid}_${Date.now()}` : String(Date.now()));
+        payload.timestamp = payload.timestamp || pKey;
+        const existingIdx = q.findIndex(m => String(m.timestamp) === String(payload.timestamp) || (m.oid && payload.oid && String(m.oid) === String(payload.oid) && !m.timestamp));
+        if (existingIdx >= 0) {
+          q[existingIdx] = payload;
+        } else {
+          q.push(payload);
+        }
+        saveLocalStorageQueue(q);
+      } catch (e) {
+        console.error('Failed to queue mutation in localStorage', e);
+      }
+
+      if (db) {
+        try {
+          const tx = db.transaction('queued_mutations', 'readwrite');
+          tx.objectStore('queued_mutations').put(payload);
+        } catch(e) {}
+      }
+      updateOfflineBannerQueueCount();
     }
 
     function getQueuedMutations() {
       return new Promise((resolve) => {
-        if (!db) return resolve([]);
+        const localMutations = getLocalStorageQueue();
+        if (!db) return resolve(localMutations);
         try {
           const tx = db.transaction('queued_mutations', 'readonly');
           const req = tx.objectStore('queued_mutations').getAll();
-          req.onsuccess = () => resolve(req.result || []);
-          req.onerror = () => resolve([]);
+          req.onsuccess = () => {
+            const idbMutations = req.result || [];
+            const map = new Map();
+            localMutations.forEach(m => map.set(String(m.timestamp || m.oid), m));
+            idbMutations.forEach(m => map.set(String(m.timestamp || m.oid), m));
+            resolve(Array.from(map.values()));
+          };
+          req.onerror = () => resolve(localMutations);
         } catch(e) {
-          resolve([]);
+          resolve(localMutations);
         }
       });
     }
 
     function clearQueuedMutations(timestamps) {
-      if (!db) return;
       try {
-        const tx = db.transaction('queued_mutations', 'readwrite');
-        const store = tx.objectStore('queued_mutations');
+        let q = getLocalStorageQueue();
         if (timestamps && timestamps.length > 0) {
-          timestamps.forEach(ts => store.delete(ts));
+          const tsSet = new Set(timestamps.map(String));
+          q = q.filter(m => !tsSet.has(String(m.timestamp)));
         } else {
-          store.clear();
+          q = [];
         }
-        tx.oncomplete = () => { updateOfflineBannerQueueCount(); };
-      } catch(e) {}
+        saveLocalStorageQueue(q);
+      } catch (e) {}
+
+      if (db) {
+        try {
+          const tx = db.transaction('queued_mutations', 'readwrite');
+          const store = tx.objectStore('queued_mutations');
+          if (timestamps && timestamps.length > 0) {
+            timestamps.forEach(ts => store.delete(ts));
+          } else {
+            store.clear();
+          }
+        } catch(e) {}
+      }
+      updateOfflineBannerQueueCount();
     }
 
     function updateOfflineBannerQueueCount() {
-      if (!db) return;
-      try {
-        const tx = db.transaction('queued_mutations', 'readonly');
-        const req = tx.objectStore('queued_mutations').count();
-        req.onsuccess = () => {
-          const count = req.result || 0;
-          const banner = document.getElementById('offlineBanner');
-          const bannerText = document.getElementById('offlineBannerText');
-          if (!banner) return;
-          if (count > 0) {
-            banner.classList.remove('hidden');
-            if (bannerText) {
-              bannerText.textContent = `⚠️ Offline — ${count} edit${count > 1 ? 's' : ''} queued on device`;
-            }
-          } else if (navigator.onLine && eventSource && eventSource.readyState === EventSource.OPEN) {
-            banner.classList.add('hidden');
-          } else {
-            banner.classList.remove('hidden');
-            if (bannerText) {
-              bannerText.textContent = 'Host disconnected. Reconnecting...';
-            }
-          }
-        };
-      } catch(e) {}
+      const localQ = getLocalStorageQueue();
+      const count = localQ.length;
+      const banner = document.getElementById('offlineBanner');
+      const bannerText = document.getElementById('offlineBannerText');
+      if (!banner) return;
+      if (count > 0) {
+        banner.classList.remove('hidden');
+        if (bannerText) {
+          bannerText.textContent = `⚠️ Offline — ${count} edit${count > 1 ? 's' : ''} queued in device storage`;
+        }
+      } else if (navigator.onLine && eventSource && eventSource.readyState === EventSource.OPEN) {
+        banner.classList.add('hidden');
+      } else {
+        banner.classList.remove('hidden');
+        if (bannerText) {
+          bannerText.textContent = 'Workstation disconnected. Offline mode active.';
+        }
+      }
     }
 
     let isFlushingMutations = false;
@@ -8789,6 +9155,8 @@ INDEX_TEMPLATE_V2 = """
       const params = new URLSearchParams();
       if (state.searchQuery) params.set('q', state.searchQuery);
       if (state.activeStatusFilter) params.set('status', state.activeStatusFilter);
+      if (state.selectedCabinet) params.set('cabinet', state.selectedCabinet);
+      if (state.selectedShelf) params.set('shelf', state.selectedShelf);
       if (state.activeSortBy) {
         if (state.activeSortBy === 'location') params.set('sort_by', 'cabinet');
         else if (state.activeSortBy === 'name_asc') { params.set('sort_by', 'genus'); params.set('sort_dir', 'asc'); }
@@ -8805,6 +9173,27 @@ INDEX_TEMPLATE_V2 = """
           state.totalMatching = res.total_matching || 0;
           renderObjectList();
           updateListMetrics(res.facets);
+          // Populate Vault Location dropdowns
+          const cabSel = document.getElementById('quickFilterCabinet');
+          const shelfSel = document.getElementById('quickFilterShelf');
+          if (cabSel && res.facets && res.facets.cabinets && cabSel.options.length <= 1) {
+            res.facets.cabinets.forEach(c => {
+              const opt = document.createElement('option');
+              opt.value = c;
+              opt.textContent = `Cab ${c}`;
+              if (state.selectedCabinet === c) opt.selected = true;
+              cabSel.appendChild(opt);
+            });
+          }
+          if (shelfSel && res.facets && res.facets.shelves && shelfSel.options.length <= 1) {
+            res.facets.shelves.forEach(s => {
+              const opt = document.createElement('option');
+              opt.value = s;
+              opt.textContent = `Shelf ${s}`;
+              if (state.selectedShelf === s) opt.selected = true;
+              shelfSel.appendChild(opt);
+            });
+          }
         }
       } catch(err) {
         if (container) {
@@ -8854,10 +9243,10 @@ INDEX_TEMPLATE_V2 = """
               </div>
               
               <div class="flex items-center gap-1.5 shrink-0">
-                ${hasFlags ? '<span class="text-xs text-brick font-bold" title="Flagged Issue">⚠</span>' : ''}
+                ${hasFlags ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">Taxon Issue ⚠</span>' : ''}
                 ${isRev ? 
-                  '<span class="w-5 h-5 rounded-full bg-emerald-50 text-fern border border-fern/30 flex items-center justify-center text-[10px] font-bold">✓</span>' : 
-                  '<span class="w-5 h-5 rounded-full bg-stone-100 text-stone-400 border border-stone-200 flex items-center justify-center text-[10px]">🕒</span>'
+                  '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-fern-dark border border-fern/30">Reviewed ✓</span>' : 
+                  '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-600 border border-stone-300">Pending</span>'
                 }
               </div>
             </div>
@@ -9039,14 +9428,27 @@ INDEX_TEMPLATE_V2 = """
       const statusBtn = document.getElementById('badgeStatus');
       const statusText = document.getElementById('badgeStatusText');
       const statusDot = document.getElementById('badgeStatusDot');
+      const detailRevBtn = document.getElementById('btnDetailMarkReviewed');
+      const detailRevLabel = document.getElementById('btnDetailReviewedLabel');
+      const detailRevIcon = document.getElementById('btnDetailReviewedIcon');
       if (state.isReviewed) {
         statusBtn.className = 'flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded border transition-colors tap-highlight-transparent bg-emerald-50 text-fern-dark border-fern/30';
         statusText.textContent = 'REVIEWED';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-fern';
+        if (detailRevBtn) {
+          detailRevBtn.className = 'flex-1 py-2.5 px-4 rounded font-sans font-bold text-xs flex items-center justify-center gap-2 border transition-all tap-active bg-emerald-600 text-white border-emerald-700 shadow-sm';
+          if (detailRevLabel) detailRevLabel.textContent = 'Reviewed (Tap to Unmark)';
+          if (detailRevIcon) detailRevIcon.textContent = '✓';
+        }
       } else {
         statusBtn.className = 'flex items-center gap-1.5 text-[11px] font-mono font-semibold px-2 py-0.5 rounded border transition-colors tap-highlight-transparent bg-amber-50 text-amber-800 border-amber-300';
         statusText.textContent = 'UNREVIEWED';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse';
+        if (detailRevBtn) {
+          detailRevBtn.className = 'flex-1 py-2.5 px-4 rounded font-sans font-bold text-xs flex items-center justify-center gap-2 border transition-all tap-active bg-emerald-50 text-fern-dark border-fern hover:bg-emerald-100 shadow-2xs';
+          if (detailRevLabel) detailRevLabel.textContent = 'Mark Reviewed';
+          if (detailRevIcon) detailRevIcon.textContent = '✓';
+        }
       }
 
       // Specimen index in list
@@ -10607,6 +11009,18 @@ INDEX_TEMPLATE_V2 = """
     }
 
     function openFilterModal() {
+      const locContainer = document.getElementById('filterModalLocations');
+      if (locContainer && locContainer.children.length === 0) {
+        const locFields = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) || [
+          { name: 'Cabinet' }, { name: 'Shelf' }, { name: 'Room' }, { name: 'Box' }
+        ];
+        locContainer.innerHTML = locFields.map(f => `
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <label class="font-mono text-muted text-[11px] w-24 shrink-0">${f.name}:</label>
+            <input type="text" id="filterModal_loc_${f.name}" placeholder="Any ${f.name}..." class="flex-1 bg-stone-50 border border-bordercol rounded px-2 py-1 text-xs font-mono text-ink outline-none focus:border-fern" />
+          </div>
+        `).join('');
+      }
       openModal('filterModal');
     }
 
@@ -10616,13 +11030,52 @@ INDEX_TEMPLATE_V2 = """
 
     function clearAdvancedFilters() {
       state.activeAdvancedFilters = { locations: {}, problems: {} };
+      state.selectedCabinet = '';
+      state.selectedShelf = '';
+      const cabSelect = document.getElementById('quickFilterCabinet');
+      const shelfSelect = document.getElementById('quickFilterShelf');
+      if (cabSelect) cabSelect.value = '';
+      if (shelfSelect) shelfSelect.value = '';
       closeFilterModal();
       fetchObjects();
     }
 
     function applyAdvancedFilters() {
+      const locFields = (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.location) || [
+        { name: 'Cabinet' }, { name: 'Shelf' }, { name: 'Room' }, { name: 'Box' }
+      ];
+      locFields.forEach(f => {
+        const inp = document.getElementById(`filterModal_loc_${f.name}`);
+        if (inp && inp.value.trim()) {
+          if (f.name.toLowerCase() === 'cabinet') state.selectedCabinet = inp.value.trim();
+          if (f.name.toLowerCase() === 'shelf') state.selectedShelf = inp.value.trim();
+        }
+      });
       closeFilterModal();
       fetchObjects();
+    }
+
+    function openAddDiscrepancyModal(defaultField = '') {
+      const select = document.getElementById('discrepancyFieldSelect');
+      if (select) {
+        const options = [
+          { val: 'Physical_Damage_Problem', label: 'Physical Specimen Damaged' },
+          { val: 'Location_Problem', label: 'Physical Specimen Misplaced' },
+          { val: 'Taxon_Problem', label: 'Taxon / Identification Issue' },
+          { val: 'General_Problem', label: 'General Specimen Issue' }
+        ];
+        if (activeSchema && activeSchema.ui_sections && activeSchema.ui_sections.problems) {
+          activeSchema.ui_sections.problems.forEach(p => {
+            if (p.name && !options.some(o => o.val === p.name)) {
+              options.push({ val: p.name, label: p.name.replace(/_/g, ' ') });
+            }
+          });
+        }
+        select.innerHTML = options.map(o => `<option value="${o.val}" ${o.val === defaultField ? 'selected' : ''}>${o.label}</option>`).join('');
+      }
+      const noteInput = document.getElementById('discrepancyReasonInput');
+      if (noteInput) noteInput.value = '';
+      openModal('addDiscrepancyModal');
     }
 
     async function submitDiscrepancy(e) {
@@ -10632,16 +11085,45 @@ INDEX_TEMPLATE_V2 = """
       if (!field || !note || !state.currentRecord) return;
 
       state.currentRecord.observation = state.currentRecord.observation || {};
-      state.currentRecord.observation[field + '_Problem'] = true;
-      state.currentRecord.observation[field + '_Note'] = note;
-      markDirty(field + '_Problem');
-      markDirty(field + '_Note');
+      const probField = field.endsWith('_Problem') ? field : `${field}_Problem`;
+      const noteField = field.endsWith('_Problem') ? `${field.slice(0, -8)}_Note` : `${field}_Note`;
+      state.currentRecord.observation[probField] = true;
+      state.currentRecord.observation[noteField] = note;
+      state.currentRecord.observation['Notes'] = note;
+      markDirty(probField);
+      markDirty(noteField);
+      markDirty('Notes');
 
       closeModal('addDiscrepancyModal');
       triggerAutoSave();
       triggerHaptic('discrepancy');
       renderDetailView(false);
-      showToast('⚑ Issue flagged');
+      showToast(`⚑ Issue flagged: ${note}`);
+    }
+
+    function handleLocationFilterChange() {
+      const cabSelect = document.getElementById('quickFilterCabinet');
+      const shelfSelect = document.getElementById('quickFilterShelf');
+      state.selectedCabinet = cabSelect ? cabSelect.value : '';
+      state.selectedShelf = shelfSelect ? shelfSelect.value : '';
+      const clearBtn = document.getElementById('btnClearLocFilter');
+      if (clearBtn) {
+        if (state.selectedCabinet || state.selectedShelf) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+      }
+      fetchObjects();
+    }
+
+    function clearLocationFilter() {
+      state.selectedCabinet = '';
+      state.selectedShelf = '';
+      const cabSelect = document.getElementById('quickFilterCabinet');
+      const shelfSelect = document.getElementById('quickFilterShelf');
+      if (cabSelect) cabSelect.value = '';
+      if (shelfSelect) shelfSelect.value = '';
+      const clearBtn = document.getElementById('btnClearLocFilter');
+      if (clearBtn) clearBtn.classList.add('hidden');
+      fetchObjects();
     }
 
     // -------------------------------------------------------------

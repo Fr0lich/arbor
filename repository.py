@@ -422,12 +422,12 @@ class ExcelRepository:
         Returns:
             (df_reg, df_obs, df_photo, df_log, df_unvalidated) — five pandas DataFrames.
         """
-        sheets = config["sheets"]
-        sections = config["ui_sections"]
+        sheets = config.get("sheets", {})
+        sections = config.get("ui_sections", {})
 
         mapped_fields = [
             f["maps_to"]
-            for f in sections["problems"]
+            for f in sections.get("problems", [])
             if "maps_to" in f
         ]
 
@@ -438,16 +438,16 @@ class ExcelRepository:
             target_reg = sheets.get("reg", "Registration")
             matched_reg = _find_sheet_name(sheet_names, target_reg)
             if matched_reg:
-                df_reg = pd.read_excel(xls, sheet_name=matched_reg)
+                df_reg = pd.read_excel(xls, sheet_name=matched_reg, dtype=str)
             else:
-                df_reg = pd.read_excel(xls, sheet_name=target_reg)  # Let it raise with original target name
+                df_reg = pd.read_excel(xls, sheet_name=target_reg, dtype=str)  # Let it raise with original target name
             df_reg = _clean_trailing_and_blank_columns(_deduplicate_columns(_detect_and_promote_header(df_reg, "ObjectID")))
 
             # Read Observation sheet
             target_obs = sheets.get("obs", "Observation")
             matched_obs = _find_sheet_name(sheet_names, target_obs)
             if matched_obs:
-                df_obs = pd.read_excel(xls, sheet_name=matched_obs)
+                df_obs = pd.read_excel(xls, sheet_name=matched_obs, dtype=str)
             else:
                 df_obs = pd.DataFrame(columns=["ObjectID"])
             df_obs = _clean_trailing_and_blank_columns(_deduplicate_columns(_detect_and_promote_header(df_obs, "ObjectID")))
@@ -456,7 +456,7 @@ class ExcelRepository:
             target_photo = sheets.get("photo", "Photo")
             matched_photo = _find_sheet_name(sheet_names, target_photo)
             if matched_photo:
-                df_photo = pd.read_excel(xls, sheet_name=matched_photo)
+                df_photo = pd.read_excel(xls, sheet_name=matched_photo, dtype=str)
             else:
                 df_photo = pd.DataFrame(columns=["ObjectID"])
             if not df_photo.empty:
@@ -478,7 +478,7 @@ class ExcelRepository:
             target_log = sheets.get("log", "Log")
             matched_log = _find_sheet_name(sheet_names, target_log)
             if matched_log:
-                df_log = pd.read_excel(xls, sheet_name=matched_log)
+                df_log = pd.read_excel(xls, sheet_name=matched_log, dtype=str)
             else:
                 df_log = pd.DataFrame()
             if not df_log.empty:
@@ -488,7 +488,7 @@ class ExcelRepository:
             target_unval = sheets.get("unvalidated", "Unvalidated_source")
             matched_unval = _find_sheet_name(sheet_names, target_unval)
             if matched_unval:
-                df_unvalidated = pd.read_excel(xls, sheet_name=matched_unval)
+                df_unvalidated = pd.read_excel(xls, sheet_name=matched_unval, dtype=str)
             else:
                 df_unvalidated = pd.DataFrame(columns=["ObjectID", "Field_Name", "Unvalidated_Comment"])
             if not df_unvalidated.empty:
@@ -870,14 +870,17 @@ class SQLiteRepository:
 
         total = len(steps)
 
-        # Always write mode via a temp file → atomic rename (never leaves
+        from utils import create_presave_backup, ExcelFileLockedError
+
+        # Always write mode via a sibling temp file → atomic rename (never leaves
         # the destination in a partially-written / corrupt state, and avoids
         # openpyxl append-mode which corrupts ZIP structure on overwrite).
         parent_dir = os.path.dirname(os.path.abspath(excel_path))
         if parent_dir:
             os.makedirs(parent_dir, exist_ok=True)
+        base_name = os.path.basename(excel_path)
         temp_id = uuid.uuid4().hex[:8]
-        tmp_path = f"{excel_path}.{temp_id}.tmp.xlsx"
+        tmp_path = os.path.join(parent_dir, f"{base_name}.tmp_{temp_id}.xlsx")
         try:
             with pd.ExcelWriter(tmp_path, engine="openpyxl", mode="w") as writer:
                 for i, (df, sheet, label) in enumerate(steps, 1):
@@ -914,6 +917,10 @@ class SQLiteRepository:
                 except Exception as style_err:
                     debug_error("export_to_excel styling", str(style_err))
 
+            # Automatic pre-save backup before replacing destination workbook
+            if os.path.exists(excel_path):
+                create_presave_backup(excel_path, max_backups=5)
+
             # Atomic rename with retry loop for transient locks (OneDrive, Dropbox, antivirus)
             max_retries = 5
             for attempt in range(max_retries):
@@ -922,26 +929,15 @@ class SQLiteRepository:
                     break
                 except (PermissionError, OSError) as e:
                     if attempt == max_retries - 1:
-                        try:
-                            if os.path.exists(tmp_path):
-                                os.remove(tmp_path)
-                        except OSError:
-                            pass
-                        raise PermissionError(
-                            f"Cannot save to '{excel_path}'. The file is open in Microsoft Excel or locked by OneDrive/Dropbox. Please close it or wait for sync to complete and retry."
-                        ) from e
+                        friendly_msg = (
+                            f"The Excel file '{base_name}' is currently open in Microsoft Excel or another program. "
+                            "Please close Excel and click 'Retry Save'."
+                        )
+                        raise ExcelFileLockedError(excel_path, friendly_msg) from e
                     time.sleep(0.15 * (2 ** attempt))
-        except PermissionError:
-            try:
-                if os.path.exists(tmp_path):
+        finally:
+            if os.path.exists(tmp_path):
+                try:
                     os.remove(tmp_path)
-            except OSError:
-                pass
-            raise
-        except Exception:
-            try:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-            except OSError:
-                pass
-            raise
+                except OSError:
+                    pass

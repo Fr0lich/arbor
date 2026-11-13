@@ -1,10 +1,12 @@
 import os
 import re
 import time
+import queue
 import threading
 import webbrowser
 from collections import OrderedDict
 from io import BytesIO
+from typing import Dict, List, Optional, Any
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk, ImageFile
@@ -18,6 +20,18 @@ Image.MAX_IMAGE_PIXELS = None
 import config
 from config import sc
 from ui.image_toolbar import create_image_toolbar, Tooltip
+from ui.image_handler import ImagePreCacher, create_missing_image_placeholder
+from backend.task_queue import app_worker, BackgroundWorker
+
+# Ensure BackgroundWorker accepts on_success/on_error aliases for API compatibility
+if not getattr(BackgroundWorker, "_has_param_aliases", False):
+    _orig_run_in_bg = BackgroundWorker.run_in_background
+    def _run_in_bg(self, func, callback=None, error_callback=None, **kwargs):
+        cb = kwargs.pop("on_success", callback)
+        ecb = kwargs.pop("on_error", error_callback)
+        return _orig_run_in_bg(self, func, callback=cb, error_callback=ecb, **kwargs)
+    BackgroundWorker.run_in_background = _run_in_bg
+    BackgroundWorker._has_param_aliases = True
 
 MAX_IMAGE_CACHE = 40
 MAX_PIL_CACHE = 3
@@ -65,7 +79,10 @@ class ImagePanel(ttk.Frame):
         self.image_render_cache = OrderedDict()
         self.original_pil_cache = OrderedDict()
         self.image_cache = OrderedDict()
+        self.pre_cacher = ImagePreCacher(maxsize=10)
         self._pil_cache_lock = threading.Lock()
+        self._is_panning = False
+        self._ui_queue = queue.Queue()
 
         self.image_zoom_factor = 1.0
         self.image_rotation_angle = 0
@@ -93,6 +110,7 @@ class ImagePanel(ttk.Frame):
         # Register keybindings if manager provided
         if self.keybindings and hasattr(self.keybindings, "bind_image_shortcuts"):
             self.keybindings.bind_image_shortcuts(self)
+        self._bind_panel_shortcuts()
 
     @property
     def root(self):
@@ -100,6 +118,28 @@ class ImagePanel(ttk.Frame):
         if self.main_ui and hasattr(self.main_ui, "root"):
             return self.main_ui.root
         return self.winfo_toplevel()
+
+    def _poll_ui_queue(self):
+        """Drains pending UI updates on the Tkinter main thread."""
+        try:
+            while True:
+                task = self._ui_queue.get_nowait()
+                if callable(task):
+                    try:
+                        task()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    def _post_ui_task(self, fn):
+        """Thread-safe queue dispatch for main-thread UI operations."""
+        self._ui_queue.put(fn)
+        try:
+            if hasattr(self, "root") and self.root and self.root.winfo_exists():
+                self.root.after(0, self._poll_ui_queue)
+        except Exception:
+            pass
 
     def set_dark_mode(self, is_dark):
         self.dark_mode = is_dark
@@ -335,7 +375,10 @@ class ImagePanel(ttk.Frame):
                 "rotate_cw": lambda: self.rotate_image(90),
                 "rotate_ccw": lambda: self.rotate_image(-90),
                 "reset": self.reset_image_view,
-                "fit": self.fit_image_view,
+                "fit": self.zoom_fit_window,
+                "fit_window": self.zoom_fit_window,
+                "fit_width": self.zoom_fit_width,
+                "actual_pixels": self.zoom_actual_pixels,
                 "design_toggle": lambda mode: getattr(self.main_ui, "save_user_pref", lambda k, v: None)("image_button_style", mode)
             },
             design_mode=getattr(self.main_ui, "image_button_style", "standard") if self.main_ui else "standard",
@@ -725,11 +768,7 @@ class ImagePanel(ttk.Frame):
         config.set_last_dir("last_image_dir", folder)
         self.image_folder = folder
 
-        threading.Thread(
-            target=self.build_image_index,
-            args=(folder,),
-            daemon=True
-        ).start()
+        app_worker.run_in_background(lambda: self.build_image_index(folder))
 
         self.image_mode = "folder"
         self.update_image_view_button()
@@ -824,7 +863,10 @@ class ImagePanel(ttk.Frame):
 
         total = len(files)
         if self.main_ui and hasattr(self.main_ui, "_show_progress"):
-            self.root.after(0, lambda: self.main_ui._show_progress("Indexing images...", total))
+            if hasattr(self, "root") and self.root:
+                self.root.after(0, lambda: self.main_ui._show_progress("Indexing images...", total))
+            else:
+                self.main_ui._show_progress("Indexing images...", total)
 
         found_object_ids = set()
         for i, path in enumerate(files):
@@ -845,11 +887,12 @@ class ImagePanel(ttk.Frame):
             self.image_index.setdefault(oid, []).append((img_no, path))
 
             if i % 50 == 0 and self.main_ui and hasattr(self.main_ui, "image_scan_progress"):
-                self.root.after(
-                    0,
-                    self.main_ui.image_scan_progress.configure,
-                    {"value": i, "maximum": total}
-                )
+                if hasattr(self, "root") and self.root:
+                    self.root.after(
+                        0,
+                        self.main_ui.image_scan_progress.configure,
+                        {"value": i, "maximum": total}
+                    )
 
         for oid in self.image_index:
             self.image_index[oid].sort(key=lambda x: x[0])
@@ -871,7 +914,10 @@ class ImagePanel(ttk.Frame):
                 if hasattr(self.main_ui, "_on_startup_ready"):
                     self.main_ui._on_startup_ready()
 
-        self.root.after(0, _notify_ui)
+        if hasattr(self, "root") and self.root:
+            self.root.after(0, _notify_ui)
+        else:
+            _notify_ui()
 
     # -------------------------------------------------------------------------
     # Image Loading & Async Fetching
@@ -916,11 +962,9 @@ class ImagePanel(ttk.Frame):
                     self._display_online_image(self.original_pil_cache[url], url, token)
                 return
 
-            threading.Thread(
-                target=self._load_online_images_worker,
-                args=(urls, token),
-                daemon=True
-            ).start()
+            app_worker.run_in_background(
+                lambda: self._load_online_images_worker(urls, token)
+            )
             return
 
         paths = self.image_index.get(str(oid), [])
@@ -990,8 +1034,12 @@ class ImagePanel(ttk.Frame):
                 if token != getattr(self, "_image_load_token", 0):
                     return
 
+                # Check async pre-cache first for instant zero-IO memory hit
+                pre_decoded = self.pre_cacher.get(path)
                 with self._pil_cache_lock:
-                    if path not in self.original_pil_cache:
+                    if pre_decoded is not None:
+                        self.original_pil_cache[path] = pre_decoded
+                    elif path not in self.original_pil_cache:
                         if path.startswith("http://") or path.startswith("https://"):
                             r = self._get_http_session().get(path, timeout=(3, 8))
                             if token != getattr(self, "_image_load_token", 0):
@@ -1000,35 +1048,44 @@ class ImagePanel(ttk.Frame):
                                 pil_img = Image.open(BytesIO(r.content))
                                 pil_img.load()
                             else:
-                                return
+                                raise FileNotFoundError(f"Remote photo returned HTTP {r.status_code}")
                         else:
+                            if not os.path.exists(path):
+                                raise FileNotFoundError(f"Image not found on disk: {path}")
+                            with open(path, "rb") as f:
+                                file_bytes = f.read()
                             if path.lower().endswith((".tif", ".tiff")):
                                 try:
                                     import tifffile
                                     import numpy as np
-                                    tif_arr = tifffile.imread(path)
+                                    tif_arr = tifffile.imread(BytesIO(file_bytes))
                                     if tif_arr.dtype == np.uint16:
                                         tif_arr = (tif_arr / 256).astype(np.uint8)
                                     pil_img = Image.fromarray(tif_arr)
                                 except Exception:
-                                    pil_img = Image.open(path)
+                                    pil_img = Image.open(BytesIO(file_bytes))
                             else:
-                                pil_img = Image.open(path)
+                                pil_img = Image.open(BytesIO(file_bytes))
                             pil_img.load()
                         self.original_pil_cache[path] = pil_img
+                        self.pre_cacher.put(path, pil_img)
                         if len(self.original_pil_cache) > MAX_PIL_CACHE:
                             self.original_pil_cache.popitem(last=False)
                     img = self.original_pil_cache[path].copy()
 
-                prefs = config.load_prefs() or {}
-                advanced_prefs = prefs.get("advanced", {})
-                algo_name = prefs.get("image_resampling_algorithm", advanced_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)"))
-                if "BILINEAR" in algo_name:
-                    resample_filter = Image.BILINEAR
-                elif "NEAREST" in algo_name:
-                    resample_filter = Image.NEAREST
+                resample_enum = getattr(Image, "Resampling", Image)
+                if getattr(self, "_is_panning", False):
+                    resample_filter = resample_enum.NEAREST
                 else:
-                    resample_filter = Image.LANCZOS
+                    prefs = config.load_prefs() or {}
+                    advanced_prefs = prefs.get("advanced", {})
+                    algo_name = prefs.get("image_resampling_algorithm", advanced_prefs.get("image_resampling_algorithm", "LANCZOS (High Quality)"))
+                    if "BILINEAR" in algo_name:
+                        resample_filter = resample_enum.BILINEAR
+                    elif "NEAREST" in algo_name:
+                        resample_filter = resample_enum.NEAREST
+                    else:
+                        resample_filter = resample_enum.LANCZOS
 
                 if large and rot != 0:
                     img = img.rotate(rot, expand=True)
@@ -1063,7 +1120,7 @@ class ImagePanel(ttk.Frame):
                     if getattr(target_widget, "loading_path", None) != path:
                         return
 
-                    tk_img = ImageTk.PhotoImage(pil_img)
+                    tk_img = ImageTk.PhotoImage(pil_img, master=self.root)
                     self.image_render_cache[key] = tk_img
 
                     if len(self.image_render_cache) > MAX_IMAGE_CACHE:
@@ -1072,13 +1129,39 @@ class ImagePanel(ttk.Frame):
                     target_widget.config(image=tk_img, text="")
                     target_widget.image = tk_img
 
-                self.root.after(0, callback)
+                self._post_ui_task(callback)
             except Exception as e:
-                if "HTTP" not in str(e):
-                    from utils import debug_error
-                    debug_error("_load_image_async worker", str(e))
+                # Graceful fallback: render visual placeholder canvas without crashing mainloop
+                short_name = os.path.basename(str(path)) if path else "image"
+                reason_msg = "Corrupted image file" if ("Unidentified" in str(type(e)) or "cannot identify" in str(e).lower()) else "Image not found on disk"
+                placeholder_w = int(width * 0.95) if large else int(70 * dpi_scale)
+                placeholder_h = int(canvas_h * 0.85) if large else int(70 * dpi_scale)
+                placeholder_img = create_missing_image_placeholder(
+                    short_name,
+                    width=max(70, placeholder_w),
+                    height=max(70, placeholder_h),
+                    is_dark=getattr(self, "dark_mode", False),
+                    reason=reason_msg
+                )
 
-        threading.Thread(target=worker, daemon=True).start()
+                def error_callback(p_img=placeholder_img, p_name=short_name, r_msg=reason_msg):
+                    if not target_widget.winfo_exists():
+                        return
+                    if getattr(target_widget, "loading_path", None) != path:
+                        return
+                    try:
+                        tk_placeholder = ImageTk.PhotoImage(p_img, master=self.root)
+                        self.image_render_cache[key] = tk_placeholder
+                        target_widget.config(image=tk_placeholder, text="")
+                        target_widget.image = tk_placeholder
+                        if hasattr(self, "images_missing_label") and self.images_missing_label.winfo_exists():
+                            self.images_missing_label.config(text=f"{r_msg}: {p_name}")
+                    except Exception:
+                        pass
+
+                self._post_ui_task(error_callback)
+
+        app_worker.run_in_background(worker)
 
     def _load_online_images_worker(self, urls, token):
         def try_load(url, attempts=2):
@@ -1150,7 +1233,7 @@ class ImagePanel(ttk.Frame):
         if token != self._image_load_token:
             return
 
-        tk_img = ImageTk.PhotoImage(pil_img)
+        tk_img = ImageTk.PhotoImage(pil_img, master=self.root)
         container = ttk.Frame(self.image_container)
         container.pack(pady=8)
 
@@ -1454,26 +1537,122 @@ class ImagePanel(ttk.Frame):
     # -------------------------------------------------------------------------
 
     def zoom_image_in(self):
-        self.image_zoom_factor *= 1.25
+        self.image_zoom_factor = min(8.0, round(self.image_zoom_factor * 1.25, 3))
         self._re_render_current_images()
+        return self.image_zoom_factor
 
     def zoom_image_out(self):
-        self.image_zoom_factor /= 1.25
-        if self.image_zoom_factor < 0.1:
-            self.image_zoom_factor = 0.1
+        self.image_zoom_factor = max(0.1, round(self.image_zoom_factor / 1.25, 3))
         self._re_render_current_images()
+        return self.image_zoom_factor
 
     def rotate_image(self, angle=-90):
         self.image_rotation_angle = (self.image_rotation_angle + angle) % 360
         self._re_render_current_images()
 
-    def reset_image_view(self):
+    def reset_image_view(self, event=None):
+        """Reset view to 1.0 zoom and 0 orientation (Ctrl+0)."""
         self.image_zoom_factor = 1.0
         self.image_rotation_angle = 0
         self._re_render_current_images()
+        return self.image_zoom_factor
 
-    def fit_image_view(self):
-        self.reset_image_view()
+    def fit_image_view(self, event=None):
+        """Fit whole sheet to window (Ctrl+1 / Toolbar Fit)."""
+        return self.zoom_fit_window(event)
+
+    def calculate_zoom_preset_scales(self, path=None) -> Dict[str, float]:
+        """Calculates exact scale factors for fit_window, fit_width, and actual_pixels presets."""
+        try:
+            cw = self.image_canvas.winfo_width()
+            ch = self.image_canvas.winfo_height()
+        except Exception:
+            cw, ch = 800, 350
+
+        if cw < 50:
+            cw = 800
+        if ch < 50:
+            ch = 350
+
+        avail_w = int(cw * 0.95)
+        avail_h = int(ch * 0.85)
+
+        img_w, img_h = 2000, 3000
+        curr_path = path
+        if not curr_path and getattr(self, "_image_paths", None) and self._current_image_index < len(self._image_paths):
+            curr_path = self._image_paths[self._current_image_index]
+
+        if curr_path:
+            cached_pil = self.pre_cacher.get(curr_path) or self.original_pil_cache.get(curr_path)
+            if cached_pil:
+                img_w, img_h = cached_pil.size
+                if self.image_rotation_angle in (90, 270):
+                    img_w, img_h = img_h, img_w
+
+        default_ratio = min(avail_w / max(1, img_w), avail_h / max(1, img_h))
+        if default_ratio <= 0:
+            default_ratio = 1.0
+
+        scale_fit_window = 1.0
+        width_ratio = avail_w / max(1, img_w)
+        scale_fit_width = round(max(1.0, width_ratio / default_ratio), 3)
+        scale_actual_pixels = round(max(1.0, 1.0 / default_ratio), 3)
+
+        return {
+            "fit_window": scale_fit_window,
+            "fit_width": scale_fit_width,
+            "actual_pixels": scale_actual_pixels
+        }
+
+    def zoom_fit_window(self, event=None):
+        """Fit entire specimen sheet into viewport (Ctrl+1)."""
+        self.image_zoom_factor = 1.0
+        self._re_render_current_images()
+        return self.image_zoom_factor
+
+    def zoom_fit_width(self, event=None):
+        """Fit specimen width to viewport width for reading bottom label (Ctrl+2)."""
+        scales = self.calculate_zoom_preset_scales()
+        self.image_zoom_factor = scales["fit_width"]
+        self._re_render_current_images()
+        return self.image_zoom_factor
+
+    def zoom_actual_pixels(self, event=None):
+        """100% 1:1 Actual Pixel Inspection for fine botanical structures (Ctrl+3)."""
+        scales = self.calculate_zoom_preset_scales()
+        self.image_zoom_factor = scales["actual_pixels"]
+        self._re_render_current_images()
+        return self.image_zoom_factor
+
+    def _bind_panel_shortcuts(self):
+        """Binds conflict-free zoom preset shortcuts (Ctrl+1, Ctrl+2, Ctrl+3)."""
+        try:
+            root = self.root
+            if not root:
+                return
+
+            def _wrap_sc(func):
+                def _handler(event=None):
+                    try:
+                        focused = root.focus_get()
+                        if isinstance(focused, (tk.Entry, ttk.Entry, tk.Text, ttk.Combobox)):
+                            return
+                    except Exception:
+                        pass
+                    func()
+                    return "break"
+                return _handler
+
+            root.bind("<Control-Key-0>", _wrap_sc(self.reset_image_view))
+            root.bind("<Control-0>", _wrap_sc(self.reset_image_view))
+            root.bind("<Control-Key-1>", _wrap_sc(self.zoom_fit_window))
+            root.bind("<Control-1>", _wrap_sc(self.zoom_fit_window))
+            root.bind("<Control-Key-2>", _wrap_sc(self.zoom_fit_width))
+            root.bind("<Control-2>", _wrap_sc(self.zoom_fit_width))
+            root.bind("<Control-Key-3>", _wrap_sc(self.zoom_actual_pixels))
+            root.bind("<Control-3>", _wrap_sc(self.zoom_actual_pixels))
+        except Exception:
+            pass
 
     def _re_render_current_images(self):
         if hasattr(self, "image_toolbar") and hasattr(self.image_toolbar, "set_status"):
@@ -1522,6 +1701,7 @@ class ImagePanel(ttk.Frame):
         self.refresh_image_view()
 
     def _on_pan_start(self, event):
+        self._is_panning = True
         canvas_x = event.x_root - self.image_canvas.winfo_rootx()
         canvas_y = event.y_root - self.image_canvas.winfo_rooty()
         self._pan_start_x = event.x_root
@@ -1530,6 +1710,7 @@ class ImagePanel(ttk.Frame):
         self.image_canvas.scan_mark(canvas_x, canvas_y)
 
     def _on_pan_drag(self, event):
+        self._is_panning = True
         dist = ((event.x_root - self._pan_start_x)**2 + (event.y_root - self._pan_start_y)**2)**0.5
         if dist > 5:
             self._has_dragged = True
@@ -1538,6 +1719,7 @@ class ImagePanel(ttk.Frame):
         self.image_canvas.scan_dragto(canvas_x, canvas_y, gain=1)
 
     def _on_pan_release(self, event, click_callback=None):
+        self._is_panning = False
         if not getattr(self, "_has_dragged", False) and click_callback:
             click_callback(event)
 
@@ -1552,70 +1734,52 @@ class ImagePanel(ttk.Frame):
             filename = os.path.basename(path_or_url)
             webbrowser.open(f"https://www.unimus.no/photos/image/jpeg/{filename}")
 
-
-
     def _preload_adjacent_images(self, oid):
         if not self.show_images_var.get():
             return
-        if self.image_mode != "folder" or not self.app.config or not self.app.config.get("has_images", True):
+        if self.image_mode != "folder" or not self.app or not getattr(self.app, "config", None) or not self.app.config.get("has_images", True):
             return
 
-        if oid not in self.app.active_object_ids:
+        active_ids = getattr(self.app, "active_object_ids", None)
+        if not active_ids or oid not in active_ids:
             return
 
-        idx = self.app.active_object_ids.index(oid)
+        idx = active_ids.index(oid)
         adjacent_oids = []
         if idx > 0:
-            adjacent_oids.append(self.app.active_object_ids[idx - 1])
-        if idx < len(self.app.active_object_ids) - 1:
-            adjacent_oids.append(self.app.active_object_ids[idx + 1])
+            adjacent_oids.append(active_ids[idx - 1])
+        if idx < len(active_ids) - 1:
+            adjacent_oids.append(active_ids[idx + 1])
 
         paths_to_load = []
         for adj_oid in adjacent_oids:
-            adj_paths = self.image_index.get(adj_oid, [])
+            adj_paths = self.image_index.get(str(adj_oid)) or self.image_index.get(adj_oid) or []
             if adj_paths:
-                first_path = adj_paths[0][1] if isinstance(adj_paths[0], tuple) else adj_paths[0]
-                if first_path not in self.image_cache:
+                first_item = adj_paths[0]
+                first_path = first_item[1] if isinstance(first_item, tuple) else first_item
+                if first_path and first_path not in self.pre_cacher and first_path not in self.image_cache:
                     paths_to_load.append(first_path)
 
         if not paths_to_load:
             return
 
         def preload_worker():
-            try:
-                available_width = self.image_canvas.winfo_width()
-                if available_width < 300:
-                    available_width = 800
-                max_width = int((available_width / 2) * 0.95)
-                max_height = int(self.root.winfo_height() * 0.85)
-            except Exception:
-                max_width, max_height = 400, 400
-
-            for path in paths_to_load:
+            for p in paths_to_load:
                 try:
-                    if path.startswith("http://") or path.startswith("https://"):
-                        r = self._get_http_session().get(path, timeout=(3, 8))
-                        if r.status_code == 200:
-                            img = Image.open(BytesIO(r.content))
-                            img.load()
-                        else:
-                            continue
-                    else:
-                        img = Image.open(path)
-                        img.load()
-                    img.thumbnail((max_width, max_height), Image.LANCZOS)
-                    self.root.after(0, lambda p=path, im=img: self._cache_preloaded_image(p, im))
+                    img = self.pre_cacher.load_and_decode(p)
+                    if img and hasattr(self, "root") and self.root and self.root.winfo_exists():
+                        self.root.after(0, lambda path=p, im=img: self._cache_preloaded_image(path, im))
                 except Exception:
                     pass
 
-        threading.Thread(target=preload_worker, daemon=True).start()
+        app_worker.run_in_background(preload_worker)
 
 
     def _cache_preloaded_image(self, path, pil_img):
         if path in self.image_cache:
             return
         try:
-            tk_img = ImageTk.PhotoImage(pil_img)
+            tk_img = ImageTk.PhotoImage(pil_img, master=self.root)
             self.image_cache[path] = tk_img
             if len(self.image_cache) > MAX_IMAGE_CACHE:
                 self.image_cache.popitem(last=False)

@@ -1728,3 +1728,246 @@ def test_v2_availability_status_in_collection_default(mock_app_state):
 
 
 
+
+
+# ==============================================================================
+# CONSOLIDATED MOBILE UTILITY & AUDIT TESTS
+# ==============================================================================
+
+@pytest.mark.parametrize("value, expected", [
+    (None, False),
+    (pd.NA, False),
+    (float('nan'), False),
+    ("", False),
+    ("   ", False),
+    ("unknown", True),
+    ("UNKNOWN", True),
+    (" ukjent ", True),
+    ("?", True),
+    ("-", True),
+    ("nan", True),
+    ("valid_data", False),
+    (123, False),
+    ("O-V-12345", False)
+])
+def test_consolidated_is_unknown(value, expected):
+    from backend.mobile_server import is_unknown
+    assert is_unknown(value) == expected
+
+
+def test_consolidated_mobile_undo_pops_not_reviewed_action():
+    app = AppState()
+    app.config = config.DATABASE_CONFIGS["Økonomisk Botanisk"]
+    app.df_reg = pd.DataFrame([{"ObjectID": "3001", "Genus": "Ulmus"}]).set_index("ObjectID")
+    app.df_obs = pd.DataFrame([{"ObjectID": "3001", "Reviewed": True}]).set_index("ObjectID")
+    app.df_photo = pd.DataFrame()
+    app.df_log = pd.DataFrame()
+    app._log_records = []
+
+    server = MobileServer(app, port=5140)
+    client = server.flask_app.test_client()
+
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+
+    resp = client.post('/api/update', json={
+        "id": "3001",
+        "reviewed": False,
+        "registration": {},
+        "observation": {}
+    })
+    assert resp.status_code == 200
+    assert not bool(app.df_obs.at["3001", "Reviewed"])
+    assert len(app._log_records) == 1
+    assert app._log_records[0]["Action"] == "NOT_REVIEWED"
+
+    undo_resp = client.post('/api/undo', json={"oid": "3001"})
+    assert undo_resp.status_code == 200
+    assert bool(app.df_obs.at["3001", "Reviewed"]) is True
+    assert len(app._log_records) == 0
+    assert len(app.df_log) == 0
+
+
+def test_consolidated_mobile_unvalidated_deletion_triggers_audit_and_guard():
+    app = AppState()
+    app.config = config.DATABASE_CONFIGS["Økonomisk Botanisk"]
+    app.df_reg = pd.DataFrame([{"ObjectID": "4001", "Genus": "Fraxinus"}]).set_index("ObjectID")
+    app.df_obs = pd.DataFrame([{"ObjectID": "4001", "Reviewed": True}]).set_index("ObjectID")
+    app.df_unvalidated = pd.DataFrame([
+        {"ObjectID": "4001", "Field_Name": "Taxonomy", "Unvalidated_Comment": "Needs herbarium review"}
+    ])
+    app.df_photo = pd.DataFrame()
+    app.df_log = pd.DataFrame()
+    app._log_records = []
+
+    server = MobileServer(app, port=5150)
+    client = server.flask_app.test_client()
+
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+
+    resp = client.post('/api/update', json={
+        "id": "4001",
+        "unvalidated_sources": [],
+        "registration": {},
+        "observation": {}
+    })
+    assert resp.status_code == 200
+    remaining = app.df_unvalidated[app.df_unvalidated["ObjectID"] == "4001"]
+    assert len(remaining) == 0
+    assert len(app._log_records) == 1
+    log_entry = app._log_records[0]
+    assert "Unvalidated_Taxonomy" in log_entry["ChangedFields"]
+    assert 'Unvalidated_Taxonomy: "Needs herbarium review" -> ""' in log_entry["ChangedValues"]
+
+
+def test_consolidated_zero_mutation_guard_comprehensive_types():
+    from backend.mobile_server import _execute_record_update
+    app = AppState()
+    app.config = config.DATABASE_CONFIGS["Økonomisk Botanisk"]
+    app.df_reg = pd.DataFrame([{
+        "ObjectID": "5001",
+        "Genus": "Pinus",
+        "Species": "sylvestris"
+    }]).set_index("ObjectID")
+    app.df_obs = pd.DataFrame([{
+        "ObjectID": "5001",
+        "Reviewed": False,
+        "Images_Missing": False
+    }]).set_index("ObjectID")
+    app._log_records = []
+    app.df_log = pd.DataFrame()
+    app.dirty = False
+
+    with app.df_lock:
+        summary, err = _execute_record_update(
+            app_state=app,
+            oid="5001",
+            reg_updates={"Genus": "  Pinus  ", "Species": "sylvestris"},
+            obs_updates={"Images_Missing": "", "Reviewed": False},
+            reviewed=False
+        )
+
+    assert err is None
+    assert len(app._log_records) == 0
+    assert app.df_log.empty
+    assert app.dirty is False
+
+
+# =========================================================================
+# VAULT AUDIT WORKFLOW, OFFLINE SYNC & BARCODE ZERO-TOLERANCE TESTS
+# =========================================================================
+
+def test_vault_audit_health_and_audit_endpoints(mock_app_state):
+    """Test server starts and responds to health and audit endpoints."""
+    server = MobileServer(mock_app_state, port=5160)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # 1. Health check endpoint
+    resp_health = client.get('/api/health')
+    assert resp_health.status_code == 200
+    data_health = resp_health.get_json()
+    assert data_health["status"] in ("healthy", "ok")
+    assert data_health.get("healthy") is True
+
+    # 2. Ping endpoint
+    resp_ping = client.get('/api/ping')
+    assert resp_ping.status_code == 200
+    assert resp_ping.get_json()["status"] == "ok"
+
+    # 3. Audit log query endpoint
+    resp_audit_get = client.get('/api/audit', headers=headers)
+    assert resp_audit_get.status_code == 200
+    data_audit = resp_audit_get.get_json()
+    assert data_audit["status"] == "ok"
+    assert "total_records" in data_audit
+    assert "records" in data_audit
+
+
+def test_vault_audit_update_marks_reviewed_and_logs(mock_app_state):
+    """Test audit update endpoint marks Reviewed = True and writes to the audit log."""
+    server = MobileServer(mock_app_state, port=5161)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Verify initial state of #1024
+    assert not bool(mock_app_state.df_obs.at["1024", "Reviewed"])
+    initial_log_len = len(mock_app_state._log_records)
+
+    # Perform audit update flagging damaged specimen and marking reviewed
+    payload = {
+        "id": "1024",
+        "reviewed": True,
+        "problem": "Physical_Damage_Problem",
+        "problem_note": "Specimen torn, herbarium sheet folded."
+    }
+    resp = client.post('/api/audit', json=payload, headers=headers)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    assert data["reviewed"] is True
+    assert data["review_status"] == "reviewed"
+
+    # Verify in-memory DataFrame updated
+    assert bool(mock_app_state.df_obs.at["1024", "Reviewed"]) is True
+    assert bool(mock_app_state.df_obs.at["1024", "Physical_Damage_Problem"]) is True
+    assert "Specimen torn" in str(mock_app_state.df_obs.at["1024", "Notes"])
+
+    # Verify audit log recorded entry
+    assert len(mock_app_state._log_records) == initial_log_len + 1
+    log_entry = mock_app_state._log_records[-1]
+    assert log_entry["ObjectID"] == "1024"
+    assert str(log_entry["Reviewed"]).upper() in ("TRUE", "YES", "1")
+    assert not mock_app_state.df_log.empty
+    assert "ObjectID" in mock_app_state.df_log.columns
+
+
+def test_zero_barcode_terms_in_mobile_templates_and_routes():
+    """Enforce strict Zero Barcode constraint: auditing is solely storage location/shelf based."""
+    import re
+    from backend.mobile_server import INDEX_TEMPLATE, INDEX_TEMPLATE_V2, LOGIN_TEMPLATE
+
+    pattern = re.compile(r'barcode', re.IGNORECASE)
+
+    # 1. Check template constants
+    assert not pattern.search(INDEX_TEMPLATE), "Found 'barcode' reference in INDEX_TEMPLATE"
+    assert not pattern.search(INDEX_TEMPLATE_V2), "Found 'barcode' reference in INDEX_TEMPLATE_V2"
+    assert not pattern.search(LOGIN_TEMPLATE), "Found 'barcode' reference in LOGIN_TEMPLATE"
+
+    # 2. Check full backend/mobile_server.py file content
+    with open('backend/mobile_server.py', 'r', encoding='utf-8') as f:
+        src = f.read()
+    assert not pattern.search(src), "Found 'barcode' reference in backend/mobile_server.py"
+
+
+def test_vault_location_filtering_and_facets(mock_app_state):
+    """Test filtering by Storage Location / Cabinet / Shelf and facet discovery."""
+    server = MobileServer(mock_app_state, port=5162)
+    client = server.flask_app.test_client()
+    headers = {"X-Session-Token": server.session_token}
+
+    # Query objects in Cabinet C-12
+    resp = client.get('/api/objects?cabinet=c-12', headers=headers)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    # 1024 is in C-12
+    returned_ids = [o["id"] for o in data["objects"]]
+    assert "1024" in returned_ids
+
+    # Query facets include cabinets and shelves
+    assert "facets" in data
+    assert "cabinets" in data["facets"]
+    assert "shelves" in data["facets"]
+
+
+def test_vault_offline_storage_queue_contract():
+    """Verify offline queuing contracts in client templates store pending updates in localStorage."""
+    from backend.mobile_server import INDEX_TEMPLATE, INDEX_TEMPLATE_V2
+
+    for tmpl_name, tmpl in [("V1", INDEX_TEMPLATE), ("V2", INDEX_TEMPLATE_V2)]:
+        assert "arbor_offline_queue" in tmpl, f"{tmpl_name} template missing 'arbor_offline_queue' localStorage key"
+        assert "getLocalStorageQueue" in tmpl, f"{tmpl_name} template missing getLocalStorageQueue function"
+        assert "saveLocalStorageQueue" in tmpl, f"{tmpl_name} template missing saveLocalStorageQueue function"
+        assert "flushQueuedMutations" in tmpl, f"{tmpl_name} template missing flushQueuedMutations"
+

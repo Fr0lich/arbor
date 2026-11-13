@@ -93,6 +93,7 @@ This file coordinates the main user workspace. It is structured into multiple la
 *   **`build_sections()`**: Dynamically creates input fields (Entry boxes, Multiline text boxes, and Dropdowns) based on the schemas defined in `config.py`.
 *   **Curatorial Command Strip (`ui/object_context_bar.py`)**: Sticky contextual specimen banner featuring monospace ID badge, real-time dataset counter (`42 of 1,250`), botanical name in *Lora* serif italics, clickable problem category badge launching resolvers, reactive amber `● Unsaved` dot, and archival action buttons.
 *   **Specimen Directory & Virtual Cards (`ui/widgets.py`)**: `TreeviewListboxWrapper` supporting Compact Mode (4-column Treeview) and Detailed Mode (virtual cards). Implements single-badge discipline (`[ TAX ]`, `[ PROV ]`, `[ BOX ]`, etc.), inline bulleted metadata, and $O(1)$ targeted selection diffing (`last_highlighted ^ current_selected`).
+*   **Virtual Card View Customization Lifecycle (`ui/widgets.py`, `ui/unified_settings.py`, `config.py`)**: Fully reactive presentation-layer preferences saved in `user_prefs["directory_card_display"]`. When altered via Unified Settings (Appearance tab), Command Palette (`Ctrl+K`), or Persona shortcuts, the coordinator invokes `wrapper.apply_directory_view_preferences(prefs)`. This clears cached card templates in `_card_pool`, flushes active windows, invalidates `_card_height = None`, triggers `_measure_card_height()`, and schedules an immediate viewport redraw. Zero backend schema, dataframe, or problem cache mutation occurs.
 *   **Smooth Drawer Sashing & Easing**: 120ms cubic ease-out animation curve for sidebar collapse/expand, with width persistence (`prefs["sidebar_width"]`) and flicker-free post-transition unmapping.
 *   **Universal Command Palette (`ui/command_palette.py`)**: Bound to `Ctrl+K`, provides fuzzy command execution and direct specimen jumping.
 *   **Floating Toasts (`ui/toast.py`)**: Non-blocking toast feedback pills for status confirmation.
@@ -109,6 +110,7 @@ This file coordinates the main user workspace. It is structured into multiple la
     *   `Ctrl + Up` / `Ctrl + Down`: Leap directly to previous/next specimen with active unresolved problem flags.
     *   `F6` / `F7` / `F8`: Toggle Left Directory / Right Registration / Middle Viewport panels.
     *   `Ctrl + O`: Toggle Left Directory drawer.
+    *   *Note on Card Layout Profiles*: Card layouts (`Standard`, `Compact`, `Full Details`, `Minimalist`) are visual preferences configured via Settings (Appearance Tab with interactive Live Preview) or searchable through the Command Palette (`Ctrl+K`) without requiring dedicated physical shortcut keys.
 
 ---
 

@@ -407,6 +407,9 @@ if __name__ == "__main__":
                 pass
             root.deiconify()
             root.state("zoomed")
+            if hasattr(ui, 'apply_proper_sash_positions'):
+                root.after(50, ui.apply_proper_sash_positions)
+                root.after(200, ui.apply_proper_sash_positions)
 
             def _show_restore_toast():
                 from config import APP_VERSION
@@ -483,6 +486,9 @@ if __name__ == "__main__":
                 pass
             root.deiconify()
             root.state("zoomed")
+            if hasattr(ui, 'apply_proper_sash_positions'):
+                root.after(50, ui.apply_proper_sash_positions)
+                root.after(200, ui.apply_proper_sash_positions)
         else:
             try:
                 root.attributes("-alpha", 1.0)
@@ -490,6 +496,9 @@ if __name__ == "__main__":
                 pass
             root.deiconify()
             root.state("zoomed")
+            if hasattr(ui, 'apply_proper_sash_positions'):
+                root.after(50, ui.apply_proper_sash_positions)
+                root.after(200, ui.apply_proper_sash_positions)
 
         # Check for crash logs from previous sessions (shows a banner after 2 s)
         _check_previous_crash_logs(root, ui_ref)

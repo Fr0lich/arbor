@@ -30,6 +30,10 @@ class ObjectUpdateSchema(Schema):
     unvalidated_sources = fields.Raw(required=False, allow_none=True)
     unvalidated = fields.Raw(required=False, allow_none=True)
     timestamp = fields.Raw(required=False, allow_none=True)
+    problem = fields.String(required=False, allow_none=True)
+    problem_note = fields.String(required=False, allow_none=True)
+    note = fields.String(required=False, allow_none=True)
+    notes = fields.String(required=False, allow_none=True)
 
     @pre_load
     def normalize_fields(self, data, **kwargs):
@@ -42,12 +46,26 @@ class ObjectUpdateSchema(Schema):
         # Unify observation updates
         obs = data.get("observation") or data.get("updates") or {}
         if isinstance(obs, dict):
-            data["observation"] = {
+            obs_dict = {
                 str(k): sanitize_string_field(v) if isinstance(v, str) else v
                 for k, v in obs.items()
             }
         else:
-            data["observation"] = {}
+            obs_dict = {}
+
+        # Handle problem and note fields
+        prob = data.get("problem")
+        if prob:
+            obs_dict[str(prob)] = True
+        p_note = data.get("problem_note") or data.get("note") or data.get("notes")
+        if p_note:
+            note_val = sanitize_string_field(p_note)
+            if prob:
+                note_key = f"{prob}_Note" if not prob.endswith("_Note") else prob
+                obs_dict[note_key] = note_val
+            obs_dict["Notes"] = note_val
+
+        data["observation"] = obs_dict
 
         # Unify registration updates
         reg = data.get("registration") or {}
