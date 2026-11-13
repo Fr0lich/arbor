@@ -3488,6 +3488,46 @@ class ObjectProgramUI(
         panes.pack(fill="both", expand=True)
         self.panes = panes
 
+        def _on_panes_sash_release(event=None):
+            try:
+                total_w = self.panes.winfo_width()
+                if total_w <= 100:
+                    return
+                active = self.panes.panes()
+                dpi = getattr(config, "DPI_FACTOR", 1.0) or 1.0
+                prefs = config.load_prefs() or {}
+                changed = False
+
+                if len(active) >= 2 and getattr(self, "left_pinned", None) and self.left_pinned.get():
+                    sash0 = self.panes.sashpos(0)
+                    if sash0 > sc(100):
+                        prefs["sidebar_width"] = int(sash0 / dpi)
+                        changed = True
+
+                if len(active) >= 3 and getattr(self, "show_reg_var", None) and self.show_reg_var.get():
+                    sash1 = self.panes.sashpos(1)
+                    rw = total_w - sash1
+                    if rw > sc(100):
+                        prefs["right_panel_width"] = int(rw / dpi)
+                        changed = True
+
+                if changed:
+                    config.save_prefs(prefs)
+            except Exception:
+                pass
+
+        panes.bind("<ButtonRelease-1>", _on_panes_sash_release, add="+")
+
+        self._sash_enforce_count = 0
+        def _on_panes_map(event=None):
+            if event and event.widget == self.panes:
+                if self._sash_enforce_count < 3:
+                    self._sash_enforce_count += 1
+                    self.root.after(50, self.apply_proper_sash_positions)
+                    self.root.after(200, self.apply_proper_sash_positions)
+
+        panes.bind("<Map>", _on_panes_map, add="+")
+
 
       
         left = ttk.Frame(panes)

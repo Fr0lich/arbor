@@ -1348,5 +1348,8 @@ class LoadingWindow:
             pass
         self.parent.deiconify()
         self.parent.state("zoomed")
+        if hasattr(self.ui, "apply_proper_sash_positions"):
+            self.parent.after(50, self.ui.apply_proper_sash_positions)
+            self.parent.after(200, self.ui.apply_proper_sash_positions)
 
 

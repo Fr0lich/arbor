@@ -1,4 +1,4 @@
-import tkinter as tk
+﻿import tkinter as tk
 from ui.state import app_bus, DATABASE_UPDATED
 from tkinter import ttk
 from config import sc
@@ -439,21 +439,15 @@ class LayoutSettingsMixin:
 
             # No saved layout — apply resolution-aware sash defaults
             def _set_default_sashes():
+            def _set_default_sashes():
                 try:
-                    screen_w = self.root.winfo_screenwidth()
-                    if screen_w < 1400:
-                        left_w  = sc(240)
-                        right_w = screen_w - sc(300)
-                    else:
-                        left_w  = sc(280)
-                        right_w = screen_w - sc(360)
-                    self.panes.sashpos(0, left_w)
-                    self.panes.sashpos(1, right_w)
+                    if hasattr(self, "apply_proper_sash_positions"):
+                        self.apply_proper_sash_positions()
                 except Exception:
                     pass
             self.root.after(100, _set_default_sashes)
+            self.root.after(300, _set_default_sashes)
             return
-
         if hasattr(self, "layout_quick_cb"):
             self.layout_quick_cb.set(name)
 
@@ -518,12 +512,23 @@ class LayoutSettingsMixin:
 
         def _set_sashes():
             try:
+                total_w = self.panes.winfo_width() if hasattr(self, "panes") else 0
                 sashes = layout.get("main_sashes", [])
-                if len(sashes) == 2:
-                    self.panes.sashpos(0, sashes[0])
-                    self.panes.sashpos(1, sashes[1])
+                if len(sashes) == 2 and total_w > 100:
+                    sash0, sash1 = sashes[0], sashes[1]
+                    from config import sc
+                    if sash1 >= total_w - sc(150) or sash1 <= sash0 + sc(150):
+                        if hasattr(self, "apply_proper_sash_positions"):
+                            self.apply_proper_sash_positions()
+                    else:
+                        self.panes.sashpos(0, sash0)
+                        self.panes.sashpos(1, sash1)
+                else:
+                    if hasattr(self, "apply_proper_sash_positions"):
+                        self.apply_proper_sash_positions()
             except Exception:
-                pass
+                if hasattr(self, "apply_proper_sash_positions"):
+                    self.apply_proper_sash_positions()
             try:
                 mid_sash = layout.get("middle_sash")
                 if mid_sash:
@@ -532,6 +537,7 @@ class LayoutSettingsMixin:
                 pass
 
         self.root.after(50, _set_sashes)
+        self.root.after(250, _set_sashes)
         self.system_status.config(text=f"Applied layout: {name}")
 
 
